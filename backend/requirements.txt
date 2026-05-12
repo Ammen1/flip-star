@@ -1,0 +1,31 @@
+Django==4.2.11
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+python-decouple==3.8
+psycopg2-binary==2.9.9
+dj-database-url==2.1.0
+Pillow==10.2.0
+daphne==4.0.0
+whitenoise==6.6.0
+cryptography==42.0.5
+requests==2.31.0
+
+# Django Channels for real-time WebSocket
+channels==4.0.0
+channels_redis==4.2.0
+
+# Celery for async task processing
+celery==5.3.4
+django-celery-beat==2.5.0
+redis==5.0.1
+
+# S3 storage
+django-storages==1.14.2
+boto3==1.34.49
+
+# Media processing
+blurhash==1.1.4
+ffmpeg-python==0.2.0
+
+# Web Push notifications (VAPID)
+pywebpush==2.0.0

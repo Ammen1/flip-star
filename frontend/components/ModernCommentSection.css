@@ -1,0 +1,18 @@
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.modern-comment-overlay {
+  padding-bottom: 0;
+}
+.modern-comment-modal {
+  max-height: 85vh;
+}
+@media (max-width: 1024px) {
+  .modern-comment-overlay {
+    padding-bottom: 0;
+  }
+  .modern-comment-modal {
+    max-height: 85vh;
+  }
+}

@@ -1,0 +1,225 @@
+/* Admin Panel Global Styles - Professional UI polish
+ * Applied app-wide via AdminApp.jsx import.
+ * Provides: animations, focus rings, scrollbar, utility classes,
+ * loading/empty/error state styles, smooth transitions for inline-styled pages.
+ */
+
+/* ---------- Keyframes ---------- */
+@keyframes admin-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes admin-fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes admin-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes admin-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes admin-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes admin-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* ---------- Root container ---------- */
+.admin-root {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.admin-root * {
+  box-sizing: border-box;
+}
+
+/* Page entrance */
+.admin-page {
+  animation: admin-fade-in-up 240ms ease-out both;
+}
+
+/* ---------- Scrollbar (subtle, modern) ---------- */
+.admin-root ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.admin-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.admin-root ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.admin-root ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* ---------- Focus visibility ---------- */
+.admin-root button:focus-visible,
+.admin-root a:focus-visible,
+.admin-root input:focus-visible,
+.admin-root select:focus-visible,
+.admin-root textarea:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---------- Smooth transitions for ANY inline-styled UI ---------- */
+.admin-root button,
+.admin-root a,
+.admin-root input,
+.admin-root select,
+.admin-root textarea {
+  transition:
+    background-color 180ms ease,
+    color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    opacity 180ms ease;
+}
+
+.admin-root button:not(:disabled):hover {
+  filter: brightness(1.04);
+}
+.admin-root button:not(:disabled):active {
+  transform: translateY(1px);
+}
+.admin-root button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55;
+}
+
+/* ---------- Card utility ---------- */
+.admin-card {
+  background: #1A1A1A;
+  border: 1px solid #333333;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 200ms ease, transform 200ms ease;
+}
+.admin-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- Modal overlay ---------- */
+.admin-modal-overlay {
+  animation: admin-fade-in 180ms ease-out both;
+}
+.admin-modal-content {
+  animation: admin-scale-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ---------- Loading spinner ---------- */
+.admin-spinner {
+  display: inline-block;
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(37, 99, 235, 0.18);
+  border-top-color: #2563EB;
+  border-radius: 50%;
+  animation: admin-spin 800ms linear infinite;
+}
+.admin-spinner.sm { width: 18px; height: 18px; border-width: 2px; }
+.admin-spinner.lg { width: 56px; height: 56px; border-width: 4px; }
+
+/* ---------- Skeleton loader ---------- */
+.admin-skeleton {
+  background: linear-gradient(90deg, #2A2A2A 25%, #333333 37%, #2A2A2A 63%);
+  background-size: 800px 100%;
+  animation: admin-shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+/* ---------- State containers ---------- */
+.admin-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 20px;
+  text-align: center;
+  animation: admin-fade-in-up 260ms ease-out both;
+}
+.admin-state-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2A2A2A;
+  color: #E5E5E5;
+}
+.admin-state-icon.error { background: #7F1D1D; color: #FCA5A5; }
+.admin-state-icon.empty { background: #1E3A8A; color: #93C5FD; }
+.admin-state-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 0;
+}
+.admin-state-message {
+  font-size: 13px;
+  color: #A8A8A8;
+  margin: 0;
+  max-width: 420px;
+  line-height: 1.5;
+}
+
+/* ---------- Tags / badges helper ---------- */
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 999px;
+  background: #2A2A2A;
+  color: #E5E5E5;
+}
+
+/* ---------- Table polish ---------- */
+.admin-root table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.admin-root tbody tr {
+  transition: background-color 150ms ease;
+}
+.admin-root tbody tr:hover {
+  background-color: #262626;
+}
+
+/* ---------- Sidebar item ---------- */
+.admin-sidebar-item {
+  position: relative;
+}
+.admin-sidebar-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: transparent;
+  transition: background 180ms ease;
+}
+.admin-sidebar-item.active::before {
+  background: #2563EB;
+}

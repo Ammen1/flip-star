@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "FlipStar",
+    "slug": "flipstar-mobile",
+    "version": "1.0.0",
+    "newArchEnabled": false,
+    "plugins": [
+      "expo-secure-store",
+      "expo-video",
+      "expo-asset",
+      "expo-font"
+    ],
+    "android": {
+      "package": "com.flipstar.mobile"
+    },
+    "ios": {
+      "bundleIdentifier": "com.flipstar.mobile"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "96483dd9-2162-4525-866e-392ea0a2d509"
+      }
+    }
+  }
+}

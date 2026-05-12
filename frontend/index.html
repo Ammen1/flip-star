@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/static/images/Flip_Star_Final_Logo_v3_side__2_-removebg-preview.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="FlipStar - Modern social media platform for sharing videos and images"
+    />
+    <title>FlipStar</title>
+
+    <!-- Open Graph / Facebook / WhatsApp / iMessage -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="FlipStar" />
+    <meta property="og:title" content="FlipStar — Check this out" />
+    <meta property="og:description" content="Watch and share videos on FlipStar" />
+    <meta property="og:image" content="/static/images/Flip_Star_Final_Logo_v3_side__2_-removebg-preview.png" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="FlipStar — Check this out" />
+    <meta name="twitter:description" content="Watch and share videos on FlipStar" />
+    <meta name="twitter:image" content="/static/images/Flip_Star_Final_Logo_v3_side__2_-removebg-preview.png" />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      input, textarea, [contenteditable] {
+        -webkit-user-select: text;
+        -moz-user-select: text;
+        user-select: text;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow-x: hidden;
+        line-height: 1.5;
+        font-size: 16px;
+        font-display: swap;
+      }
+
+      html,
+      body,
+      #root,
+      .App {
+        min-width: 100%;
+        min-height: 100%;
+      }
+
+      :root {
+        --font-size-base: 16px;
+        --color-bg: #0D0D0D;
+        --color-txt: #FFFFFF;
+        --color-sub: #C2994B;
+        --color-border: #262626;
+        --color-card: #1A1A1A;
+        --color-primary: #E2B355;
+        --color-primary-gradient: linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%);
+      }
+
+      img,
+      canvas,
+      svg {
+        max-width: 100%;
+        height: auto;
+        display: block;
+      }
+
+      video {
+        display: block;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+        min-height: 44px;
+        font-size: 16px; /* Prevents auto-zoom on iOS */
+      }
+
+      /* Mobile Responsive Styles */
+      @media (max-width: 1024px) {
+        /* Hide legacy sidebars on mobile */
+        .desktop-sidebar,
+        .right-sidebar,
+        .left-sidebar,
+        .selfie-sidebar,
+        .modern-desktop-sidebar,
+        aside[class*='sidebar'] {
+          display: none !important;
+        }
+
+        .video-feed {
+          max-width: 100vw !important;
+          margin-right: 0 !important;
+        }
+      }
+
+      @media (max-width: 768px) {
+        body {
+          font-size: 15px;
+          padding: 0;
+          margin: 0;
+        }
+
+        #root {
+          padding-bottom: 0;
+        }
+
+        .desktop-sidebar,
+        .right-sidebar {
+          display: none !important;
+        }
+
+        .left-sidebar {
+          transform: translateX(-100%);
+          box-shadow: 20px 0 50px rgba(0, 0, 0, 0.2);
+        }
+
+        .left-sidebar.open {
+          transform: translateX(0);
+        }
+
+        .mobile-hamburger,
+        .drawer-close {
+          display: flex !important;
+        }
+
+        .mobile-nav {
+          display: flex !important;
+          position: fixed;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 60px;
+          background: rgba(13, 13, 13, 0.97);
+          backdrop-filter: blur(20px);
+          border-top: 1px solid rgba(226, 179, 85, 0.25);
+          z-index: 1100;
+          align-items: center;
+          justify-content: space-around;
+          padding: 0 10px;
+        }
+
+        .mobile-nav button {
+          color: #E2B355 !important;
+        }
+
+        .video-feed {
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+          max-width: 100vw !important;
+        }
+      }
+
+      @media (orientation: portrait) {
+        body {
+          font-size: clamp(14px, 3vw, 16px);
+        }
+
+        button,
+        input,
+        select,
+        textarea {
+          min-height: 50px;
+          font-size: 16px;
+        }
+
+        .mobile-nav {
+          height: 70px;
+        }
+      }
+
+      @media (orientation: landscape) and (max-width: 1024px) {
+        body {
+          font-size: clamp(13px, 2.5vw, 15px);
+        }
+
+        .video-container {
+          height: 100vh !important;
+        }
+
+        .video-feed {
+          padding-bottom: 90px !important;
+        }
+
+        .mobile-nav {
+          height: 50px;
+        }
+      }
+
+      @media (min-width: 769px) {
+        .mobile-nav {
+          display: none !important;
+        }
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Skeleton sits outside #root so React replacement never shifts layout -->
+    <div id="app-skeleton" style="position:fixed;inset:0;display:flex;flex-direction:column;background:#f5f5f5;z-index:9999;pointer-events:none">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;position:relative">
+        <div style="width:100%;max-width:420px;height:100%;background:#fff;position:relative;overflow:hidden">
+          <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(90deg,transparent 0%,rgba(0,0,0,0.03) 50%,transparent 100%);animation:shimmer 1.5s infinite"></div>
+          <div style="position:absolute;bottom:80px;left:16px;right:70px">
+            <div style="width:120px;height:14px;background:rgba(0,0,0,0.08);border-radius:7px;margin-bottom:10px"></div>
+            <div style="width:200px;height:12px;background:rgba(0,0,0,0.05);border-radius:6px;margin-bottom:6px"></div>
+            <div style="width:160px;height:12px;background:rgba(0,0,0,0.03);border-radius:6px"></div>
+          </div>
+          <div style="position:absolute;bottom:80px;right:12px;display:flex;flex-direction:column;gap:20px;align-items:center">
+            <div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,0.08)"></div>
+            <div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,0.08)"></div>
+            <div style="width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,0.08)"></div>
+          </div>
+        </div>
+      </div>
+      <style>@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}</style>
+    </div>
+    <div id="root"></div>
+    <script>
+      // Fail-safe: remove skeleton after 2.5 seconds if React doesn't load
+      setTimeout(function() {
+        var skeleton = document.getElementById('app-skeleton');
+        if (skeleton) {
+          skeleton.style.transition = 'opacity 0.3s ease';
+          skeleton.style.opacity = '0';
+          setTimeout(function() { skeleton.remove(); }, 300);
+        }
+      }, 2500);
+    </script>
+    <script type="module" src="./main.jsx"></script>
+  </body>
+</html>

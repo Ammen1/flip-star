@@ -1,0 +1,27 @@
+{
+  "name": "expo-json-utils",
+  "version": "55.0.2",
+  "description": "Utilities for reading JSONObjects (Android) and NSDictionaries (iOS).",
+  "main": "index.js",
+  "keywords": [
+    "react-native",
+    "expo",
+    "expo-json-utils",
+    "android",
+    "ios",
+    "jsonobjects",
+    "nsdictionaries"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/expo/expo.git",
+    "directory": "packages/expo-json-utils"
+  },
+  "bugs": {
+    "url": "https://github.com/expo/expo/issues"
+  },
+  "author": "650 Industries, Inc.",
+  "license": "MIT",
+  "homepage": "https://docs.expo.dev",
+  "gitHead": "20029879d2f953a428d70197fc7e25e4d791848a"
+}
