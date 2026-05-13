@@ -13,6 +13,7 @@ from .serializers_rbac import (
     RoleSerializer, PermissionSerializer, RolePermissionSerializer,
     AuditLogSerializer, UserRoleSerializer
 )
+from .permissions_rbac import IsSuperAdmin, HasRolePermission
 
 
 class RoleViewSet(viewsets.ModelViewSet):
@@ -29,7 +30,8 @@ class RoleViewSet(viewsets.ModelViewSet):
     """
     queryset = Role.objects.all()
     serializer_class = RoleSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperAdmin]  # Only Super Admin can manage roles
+    required_permission = 'admin.role.assign'
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -145,7 +147,8 @@ class PermissionViewSet(viewsets.ModelViewSet):
     """
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperAdmin]  # Only Super Admin can manage permissions
+    required_permission = 'admin.role.assign'
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -214,7 +217,8 @@ class RolePermissionViewSet(viewsets.ModelViewSet):
     """
     queryset = RolePermission.objects.all()
     serializer_class = RolePermissionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperAdmin]  # Only Super Admin can manage role-permission mappings
+    required_permission = 'admin.role.assign'
     
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -371,7 +375,8 @@ class UserRoleViewSet(viewsets.ViewSet):
     - PUT    /api/admin/rbac/users/{user_id}/role/ - Assign/change user role
     - POST   /api/admin/rbac/users/bulk-assign/     - Bulk assign roles to users
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperAdmin]  # Only Super Admin can assign roles
+    required_permission = 'admin.role.assign'
     
     def list(self, request):
         """List all users with their roles"""
@@ -513,7 +518,8 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsSuperAdmin]  # Only Super Admin can view full audit log
+    required_permission = 'audit.log.view.all'
     
     def get_queryset(self):
         queryset = super().get_queryset()
