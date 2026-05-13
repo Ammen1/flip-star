@@ -37,10 +37,11 @@ export default function WebsiteCoinScreen({ navigation }) {
 
   const loadPackages = async () => {
     try {
-      const response = await api.request('/coins/packages/');
-      console.log('Packages API response:', response);
+      // Use same endpoint as website
+      const response = await api.request('/wallet/config/');
+      console.log('Wallet config response:', response);
       // Backend returns { packages: [...] }
-      const rawPkgs = response?.packages || response || [];
+      const rawPkgs = response?.packages || [];
       const pkgs = (Array.isArray(rawPkgs) ? rawPkgs : []).map(p => ({
         id: p.id,
         coins: p.coin_amount,
@@ -124,70 +125,49 @@ export default function WebsiteCoinScreen({ navigation }) {
     try {
       setLoading(true);
 
-      // Get user's phone number
+      // Get user's phone number - send as-is like website
       let userPhoneNumber = authUser?.phone_number || authUser?.phone || authUser?.username;
-      if (userPhoneNumber) {
-        if (userPhoneNumber.startsWith('0')) {
-          userPhoneNumber = '251' + userPhoneNumber.substring(1);
-        } else if (userPhoneNumber.startsWith('+')) {
-          userPhoneNumber = userPhoneNumber.substring(1);
-        }
-      }
       if (!userPhoneNumber) {
         Alert.alert('Error', 'Phone number not found. Please update your profile.');
         return;
       }
 
-      if (paymentMethod === 'airtime') {
-        // Use /coins/purchase/ endpoint - same as website "From Airtime" button
-        // This directly credits coins (no SMS, no Onevas call needed)
-        const response = await api.request('/coins/purchase/', {
-          method: 'POST',
-          body: JSON.stringify({
-            package_id: pkg.id,
-            payment_method: 'airtime',
-            phone_number: userPhoneNumber,
-            amount: pkg.price,
-          }),
-        });
+      // Use same endpoint as website for BOTH airtime and telebirr
+      const response = await api.request('/wallet/telebirr/initiate/', {
+        method: 'POST',
+        body: JSON.stringify({
+          package_id: pkg.id,
+          phone_number: userPhoneNumber,
+        }),
+      });
 
-        console.log('Airtime purchase response:', response);
+      console.log('Payment initiation response:', response);
 
-        if (response.coins_added || response.message?.includes('successfully')) {
-          await loadUserCoins();
-          setPurchasedCoins(response.coins_added || (pkg.coins + pkg.bonus));
-          setShowSuccessModal(true);
-          setShowPaymentModal(false);
-          SoundManager.playCoinSound();
-        } else {
-          Alert.alert('Payment Failed', response.error || 'Could not complete purchase. Please try again.');
-        }
+      if (response.success && response.payment_url) {
+        setShowPaymentModal(false);
+        // Open payment URL in browser/app
+        await Linking.openURL(response.payment_url);
+        
+        // Start polling for balance update after user completes payment
+        Alert.alert(
+          'Complete Payment',
+          'Complete the payment in the opened page. Your coins will be added automatically.',
+          [{
+            text: 'OK',
+            onPress: () => {
+              let pollCount = 0;
+              const pollInterval = setInterval(async () => {
+                pollCount++;
+                await loadUserCoins();
+                if (pollCount >= 12) {
+                  clearInterval(pollInterval);
+                }
+              }, 5000);
+            }
+          }]
+        );
       } else {
-        // Telebirr - use /wallet/telebirr/initiate/ endpoint
-        const response = await api.request('/wallet/telebirr/initiate/', {
-          method: 'POST',
-          body: JSON.stringify({
-            package_id: pkg.id,
-            phone_number: userPhoneNumber,
-          }),
-        });
-
-        console.log('Telebirr initiation response:', response);
-
-        if (response.success && response.payment_url) {
-          setShowPaymentModal(false);
-          await Linking.openURL(response.payment_url);
-          
-          // Poll for balance update after payment
-          let pollCount = 0;
-          const pollInterval = setInterval(async () => {
-            pollCount++;
-            await loadUserCoins();
-            if (pollCount >= 12) clearInterval(pollInterval);
-          }, 5000);
-        } else {
-          Alert.alert('Payment Failed', response.error || 'Could not initiate payment. Please try again.');
-        }
+        Alert.alert('Payment Failed', response.error || 'Could not initiate payment. Please try again.');
       }
     } catch (error) {
       console.error('Payment error:', error);

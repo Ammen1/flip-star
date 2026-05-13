@@ -361,18 +361,28 @@ def public_wallet_config(request):
     """
     config = WalletConfig.get_config()
 
-    packages = [
-        {
-            'id': p.id,
-            'name': p.name,
-            'price_etb': str(p.price_etb),
-            'coin_amount': p.coin_amount,
-            'bonus_coins': p.bonus_coins,
-            'total_coins': p.get_total_coins(),
-            'is_featured': p.is_featured,
-        }
-        for p in CoinPackage.objects.filter(is_active=True).order_by('sort_order', 'price_etb')
-    ]
+    try:
+        packages = [
+            {
+                'id': p.id,
+                'name': p.name,
+                'price_etb': str(p.price_etb),
+                'coin_amount': p.coin_amount,
+                'bonus_coins': p.bonus_coins,
+                'total_coins': p.get_total_coins(),
+                'is_featured': p.is_featured,
+            }
+            for p in CoinPackage.objects.filter(is_active=True).order_by('sort_order', 'price_etb')
+        ]
+    except Exception:
+        # Table may not exist yet - return default packages
+        packages = [
+            {'id': 1, 'name': 'Starter Pack', 'price_etb': '10.0', 'coin_amount': 100, 'bonus_coins': 0, 'total_coins': 100, 'is_featured': False},
+            {'id': 2, 'name': 'Good Value', 'price_etb': '25.0', 'coin_amount': 250, 'bonus_coins': 25, 'total_coins': 275, 'is_featured': False},
+            {'id': 3, 'name': 'Most Popular', 'price_etb': '50.0', 'coin_amount': 500, 'bonus_coins': 75, 'total_coins': 575, 'is_featured': True},
+            {'id': 4, 'name': 'Best Deal', 'price_etb': '100.0', 'coin_amount': 1000, 'bonus_coins': 200, 'total_coins': 1200, 'is_featured': False},
+            {'id': 5, 'name': 'Premium Package', 'price_etb': '250.0', 'coin_amount': 2500, 'bonus_coins': 625, 'total_coins': 3125, 'is_featured': False},
+        ]
 
     return Response({
         'currency': 'ETB',
