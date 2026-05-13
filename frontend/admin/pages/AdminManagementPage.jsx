@@ -27,19 +27,28 @@ export function AdminManagementPage({ theme }) {
   const [roleForm, setRoleForm] = useState({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true, selectedPermissions: [] });
   
   // User role assignment state
-  const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '' });
+  const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
   const [selectedUserRole, setSelectedUserRole] = useState('');
 
   // User role assignment functions
-  const handleAssignRole = (user) => {
-    setUserRoleModal({ isOpen: true, userId: user.id, username: user.username });
+  const handleAssignRole = (user, event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+    
+    setUserRoleModal({ 
+      isOpen: true, 
+      userId: user.id, 
+      username: user.username,
+      clickPosition: { x: rect.left + scrollLeft + rect.width / 2, y: rect.top + scrollTop }
+    });
     setSelectedUserRole(user.profile?.role?.id || '');
   };
 
   const handleSaveUserRole = async () => {
     try {
-      await api.request(`/admin/rbac/users/${userRoleModal.userId}/assign-role/`, {
-        method: 'POST',
+      await api.request(`/admin/rbac/users/${userRoleModal.userId}/role/`, {
+        method: 'PUT',
         body: JSON.stringify({ role_id: selectedUserRole })
       });
       loadUsers();
@@ -554,7 +563,7 @@ export function AdminManagementPage({ theme }) {
                             {user.is_staff ? 'Revoke Admin' : 'Make Admin'}
                           </button>
                           <button
-                            onClick={() => handleAssignRole(user)}
+                            onClick={(e) => handleAssignRole(user, e)}
                             style={{
                               padding: '6px 12px',
                               background: theme.purple + '30',
@@ -1008,6 +1017,7 @@ export function AdminManagementPage({ theme }) {
             border: `1px solid ${theme.border}`,
             margin: 'auto',
             position: 'relative',
+            top: userRoleModal.clickPosition.y > 300 ? (userRoleModal.clickPosition.y - 300) / 2 : 0,
           }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
               Assign Role to {userRoleModal.username}
