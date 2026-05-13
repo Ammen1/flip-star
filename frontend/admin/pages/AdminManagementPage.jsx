@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Shield, UserPlus, UserMinus, Search, Users, Key, FileText, Settings, Plus, Edit, Trash2 } from 'lucide-react';
 import api from '../../api';
 import { AlertModal } from '../components/AlertModal';
 
 export function AdminManagementPage({ theme }) {
+  const searchInputRef = useRef(null);
   const [activeTab, setActiveTab] = useState(() => {
     // Restore active tab from localStorage
     const savedTab = localStorage.getItem('adminActiveTab');
@@ -61,6 +62,9 @@ export function AdminManagementPage({ theme }) {
         })
       });
       setSearch('');
+      if (searchInputRef.current) {
+        searchInputRef.current.blur();
+      }
       loadUsers();
       setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
       setSelectedUserRoles([]);
@@ -389,6 +393,7 @@ export function AdminManagementPage({ theme }) {
           color: theme.sub,
         }} />
         <input
+          ref={searchInputRef}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
