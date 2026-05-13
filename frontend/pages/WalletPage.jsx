@@ -36,7 +36,7 @@ function writeCache(summary, config) {
   } catch {}
 }
 
-export function WalletPage({ theme, onBack, showTopUpOnMount }) {
+export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase }) {
   const T = theme || defaultTheme();
   const [activeTab, setActiveTab] = useState('overview'); // overview | transactions | withdrawals
 
@@ -294,7 +294,13 @@ export function WalletPage({ theme, onBack, showTopUpOnMount }) {
 
       {/* Action buttons */}
       <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-        <button onClick={() => setShowTopUpModal(true)} style={btnPrimary(T)}>
+        <button
+          onClick={() => {
+            if (onShowCoinPurchase) onShowCoinPurchase();
+            else setShowTopUpModal(true);
+          }}
+          style={btnPrimary(T)}
+        >
           <ArrowDownToLine size={18} /> Buy Coins
         </button>
       </div>

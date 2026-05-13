@@ -1454,7 +1454,7 @@ export default function WerqRoot() {
         {showWallet && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
-              <WalletPage theme={colors} onBack={handleCloseWallet} showTopUpOnMount={walletShowTopUpOnMount.current} />
+              <WalletPage theme={colors} onBack={handleCloseWallet} showTopUpOnMount={walletShowTopUpOnMount.current} onShowCoinPurchase={handleShowCoinPurchase} />
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
