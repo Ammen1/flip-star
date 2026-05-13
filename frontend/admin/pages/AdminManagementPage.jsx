@@ -459,7 +459,6 @@ export function AdminManagementPage({ theme }) {
                 <thead>
                   <tr style={{ background: theme.bg }}>
                     <th style={headerStyle}>User</th>
-                    <th style={headerStyle}>Email</th>
                     <th style={headerStyle}>Status</th>
                     <th style={headerStyle}>Permissions</th>
                     <th style={headerStyle}>Actions</th>
@@ -493,11 +492,6 @@ export function AdminManagementPage({ theme }) {
                               {user.username}
                             </div>
                           </div>
-                        </div>
-                      </td>
-                      <td style={cellStyle}>
-                        <div style={{ fontSize: 13, color: theme.txt }}>
-                          {user.email}
                         </div>
                       </td>
                       <td style={cellStyle}>
@@ -1358,7 +1352,6 @@ export function AdminManagementPage({ theme }) {
                   <th style={headerStyle}>Timestamp</th>
                   <th style={headerStyle}>Action</th>
                   <th style={headerStyle}>Actor</th>
-                  <th style={headerStyle}>Email</th>
                   <th style={headerStyle}>Target</th>
                   <th style={headerStyle}>IP Address</th>
                 </tr>
@@ -1388,11 +1381,6 @@ export function AdminManagementPage({ theme }) {
                     <td style={cellStyle}>
                       <div style={{ fontSize: 13, color: theme.txt }}>
                         {log.actor_username || 'System'}
-                      </div>
-                    </td>
-                    <td style={cellStyle}>
-                      <div style={{ fontSize: 12, color: theme.sub }}>
-                        {log.actor_email || 'N/A'}
                       </div>
                     </td>
                     <td style={cellStyle}>

@@ -428,7 +428,9 @@ class UserRoleViewSet(viewsets.ViewSet):
             # Update is_staff based on role types (if any role is internal_operator, user is staff)
             has_internal_role = user.profile.roles.filter(type='internal_operator').exists()
             user.profile.is_staff = has_internal_role
+            user.is_staff = has_internal_role
             user.profile.save()
+            user.save()
             
             # Update email if provided
             if email:
