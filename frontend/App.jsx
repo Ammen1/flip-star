@@ -4,6 +4,191 @@ import { TikTokLayout } from './components/TikTokLayout';
 import { useTheme } from './contexts/ThemeContext';
 import api from './api';
 import webPush from './services/WebPushService';
+import { Coins, Gift, X } from 'lucide-react';
+
+// ---------------------------------------------------------------
+// Helper Styles for Modal
+// ---------------------------------------------------------------
+
+const btnPrimary = (T) => ({
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  padding: '12px 16px', borderRadius: 12, border: 'none',
+  background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
+  cursor: 'pointer',
+});
+
+const modalLabel = (T) => ({
+  display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6,
+});
+
+const modalInput = (T) => ({
+  width: '100%', padding: '12px 14px', borderRadius: 10,
+  border: `1px solid ${T.border}`, background: T.card, color: T.txt,
+  fontSize: 15, outline: 'none', boxSizing: 'border-box',
+});
+
+// ---------------------------------------------------------------
+// Modal Components
+// ---------------------------------------------------------------
+
+function Modal({ children, onClose, theme: T, title }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999, padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: T.card, borderRadius: 16, padding: 20,
+          maxWidth: 400, width: '100%', maxHeight: '80vh', overflowY: 'auto',
+          border: `1px solid ${T.border}`,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: T.txt, margin: 0 }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.sub }}>
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ theme: T, icon, title, subtitle }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '40px 20px', color: T.sub }}>
+      <div style={{ marginBottom: 12, opacity: 0.5 }}>{icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: T.txt, marginBottom: 4 }}>{title}</div>
+      {subtitle && <div style={{ fontSize: 13 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
+function TopUpModal({ theme: T, packages, onClose }) {
+  const [selected, setSelected] = useState(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Fetch user's phone number when modal opens
+  useEffect(() => {
+    const fetchPhoneNumber = async () => {
+      try {
+        const profile = await api.request('/profile/me/');
+        if (profile && profile.phone_number) {
+          setPhoneNumber(profile.phone_number);
+        }
+      } catch (error) {
+        console.error('[TopUpModal] Failed to fetch phone number:', error);
+      }
+    };
+    fetchPhoneNumber();
+  }, []);
+
+  const handlePurchase = async () => {
+    if (!selected || !phoneNumber) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${window.location.origin}/api/wallet/telebirr/initiate/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          package_id: selected.id,
+          phone_number: phoneNumber,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.payment_url) {
+        window.open(data.payment_url, '_blank');
+        onClose();
+      } else {
+        alert(data.error || 'Payment initiation failed');
+      }
+    } catch (error) {
+      console.error('telebirr payment error:', error);
+      alert('Payment initiation failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Modal onClose={onClose} theme={T} title="Buy Coins with telebirr">
+      {packages.length === 0 ? (
+        <EmptyState theme={T} icon={<Gift size={32} />} title="No packages available"
+                    subtitle="Check back soon for coin packages." />
+      ) : (
+        <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+          {packages.map((pkg) => (
+            <button
+              key={pkg.id}
+              onClick={() => setSelected(pkg)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: 14,
+                borderRadius: 12,
+                border: `2px solid ${selected?.id === pkg.id ? T.pri : T.border}`,
+                background: selected?.id === pkg.id ? T.pri + '10' : T.card,
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 44, height: 44, borderRadius: 12,
+                background: T.pri + '15',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Coins size={22} color={T.pri} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: T.txt }}>
+                  {pkg.total_coins.toLocaleString()} coins
+                </div>
+                {pkg.bonus_coins > 0 && (
+                  <div style={{ fontSize: 11, color: '#10B981', fontWeight: 600 }}>
+                    +{pkg.bonus_coins} bonus
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: T.sub }}>{pkg.name}</div>
+              </div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: T.pri }}>
+                {Number(pkg.price_etb).toFixed(0)} ETB
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ ...modalLabel(T), marginBottom: 6 }}>Phone Number (for telebirr)</label>
+        <input
+          type="tel"
+          value={phoneNumber}
+          onChange={(e) => setPhoneNumber(e.target.value)}
+          placeholder="+251 9xx xxx xxx"
+          style={modalInput(T)}
+        />
+      </div>
+
+      <button
+        onClick={handlePurchase}
+        disabled={!selected || !phoneNumber || loading}
+        style={{ ...btnPrimary(T), width: '100%', opacity: (!selected || !phoneNumber || loading) ? 0.5 : 1 }}
+      >
+        {loading ? 'Processing...' : selected ? `Pay ${Number(selected.price_etb).toFixed(0)} ETB via telebirr` : 'Select a package'}
+      </button>
+    </Modal>
+  );
+}
 
 // Lazy load ALL non-critical components for smaller initial bundle
 const PhoneLoginModal = lazy(() => import('./components/PhoneLoginModal').then(m => ({ default: m.PhoneLoginModal })));
@@ -233,6 +418,8 @@ export default function WerqRoot() {
   const [showSettings, setShowSettings] = useState(_historyState.showSettings || false);
   const [showWallet, setShowWallet] = useState(_historyState.showWallet || false);
   const [showSubscription, setShowSubscription] = useState(_historyState.showSubscription || false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [coinPackages, setCoinPackages] = useState([]);
   const settingsReturnState = useRef(null); // tracks where to go back to when settings closes
   const walletReturnState = useRef(null); // tracks where to go back to when wallet closes
   const walletShowTopUpOnMount = useRef(false); // tracks whether to show top-up modal on wallet mount
@@ -961,27 +1148,17 @@ export default function WerqRoot() {
     pushHistoryState({ showWallet: true });
   };
 
-  const handleShowCoinPurchase = () => {
+  const handleShowCoinPurchase = async () => {
     if (!authUser) { setShowLogin(true); return; }
-    // Save the current page so back button can restore it
-    walletReturnState.current = {
-      showProfile, profileUserId, activeTab,
-      showSettings, showNotifications,
-    };
-    setShowWallet(true);
-    setShowSettings(false);
-    setShowProfile(false);
-    setShowPostPage(false);
-    setShowEditProfile(false);
-    setShowFollowersList(false);
-    setShowNotifications(false);
-    setShowCampaigns(false);
-    setShowCampaignDetail(false);
-    setShowCampaignLeaderboard(false);
-    setShowCampaignFeed(false);
-    setShowVideoDetail(false);
-    walletShowTopUpOnMount.current = true;
-    pushHistoryState({ showWallet: true, showTopUp: true });
+    // Load coin packages
+    try {
+      const config = await api.request('/wallet/config/');
+      setCoinPackages(config.packages || []);
+      setShowTopUpModal(true);
+    } catch (error) {
+      console.error('Failed to load coin packages:', error);
+      alert('Failed to load coin packages. Please try again.');
+    }
   };
 
   const handleCloseWallet = () => {
@@ -1425,6 +1602,13 @@ export default function WerqRoot() {
               />
             </Suspense>
           </LazyLoadErrorBoundary>
+        )}
+        {showTopUpModal && (
+          <TopUpModal
+            theme={colors}
+            packages={coinPackages}
+            onClose={() => setShowTopUpModal(false)}
+          />
         )}
         {showVideoDetail && (
           <LazyLoadErrorBoundary>
