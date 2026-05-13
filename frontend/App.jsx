@@ -25,6 +25,7 @@ const modalInput = (T) => ({
   width: '100%', padding: '12px 14px', borderRadius: 10,
   border: `1px solid ${T.border}`, background: T.card, color: T.txt,
   fontSize: 15, outline: 'none', boxSizing: 'border-box',
+  cursor: 'text', pointerEvents: 'auto',
 });
 
 // ---------------------------------------------------------------
@@ -170,7 +171,12 @@ function TopUpModal({ theme: T, onClose }) {
           value={phoneNumber}
           onChange={(e) => setPhoneNumber(e.target.value)}
           placeholder="+251 9xx xxx xxx"
-          style={modalInput(T)}
+          style={{
+            ...modalInput(T),
+            background: (T.card || '#1A1A1A'),
+            color: (T.txt || '#fff'),
+            border: `1px solid ${T.border || '#444'}`,
+          }}
         />
       </div>
 
