@@ -761,7 +761,6 @@ export function AdminManagementPage({ theme }) {
           justifyContent: 'center',
           zIndex: 1000,
           padding: 20,
-          overflowY: 'auto',
         }}>
           <div style={{
             background: theme.card,
@@ -1093,7 +1092,6 @@ export function AdminManagementPage({ theme }) {
           justifyContent: 'center',
           zIndex: 1000,
           padding: 20,
-          overflowY: 'auto',
         }}>
           <div style={{
             background: theme.card,
@@ -1104,7 +1102,6 @@ export function AdminManagementPage({ theme }) {
             border: `1px solid ${theme.border}`,
             margin: 'auto',
             position: 'relative',
-            top: userRoleModal.clickPosition.y > 300 ? (userRoleModal.clickPosition.y - 300) / 2 : 0,
           }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
               Assign Roles to {userRoleModal.username}

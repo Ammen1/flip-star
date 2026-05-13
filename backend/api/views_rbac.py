@@ -389,7 +389,7 @@ class UserRoleViewSet(viewsets.ViewSet):
     
     def list(self, request):
         """List all users with their roles"""
-        users = User.objects.select_related('profile__role').all()
+        users = User.objects.prefetch_related('profile__roles').all()
         serializer = UserRoleSerializer(users, many=True)
         return Response(serializer.data)
     
@@ -406,37 +406,37 @@ class UserRoleViewSet(viewsets.ViewSet):
             )
     
     def update(self, request, user_id=None):
-        """Assign or change a user's role"""
+        """Assign or change a user's roles (supports multiple roles)"""
         try:
             user = User.objects.get(id=user_id)
-            role_id = request.data.get('role_id')
+            role_ids = request.data.get('role_ids', [])
             
-            if not role_id:
-                return Response(
-                    {'error': 'role_id is required'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # Get current roles
+            old_role_ids = list(user.profile.roles.values_list('id', flat=True))
             
-            role = Role.objects.get(id=role_id)
-            old_role_id = user.profile.role.id if user.profile.role else None
+            # Clear existing roles and add new ones
+            user.profile.roles.clear()
+            for role_id in role_ids:
+                try:
+                    role = Role.objects.get(id=role_id)
+                    user.profile.roles.add(role)
+                except Role.DoesNotExist:
+                    continue
             
-            # Update user's role
-            user.profile.role = role
-            user.profile.save()
-            
-            # Update is_staff based on role type
-            user.profile.is_staff = (role.type == 'internal_operator')
+            # Update is_staff based on role types (if any role is internal_operator, user is staff)
+            has_internal_role = user.profile.roles.filter(type='internal_operator').exists()
+            user.profile.is_staff = has_internal_role
             user.profile.save()
             
             # Log the action
             AuditLog.objects.create(
                 actor=request.user,
-                action='role_assign' if old_role_id != role_id else 'role_update',
+                action='role_assign' if set(old_role_ids) != set(role_ids) else 'role_update',
                 target_type='user',
                 target_id=str(user.id),
                 target_name=user.username,
-                old_value={'role': old_role_id},
-                new_value={'role': role_id},
+                old_value={'roles': old_role_ids},
+                new_value={'roles': role_ids},
                 ip_address=self.get_client_ip(),
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
             )

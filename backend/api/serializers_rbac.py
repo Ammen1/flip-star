@@ -80,14 +80,22 @@ class UserRoleSerializer(serializers.ModelSerializer):
     """Serializer for User with Role information"""
     username = serializers.CharField(source='user.username', read_only=True)
     email = serializers.CharField(source='user.email', read_only=True)
-    role_id = serializers.CharField(source='profile.role.id', read_only=True)
-    role_name = serializers.CharField(source='profile.role.name', read_only=True)
-    role_type = serializers.CharField(source='profile.role.type', read_only=True)
+    roles = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(source='profile.is_staff', read_only=True)
     
     class Meta:
         model = User
-        fields = [
-            'id', 'username', 'email', 'role_id', 'role_name', 'role_type', 'is_staff',
-        ]
-        read_only_fields = ['id', 'username', 'email', 'role_id', 'role_name', 'role_type', 'is_staff']
+        fields = ['id', 'username', 'email', 'roles', 'is_staff']
+        read_only_fields = ['id', 'username', 'email', 'roles', 'is_staff']
+    
+    def get_roles(self, obj):
+        """Get user's roles as a list of role objects"""
+        profile = getattr(obj, 'profile', None)
+        if profile:
+            roles = profile.roles.all()
+            return [{
+                'id': role.id,
+                'name': role.name,
+                'type': role.type,
+            } for role in roles]
+        return []

@@ -96,8 +96,8 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # RBAC - Role Assignment
-    role = models.ForeignKey(Role, on_delete=models.PROTECT, null=True, blank=True, related_name='users', help_text='User role for RBAC')
+    # RBAC - Role Assignment (Multiple roles supported)
+    roles = models.ManyToManyField(Role, blank=True, related_name='users', help_text='User roles for RBAC')
     is_staff = models.BooleanField(default=False, help_text='Is this user an internal operator (admin staff)?')
 
     def __str__(self):
