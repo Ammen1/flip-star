@@ -152,7 +152,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
             <div style={{ textAlign: "center", fontSize: 13, color: "#666" }}>
               Don't have an account?{" "}
               <button type="button" onClick={onSignUp} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
-                Subscribe & Register
+                Subscribe
               </button>
             </div>
           </div>
