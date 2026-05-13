@@ -47,6 +47,21 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEdit
   }, []);
 
   useEffect(() => {
+    // Fetch privacy settings from server
+    api.getPrivacySettings().then(data => {
+      if (data) {
+        setPrivacy({
+          privateAccount: data.privateAccount ?? false,
+          showActivity: data.showActivity ?? true,
+          allowMessages: data.allowMessages ?? true,
+        });
+      }
+    }).catch(() => {
+      // Keep localStorage values if fetch fails - silent fail
+    });
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem('notifications', JSON.stringify(notifications));
   }, [notifications]);
 
