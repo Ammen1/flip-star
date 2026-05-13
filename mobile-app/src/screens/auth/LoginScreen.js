@@ -37,11 +37,11 @@ const FAQ_ITEMS = [
   },
   { 
     q: "How do I subscribe to FlipStar?", 
-    a: "Via SMS: Send 'OK' to the FlipStar shortcode. Via App/Web: Download the app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, then enter the confirmation code sent to your number." 
+    a: "Via SMS: Send 'OK1' (Daily), 'OK2' (Weekly), or 'OK3' (Monthly) to the FlipStar shortcode. Via App/Web: Download the app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, then enter the confirmation code sent to your number." 
   },
   { 
     q: "What subscription plans are available?", 
-    a: "Flip Daily: 3 ETB/24hrs • Flip Weekly: 20 ETB/7days • Flip Monthly: 70 ETB/30days • Flip Yearly: 600 ETB/365days • Flip On-Demand: 10 ETB for 100 Coins (one-time purchase)." 
+    a: "Daily Plan: 3 ETB per day • Weekly Plan: 20 ETB per week • Monthly Plan: 70 ETB per month • Yearly Plan: 600 ETB per year • On-Demand: 10 ETB for 100 Coins (one-time purchase)." 
   },
   { 
     q: "Is there a free trial?", 
@@ -53,7 +53,7 @@ const FAQ_ITEMS = [
   },
   { 
     q: "How do I unsubscribe?", 
-    a: "Send 'STOP' to the FlipStar shortcode, or go to Account Settings in the app and select Unsubscribe. Your request is processed immediately and you will receive a confirmation SMS." 
+    a: "Send 'STOP1' (Daily), 'STOP2' (Weekly), or 'STOP3' (Monthly) to the FlipStar shortcode, or go to Account Settings in the app and select Unsubscribe. Your request is processed immediately and you will receive a confirmation SMS." 
   },
   { 
     q: "What happens to my coins and progress if I unsubscribe?", 
@@ -61,7 +61,7 @@ const FAQ_ITEMS = [
   },
   { 
     q: "What are coins and how do I earn them?", 
-    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), or Purchase (1 ETB = 10 Coins via telebirr/Airtime)." 
+    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), or Purchase via telebirr/Airtime." 
   },
   { 
     q: "What can I do with coins?", 
@@ -224,7 +224,7 @@ function TermsModal({ onClose }) {
             <Text style={ts.sectionTitle}>2. Service Overview</Text>
             <Text style={ts.bullet}>• FlipStar is available to all active Ethio Telecom prepaid, postpaid, and hybrid mobile customers with a smartphone device (Android, iOS, or any HTML5-capable browser for web access).</Text>
             <Text style={ts.bullet}>• The Service allows users to upload short-form videos (15–120 seconds depending on user tier) and photos, interact with content, participate in daily, weekly, monthly, and grand prize competitions, and earn and spend digital coins.</Text>
-            <Text style={ts.bullet}>• To subscribe via SMS: send 'OK' to the FlipStar shortcode. To unsubscribe: send 'STOP' to the same shortcode.</Text>
+            <Text style={ts.bullet}>• To subscribe via SMS: send 'OK1' (Daily), 'OK2' (Weekly), or 'OK3' (Monthly) to the FlipStar shortcode. To unsubscribe: send 'STOP1', 'STOP2', or 'STOP3' to the same shortcode.</Text>
             <Text style={ts.bullet}>• To subscribe via app or web: download the FlipStar app or visit https://flipstar.et, select Sign Up, and follow the on-screen registration flow.</Text>
 
             {/* 3 */}
@@ -234,10 +234,10 @@ function TermsModal({ onClose }) {
               headers={['Plan', 'Price', 'Billing Cycle', 'Notes']}
               flex={[1.1, 0.9, 1, 1.5]}
               rows={[
-                ['Flip Daily', '3 ETB', 'Every 24 hrs', 'Charged daily. Auto-renewed while active.'],
-                ['Flip Weekly', '20 ETB', 'Every 7 days', 'Charged weekly. Auto-renewed while active.'],
-                ['Flip Monthly', '70 ETB', 'Every 30 days', 'Charged monthly. Auto-renewed while active.'],
-                ['Flip On-Demand', '10 ETB / 100 Coins', 'One-time', 'Coins on demand. No recurring charge.'],
+                ['Daily Plan', '3 ETB', 'Every 24 hrs', 'Charged daily. Auto-renewed while active.'],
+                ['Weekly Plan', '20 ETB', 'Every 7 days', 'Charged weekly. Auto-renewed while active.'],
+                ['Monthly Plan', '70 ETB', 'Every 30 days', 'Charged monthly. Auto-renewed while active.'],
+                ['On-Demand Plan', '10 ETB / 100 Coins', 'One-time', 'Coins on demand. No recurring charge.'],
               ]}
             />
             <Text style={ts.subSectionTitle}>3.2 Eligibility</Text>
@@ -259,7 +259,7 @@ function TermsModal({ onClose }) {
             <Text style={ts.bullet}>• Upon successful renewal, the subscriber will receive an SMS notification confirming the renewal and extended service period.</Text>
             <Text style={ts.bullet}>• If auto-renewal fails due to insufficient balance, service access may be suspended until the next successful charge or manual resubscription.</Text>
             <Text style={ts.subSectionTitle}>3.6 Unsubscription</Text>
-            <Text style={ts.bullet}>• To unsubscribe, send 'STOP' to the FlipStar shortcode, or use the unsubscription option within the app or web portal under Account Settings.</Text>
+            <Text style={ts.bullet}>• To unsubscribe, send 'STOP1', 'STOP2', or 'STOP3' to the FlipStar shortcode, or use the unsubscription option within the app or web portal under Account Settings.</Text>
             <Text style={ts.bullet}>• Unsubscription requests are processed immediately.</Text>
             <Text style={ts.bullet}>• A subscriber is considered active until they explicitly unsubscribe. Once cancelled, the user must re-subscribe to regain access to premium features.</Text>
             <Text style={ts.bullet}>• Coins and digital assets earned or purchased prior to unsubscription remain valid for 30 days and are restored upon re-subscription within that period if not expired.</Text>
@@ -282,7 +282,7 @@ function TermsModal({ onClose }) {
               headers={['Action', 'Rate / Rule']}
               flex={[1, 1.8]}
               rows={[
-                ['Purchase coins', '1 ETB = 10 Coins via telebirr or Airtime. No commission at purchase.'],
+                ['Purchase coins', 'Purchase coins via telebirr or Airtime. No commission at purchase.'],
                 ['On-Demand Pack', '10 ETB = 100 Coins (Flip On-Demand purchase).'],
                 ['Daily login bonus', '3 Coins per day for opening the FlipStar app.'],
                 ['Weekly loyalty bonus', '50 Coins for consistent daily usage for a full week.'],

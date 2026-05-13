@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../contexts/ThemeContext';
 import api from '../../api';
 
 const GOLD = '#C8B56A';
@@ -48,6 +49,7 @@ const getFallbackTiers = () => [
 
 export default function SubscriptionPlansModal({ visible, onClose, onSuccess, user }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [tiers, setTiers] = useState(getFallbackTiers());
   const [loading, setLoading] = useState(false);
   const [selectedTier, setSelectedTier] = useState(null);
@@ -286,7 +288,7 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
               {/* Header with Back Button */}
               <View style={s.topHeader}>
                 <TouchableOpacity style={s.topBackButton} onPress={onClose}>
-                  <Ionicons name="chevron-back" size={20} color={GOLD} />
+                  <Ionicons name="chevron-back" size={20} color={colors.primary} />
                 </TouchableOpacity>
                 <Text style={s.headerTitle}>Choose Your Plan</Text>
                 <View style={s.placeholder} />

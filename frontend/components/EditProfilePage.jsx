@@ -353,24 +353,24 @@ export function EditProfilePage({ user, onBack, onSave }) {
           onClick={handleSave}
           disabled={saving}
           style={{
-            width: "100%",
-            padding: "14px 20px",
+            width: "auto",
+            padding: "12px 20px",
             background: T.pri,
             border: "none",
-            borderRadius: 10,
+            borderRadius: 8,
             color: "#fff",
-            fontSize: 15,
-            fontWeight: 700,
+            fontSize: 14,
+            fontWeight: 600,
             cursor: saving ? "not-allowed" : "pointer",
             opacity: saving ? 0.6 : 1,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 8,
+            gap: 6,
           }}
         >
-          <Save size={18} />
-          {saving ? "Saving..." : "Save Changes"}
+          <Save size={16} />
+          {saving ? "Saving..." : "Save"}
         </button>
       </div>
     </div>

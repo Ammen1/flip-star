@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../api';
 import config from '../config';
+import SoundManager from '../utils/SoundUtils';
 
 const GOLD = '#C8B56A';
 const LIGHT_GOLD = '#F9E08B';
@@ -111,7 +112,15 @@ export default function NotificationsScreen({ navigation }) {
     try {
       if (!silent) setLoading(true);
       const data = await api.request('/notifications/');
-      setNotifications(Array.isArray(data) ? data : (data.results || []));
+      const newNotifications = Array.isArray(data) ? data : (data.results || []);
+      
+      // Play notification sound for new unread notifications
+      const hasNewNotifications = newNotifications.some(n => !n.is_read);
+      if (hasNewNotifications && !silent) {
+        SoundManager.playNotificationSound();
+      }
+      
+      setNotifications(newNotifications);
     } catch { 
       setNotifications([]); 
     } finally { 

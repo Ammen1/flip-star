@@ -50,10 +50,22 @@ export default function WalletScreen({ navigation }) {
         api.request('/coins/packages/').catch(() => []),
         api.request('/profile/me/').catch(() => ({})),
       ]);
+      console.log('Wallet data:', s);
+      console.log('Profile data:', profile);
       setSummary({ ...s, profile });
       setConfig(c);
       setPackages(Array.isArray(pkgs) ? pkgs : (pkgs.results || []));
-    } catch (e) { Alert.alert('Error', 'Failed to load wallet'); }
+      
+      // Use recent transactions from wallet API response
+      if (s?.recent_transactions && !transactions.length) {
+        setTransactions(s.recent_transactions);
+      } else if (!transactions.length) {
+        loadTransactions();
+      }
+    } catch (e) { 
+      console.error('Wallet load error:', e);
+      Alert.alert('Error', 'Failed to load wallet'); 
+    }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -78,8 +90,12 @@ export default function WalletScreen({ navigation }) {
   };
 
   const handleWithdraw = async () => {
-    if (!withdrawAmount || !withdrawAccount) {
-      Alert.alert('Error', 'Please fill all fields'); return;
+    if (!withdrawAmount || !withdrawMethod || !withdrawAccount) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
+    if (withdrawAccount.length !== 6 || !/^\d{6}$/.test(withdrawAccount)) {
+      Alert.alert('Error', 'Please enter a valid 6-digit PIN'); return;
     }
     setProcessing(true);
     try {
@@ -93,6 +109,44 @@ export default function WalletScreen({ navigation }) {
       loadAll(true);
     } catch (e) { Alert.alert('Error', e.message || 'Withdrawal failed'); }
     finally { setProcessing(false); }
+  };
+
+  const handleMonetizeCoins = async () => {
+    const availableCoins = summary?.balance?.purchased || 0;
+    if (availableCoins < 1000) {
+      Alert.alert('Insufficient Coins', 'You need at least 1,000 purchased coins to monetize.');
+      return;
+    }
+    
+    Alert.alert(
+      'Monetize Coins',
+      `Convert ${availableCoins} coins to ETB via telebirr?\nEstimated payout: ${(availableCoins * 0.08).toFixed(2)} ETB (after 20% commission)`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Monetize',
+          onPress: async () => {
+            try {
+              const response = await api.request('/monetize/', {
+                method: 'POST',
+                body: JSON.stringify({
+                  coins: availableCoins,
+                  method: 'telebirr'
+                })
+              });
+              
+              Alert.alert(
+                'Success', 
+                `Monetization request submitted!\n${availableCoins} coins will be converted to ${(availableCoins * 0.08).toFixed(2)} ETB`
+              );
+              loadAll();
+            } catch (error) {
+              Alert.alert('Error', 'Monetization failed. Please try again.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleTopUp = async () => {
@@ -153,50 +207,50 @@ export default function WalletScreen({ navigation }) {
             <Ionicons name="wallet" size={22} color="#000" />
             <Text style={styles.balanceLabel}>My Wallet</Text>
           </View>
-          <Text style={styles.balanceAmount}>{coins}</Text>
+          <Text style={styles.balanceAmount}>{total}</Text>
           <Text style={styles.balanceSubtext}>Coins</Text>
         </View>
 
         {/* Gamification Stats */}
         <View style={styles.statsContainer}>
-          <View style={[styles.statItem, { backgroundColor: '#2D1F1F' }]}>
-            <Ionicons name="flame" size={28} color="#FF6B6B" />
-            <Text style={styles.statNumber}>{loginStreak}</Text>
-            <Text style={styles.statLabel}>Streak</Text>
+          <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
+            <Ionicons name="flame" size={28} color={colors.error} />
+            <Text style={[styles.statNumber, { color: colors.text }]}>{loginStreak}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Streak</Text>
           </View>
-          <View style={[styles.statItem, { backgroundColor: '#2D2A1F' }]}>
-            <Ionicons name="star" size={28} color="#FFD93D" />
-            <Text style={styles.statNumber}>{points}</Text>
-            <Text style={styles.statLabel}>Points</Text>
+          <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
+            <Ionicons name="star" size={28} color={colors.primary} />
+            <Text style={[styles.statNumber, { color: colors.text }]}>{points}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Points</Text>
           </View>
-          <View style={[styles.statItem, { backgroundColor: '#252029' }]}>
-            <Ionicons name="flash" size={28} color="#A78BFA" />
-            <Text style={styles.statNumber}>{xp}</Text>
-            <Text style={styles.statLabel}>XP</Text>
+          <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
+            <Ionicons name="flash" size={28} color={colors.primary} />
+            <Text style={[styles.statNumber, { color: colors.text }]}>{xp}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>XP</Text>
           </View>
-          <View style={[styles.statItem, { backgroundColor: '#1F2A2D' }]}>
-            <Ionicons name="trophy" size={28} color="#4ECDC4" />
-            <Text style={styles.statNumber}>{level}</Text>
-            <Text style={styles.statLabel}>Level</Text>
+          <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
+            <Ionicons name="trophy" size={28} color={colors.primary} />
+            <Text style={[styles.statNumber, { color: colors.text }]}>{level}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Level</Text>
           </View>
         </View>
 
         {/* Action buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowTopUpModal(true)}>
-            <View style={[styles.actionGrad, { backgroundColor: colors.primary }]}>
+            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
               <Ionicons name="add-circle" size={24} color="#fff" />
               <Text style={styles.actionText}>Buy Coins</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowWithdrawModal(true)}>
-            <View style={[styles.actionGrad, { backgroundColor: colors.primary }]}>
+            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
               <Ionicons name="arrow-up-circle" size={24} color="#fff" />
               <Text style={styles.actionText}>Withdraw</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => handleTabChange('transactions')}>
-            <View style={[styles.actionGrad, { backgroundColor: colors.primary }]}>
+            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
               <Ionicons name="receipt" size={24} color="#fff" />
               <Text style={styles.actionText}>History</Text>
             </View>
@@ -219,6 +273,55 @@ export default function WalletScreen({ navigation }) {
           {/* Overview */}
           {activeTab === 'overview' && (
             <>
+              {/* Wallet Summary Cards */}
+              <View style={styles.summaryCards}>
+                <View style={[styles.summaryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                  <Ionicons name="wallet" size={24} color={colors.primary} />
+                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Available Balance</Text>
+                  <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.balance?.total || 0}</Text>
+                  <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
+                </View>
+                
+                <View style={[styles.summaryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                  <Ionicons name="trending-up" size={24} color="#10B981" />
+                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Earned</Text>
+                  <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.totals?.lifetime_earned || summary?.balance?.earned || 0}</Text>
+                  <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
+                </View>
+                
+                <View style={[styles.summaryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                  <Ionicons name="trending-down" size={24} color="#EF4444" />
+                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Spent</Text>
+                  <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.totals?.lifetime_spent || 0}</Text>
+                  <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
+                </View>
+              </View>
+
+              {/* Recent Transactions */}
+              <Text style={styles.sectionTitle}>Recent Transactions</Text>
+              {transactions.length === 0
+                ? <Text style={styles.emptyText}>No transactions yet</Text>
+                : transactions.slice(0, 5).map(tx => (
+                  <View key={tx.id} style={styles.txItem}>
+                    <View style={[styles.txIcon, { backgroundColor: tx.is_credit ? '#0D2D1A' : '#2D1010' }]}>
+                      <Ionicons name={tx.is_credit ? 'arrow-down' : 'arrow-up'} size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.txType}>{tx.type_display || tx.type}</Text>
+                      <Text style={styles.txDate}>{timeAgo(tx.created_at)}</Text>
+                    </View>
+                    <Text style={[styles.txAmount, { color: tx.is_credit ? '#10B981' : '#EF4444' }]}>
+                      {tx.is_credit ? '+' : '-'}{tx.coins}
+                    </Text>
+                  </View>
+                ))}
+              {transactions.length > 5 && (
+                <TouchableOpacity onPress={() => setActiveTab('transactions')}>
+                  <Text style={[styles.viewAllText, { color: colors.primary }]}>View all transactions →</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Coin Packages */}
               <Text style={styles.sectionTitle}>Coin Packages</Text>
               {packages.length === 0
                 ? <Text style={styles.emptyText}>No packages available</Text>
@@ -255,7 +358,13 @@ export default function WalletScreen({ navigation }) {
                 : transactions.map(tx => (
                   <View key={tx.id} style={styles.txItem}>
                     <View style={[styles.txIcon, { backgroundColor: tx.is_credit ? '#0D2D1A' : '#2D1010' }]}>
-                      <Ionicons name={tx.is_credit ? 'arrow-down' : 'arrow-up'} size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
+                      <Ionicons name={
+                        tx.type === 'gift' || tx.type_display?.includes('gift') 
+                          ? (tx.is_credit ? 'trending-up' : 'trending-down')
+                          : tx.type === 'airtime' || tx.type_display?.includes('airtime')
+                          ? (tx.is_credit ? 'trending-up' : 'trending-down')
+                          : (tx.is_credit ? 'arrow-down' : 'arrow-up')
+                      } size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
                       <Text style={styles.txType}>{tx.type_display || tx.type}</Text>
@@ -266,6 +375,26 @@ export default function WalletScreen({ navigation }) {
                     </Text>
                   </View>
                 ))}
+              {activeTab === 'transactions' && transactions.length > 0 && (
+                <View style={[styles.monetizeSection, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                  <View style={styles.monetizeHeader}>
+                    <Ionicons name="cash-outline" size={24} color={GOLD} />
+                    <View style={styles.monetizeInfo}>
+                      <Text style={[styles.monetizeTitle, { color: colors.text }]}>Monetize Your Coins</Text>
+                      <Text style={[styles.monetizeSubtitle, { color: colors.textSecondary }]}>
+                        Convert your available coins to ETB via telebirr
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity 
+                    style={[styles.monetizeBtn, { backgroundColor: GOLD }]}
+                    onPress={() => handleMonetizeCoins()}
+                  >
+                    <Ionicons name="trending-up" size={20} color="#000" />
+                    <Text style={styles.monetizeBtnText}>Monetize All Coins</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </>
           )}
 
@@ -315,8 +444,17 @@ export default function WalletScreen({ navigation }) {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.fieldLabel}>Account Number</Text>
-            <TextInput style={styles.input} placeholder="Phone or account number" placeholderTextColor="#666" value={withdrawAccount} onChangeText={setWithdrawAccount} keyboardType="phone-pad" />
+            <Text style={styles.fieldLabel}>6-Digit PIN</Text>
+            <TextInput 
+              style={styles.input} 
+              placeholder="Enter 6-digit PIN" 
+              placeholderTextColor="#666" 
+              value={withdrawAccount} 
+              onChangeText={setWithdrawAccount} 
+              keyboardType="number-pad" 
+              maxLength={6}
+              secureTextEntry={true}
+            />
             <TouchableOpacity style={[styles.submitBtn, processing && { opacity: 0.6 }]} onPress={handleWithdraw} disabled={processing}>
               {processing ? <ActivityIndicator color="#000" /> : <Text style={styles.submitBtnText}>Submit Withdrawal</Text>}
             </TouchableOpacity>
@@ -387,6 +525,12 @@ const styles = StyleSheet.create({
   featuredText: { fontSize: 10, color: '#000', fontWeight: '700' },
   infoBox: { flexDirection: 'row', backgroundColor: CARD, borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: BORDER, marginTop: 8 },
   infoText: { flex: 1, fontSize: 12, color: '#888', lineHeight: 18 },
+  summaryCards: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+  summaryCard: { flex: 1, alignItems: 'center', padding: 16, borderRadius: 12, borderWidth: 1, marginHorizontal: 4 },
+  summaryLabel: { fontSize: 12, fontWeight: '500', marginTop: 8, marginBottom: 4 },
+  summaryAmount: { fontSize: 20, fontWeight: '700', marginBottom: 2 },
+  summarySubtext: { fontSize: 11, fontWeight: '500' },
+  viewAllText: { textAlign: 'center', padding: 12, fontWeight: '600' },
   txItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   txIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   txType: { fontSize: 14, fontWeight: '600', color: '#fff' },
@@ -441,5 +585,12 @@ const styles = StyleSheet.create({
   submitBtn: { backgroundColor: GOLD, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
   selectedPkg: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
+  monetizeSection: { margin: 16, padding: 20, borderRadius: 16, borderWidth: 1, marginTop: 20 },
+  monetizeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  monetizeInfo: { flex: 1, marginLeft: 12 },
+  monetizeTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  monetizeSubtitle: { fontSize: 13, lineHeight: 18 },
+  monetizeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 12, gap: 8 },
+  monetizeBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
 });
 

@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, TouchableOpacity, Image,
-  ActivityIndicator, RefreshControl, TextInput, Modal, ScrollView,
-  Dimensions, Alert, StatusBar, Animated, Share, KeyboardAvoidingView,
-  Platform,
+  View, Text, StyleSheet, TouchableOpacity, Image, FlatList,
+  ActivityIndicator, ScrollView, Dimensions, Alert, RefreshControl,
+  StatusBar, Modal, TextInput, Share, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
+import config from '../config';
+import SoundManager from '../utils/SoundUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Avatar from '../components/Avatar';
 import UserSuggestions from '../components/UserSuggestions';
 import HorizontalUserSuggestions from '../components/HorizontalUserSuggestions';
@@ -133,9 +134,9 @@ const VideoThumbnail = React.memo(({ thumbnailUrl, style, postMedia }) => {
   
   if (showPlaceholder || !normalizedUrl) {
     return (
-      <View style={[style, { backgroundColor: '#2a2a2a', justifyContent: 'center', alignItems: 'center' }]}>
-        <Ionicons name="videocam" size={64} color="#C8B56A" />
-        <Text style={styles.videoPlaceholderText}>Video</Text>
+      <View style={[style, { backgroundColor: colors.cardBg, justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="videocam" size={64} color={colors.primary} />
+        <Text style={[styles.videoPlaceholderText, { color: colors.textSecondary }]}>Video</Text>
       </View>
     );
   }
@@ -864,17 +865,32 @@ export default function HomeScreen({ navigation, route }) {
       setGiftSent(true);
       setUserCoins(prev => prev - totalCost);
       setGiftsSentToday(prev => prev + 1);
+      
+      // Play coin sound for successful gift
+      SoundManager.playCoinSound();
+      
       setTimeout(() => {
         setShowGiftModal(false);
         setGiftSent(null);
       }, 2000);
     } catch (error) {
-      console.error('Gift error:', error);
-      const errorData = error.response?.data || error;
-      if (errorData.needs_recharge) {
-        setGiftError(`Insufficient purchased coins. Need ${totalCost}, have ${userCoins}`);
+      const errMsg = error?.message || '';
+      const needsRecharge = errMsg.includes('Insufficient') || errMsg.includes('needs_recharge');
+      
+      if (needsRecharge) {
+        const match = errMsg.match(/need (\d+).*have (\d+)/i);
+        const needed = match ? match[1] : totalCost;
+        const have = match ? match[2] : userCoins;
+        Alert.alert(
+          'Insufficient Coins',
+          `You need ${needed} purchased coins but only have ${have}.\n\nOnly purchased coins can be used for gifting. Please top up your coins.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Buy Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+          ]
+        );
       } else {
-        setGiftError(errorData.error || error.message || 'Failed to send gift');
+        setGiftError(errMsg || 'Failed to send gift');
       }
     } finally {
       setSendingGift(false);
@@ -1108,10 +1124,10 @@ export default function HomeScreen({ navigation, route }) {
             <TextWithMentions text={comment.text} style={styles.commentText} />
             <View style={{ flexDirection: 'row', gap: 16, marginTop: 6 }}>
               <TouchableOpacity onPress={() => {}}>
-                <Ionicons name="heart-outline" size={16} color="#666" />
+                <Ionicons name="heart-outline" size={16} color={colors.textSecondary} />
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setReplyingTo(comment)}>
-                <Text style={{ color: GOLD, fontSize: 13, fontWeight: '600' }}>Reply</Text>
+                <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '600' }}>Reply</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1244,8 +1260,8 @@ export default function HomeScreen({ navigation, route }) {
                   {post.image ? (
                     <OriginalSizeImage imageUrl={post.image} />
                   ) : (
-                    <View style={[styles.mediaImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#2a2a2a' }]}>
-                      <Ionicons name="videocam" size={64} color="#666" />
+                    <View style={[styles.mediaImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.cardBg }]}>
+                      <Ionicons name="videocam" size={64} color={colors.textSecondary} />
                     </View>
                   )}
                   {/* Play icon overlay for videos */}
@@ -1276,30 +1292,34 @@ export default function HomeScreen({ navigation, route }) {
             {/* Like */}
             <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(post)}>
               <Ionicons
-                name={post.is_liked ? 'heart' : 'heart-outline'}
+                name={
+                  post.is_campaign || post.campaign_id 
+                    ? (post.is_liked ? 'trophy' : 'trophy-outline')
+                    : (post.is_liked ? 'heart' : 'heart-outline')
+                }
                 size={24}
-                color={post.is_liked ? LIGHT_GOLD : LIGHT_GOLD}
-                fill={post.is_liked ? LIGHT_GOLD : 'none'}
+                color={post.is_liked ? colors.primary : colors.text}
+                fill={post.is_liked ? colors.primary : 'none'}
               />
-              {post.votes > 0 && <Text style={styles.actionCount}>{post.votes}</Text>}
+              {post.votes > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.votes}</Text>}
             </TouchableOpacity>
             
             {/* Comment */}
             <TouchableOpacity style={styles.actionBtn} onPress={() => openComments(post)}>
-              <Ionicons name="chatbubble-outline" size={22} color={LIGHT_GOLD} />
-              {(post.comment_count || 0) > 0 && <Text style={styles.actionCount}>{post.comment_count || 0}</Text>}
+              <Ionicons name="chatbubble-outline" size={22} color={colors.primary} />
+              {(post.comment_count || 0) > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.comment_count || 0}</Text>}
             </TouchableOpacity>
             
             {/* Share */}
             <TouchableOpacity style={styles.actionBtn} onPress={() => sharePost(post)}>
-              <Ionicons name="share-social-outline" size={22} color={LIGHT_GOLD} />
-              {post.shares > 0 && <Text style={styles.actionCount}>{post.shares}</Text>}
+              <Ionicons name="share-social-outline" size={22} color={colors.primary} />
+              {post.shares > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.shares}</Text>}
             </TouchableOpacity>
             
             {/* Gift - only for other people's posts */}
             {post.user?.username !== user?.username && (
               <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post.user)}>
-                <Ionicons name="gift-outline" size={22} color={LIGHT_GOLD} />
+                <Ionicons name="gift-outline" size={22} color={colors.primary} />
               </TouchableOpacity>
             )}
           </View>
@@ -1313,7 +1333,7 @@ export default function HomeScreen({ navigation, route }) {
               <Ionicons
                 name={post.is_saved ? 'bookmark' : 'bookmark-outline'}
                 size={22}
-                color={post.is_saved ? LIGHT_GOLD : LIGHT_GOLD}
+                color={post.is_saved ? colors.primary : colors.text}
               />
             </TouchableOpacity>
           </View>
@@ -1726,10 +1746,10 @@ export default function HomeScreen({ navigation, route }) {
             {/* Reply indicator */}
             {replyingTo && (
               <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: CARD, borderBottomWidth: 1, borderBottomColor: BORDER }}>
-                <Text style={{ color: GOLD, fontSize: 12 }}>Replying to </Text>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>{replyingTo.user?.username}</Text>
+                <Text style={{ color: colors.primary, fontSize: 12 }}>Replying to </Text>
+                <Text style={{ color: colors.text, fontSize: 12, fontWeight: '600' }}>{replyingTo.user?.username}</Text>
                 <TouchableOpacity onPress={() => setReplyingTo(null)} style={{ marginLeft: 'auto' }}>
-                  <Ionicons name="close-circle" size={16} color="#666" />
+                  <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
             )}
@@ -1739,7 +1759,7 @@ export default function HomeScreen({ navigation, route }) {
               <TextInput
                 style={styles.commentTextInput}
                 placeholder={replyingTo ? `Reply to ${replyingTo.user?.username}...` : "Add a comment..."}
-                placeholderTextColor="#666"
+                placeholderTextColor={colors.textSecondary}
                 value={commentText}
                 onChangeText={setCommentText}
                 multiline
@@ -1748,25 +1768,25 @@ export default function HomeScreen({ navigation, route }) {
                 onPress={() => setCommentText(prev => prev + '@')}
                 style={styles.commentIconButton}
               >
-                <Ionicons name="at" size={20} color={GOLD} />
+                <Ionicons name="at" size={20} color={colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => openGiftModal(commentPost)}
                 style={styles.commentIconButton}
               >
-                <Ionicons name="gift" size={20} color={GOLD} />
+                <Ionicons name="gift" size={20} color={colors.primary} />
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={postComment}
                 disabled={!commentText.trim() || postingComment}
               >
                 {postingComment ? (
-                  <ActivityIndicator size="small" color={GOLD} />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <Ionicons
                     name="send"
                     size={22}
-                    color={commentText.trim() ? GOLD : '#444'}
+                    color={commentText.trim() ? colors.primary : colors.textSecondary}
                   />
                 )}
               </TouchableOpacity>
@@ -2044,20 +2064,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-evenly',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: BG,
     borderBottomWidth: 1,
-    borderBottomColor: BORDER,
   },
   tab: {
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: CARD,
     alignItems: 'center',
     minWidth: 80,
   },
   activeTab: {
-    backgroundColor: GOLD,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -2067,7 +2083,6 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 13,
     fontWeight: '600',
-    color: LIGHT_GOLD,
   },
   activeTabText: {
     color: '#000',

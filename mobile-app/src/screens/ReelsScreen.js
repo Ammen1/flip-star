@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import config from '../config';
+import SoundManager from '../utils/SoundUtils';
 
 const MEDIA_BASE = config.API_BASE_URL.replace('/api', '');
 
@@ -135,6 +136,17 @@ const ReelItem = React.memo(function ReelItem({
   const videoUri = item.media
     ? (item.media.startsWith('http') ? item.media : `${MEDIA_BASE}${item.media}`)
     : null;
+
+  // Check if this is a campaign post
+  const isCampaignPost = item.is_campaign || item.campaign_id || item.campaign || item.competition;
+  console.log('Post data:', { 
+    id: item.id, 
+    is_campaign: item.is_campaign, 
+    campaign_id: item.campaign_id, 
+    campaign: item.campaign,
+    competition: item.competition,
+    isCampaignPost 
+  });
 
   // Use expo-video player
   const player = useVideoPlayer(videoUri, player => {
@@ -504,7 +516,11 @@ const ReelItem = React.memo(function ReelItem({
         {doubleTapLike && (
           <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', pointerEvents: 'none' }]}>
             <Animated.View style={styles.doubleTapHeart}>
-              <Ionicons name="heart" size={100} color="#fff" />
+              <Ionicons 
+                name={isCampaignPost ? "trophy" : "heart"} 
+                size={100} 
+                color="#fff" 
+              />
             </Animated.View>
           </View>
         )}
@@ -572,7 +588,11 @@ const ReelItem = React.memo(function ReelItem({
             likeAnimation && styles.likeAnimation
           ]}>
             <Ionicons 
-              name={item.is_liked ? 'heart' : 'heart-outline'}
+              name={
+                isCampaignPost 
+                  ? (item.is_liked ? 'trophy' : 'trophy-outline')
+                  : (item.is_liked ? 'heart' : 'heart-outline')
+              }
               size={28}
               color={item.is_liked ? '#EF4444' : GOLD}
               fill={item.is_liked ? '#EF4444' : 'none'}
@@ -1130,6 +1150,13 @@ export default function ReelsScreen({ navigation, route }) {
     setSendingGift(true);
     setGiftError('');
     try {
+      console.log('Sending gift with data:', {
+        gift_id: selectedGift.id,
+        recipient_username: giftRecipient,
+        quantity: giftQuantity,
+        message: giftMessage,
+      });
+      
       const response = await api.request('/gifts/send/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1141,20 +1168,44 @@ export default function ReelsScreen({ navigation, route }) {
         }),
       });
 
-      if (response && response.success) {
+      console.log('Gift send response:', response);
+
+      if (response && response.id) {
+        // Gift was sent successfully - API returns gift data directly
         setUserCoins(prev => prev - totalCost);
         setGiftsSentToday(prev => prev + 1);
         setGiftSent(response);
+        
+        // Play coin sound for successful gift
+        SoundManager.playCoinSound();
+        
         setTimeout(() => {
           setShowGiftModal(false);
           setGiftSent(null);
         }, 2000);
       } else {
+        console.error('Gift send failed:', response);
         setGiftError(response?.message || 'Failed to send gift');
       }
     } catch (error) {
-      console.error('Gift sending error:', error);
-      setGiftError('Failed to send gift. Please try again.');
+      const errMsg = error?.message || '';
+      const needsRecharge = errMsg.includes('Insufficient') || errMsg.includes('needs_recharge');
+      
+      if (needsRecharge) {
+        const match = errMsg.match(/need (\d+).*have (\d+)/i);
+        const needed = match ? match[1] : '';
+        const have = match ? match[2] : '';
+        Alert.alert(
+          'Insufficient Coins',
+          `You need ${needed || 'more'} purchased coins but only have ${have || '0'}.\n\nOnly purchased coins can be used for gifting. Please top up your coins.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Buy Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+          ]
+        );
+      } else {
+        setGiftError(errMsg || 'Failed to send gift. Please try again.');
+      }
     } finally {
       setSendingGift(false);
     }

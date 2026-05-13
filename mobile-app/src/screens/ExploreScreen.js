@@ -410,11 +410,10 @@ export default function ExploreScreen({ navigation }) {
               value={query}
               onChangeText={setQuery}
               onFocus={() => setShowHashtagDropdown(false)}
-              placeholderTextColor="#666"
             />
             {query && (
               <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                <Ionicons name="close" size={12} color="#666" />
+                <Ionicons name="close" size={12} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -428,12 +427,14 @@ export default function ExploreScreen({ navigation }) {
                   onPress={() => { setTimeRange(r.id); setHashtagView(null); }}
                   style={[
                     styles.timeChip,
-                    timeRange === r.id && styles.timeChipActive
+                    { backgroundColor: colors.cardBg, borderColor: colors.border },
+                    timeRange === r.id && { backgroundColor: colors.primary }
                   ]}
                 >
                   <Text style={[
                     styles.timeText,
-                    timeRange === r.id && styles.timeTextActive
+                    { color: colors.textSecondary },
+                    timeRange === r.id && { color: '#000' }
                   ]}>
                     {r.label}
                   </Text>
@@ -459,13 +460,15 @@ export default function ExploreScreen({ navigation }) {
                     onPress={() => { setActiveCategory(cat.id); setHashtagView(null); }}
                     style={[
                       styles.categoryChip,
-                      isActive && styles.categoryChipActive
+                      { backgroundColor: colors.cardBg, borderColor: colors.border },
+                      isActive && { backgroundColor: colors.primary }
                     ]}
                   >
                     <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
                     <Text style={[
                       styles.categoryText,
-                      isActive && styles.categoryTextActive
+                      { color: colors.textSecondary },
+                      isActive && { color: '#000' }
                     ]}>
                       {cat.label}
                     </Text>

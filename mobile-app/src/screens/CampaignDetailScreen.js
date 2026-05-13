@@ -2,6 +2,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, Modal, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
 
@@ -140,6 +141,7 @@ const Accordion = ({ title, subtitle, icon, children, isOpen, onToggle, iconColo
 
 export default function CampaignDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const { campaignId } = route.params;
   const [campaign, setCampaign] = useState(null);
   const [entries, setEntries] = useState([]);
@@ -351,22 +353,22 @@ export default function CampaignDetailScreen({ route, navigation }) {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  if (loading) return <View style={styles.centered}><ActivityIndicator size='large' color={GOLD} /></View>;
+  if (loading) return <View style={[styles.centered, { backgroundColor: colors.bg }]}><ActivityIndicator size='large' color={colors.primary} /></View>;
   if (!campaign) return null;
   
   const isActive = campaign.status === 'active';
   const hasRequirements = (campaign.min_followers > 0 || campaign.min_level > 0 || campaign.min_votes_per_reel > 0 || campaign.required_hashtags || campaign.winner_count > 0);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name='chevron-back' size={24} color={GOLD} />
+          <Ionicons name='chevron-back' size={24} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{campaign.title}</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]} numberOfLines={1}>{campaign.title}</Text>
         <TouchableOpacity onPress={loadCampaign} style={{ padding: 4 }}>
-          <Ionicons name='refresh' size={20} color={GOLD} />
+          <Ionicons name='refresh' size={20} color={colors.primary} />
         </TouchableOpacity>
         <View style={[styles.statusBadge, 
           isActive && styles.statusActive, 
@@ -384,64 +386,64 @@ export default function CampaignDetailScreen({ route, navigation }) {
             <OriginalSizeImage imageUrl={mediaUrl(campaign.image)} style={styles.banner} />
           ) : (
             <View style={[styles.banner, styles.bannerPlaceholder]}>
-              <Ionicons name='trophy' size={56} color={GOLD} opacity={0.4} />
+              <Ionicons name='trophy' size={56} color={colors.primary} opacity={0.4} />
             </View>
           )}
           <View style={styles.heroOverlay} />
           
           {/* Prize Overlay */}
           <View style={styles.prizeOverlay}>
-            <View style={styles.prizeIcon}>
+            <View style={[styles.prizeIcon, { backgroundColor: colors.primary }]}>
               <Ionicons name='trophy' size={22} color='#000' />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.prizeLabel}>PRIZE POOL</Text>
-              <Text style={styles.prizeValue}>
+              <Text style={[styles.prizeLabel, { color: colors.textSecondary }]}>PRIZE POOL</Text>
+              <Text style={[styles.prizeValue, { color: colors.text }]}>
                 {campaign.prize_value ? `${campaign.prize_value} ETB` : (campaign.prize_title || '—')}
               </Text>
             </View>
-            <View style={styles.timeChip}>
-              <Ionicons name='time' size={12} color='#fff' />
-              <Text style={styles.timeText}>{timeLeft(campaign.voting_end || campaign.entry_deadline)}</Text>
+            <View style={[styles.timeChip, { backgroundColor: colors.cardBg }]}>
+              <Ionicons name='time' size={12} color={colors.textSecondary} />
+              <Text style={[styles.timeText, { color: colors.text }]}>{timeLeft(campaign.voting_end || campaign.entry_deadline)}</Text>
             </View>
           </View>
         </View>
 
         {/* Quick Stats */}
         <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <Ionicons name='people' size={11} color='#3B82F6' />
-            <Text style={styles.statLabel}>ENTRIES</Text>
-            <Text style={[styles.statValue, { color: '#3B82F6' }]}>{campaign.total_entries || 0}</Text>
+          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <Ionicons name='people' size={11} color={colors.primary} />
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>ENTRIES</Text>
+            <Text style={[styles.statValue, { color: colors.primary }]}>{campaign.total_entries || 0}</Text>
           </View>
-          <View style={styles.statCard}>
-            <Ionicons name='flame' size={11} color='#EF4444' />
-            <Text style={styles.statLabel}>VOTES</Text>
-            <Text style={[styles.statValue, { color: '#EF4444' }]}>{campaign.total_votes || 0}</Text>
+          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <Ionicons name='flame' size={11} color={colors.error} />
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>VOTES</Text>
+            <Text style={[styles.statValue, { color: colors.error }]}>{campaign.total_votes || 0}</Text>
           </View>
-          <View style={styles.statCard}>
-            <Ionicons name='trophy' size={11} color={GOLD} />
-            <Text style={styles.statLabel}>WINNERS</Text>
-            <Text style={[styles.statValue, { color: GOLD }]}>{campaign.winner_count || 1}</Text>
+          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <Ionicons name='trophy' size={11} color={colors.primary} />
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>WINNERS</Text>
+            <Text style={[styles.statValue, { color: colors.primary }]}>{campaign.winner_count || 1}</Text>
           </View>
         </View>
 
         {/* CTA Button */}
         {isActive && !userEntry && (
-          <TouchableOpacity style={styles.joinBtn} onPress={handleJoinClick}>
+          <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.primary }]} onPress={handleJoinClick}>
             <Ionicons name='cloud-upload' size={18} color='#000' />
             <Text style={styles.joinBtnText}>Join Campaign</Text>
           </TouchableOpacity>
         )}
 
         {userEntry && (
-          <View style={styles.userEntryCard}>
-            <View style={styles.userEntryIcon}>
+          <View style={[styles.userEntryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <View style={[styles.userEntryIcon, { backgroundColor: colors.primary }]}>
               <Ionicons name='checkmark' size={18} color='#fff' />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.userEntryTitle}>Your Entry is Live 🎉</Text>
-              <Text style={styles.userEntryStats}>
+              <Text style={[styles.userEntryTitle, { color: colors.text }]}>Your Entry is Live 🎉</Text>
+              <Text style={[styles.userEntryStats, { color: colors.textSecondary }]}>
                 {userEntry.total_score ?? userEntry.score ?? 0} pts · {userEntry.vote_count || 0} votes · Rank #{userEntry.rank || '—'}
               </Text>
             </View>

@@ -237,7 +237,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
               </div>
             </div>
 
-            <button type="submit" disabled={loading || otp.length < 6} style={{ width: "100%", padding: "14px", background: loading || otp.length < 6 ? "#3A3A3A" : GOLD, border: "none", borderRadius: 10, color: loading || otp.length < 6 ? "#888" : "#000", fontSize: 15, fontWeight: 800, cursor: loading || otp.length < 6 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
+            <button type="submit" disabled={loading || otp.length < 6} style={{ width: "auto", padding: "14px 24px", background: loading || otp.length < 6 ? "#3A3A3A" : GOLD, border: "none", borderRadius: 10, color: loading || otp.length < 6 ? "#888" : "#000", fontSize: 15, fontWeight: 800, cursor: loading || otp.length < 6 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
               {loading ? <><Loader size={18} style={{ animation: "spin 1s linear infinite" }} /> Creating Account…</> : "Create Account & Login 🚀"}
             </button>
           </form>

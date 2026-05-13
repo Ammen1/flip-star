@@ -3,16 +3,26 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndi
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
+import config from '../config';
 
 const GOLD = '#C8B56A';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
 
+const BASE = config.API_BASE_URL.replace('/api', '');
+const mediaUrl = (url) => {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${BASE}${url}`;
+};
+
 export default function FollowListScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { colors } = useTheme();
   const { userId, type } = route.params || {};
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +56,7 @@ export default function FollowListScreen({ navigation, route }) {
     <View style={styles.row}>
       <TouchableOpacity style={styles.userInfo} onPress={() => navigation.navigate('Profile', { userId: item.id })}>
         {item.profile_photo
-          ? <Image source={{ uri: item.profile_photo }} style={styles.avatar} />
+          ? <Image source={{ uri: mediaUrl(item.profile_photo) }} style={styles.avatar} />
           : <View style={[styles.avatar, { backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center' }]}>
               <Text style={{ color: '#000', fontWeight: '700', fontSize: 16 }}>{(item.username || '?')[0].toUpperCase()}</Text>
             </View>}
@@ -72,7 +82,7 @@ export default function FollowListScreen({ navigation, route }) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={24} color={GOLD} />
+          <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{type === 'followers' ? 'Followers' : 'Following'}</Text>
         <View style={{ width: 24 }} />

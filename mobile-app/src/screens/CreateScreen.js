@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 
 const { width } = Dimensions.get('window');
@@ -29,6 +30,7 @@ const FILTERS = [
 export default function CreateScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { colors } = useTheme();
   const [stage, setStage] = useState('pick');
   const [media, setMedia] = useState(null);
   const [caption, setCaption] = useState('');
@@ -47,10 +49,26 @@ export default function CreateScreen({ navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       quality: 0.85,
-      videoMaxDuration: 60,
     });
     if (!result.canceled && result.assets?.length) {
       const asset = result.assets[0];
+      console.log('Asset info:', {
+        type: asset.type,
+        duration: asset.duration,
+        fileName: asset.fileName,
+        fileSize: asset.fileSize
+      });
+      
+      // Temporarily disable duration check to allow all videos
+      if (asset.type === 'video') {
+        console.log('Video detected, allowing upload regardless of duration');
+        console.log('Asset info:', {
+          fileName: asset.fileName,
+          duration: asset.duration,
+          durationType: typeof asset.duration
+        });
+      }
+      
       setMedia({ uri: asset.uri, type: asset.type || 'image' });
       setStage('edit');
     }
@@ -84,17 +102,32 @@ export default function CreateScreen({ navigation }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Videos,
       allowsEditing: false,
       quality: 0.85,
-      videoMaxDuration: 60,
       presentationStyle: 'fullScreen',
     });
     if (!result.canceled && result.assets?.length) {
       const asset = result.assets[0];
+      console.log('Camera video asset info:', {
+        type: asset.type,
+        duration: asset.duration,
+        fileName: asset.fileName,
+        fileSize: asset.fileSize
+      });
+      
+      // Temporarily disable duration check for camera videos
+      console.log('Camera video detected, allowing upload regardless of duration');
+      console.log('Camera asset info:', {
+        fileName: asset.fileName,
+        duration: asset.duration,
+        durationType: typeof asset.duration
+      });
+      
       setMedia({ uri: asset.uri, type: 'video' });
       setStage('edit');
     }
   };
 
-  const handlePost = async () => {
+  
+const handlePost = async () => {
     if (!media) return;
     if (!user) { Alert.alert('Login Required', 'Please login to post.'); return; }
     setStage('uploading');
@@ -207,10 +240,10 @@ export default function CreateScreen({ navigation }) {
   // ── PICK STAGE ──────────────────────────────────────────────────────────────
   if (stage === 'pick') {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" />
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>New Post</Text>
+      <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+        <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+        <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>New Post</Text>
         </View>
         <ScrollView contentContainerStyle={styles.pickBody}>
           {/* Hero */}
@@ -223,39 +256,39 @@ export default function CreateScreen({ navigation }) {
               />
               <View style={styles.sparkle}><Text style={{ fontSize: 11 }}>✨</Text></View>
             </View>
-            <Text style={styles.heroTitle}>Create Post</Text>
-            <Text style={styles.heroSub}>Choose how you want to create content</Text>
+            <Text style={[styles.heroTitle, { color: colors.text }]}>Create Post</Text>
+            <Text style={[styles.heroSub, { color: colors.textSecondary }]}>Choose how you want to create content</Text>
           </View>
 
           {/* Action cards */}
           <View style={styles.actionCards}>
-            <TouchableOpacity style={styles.actionCard} onPress={pickPhotoFromCamera} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={pickPhotoFromCamera} activeOpacity={0.85}>
               <View style={styles.cardIcon}>
-                <Ionicons name="camera" size={24} color={GOLD} />
+                <Ionicons name="camera" size={24} color={colors.primary} />
               </View>
               <View style={styles.cardText}>
-                <Text style={styles.cardTitle}>Take Photo</Text>
-                <Text style={styles.cardSub}>Use camera for photos</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Take Photo</Text>
+                <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Use camera for photos</Text>
               </View>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.actionCard} onPress={pickVideoFromCamera} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={pickVideoFromCamera} activeOpacity={0.85}>
               <View style={styles.cardIcon}>
-                <Ionicons name="videocam" size={24} color={GOLD} />
+                <Ionicons name="videocam" size={24} color={colors.primary} />
               </View>
               <View style={styles.cardText}>
-                <Text style={styles.cardTitle}>Record Video</Text>
-                <Text style={styles.cardSub}>Record up to 60 seconds</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Record Video</Text>
+                <Text style={[styles.cardSub, { color: colors.textSecondary }]}>Record up to 60 seconds</Text>
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionCard} onPress={pickFromLibrary} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.actionCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={pickFromLibrary} activeOpacity={0.85}>
               <View style={styles.cardIcon}>
-                <Ionicons name="cloud-upload-outline" size={24} color={GOLD} />
+                <Ionicons name="cloud-upload-outline" size={24} color={colors.primary} />
               </View>
               <View style={styles.cardText}>
-                <Text style={styles.cardTitle}>Upload Photo/Video</Text>
-                <Text style={styles.cardSub}>From gallery or files</Text>
+                <Text style={[styles.cardTitle, { color: colors.text }]}>Upload Photo/Video</Text>
+                <Text style={[styles.cardSub, { color: colors.textSecondary }]}>From gallery or files</Text>
               </View>
               <Text style={{ color: GOLD, fontSize: 22, fontWeight: '300' }}>+</Text>
             </TouchableOpacity>
@@ -268,8 +301,8 @@ export default function CreateScreen({ navigation }) {
   // ── EDIT STAGE ──────────────────────────────────────────────────────────────
   if (stage === 'edit') {
     return (
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <StatusBar barStyle="light-content" />
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
         <View style={StyleSheet.absoluteFill}>
           <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: filter.overlay }]} pointerEvents="none" />
@@ -278,20 +311,20 @@ export default function CreateScreen({ navigation }) {
         {/* Top bar */}
         <View style={[styles.editTop, { top: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => setStage('pick')} style={styles.editIconBtn}>
-            <Ionicons name="close" size={26} color="#fff" />
+            <Ionicons name="close" size={26} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setStage('details')} style={styles.nextPill}>
-            <Text style={styles.nextPillText}>Next →</Text>
+          <TouchableOpacity onPress={() => setStage('details')} style={[styles.nextPill, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.nextPillText, { color: colors.text }]}>Next →</Text>
           </TouchableOpacity>
         </View>
 
         {/* Filter bar */}
-        <View style={[styles.filterBar, { bottom: insets.bottom + 20 }]}>
+        <View style={[styles.filterBar, { backgroundColor: colors.cardBg, bottom: insets.bottom + 20 }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
             {FILTERS.map(f => (
               <TouchableOpacity key={f.id} onPress={() => setFilter(f)}
-                style={[styles.filterChip, filter.id === f.id && styles.filterChipActive]}>
-                <Text style={[styles.filterChipText, filter.id === f.id && { color: '#000' }]}>{f.name}</Text>
+                style={[styles.filterChip, { backgroundColor: colors.bg, borderColor: colors.border }, filter.id === f.id && { backgroundColor: colors.primary }]}>
+                <Text style={[styles.filterChipText, { color: colors.textSecondary }, filter.id === f.id && { color: colors.text }]}>{f.name}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -303,15 +336,15 @@ export default function CreateScreen({ navigation }) {
   // ── DETAILS STAGE ───────────────────────────────────────────────────────────
   if (stage === 'details') {
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
-        <StatusBar barStyle="light-content" />
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.container, { backgroundColor: colors.bg }]}>
+        <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
+        <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border, paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => setStage('edit')}>
-            <Ionicons name="chevron-back" size={24} color={GOLD} />
+            <Ionicons name="chevron-back" size={24} color={colors.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post Details</Text>
-          <TouchableOpacity onPress={handlePost} style={styles.postBtn}>
-            <Text style={styles.postBtnText}>Post</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Post Details</Text>
+          <TouchableOpacity onPress={handlePost} style={[styles.postBtn, { backgroundColor: colors.primary }]}>
+            <Text style={[styles.postBtnText, { color: colors.text }]}>Post</Text>
           </TouchableOpacity>
         </View>
 
@@ -328,20 +361,20 @@ export default function CreateScreen({ navigation }) {
           </View>
 
           <TextInput
-            style={styles.captionInput}
+            style={[styles.captionInput, { color: colors.text, backgroundColor: colors.cardBg, borderColor: colors.border }]}
             placeholder="Write a caption..."
-            placeholderTextColor="#555"
+            placeholderTextColor={colors.textSecondary}
             value={caption}
             onChangeText={setCaption}
             multiline
           />
 
-          <View style={styles.hashRow}>
-            <Text style={styles.hashSymbol}>#</Text>
+          <View style={[styles.hashRow, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <Text style={[styles.hashSymbol, { color: colors.primary }]}>#</Text>
             <TextInput
-              style={styles.hashInput}
+              style={[styles.hashInput, { color: colors.text }]}
               placeholder="Add hashtags (e.g. flipstar ethiopia)"
-              placeholderTextColor="#555"
+              placeholderTextColor={colors.textSecondary}
               value={hashtags}
               onChangeText={setHashtags}
               autoCapitalize="none"
@@ -354,14 +387,14 @@ export default function CreateScreen({ navigation }) {
 
   // ── UPLOADING STAGE ─────────────────────────────────────────────────────────
   return (
-    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-      <View style={styles.uploadCard}>
-        <ActivityIndicator size="large" color={GOLD} />
-        <Text style={styles.uploadTitle}>Posting your content...</Text>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
+    <View style={[styles.container, { backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.uploadCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.uploadTitle, { color: colors.text }]}>Posting your content...</Text>
+        <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
+          <View style={[styles.progressFill, { backgroundColor: colors.primary, width: `${progress}%` }]} />
         </View>
-        <Text style={{ color: GOLD, fontSize: 14, fontWeight: '600' }}>{progress}%</Text>
+        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>{progress}%</Text>
       </View>
     </View>
   );

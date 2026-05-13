@@ -2,11 +2,12 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, FlatList,
   ActivityIndicator, ScrollView, Dimensions, Alert, RefreshControl,
-  StatusBar, Modal, TextInput,
+  StatusBar, Modal, TextInput, Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
 
@@ -30,6 +31,7 @@ const ITEM_SIZE = Math.floor((width - (GAP * (COLS - 1)) - 32) / COLS);
 export default function ProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { user: authUser, logout } = useAuth();
+  const { colors } = useTheme();
   // authUser from /profile/me/ (UserProfileSerializer):
   //   authUser.id      = UserProfile.pk
   //   authUser.user.id = User.pk (or authUser.id if flat login response)
@@ -95,15 +97,26 @@ export default function ProfileScreen({ navigation, route }) {
     { id: 'other', label: 'Other', emoji: '📋' },
   ];
 
-  useEffect(() => { loadProfile(); }, [targetProfileId]);
+  useEffect(() => { 
+    // Reset state when targetProfileId changes to prevent profile mixing
+    setProfile(null);
+    setPosts([]);
+    setReels([]);
+    setSavedPosts([]);
+    setCampaignStats(null);
+    setIsFollowing(false);
+    setActiveTab('posts');
+    loadProfile(); 
+  }, [targetProfileId]);
 
   // Reload profile when screen comes back into focus (e.g. after EditProfile)
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
-      if (isOwnProfile) loadProfile();
+      // Always reload profile when screen focuses to ensure correct profile is shown
+      loadProfile();
     });
     return unsubscribe;
-  }, [navigation, isOwnProfile]);
+  }, [navigation]);
 
   useEffect(() => { 
     if (activeTab === 'reels') loadReels();
@@ -114,7 +127,9 @@ export default function ProfileScreen({ navigation, route }) {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      const profileEndpoint = isOwnProfile ? '/profile/me/' : `/profile/${targetProfileId}/`;
+      // Use targetProfileId to determine endpoint, not isOwnProfile state
+      const isOwnProfileCheck = !routeUserId || String(targetProfileId) === String(authProfileId) || String(targetProfileId) === String(authUserId);
+      const profileEndpoint = isOwnProfileCheck ? '/profile/me/' : `/profile/${targetProfileId}/`;
 
       // Fetch profile first to get the real userId reliably
       const profileData = await api.request(profileEndpoint);
@@ -290,9 +305,19 @@ export default function ProfileScreen({ navigation, route }) {
     }
   };
 
-  const handleShareProfile = () => {
-    // In a real app, you'd use Share.share from react-native
-    Alert.alert('Share', 'Profile link copied!');
+  const handleShareProfile = async () => {
+    try {
+      const profileUrl = `${config.WEB_BASE_URL}/profile/${profile?.username || targetUserId}`;
+      
+      await Share.share({
+        message: `Check out ${profile?.username || 'this user'}'s profile on FlipStar!\n${profileUrl}`,
+        url: profileUrl,
+        title: `${profile?.username || 'User'} Profile - FlipStar`
+      });
+    } catch (error) {
+      console.error('Share error:', error);
+      Alert.alert('Share', 'Could not share profile. Please try again.');
+    }
   };
 
   const handleEditBio = async () => {
@@ -479,7 +504,7 @@ export default function ProfileScreen({ navigation, route }) {
             <Image source={{ uri: mediaUrl(thumbnail) }} style={styles.gridImage} resizeMode="cover" />
           ) : (
             <View style={[styles.gridImage, styles.fallbackContainer]}>
-              <Ionicons name={isVideo ? 'play' : 'image'} size={28} color="#666" />
+              <Ionicons name={isVideo ? 'play' : 'image'} size={28} color={colors.textSecondary} />
             </View>
           )}
           
@@ -505,19 +530,19 @@ export default function ProfileScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: BG, paddingTop: insets.top }]}>
-        <StatusBar barStyle="light-content" backgroundColor={BG} />
+      <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+        <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={GOLD} />
-          <Text style={[styles.loadingText, { color: '#888' }]}>Loading profile...</Text>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading profile...</Text>
         </View>
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: BG, paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor={BG} />
+    <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
       
       {/* Success Toast */}
       {successMessage && (
@@ -527,40 +552,43 @@ export default function ProfileScreen({ navigation, route }) {
       )}
       
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: CARD, borderBottomColor: BORDER }]}>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={24} color={GOLD} />
+          <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <View style={styles.headerSpacer} />
         {isOwnProfile && (
           <View style={styles.headerActions}>
+            <TouchableOpacity onPress={() => navigation.navigate('WebsiteCoin')} style={styles.headerButton}>
+              <Ionicons name="star" size={24} color={colors.primary} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Wallet')} style={styles.headerButton}>
-              <Ionicons name="wallet-outline" size={24} color={GOLD} />
+              <Ionicons name="wallet-outline" size={24} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Subscription')} style={styles.headerButton}>
-              <Ionicons name="ribbon" size={24} color={GOLD} />
+              <Ionicons name="ribbon" size={24} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Gamification')} style={styles.headerButton}>
-              <Ionicons name="diamond-outline" size={24} color={GOLD} />
+              <Ionicons name="game-controller-outline" size={24} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Settings')} style={styles.headerButton}>
-              <Ionicons name="settings-outline" size={24} color={GOLD} />
+              <Ionicons name="settings-outline" size={24} color={colors.primary} />
             </TouchableOpacity>
           </View>
         )}
       </View>
 
       <ScrollView 
-        style={[styles.content, { backgroundColor: BG }]} 
+        style={[styles.content, { backgroundColor: colors.bg }]} 
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
         nestedScrollEnabled={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={GOLD} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
         {/* Profile Header */}
-        <View style={[styles.profileHeader, { backgroundColor: CARD }]}>
+        <View style={[styles.profileHeader, { backgroundColor: colors.cardBg }]}>
           <View style={styles.profileInfo}>
             <View style={styles.avatarContainer}>
               {profile?.profile_photo ? (
@@ -571,7 +599,7 @@ export default function ProfileScreen({ navigation, route }) {
                   />
                 </TouchableOpacity>
               ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: BORDER }]}>
+                <View style={[styles.avatar, styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
                   <Text style={styles.avatarText}>👤</Text>
                 </View>
               )}
@@ -579,39 +607,49 @@ export default function ProfileScreen({ navigation, route }) {
             
             <View style={styles.statsContainer}>
               <View style={styles.statItem}>
-                <Text style={[styles.statNumber, { color: '#fff' }]}>{postsCount}</Text>
-                <Text style={[styles.statLabel, { color: '#888' }]}>Posts</Text>
+                <Text style={[styles.statNumber, { color: colors.text }]}>{postsCount}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Posts</Text>
               </View>
               <TouchableOpacity 
                 onPress={() => navigation.navigate('FollowList', { userId: targetUserId, type: 'followers' })}
                 style={styles.statItem}
               >
-                <Text style={[styles.statNumber, { color: '#fff' }]}>{followersCount}</Text>
-                <Text style={[styles.statLabel, { color: '#888' }]}>Followers</Text>
+                <Text style={[styles.statNumber, { color: colors.text }]}>{followersCount}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Followers</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 onPress={() => navigation.navigate('FollowList', { userId: targetUserId, type: 'following' })}
                 style={styles.statItem}
               >
-                <Text style={[styles.statNumber, { color: '#fff' }]}>{followingCount}</Text>
-                <Text style={[styles.statLabel, { color: '#888' }]}>Following</Text>
+                <Text style={[styles.statNumber, { color: colors.text }]}>{followingCount}</Text>
+                <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Following</Text>
               </TouchableOpacity>
             </View>
           </View>
           
           <View style={styles.profileDetails}>
-            <Text style={[styles.profileName, { color: '#fff' }]}>
+            <Text style={[styles.profileName, { color: colors.text }]}>
               {(profile?.user?.first_name || profile?.first_name)} {(profile?.user?.last_name || profile?.last_name)}
             </Text>
-            <Text style={[styles.profileUsername, { color: '#888' }]}>@{profile?.username || profile?.user?.username}</Text>
+            <Text style={[styles.profileUsername, { color: '#fff' }]}>@{profile?.username || profile?.user?.username}</Text>
+            
+            {/* Phone Number - Only show in own profile */}
+            {isOwnProfile && profile?.user?.phone_number && (
+              <View style={styles.phoneContainer}>
+                <Text style={[styles.phoneNumber, { color: '#fff' }]}>
+                  {profile?.user?.phone_number}
+                </Text>
+              </View>
+            )}
+            
             {isOwnProfile && editingBio ? (
               <View style={styles.bioEditContainer}>
                 <TextInput
-                  style={[styles.bioInput, { color: '#fff', backgroundColor: BG, borderColor: BORDER }]}
+                  style={[styles.bioInput, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border }]}
                   value={bioText}
                   onChangeText={setBioText}
                   placeholder="Add a bio..."
-                  placeholderTextColor={'#888'}
+                  placeholderTextColor={colors.textSecondary}
                   multiline
                   maxLength={200}
                 />
@@ -652,7 +690,7 @@ export default function ProfileScreen({ navigation, route }) {
               onPress={() => navigation.navigate('EditProfile')}
               style={styles.editProfileButton}
             >
-              <Ionicons name="create-outline" size={16} color={GOLD} />
+              <Ionicons name="create-outline" size={16} color={colors.primary} />
               <Text style={styles.editProfileButtonText}>Edit Profile</Text>
             </TouchableOpacity>
           )}
@@ -670,7 +708,7 @@ export default function ProfileScreen({ navigation, route }) {
                 <Ionicons 
                   name={isFollowing ? "checkmark" : "add"} 
                   size={18} 
-                  color={isFollowing ? GOLD : '#000'} 
+                  color={isFollowing ? colors.primary : colors.text} 
                 />
                 <Text style={[
                   styles.followButtonText,
@@ -681,7 +719,7 @@ export default function ProfileScreen({ navigation, route }) {
               </TouchableOpacity>
               
               <TouchableOpacity onPress={handleShareProfile} style={styles.actionButton}>
-                <Ionicons name="share-outline" size={18} color={GOLD} />
+                <Ionicons name="share-outline" size={18} color={colors.primary} />
               </TouchableOpacity>
               
               {!isBlocked ? (
@@ -689,14 +727,14 @@ export default function ProfileScreen({ navigation, route }) {
                   onPress={handleBlockUser} 
                   style={styles.actionButton}
                 >
-                  <Ionicons name="person-remove-outline" size={18} color="#EF4444" />
+                  <Ionicons name="person-remove-outline" size={18} color={colors.error} />
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity 
                   onPress={handleUnblockUser} 
                   style={styles.actionButton}
                 >
-                  <Ionicons name="person-add-outline" size={18} color={GOLD} />
+                  <Ionicons name="person-add-outline" size={18} color={colors.primary} />
                 </TouchableOpacity>
               )}
               
@@ -705,14 +743,14 @@ export default function ProfileScreen({ navigation, route }) {
                 disabled={reportingUser}
                 style={styles.actionButton}
               >
-                <Ionicons name="flag-outline" size={18} color="#EF4444" />
+                <Ionicons name="flag-outline" size={18} color={colors.error} />
               </TouchableOpacity>
             </View>
           )}
         </View>
 
         {/* Tabs */}
-        <View style={styles.tabs}>
+        <View style={[styles.tabs, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
           {[
             { id: 'posts', icon: 'grid-outline', label: 'Posts' },
             { id: 'reels', icon: 'film-outline', label: 'Reels' },
@@ -726,17 +764,18 @@ export default function ProfileScreen({ navigation, route }) {
                 onPress={() => setActiveTab(tab.id)}
                 style={[
                   styles.tab,
-                  activeTab === tab.id && styles.activeTab
+                  activeTab === tab.id && { backgroundColor: colors.primary + '20' }
                 ]}
               >
                 <Ionicons 
                   name={tab.icon} 
                   size={22} 
-                  color={activeTab === tab.id ? GOLD : '#fff'} 
+                  color={activeTab === tab.id ? colors.primary : colors.text} 
                 />
                 <Text style={[
                   styles.tabLabel,
-                  activeTab === tab.id && styles.activeTabLabel
+                  { color: colors.textSecondary },
+                  activeTab === tab.id && { color: colors.primary, fontWeight: '700' }
                 ]}>
                   {tab.label}
                 </Text>
@@ -746,63 +785,63 @@ export default function ProfileScreen({ navigation, route }) {
 
         {/* Campaign Stats Content */}
         {activeTab === 'campaigns' && (
-          <View style={styles.campaignsContent}>
+          <View style={[styles.campaignsContent, { backgroundColor: colors.cardBg }]}>
             {!campaignStats ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={GOLD} />
-                <Text style={styles.loadingText}>Loading campaign stats...</Text>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading campaign stats...</Text>
               </View>
             ) : !campaignStats.campaigns || campaignStats.campaigns.length === 0 ? (
               <View style={styles.emptyCampaigns}>
-                <Ionicons name="trophy-outline" size={48} color="#666" />
-                <Text style={styles.emptyCampaignsTitle}>No campaigns yet</Text>
-                <Text style={styles.emptyCampaignsText}>Join a campaign to see your stats here!</Text>
+                <Ionicons name="trophy-outline" size={48} color={colors.textSecondary} />
+                <Text style={[styles.emptyCampaignsTitle, { color: colors.text }]}>No campaigns yet</Text>
+                <Text style={[styles.emptyCampaignsText, { color: colors.textSecondary }]}>Join a campaign to see your stats here!</Text>
               </View>
             ) : (
               <View>
                 {/* Header */}
-                <View style={styles.campaignHeader}>
-                  <Ionicons name="trophy" size={22} color={GOLD} />
-                  <Text style={styles.campaignTitle}>Campaign Achievements</Text>
+                <View style={[styles.campaignHeader, { borderBottomColor: colors.border }]}>
+                  <Ionicons name="trophy" size={22} color={colors.primary} />
+                  <Text style={[styles.campaignTitle, { color: colors.text }]}>Campaign Achievements</Text>
                 </View>
 
                 {/* Stats Grid */}
                 <View style={styles.statsGrid}>
-                  <View style={styles.statCard}>
-                    <Ionicons name="trophy-outline" size={18} color={GOLD} />
-                    <Text style={styles.statValue}>{campaignStats.total_campaigns || 0}</Text>
-                    <Text style={styles.statLabel}>Campaigns</Text>
+                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                    <Ionicons name="trophy-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.total_campaigns || 0}</Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Campaigns</Text>
                   </View>
-                  <View style={styles.statCard}>
-                    <Ionicons name="star-outline" size={18} color={GOLD} />
-                    <Text style={styles.statValue}>{campaignStats.total_score || 0}</Text>
-                    <Text style={styles.statLabel}>Total Score</Text>
+                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                    <Ionicons name="podium-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.total_wins || 0}</Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Wins</Text>
                   </View>
-                  <View style={styles.statCard}>
-                    <Ionicons name="podium-outline" size={18} color={GOLD} />
-                    <Text style={styles.statValue}>#{campaignStats.best_rank || '-'}</Text>
-                    <Text style={styles.statLabel}>Best Rank</Text>
+                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                    <Ionicons name="medal-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.best_rank || '-'}</Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Best Rank</Text>
                   </View>
-                  <View style={styles.statCard}>
-                    <Ionicons name="flame-outline" size={18} color={GOLD} />
-                    <Text style={styles.statValue}>{campaignStats.current_streak || 0}</Text>
-                    <Text style={styles.statLabel}>Streak</Text>
+                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                    <Ionicons name="flame-outline" size={18} color={colors.primary} />
+                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.current_streak || 0}</Text>
+                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Streak</Text>
                   </View>
                 </View>
 
                 {/* Campaign List */}
-                <View style={styles.campaignList}>
-                  <Text style={styles.campaignListTitle}>Active Campaigns</Text>
+                <View style={[styles.campaignList, { backgroundColor: colors.cardBg }]}>
+                  <Text style={[styles.campaignListTitle, { color: colors.text }]}>Active Campaigns</Text>
                   {campaignStats.campaigns.map((campaign) => (
-                    <View key={campaign.campaign_id} style={styles.campaignItem}>
+                    <View key={campaign.campaign_id} style={[styles.campaignItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
                       <View style={styles.campaignInfo}>
-                        <Text style={styles.campaignName}>{campaign.campaign_title}</Text>
-                        <Text style={styles.campaignDetails}>
+                        <Text style={[styles.campaignName, { color: colors.text }]}>{campaign.campaign_title}</Text>
+                        <Text style={[styles.campaignDetails, { color: colors.textSecondary }]}>
                           {campaign.posts_count} posts · Rank #{campaign.rank || '-'}
                         </Text>
                       </View>
                       <View style={styles.campaignScore}>
-                        <Text style={styles.campaignScoreText}>{campaign.total_score} pts</Text>
+                        <Text style={[styles.campaignScoreText, { color: colors.primary }]}>{campaign.total_score} pts</Text>
                       </View>
                     </View>
                   ))}
@@ -810,13 +849,13 @@ export default function ProfileScreen({ navigation, route }) {
 
                 {/* Badges */}
                 {campaignStats.badges && campaignStats.badges.length > 0 && (
-                  <View style={styles.badgesSection}>
-                    <Text style={styles.badgesTitle}>Badges Earned</Text>
+                  <View style={[styles.badgesSection, { backgroundColor: colors.cardBg }]}>
+                    <Text style={[styles.badgesTitle, { color: colors.text }]}>Badges Earned</Text>
                     <View style={styles.badgesList}>
                       {campaignStats.badges.map((badge, idx) => (
-                        <View key={idx} style={styles.badgeItem}>
-                          <Ionicons name="award" size={13} color={GOLD} />
-                          <Text style={styles.badgeText}>{badge.title}</Text>
+                        <View key={idx} style={[styles.badgeItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                          <Ionicons name="award" size={13} color={colors.primary} />
+                          <Text style={[styles.badgeText, { color: colors.text }]}>{badge.title}</Text>
                         </View>
                       ))}
                     </View>
@@ -831,7 +870,7 @@ export default function ProfileScreen({ navigation, route }) {
         {activeTab !== 'campaigns' && (
           <View style={styles.postsGrid}>
             {currentTabContent.length === 0 ? (
-              <View style={styles.emptyState}>
+              <View style={[styles.emptyState, { backgroundColor: colors.cardBg }]}>
                 <Ionicons 
                   name={
                     activeTab === 'posts' ? 'grid-outline' : 
@@ -839,9 +878,9 @@ export default function ProfileScreen({ navigation, route }) {
                     'bookmark-outline'
                   } 
                   size={48} 
-                  color="#666" 
+                  color={colors.textSecondary} 
                 />
-                <Text style={styles.emptyText}>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   {activeTab === 'posts' ? 'No posts yet' : 
                    activeTab === 'reels' ? 'No reels yet' : 
                    'No saved posts yet'}
@@ -918,7 +957,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editForm.first_name}
                   onChangeText={(text) => setEditForm(prev => ({ ...prev, first_name: text }))}
                   placeholder="First name"
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                 />
               </View>
               
@@ -929,7 +968,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editForm.last_name}
                   onChangeText={(text) => setEditForm(prev => ({ ...prev, last_name: text }))}
                   placeholder="Last name"
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                 />
               </View>
               
@@ -940,7 +979,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editForm.username}
                   onChangeText={(text) => setEditForm(prev => ({ ...prev, username: text }))}
                   placeholder="Username"
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                   autoCapitalize="none"
                 />
               </View>
@@ -952,7 +991,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editForm.email}
                   onChangeText={(text) => setEditForm(prev => ({ ...prev, email: text }))}
                   placeholder="Email"
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                   keyboardType="email-address"
                   autoCapitalize="none"
                 />
@@ -965,7 +1004,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editForm.bio}
                   onChangeText={(text) => setEditForm(prev => ({ ...prev, bio: text }))}
                   placeholder="Tell us about yourself..."
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                   multiline
                   maxLength={200}
                 />
@@ -1132,7 +1171,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editCaption}
                   onChangeText={setEditCaption}
                   placeholder="Write a caption..."
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                   multiline
                   maxLength={500}
                 />
@@ -1147,7 +1186,7 @@ export default function ProfileScreen({ navigation, route }) {
                   value={editHashtags}
                   onChangeText={setEditHashtags}
                   placeholder="#hashtag1 #hashtag2"
-                  placeholderTextColor="#666"
+                  placeholderTextColor={colors.textSecondary}
                 />
               </View>
             </ScrollView>
@@ -1272,6 +1311,8 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     backgroundColor: CARD,
+    borderWidth: 2,
+    borderColor: GOLD,
   },
   avatarPlaceholder: {
     backgroundColor: GOLD + '30',
@@ -1313,6 +1354,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     marginBottom: 8,
+  },
+  phoneContainer: {
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: GOLD,
+  },
+  phoneNumber: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '500',
   },
   profileBio: {
     fontSize: 14,

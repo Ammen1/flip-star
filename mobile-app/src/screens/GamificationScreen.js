@@ -2,6 +2,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Animated, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import { AppAlert } from '../components/AppAlert';
 
@@ -13,6 +14,7 @@ const STREAK_DAYS = [1,2,3,4,5,6,7].map((d,i) => ({ day: d, coins: [5,10,15,20,3
 
 export default function GamificationScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const [status, setStatus] = useState(null);
   const [quests, setQuests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,80 +59,80 @@ export default function GamificationScreen({ navigation }) {
   };
 
 
-  if (loading) return <View style={[styles.container, styles.centered]}><ActivityIndicator size='large' color={GOLD} /></View>;
+  if (loading) return <View style={[styles.container, { backgroundColor: colors.bg }, styles.centered]}><ActivityIndicator size='large' color={colors.primary} /></View>;
 
-  const coins = n(status?.coins, 'balance');
+  const coins = n(status?.wallet?.balance?.total ?? status?.total_coins ?? status?.coins, 'balance');
   const streak = n(status?.login_streak, 'current');
   const longest = n(status?.login_streak, 'longest');
   const bonusAvailable = status?.login_streak?.bonus_available ?? false;
   const points = n(status?.points, 'balance');
   const nextBonus = status?.login_streak?.next_bonus?.coins ?? 0;
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#fff" />
+          <Ionicons name="chevron-back" size={22} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Rewards</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Rewards</Text>
         <TouchableOpacity onPress={() => loadAll(true)} style={styles.backBtn}>
-          <Ionicons name="refresh" size={20} color={GOLD} />
+          <Ionicons name="refresh" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} tintColor={GOLD} />}>
-        <View style={styles.heroCard}>
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} tintColor={colors.primary} />}>
+        <View style={[styles.heroCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <View style={styles.heroMain}>
-            <View style={styles.coinCircle}><Ionicons name="star" size={32} color={GOLD} /></View>
+            <View style={[styles.coinCircle, { backgroundColor: colors.primary }]}><Ionicons name="star" size={32} color="#000" /></View>
             <View style={{ marginLeft: 16 }}>
-              <Text style={styles.coinAmount}>{coins.toLocaleString()}</Text>
-              <Text style={styles.coinLabel}>Coins Balance</Text>
+              <Text style={[styles.coinAmount, { color: colors.text }]}>{coins.toLocaleString()}</Text>
+              <Text style={[styles.coinLabel, { color: colors.textSecondary }]}>Coins Balance</Text>
             </View>
           </View>
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
-              <Ionicons name="flame" size={16} color="#F97316" />
-              <Text style={styles.heroStatVal}>{streak}</Text>
-              <Text style={styles.heroStatLabel}>Streak</Text>
+              <Ionicons name="flame" size={16} color={colors.error} />
+              <Text style={[styles.heroStatVal, { color: colors.text }]}>{streak}</Text>
+              <Text style={[styles.heroStatLabel, { color: colors.textSecondary }]}>Streak</Text>
             </View>
-            <View style={styles.heroStatDivider} />
+            <View style={[styles.heroStatDivider, { backgroundColor: colors.border }]} />
             <View style={styles.heroStat}>
-              <Ionicons name="star" size={16} color="#8B5CF6" />
-              <Text style={styles.heroStatVal}>{points.toLocaleString()}</Text>
-              <Text style={styles.heroStatLabel}>Points</Text>
+              <Ionicons name="star" size={16} color={colors.primary} />
+              <Text style={[styles.heroStatVal, { color: colors.text }]}>{points.toLocaleString()}</Text>
+              <Text style={[styles.heroStatLabel, { color: colors.textSecondary }]}>Points</Text>
             </View>
-            <View style={styles.heroStatDivider} />
+            <View style={[styles.heroStatDivider, { backgroundColor: colors.border }]} />
             <View style={styles.heroStat}>
-              <Ionicons name="trophy" size={16} color={GOLD} />
-              <Text style={styles.heroStatVal}>{longest}</Text>
-              <Text style={styles.heroStatLabel}>Best</Text>
+              <Ionicons name="trophy" size={16} color={colors.primary} />
+              <Text style={[styles.heroStatVal, { color: colors.text }]}>{longest}</Text>
+              <Text style={[styles.heroStatLabel, { color: colors.textSecondary }]}>Best</Text>
             </View>
           </View>
         </View>
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Ionicons name="flame" size={18} color="#F97316" />
-            <Text style={styles.sectionTitle}>Daily Streak</Text>
-            <Text style={styles.sectionBadge}>Day {streak}</Text>
+        <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+          <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+            <Ionicons name="flame" size={18} color={colors.error} />
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Daily Streak</Text>
+            <Text style={[styles.sectionBadge, { backgroundColor: colors.primary, color: '#000' }]}>Day {streak}</Text>
           </View>
           <View style={styles.streakRow}>
             {STREAK_DAYS.map((d) => {
               const done = streak >= d.day;
               const isToday = streak + 1 === d.day;
               return (
-                <View key={d.day} style={[styles.streakDay, done && styles.streakDayDone, isToday && styles.streakDayToday]}>
-                  <Text style={[styles.streakDayNum, done && { color: '#000' }, isToday && { color: GOLD }]}>{d.day}</Text>
-                  <Text style={[styles.streakDayCoins, done && { color: '#000' }]}>+{d.coins}</Text>
+                <View key={d.day} style={[styles.streakDay, { backgroundColor: colors.bg, borderColor: colors.border }, done && { backgroundColor: colors.primary }, isToday && { borderColor: colors.primary }]}>
+                  <Text style={[styles.streakDayNum, { color: colors.textSecondary }, done && { color: '#000' }, isToday && { color: colors.primary }]}>{d.day}</Text>
+                  <Text style={[styles.streakDayCoins, { color: colors.textSecondary }, done && { color: '#000' }]}>+{d.coins}</Text>
                 </View>
               );
             })}
           </View>
           <Animated.View style={{ transform: [{ scale: bonusAvailable ? pulseAnim : 1 }] }}>
-            <TouchableOpacity style={[styles.actionBtn, !bonusAvailable && styles.actionBtnDisabled]}
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.primary }, !bonusAvailable && { backgroundColor: colors.border }]}
               onPress={claimBonus} disabled={!bonusAvailable || claimingBonus}>
               {claimingBonus ? <ActivityIndicator size="small" color="#000" /> : (
                 <>
-                  <Ionicons name="gift" size={18} color={bonusAvailable ? '#000' : '#555'} />
-                  <Text style={[styles.actionBtnText, !bonusAvailable && { color: '#555' }]}>
+                  <Ionicons name="gift" size={18} color={bonusAvailable ? '#000' : colors.textSecondary} />
+                  <Text style={[styles.actionBtnText, { color: '#000' }, !bonusAvailable && { color: colors.textSecondary }]}>
                     {bonusAvailable ? 'Claim +' + nextBonus + ' Coins' : 'Bonus Claimed Today'}
                   </Text>
                 </>
@@ -141,20 +143,20 @@ export default function GamificationScreen({ navigation }) {
 
 
         {quests.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="list" size={18} color="#10B981" />
-              <Text style={styles.sectionTitle}>Quests</Text>
+          <View style={[styles.section, { backgroundColor: colors.cardBg }]}>
+            <View style={[styles.sectionHeader, { borderBottomColor: colors.border }]}>
+              <Ionicons name="list" size={18} color={colors.primary} />
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Quests</Text>
             </View>
             {quests.map((q) => (
-              <View key={q.id} style={styles.questCard}>
-                <View style={styles.questIcon}><Ionicons name="checkmark-done" size={18} color="#10B981" /></View>
+              <View key={q.id} style={[styles.questCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                <View style={[styles.questIcon, { backgroundColor: colors.primary }]}><Ionicons name="checkmark-done" size={18} color="#000" /></View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.questTitle}>{q.title || q.name}</Text>
-                  {q.description ? <Text style={styles.questDesc}>{q.description}</Text> : null}
+                  <Text style={[styles.questTitle, { color: colors.text }]}>{q.title || q.name}</Text>
+                  {q.description ? <Text style={[styles.questDesc, { color: colors.textSecondary }]}>{q.description}</Text> : null}
                 </View>
                 <View style={styles.questReward}>
-                  <Ionicons name="star" size={13} color={GOLD} />
+                  <Ionicons name="star" size={13} color={colors.primary} />
                   <Text style={styles.questRewardText}>{q.reward_coins || q.coins || 0}</Text>
                 </View>
               </View>

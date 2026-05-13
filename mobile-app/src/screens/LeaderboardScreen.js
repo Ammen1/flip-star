@@ -172,7 +172,7 @@ export default function LeaderboardScreen({ route, navigation }) {
       {/* ── Header ── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={24} color={GOLD} />
+          <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <View style={{ flex: 1, paddingHorizontal: 8 }}>
           <Text style={styles.headerTitle}>Leaderboard</Text>

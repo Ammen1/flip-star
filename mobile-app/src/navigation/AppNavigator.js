@@ -32,6 +32,7 @@ import WalletScreen from '../screens/WalletScreen';
 import SubscriptionScreen from '../screens/SubscriptionScreen';
 import GamificationScreen from '../screens/GamificationScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import WebsiteCoinScreen from '../screens/WebsiteCoinScreen';
 
 // Configure deep linking
 const linking = {
@@ -185,6 +186,7 @@ function MainStack() {
       <Stack.Screen name="Subscription"    component={SubscriptionScreen} />
       <Stack.Screen name="Gamification"    component={GamificationScreen} />
       <Stack.Screen name="Notifications"   component={NotificationsScreen} />
+      <Stack.Screen name="WebsiteCoin"     component={WebsiteCoinScreen} />
     </Stack.Navigator>
   );
 }

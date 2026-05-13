@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
 
@@ -39,6 +40,7 @@ function clockTime(iso) {
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 const Avatar = memo(function Avatar({ uri, size = 44, name = '' }) {
+  const { colors } = useTheme();
   const [err, setErr] = useState(false);
   const u = uri ? mediaUrl(uri) : null;
   if (u && !err) {
@@ -53,7 +55,7 @@ const Avatar = memo(function Avatar({ uri, size = 44, name = '' }) {
   return (
     <View style={{
       width: size, height: size, borderRadius: size / 2,
-      backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center',
+      backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center',
     }}>
       <Text style={{ color: '#000', fontWeight: '700', fontSize: size * 0.38 }}>
         {(name || '?')[0].toUpperCase()}
@@ -64,6 +66,7 @@ const Avatar = memo(function Avatar({ uri, size = 44, name = '' }) {
 
 // ─── New Chat Modal ────────────────────────────────────────────────────────────
 function NewChatModal({ onClose, onSelectUser }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
@@ -88,30 +91,30 @@ function NewChatModal({ onClose, onSelectUser }) {
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.modalOverlay} />
       </TouchableWithoutFeedback>
-      <View style={[styles.newChatSheet, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.newChatSheet, { backgroundColor: colors.cardBg, paddingBottom: insets.bottom + 8 }]}>
         {/* Handle */}
         <View style={styles.sheetHandle} />
         <View style={styles.newChatHeader}>
-          <Text style={styles.newChatTitle}>New Message</Text>
+          <Text style={[styles.newChatTitle, { color: colors.text }]}>New Message</Text>
           <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
-            <Ionicons name="close" size={22} color={SUB} />
+            <Ionicons name="close" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
         {/* Search input */}
-        <View style={styles.searchRow}>
-          <Ionicons name="search" size={16} color={SUB} style={{ marginRight: 8 }} />
+        <View style={[styles.searchRow, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+          <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
           <TextInput
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.text }]}
             value={q}
             onChangeText={setQ}
             placeholder="Search users..."
-            placeholderTextColor="#555"
+            placeholderTextColor={colors.textSecondary}
             autoFocus
             returnKeyType="search"
           />
           {q.length > 0 && (
             <TouchableOpacity onPress={() => setQ('')}>
-              <Ionicons name="close-circle" size={16} color={SUB} />
+              <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
@@ -119,26 +122,26 @@ function NewChatModal({ onClose, onSelectUser }) {
         <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
           {loading && (
             <View style={{ padding: 24, alignItems: 'center' }}>
-              <ActivityIndicator color={GOLD} />
+              <ActivityIndicator color={colors.primary} />
             </View>
           )}
           {!loading && q.trim() && results.length === 0 && (
-            <Text style={styles.emptyText}>No users found</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No users found</Text>
           )}
           {!loading && !q.trim() && (
-            <Text style={styles.emptyText}>Start typing to search users</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Start typing to search users</Text>
           )}
           {results.map((u) => (
             <TouchableOpacity
               key={u.id}
-              style={styles.userRow}
+              style={[styles.userRow, { borderBottomColor: colors.border }]}
               onPress={() => onSelectUser(u)}
             >
               <Avatar uri={u.profile_photo} size={42} name={u.username} />
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={styles.userName}>{u.username}</Text>
+                <Text style={[styles.userName, { color: colors.text }]}>{u.username}</Text>
                 {(u.first_name || u.last_name) && (
-                  <Text style={styles.userSub}>{u.first_name} {u.last_name}</Text>
+                  <Text style={[styles.userSub, { color: colors.textSecondary }]}>{u.first_name} {u.last_name}</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -151,24 +154,18 @@ function NewChatModal({ onClose, onSelectUser }) {
 
 // ─── Message Bubble ────────────────────────────────────────────────────────────
 const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
+  const { colors } = useTheme();
   const own = msg.is_own;
 
   const handleLongPress = () => {
-    if (!own || msg.is_deleted) return;
-    const opts = [];
-    if (msg.is_editable && (!msg.media_type || msg.media_type === 'text')) {
+    const opts = [
+      { text: 'Copy', onPress: () => handleCopy(msg.text) },
+      { text: 'Reply', onPress: () => handleReply(msg) },
+    ];
+    if (own) {
       opts.push({ text: 'Edit', onPress: () => onEdit(msg) });
+      opts.push({ text: 'Delete', onPress: () => onDelete(msg) });
     }
-    opts.push({
-      text: 'Delete',
-      style: 'destructive',
-      onPress: () => {
-        Alert.alert('Delete message', 'Delete this message?', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: () => onDelete(msg) },
-        ]);
-      },
-    });
     opts.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message options', undefined, opts);
   };
@@ -177,7 +174,7 @@ const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
     ? [styles.bubble, styles.bubbleMine]
     : [styles.bubble, styles.bubbleOther];
 
-  const textColor = own ? '#000' : '#fff';
+  const textColor = own ? colors.text : '#fff';
 
   const renderContent = () => {
     if (msg.is_deleted) {
@@ -237,6 +234,7 @@ const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
 
 // ─── Thread / Chat View ────────────────────────────────────────────────────────
 function ChatView({ conversation, onBack, userId, navigation }) {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -401,34 +399,34 @@ function ChatView({ conversation, onBack, userId, navigation }) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: BG }}
+      style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       {/* Header */}
-      <View style={[styles.chatHeader, { paddingTop: insets.top }]}>
+      <View style={[styles.chatHeader, { paddingTop: insets.top, borderBottomColor: colors.border, backgroundColor: colors.cardBg }]}>
         <TouchableOpacity onPress={onBack} style={{ padding: 4, marginRight: 4 }}>
-          <Ionicons name="chevron-back" size={24} color={GOLD} />
+          <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Avatar uri={other?.profile_photo} size={36} name={other?.username} />
         <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.chatName} numberOfLines={1}>{other?.username || 'Unknown'}</Text>
+          <Text style={[styles.chatName, { color: colors.text }]} numberOfLines={1}>{other?.username || 'Unknown'}</Text>
           {(other?.first_name || other?.last_name) ? (
-            <Text style={styles.chatSub} numberOfLines={1}>{other.first_name} {other.last_name}</Text>
+            <Text style={[styles.chatSub, { color: colors.textSecondary }]} numberOfLines={1}>{other.first_name} {other.last_name}</Text>
           ) : null}
         </View>
         <TouchableOpacity
           onPress={() => navigation.navigate('Profile', { userId: other?.id })}
           style={{ padding: 6 }}
         >
-          <Ionicons name="person-outline" size={20} color={GOLD} />
+          <Ionicons name="person-outline" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
       {/* Messages */}
       {loading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator color={GOLD} size="large" />
+          <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : (
         <FlatList
@@ -439,8 +437,8 @@ function ChatView({ conversation, onBack, userId, navigation }) {
           contentContainerStyle={{ padding: 12, paddingBottom: 3, gap: 6 }}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', marginTop: 60 }}>
-              <Ionicons name="chatbubbles-outline" size={48} color="#333" />
-              <Text style={{ color: SUB, marginTop: 12, fontSize: 14 }}>
+              <Ionicons name="chatbubbles-outline" size={48} color={colors.textSecondary} />
+              <Text style={{ color: colors.textSecondary, marginTop: 12, fontSize: 14 }}>
                 No messages yet. Say hello!
               </Text>
             </View>
@@ -452,41 +450,41 @@ function ChatView({ conversation, onBack, userId, navigation }) {
 
       {/* Attachment preview */}
       {attachment && (
-        <View style={styles.attachPreview}>
+        <View style={[styles.attachPreview, { backgroundColor: colors.cardBg, borderTopColor: colors.border }]}>
           <Image source={{ uri: attachment.uri }} style={styles.attachThumb} />
-          <Text style={{ color: '#fff', flex: 1, marginLeft: 10, fontSize: 13 }} numberOfLines={1}>
+          <Text style={{ color: colors.text, flex: 1, marginLeft: 10, fontSize: 13 }} numberOfLines={1}>
             {attachment.name}
           </Text>
           <TouchableOpacity onPress={clearAttachment} style={{ padding: 4 }}>
-            <Ionicons name="close-circle" size={20} color={SUB} />
+            <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       )}
 
       {/* Edit banner */}
       {editing && (
-        <View style={styles.editBanner}>
-          <Ionicons name="pencil" size={14} color={GOLD} />
-          <Text style={{ color: GOLD, flex: 1, marginLeft: 8, fontSize: 13 }}>Editing message</Text>
+        <View style={[styles.editBanner, { backgroundColor: colors.cardBg, borderTopColor: colors.border }]}>
+          <Ionicons name="pencil" size={14} color={colors.primary} />
+          <Text style={{ color: colors.primary, flex: 1, marginLeft: 8, fontSize: 13 }}>Editing message</Text>
           <TouchableOpacity onPress={cancelEdit} style={{ padding: 4 }}>
-            <Ionicons name="close" size={16} color={SUB} />
+            <Ionicons name="close" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       )}
 
       {/* Composer */}
-      <View style={styles.inputRow}>
+      <View style={[styles.inputRow, { backgroundColor: colors.bg, borderTopColor: colors.border }]}>
         {!editing && (
           <TouchableOpacity onPress={pickImage} style={styles.attachBtn}>
-            <Ionicons name="image-outline" size={22} color={SUB} />
+            <Ionicons name="image-outline" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
         <TextInput
-          style={styles.msgInput}
+          style={[styles.msgInput, { color: colors.text, backgroundColor: colors.cardBg, borderColor: colors.border }]}
           value={text}
           onChangeText={setText}
           placeholder={editing ? 'Edit message…' : attachment ? 'Add a caption…' : 'Message…'}
-          placeholderTextColor="#555"
+          placeholderTextColor={colors.textSecondary}
           multiline
           maxLength={4000}
           returnKeyType="default"
@@ -496,7 +494,7 @@ function ChatView({ conversation, onBack, userId, navigation }) {
           disabled={(!text.trim() && !attachment) || sending}
           style={[
             styles.sendBtn,
-            { opacity: (!text.trim() && !attachment) || sending ? 0.5 : 1 },
+            { backgroundColor: colors.primary, opacity: (!text.trim() && !attachment) || sending ? 0.5 : 1 },
           ]}
         >
           {sending
@@ -510,6 +508,7 @@ function ChatView({ conversation, onBack, userId, navigation }) {
 
 // ─── Conversation Row ─────────────────────────────────────────────────────────
 const ConvRow = memo(function ConvRow({ conv, onPress, userId }) {
+  const { colors } = useTheme();
   const other = conv.other_user;
   const last = conv.last_message;
   const isOwn = last?.sender === userId || last?.sender_id === userId;
@@ -518,11 +517,11 @@ const ConvRow = memo(function ConvRow({ conv, onPress, userId }) {
     : (last?.text || (last?.media_type ? '📷 Media' : 'No messages yet'));
 
   return (
-    <TouchableOpacity style={styles.convoRow} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.convoRow, { borderBottomColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
       <View>
         <Avatar uri={other?.profile_photo} size={50} name={other?.username} />
         {conv.unread_count > 0 && (
-          <View style={styles.unreadDot}>
+          <View style={[styles.unreadDot, { backgroundColor: colors.primary }]}>
             <Text style={styles.unreadNum}>
               {conv.unread_count > 9 ? '9+' : conv.unread_count}
             </Text>
@@ -531,12 +530,12 @@ const ConvRow = memo(function ConvRow({ conv, onPress, userId }) {
       </View>
       <View style={{ flex: 1, marginLeft: 12 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 }}>
-          <Text style={styles.convoName} numberOfLines={1}>{other?.username || 'Unknown'}</Text>
-          <Text style={styles.convoTime}>{timeAgo(last?.created_at)}</Text>
+          <Text style={[styles.convoName, { color: colors.text }]} numberOfLines={1}>{other?.username || 'Unknown'}</Text>
+          <Text style={[styles.convoTime, { color: colors.textSecondary }]}>{timeAgo(last?.created_at)}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Text
-            style={[styles.convoPreview, conv.unread_count > 0 && styles.convoPreviewUnread]}
+            style={[styles.convoPreview, { color: colors.textSecondary }, conv.unread_count > 0 && { color: colors.text, fontWeight: '600' }]}
             numberOfLines={1}
           >
             {isOwn ? 'You: ' : ''}{preview}
@@ -551,6 +550,7 @@ const ConvRow = memo(function ConvRow({ conv, onPress, userId }) {
 export default function MessagesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { user: authUser } = useAuth();
+  const { colors } = useTheme();
   // authUser from /profile/me/ is UserProfileSerializer — actual user id is in .user.id
   const userId = authUser?.user?.id || authUser?.id;
 
@@ -616,8 +616,8 @@ export default function MessagesScreen({ navigation }) {
   // If in a chat, show ChatView full-screen
   if (activeConv) {
     return (
-      <View style={{ flex: 1, backgroundColor: BG }}>
-        <StatusBar barStyle="light-content" backgroundColor={BG} />
+      <View style={{ flex: 1, backgroundColor: colors.bg }}>
+        <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
         <ChatView
           conversation={activeConv}
           onBack={() => {
@@ -633,38 +633,38 @@ export default function MessagesScreen({ navigation }) {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="light-content" backgroundColor={BG} />
+      <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
 
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Messages</Text>
+      <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Messages</Text>
         <TouchableOpacity onPress={() => setShowNewChat(true)} style={{ padding: 4 }}>
-          <Ionicons name="create-outline" size={22} color={GOLD} />
+          <Ionicons name="create-outline" size={22} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
       {/* Search */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={16} color={SUB} style={{ marginRight: 8 }} />
+      <View style={[styles.searchBar, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+        <Ionicons name="search" size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           value={search}
           onChangeText={setSearch}
           placeholder="Search conversations..."
-          placeholderTextColor="#555"
+          placeholderTextColor={colors.textSecondary}
           returnKeyType="search"
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={16} color={SUB} />
+            <Ionicons name="close-circle" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
         )}
       </View>
 
       {/* Conversation list */}
       {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator color={GOLD} size="large" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
+          <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : (
         <FlatList
@@ -678,21 +678,21 @@ export default function MessagesScreen({ navigation }) {
             />
           )}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="chatbubbles-outline" size={52} color="#333" />
-              <Text style={styles.emptyTitle}>
+            <View style={[styles.emptyState, { backgroundColor: colors.bg }]}>
+              <Ionicons name="chatbubbles-outline" size={52} color={colors.textSecondary} />
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>
                 {search ? `No results for "${search}"` : 'No messages yet'}
               </Text>
               {!search && (
                 <>
-                  <Text style={styles.emptyBody}>
+                  <Text style={[styles.emptyBody, { color: colors.textSecondary }]}>
                     Start a conversation with anyone on the platform.
                   </Text>
                   <TouchableOpacity
-                    style={styles.newMsgBtn}
+                    style={[styles.newMsgBtn, { backgroundColor: colors.primary }]}
                     onPress={() => setShowNewChat(true)}
                   >
-                    <Text style={styles.newMsgBtnText}>Send message</Text>
+                    <Text style={[styles.newMsgBtnText, { color: colors.text }]}>Send message</Text>
                   </TouchableOpacity>
                 </>
               )}
