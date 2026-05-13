@@ -13,6 +13,21 @@ export function AdminManagementPage({ theme }) {
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
   const [search, setSearch] = useState('');
 
+  const headerStyle = {
+    padding: '16px',
+    textAlign: 'left',
+    fontSize: 13,
+    fontWeight: 700,
+    color: theme.sub,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  };
+
+  const cellStyle = {
+    padding: '16px',
+    fontSize: 14,
+  };
+
   useEffect(() => {
     loadUsers();
     loadRoles();
@@ -520,22 +535,6 @@ export function AdminManagementPage({ theme }) {
     </div>
   );
 }
-
-const headerStyle = {
-  padding: '16px',
-  textAlign: 'left',
-  fontSize: 13,
-  fontWeight: 700,
-  color: theme.sub,
-  textTransform: 'uppercase',
-  letterSpacing: '0.5px',
-};
-
-const cellStyle = {
-  padding: '16px',
-  fontSize: 14,
-};
-
 
 
 
