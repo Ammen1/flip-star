@@ -517,6 +517,7 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
                       padding: 8, display: 'flex', alignItems: 'center', color: '#F9E08B',
+                      pointerEvents: 'auto', zIndex: 10,
                     }}
                     title="Wallet"
                   >
