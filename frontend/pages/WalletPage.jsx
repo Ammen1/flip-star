@@ -36,7 +36,7 @@ function writeCache(summary, config) {
   } catch {}
 }
 
-export function WalletPage({ theme, onBack }) {
+export function WalletPage({ theme, onBack, showTopUpOnMount }) {
   const T = theme || defaultTheme();
   const [activeTab, setActiveTab] = useState('overview'); // overview | transactions | withdrawals
 
@@ -51,7 +51,7 @@ export function WalletPage({ theme, onBack }) {
   const [error, setError] = useState('');
 
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(showTopUpOnMount || false);
 
   useEffect(() => {
     if (cached) {

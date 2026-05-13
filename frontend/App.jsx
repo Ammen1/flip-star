@@ -235,6 +235,7 @@ export default function WerqRoot() {
   const [showSubscription, setShowSubscription] = useState(_historyState.showSubscription || false);
   const settingsReturnState = useRef(null); // tracks where to go back to when settings closes
   const walletReturnState = useRef(null); // tracks where to go back to when wallet closes
+  const walletShowTopUpOnMount = useRef(false); // tracks whether to show top-up modal on wallet mount
   const subscriptionReturnState = useRef(null); // tracks where to go back to when subscription closes
   const prevNavState = useRef(null); // tracks nav state before any overlay page opens
   const [showNotifications, setShowNotifications] = useState(_historyState.showNotifications || false);
@@ -960,8 +961,32 @@ export default function WerqRoot() {
     pushHistoryState({ showWallet: true });
   };
 
+  const handleShowCoinPurchase = () => {
+    if (!authUser) { setShowLogin(true); return; }
+    // Save the current page so back button can restore it
+    walletReturnState.current = {
+      showProfile, profileUserId, activeTab,
+      showSettings, showNotifications,
+    };
+    setShowWallet(true);
+    setShowSettings(false);
+    setShowProfile(false);
+    setShowPostPage(false);
+    setShowEditProfile(false);
+    setShowFollowersList(false);
+    setShowNotifications(false);
+    setShowCampaigns(false);
+    setShowCampaignDetail(false);
+    setShowCampaignLeaderboard(false);
+    setShowCampaignFeed(false);
+    setShowVideoDetail(false);
+    walletShowTopUpOnMount.current = true;
+    pushHistoryState({ showWallet: true, showTopUp: true });
+  };
+
   const handleCloseWallet = () => {
     setShowWallet(false);
+    walletShowTopUpOnMount.current = false;
     const ret = walletReturnState.current;
     if (ret) {
       walletReturnState.current = null;
@@ -970,16 +995,14 @@ export default function WerqRoot() {
         setProfileUserId(ret.profileUserId);
         setActiveTab(ret.activeTab || 'profile');
         pushHistoryState({ showWallet: false, showProfile: true, profileUserId: ret.profileUserId, activeTab: ret.activeTab || 'profile' }, true);
-        return;
-      }
-      if (ret.showSettings) {
+      } else if (ret.showSettings) {
         setShowSettings(true);
         setActiveTab(ret.activeTab || 'settings');
         pushHistoryState({ showWallet: false, showSettings: true, activeTab: ret.activeTab || 'settings' }, true);
-        return;
       }
+    } else {
+      pushHistoryState({ showWallet: false }, true);
     }
-    pushHistoryState({ showWallet: false }, true);
   };
 
   const handleShowSubscription = () => {
@@ -1198,7 +1221,7 @@ export default function WerqRoot() {
         {showWallet && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
-              <WalletPage theme={colors} onBack={handleCloseWallet} />
+              <WalletPage theme={colors} onBack={handleCloseWallet} showTopUpOnMount={walletShowTopUpOnMount.current} />
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
@@ -1299,6 +1322,7 @@ export default function WerqRoot() {
                 onShowSettings={handleShowSettings}
                 onShowWallet={handleShowWallet}
                 onShowSubscription={handleShowSubscription}
+                onShowCoinPurchase={handleShowCoinPurchase}
                 onShowFollowers={(userId) =>
                   handleShowFollowers(userId, 'followers')
                 }
