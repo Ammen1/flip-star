@@ -617,6 +617,7 @@ export function AdminManagementPage({ theme }) {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 1000,
+          padding: 20,
         }}>
           <div style={{
             background: theme.card,
@@ -624,6 +625,8 @@ export function AdminManagementPage({ theme }) {
             padding: 24,
             width: '100%',
             maxWidth: 500,
+            maxHeight: '90vh',
+            overflow: 'auto',
             border: `1px solid ${theme.border}`,
           }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
