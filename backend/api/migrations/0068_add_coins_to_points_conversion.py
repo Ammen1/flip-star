@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('api', '0067_block_onevaschargingtransaction_and_more'),
+        ('api', '0066_add_gifts_weight_to_scoring_config'),
     ]
 
     operations = [
