@@ -52,7 +52,7 @@ export function AdminManagementPage({ theme }) {
 
   const handleSaveUserRole = async () => {
     try {
-      await api.request(`/admin/rbac/users/${userRoleModal.userId}/roles/`, {
+      await api.request(`/admin/rbac/users/${userRoleModal.userId}/`, {
         method: 'PUT',
         body: JSON.stringify({ 
           role_ids: selectedUserRoles,
