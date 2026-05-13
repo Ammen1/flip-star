@@ -559,7 +559,7 @@ export default function ProfileScreen({ navigation, route }) {
         <View style={styles.headerSpacer} />
         {isOwnProfile && (
           <View style={styles.headerActions}>
-            <TouchableOpacity onPress={() => navigation.navigate('WebsiteCoin')} style={styles.headerButton}>
+            <TouchableOpacity onPress={() => navigation.navigate('CoinPurchase')} style={styles.headerButton}>
               <Ionicons name="star" size={24} color={colors.primary} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Wallet')} style={styles.headerButton}>
