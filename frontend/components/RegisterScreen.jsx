@@ -152,7 +152,7 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
             <div style={{ fontSize:19, fontWeight:800, color:T.txt, marginBottom:4 }}>Add your number 📱</div>
             <div style={{ fontSize:13, color:T.sub, marginBottom:20, lineHeight:1.5 }}>SMS verification & notifications. You can opt out anytime.</div>
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:T.sub, textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:6 }}>Country Code</div>
+              <div style={{ fontSize:11, fontWeight:700, color:T.sub, letterSpacing:"0.5px", marginBottom:6 }}>Country Code</div>
               <select value={form.country} onChange={e=>set("country",e.target.value)} style={{ width:"100%", border:`1.5px solid ${T.border}`, borderRadius:14, padding:"12px 14px", fontSize:14, outline:"none", fontFamily:"inherit", color:T.txt, background:"#fff" }}>
                 {[["+251","🇪🇹 Ethiopia"],["+254","🇰🇪 Kenya"],["+27","🇿🇦 South Africa"],["+234","🇳🇬 Nigeria"],["+1","🇺🇸 USA"],["+44","🇬🇧 UK"]].map(([v,l])=>(<option key={v} value={v}>{l}</option>))}
               </select>
