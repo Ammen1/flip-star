@@ -36,7 +36,7 @@ function Modal({ children, onClose, theme: T, title }) {
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 9999, padding: 16,
       }}
@@ -44,14 +44,15 @@ function Modal({ children, onClose, theme: T, title }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: T.card, borderRadius: 16, padding: 20,
+          background: T.card || '#1A1A1A', borderRadius: 16, padding: 20,
           maxWidth: 400, width: '100%', maxHeight: '80vh', overflowY: 'auto',
-          border: `1px solid ${T.border}`,
+          border: `1px solid ${T.border || '#333'}`,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: T.txt, margin: 0 }}>{title}</h2>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.sub }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: T.txt || '#fff', margin: 0 }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.sub || '#999' }}>
             <X size={20} />
           </button>
         </div>
