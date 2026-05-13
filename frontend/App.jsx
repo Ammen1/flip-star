@@ -72,11 +72,11 @@ function EmptyState({ theme: T, icon, title, subtitle }) {
   );
 }
 
-function TopUpModal({ theme: T, packages, onClose }) {
-  const [selected, setSelected] = useState(null);
+function TopUpModal({ theme: T, onClose }) {
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState(null); // 'airtime' | 'telebirr'
   const [loading, setLoading] = useState(false);
+  const [loadingAirtime, setLoadingAirtime] = useState(false);
+  const [loadingTelebirr, setLoadingTelebirr] = useState(false);
 
   // Fetch user's phone number when modal opens
   useEffect(() => {
@@ -93,81 +93,78 @@ function TopUpModal({ theme: T, packages, onClose }) {
     fetchPhoneNumber();
   }, []);
 
-  const handlePurchase = async () => {
-    if (!selected || !phoneNumber || !paymentMethod) return;
+  const handleAirtimePurchase = async () => {
+    if (!phoneNumber) {
+      alert('Please enter your phone number');
+      return;
+    }
 
-    setLoading(true);
+    setLoadingAirtime(true);
     try {
-      const response = await api.request('/contest/purchase-coins/', {
+      const response = await api.request('/charging/coin-purchase/', {
         method: 'POST',
         body: JSON.stringify({
-          package_id: selected.id,
           phone_number: phoneNumber,
-          payment_method: paymentMethod,
         }),
       });
 
-      if (response.message) {
+      if (response.success) {
         alert(response.message);
         onClose();
       } else {
-        alert('Purchase failed');
+        alert(response.message || 'Purchase failed');
       }
     } catch (error) {
-      console.error('coin purchase error:', error);
+      console.error('airtime coin purchase error:', error);
       alert('Purchase failed. Please try again.');
     } finally {
-      setLoading(false);
+      setLoadingAirtime(false);
+    }
+  };
+
+  const handleTelebirrPurchase = async () => {
+    if (!phoneNumber) {
+      alert('Please enter your phone number');
+      return;
+    }
+
+    setLoadingTelebirr(true);
+    try {
+      const response = await api.request('/wallet/telebirr/initiate/', {
+        method: 'POST',
+        body: JSON.stringify({
+          package_id: 1, // On-demand package ID
+          phone_number: phoneNumber,
+        }),
+      });
+
+      if (response.success && response.payment_url) {
+        window.open(response.payment_url, '_blank');
+        onClose();
+      } else {
+        alert(response.error || 'Payment initiation failed');
+      }
+    } catch (error) {
+      console.error('telebirr payment error:', error);
+      alert('Payment initiation failed. Please try again.');
+    } finally {
+      setLoadingTelebirr(false);
     }
   };
 
   return (
     <Modal onClose={onClose} theme={T} title="Buy Coins">
-      {packages.length === 0 ? (
-        <EmptyState theme={T} icon={<Gift size={32} />} title="No packages available"
-                    subtitle="Check back soon for coin packages." />
-      ) : (
-        <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
-          {packages.map((pkg) => (
-            <button
-              key={pkg.id}
-              onClick={() => setSelected(pkg)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: 14,
-                borderRadius: 12,
-                border: `2px solid ${selected?.id === pkg.id ? T.pri : T.border}`,
-                background: selected?.id === pkg.id ? T.pri + '10' : T.card,
-                cursor: 'pointer', textAlign: 'left',
-              }}
-            >
-              <div style={{
-                width: 44, height: 44, borderRadius: 12,
-                background: T.pri + '15',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Coins size={22} color={T.pri} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: T.txt }}>
-                  {pkg.total_coins.toLocaleString()} coins
-                </div>
-                {pkg.bonus_coins > 0 && (
-                  <div style={{ fontSize: 11, color: '#10B981', fontWeight: 600 }}>
-                    +{pkg.bonus_coins} bonus
-                  </div>
-                )}
-                <div style={{ fontSize: 12, color: T.sub }}>{pkg.name}</div>
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: T.pri }}>
-                {Number(pkg.price_etb).toFixed(0)} ETB
-              </div>
-            </button>
-          ))}
+      <div style={{ textAlign: 'center', marginBottom: 20 }}>
+        <div style={{ fontSize: 32, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
+          100 Coins
         </div>
-      )}
+        <div style={{ fontSize: 16, color: T.sub }}>
+          for 10 ETB
+        </div>
+      </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ ...modalLabel(T), marginBottom: 6 }}>Phone Number</label>
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ ...modalLabel(T), marginBottom: 8 }}>Phone Number</label>
         <input
           type="tel"
           value={phoneNumber}
@@ -177,42 +174,34 @@ function TopUpModal({ theme: T, packages, onClose }) {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <button
-          onClick={() => setPaymentMethod('airtime')}
-          disabled={loading}
+          onClick={handleAirtimePurchase}
+          disabled={loadingAirtime || loadingTelebirr}
           style={{
             ...btnPrimary(T),
-            opacity: paymentMethod === 'airtime' ? 1 : 0.5,
-            background: paymentMethod === 'airtime' ? T.pri : T.card,
-            color: paymentMethod === 'airtime' ? '#000' : T.txt,
-            border: paymentMethod === 'airtime' ? 'none' : `1px solid ${T.border}`,
+            opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
+            background: T.pri,
+            color: '#000',
+            border: 'none',
           }}
         >
-          From Airtime
+          {loadingAirtime ? 'Processing...' : 'From Airtime'}
         </button>
         <button
-          onClick={() => setPaymentMethod('telebirr')}
-          disabled={loading}
+          onClick={handleTelebirrPurchase}
+          disabled={loadingAirtime || loadingTelebirr}
           style={{
             ...btnPrimary(T),
-            opacity: paymentMethod === 'telebirr' ? 1 : 0.5,
-            background: paymentMethod === 'telebirr' ? T.pri : T.card,
-            color: paymentMethod === 'telebirr' ? '#000' : T.txt,
-            border: paymentMethod === 'telebirr' ? 'none' : `1px solid ${T.border}`,
+            opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
+            background: T.pri,
+            color: '#000',
+            border: 'none',
           }}
         >
-          From Telebirr
+          {loadingTelebirr ? 'Processing...' : 'From Telebirr'}
         </button>
       </div>
-
-      <button
-        onClick={handlePurchase}
-        disabled={!selected || !phoneNumber || !paymentMethod || loading}
-        style={{ ...btnPrimary(T), width: '100%', opacity: (!selected || !phoneNumber || !paymentMethod || loading) ? 0.5 : 1 }}
-      >
-        {loading ? 'Processing...' : 'Purchase Coins'}
-      </button>
     </Modal>
   );
 }
@@ -446,7 +435,6 @@ export default function WerqRoot() {
   const [showWallet, setShowWallet] = useState(_historyState.showWallet || false);
   const [showSubscription, setShowSubscription] = useState(_historyState.showSubscription || false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
-  const [coinPackages, setCoinPackages] = useState([]);
   const settingsReturnState = useRef(null); // tracks where to go back to when settings closes
   const walletReturnState = useRef(null); // tracks where to go back to when wallet closes
   const walletShowTopUpOnMount = useRef(false); // tracks whether to show top-up modal on wallet mount
@@ -1177,15 +1165,7 @@ export default function WerqRoot() {
 
   const handleShowCoinPurchase = async () => {
     if (!authUser) { setShowLogin(true); return; }
-    // Load coin packages
-    try {
-      const response = await api.request('/coins/packages/');
-      setCoinPackages(response.packages || []);
-      setShowTopUpModal(true);
-    } catch (error) {
-      console.error('Failed to load coin packages:', error);
-      alert('Failed to load coin packages. Please try again.');
-    }
+    setShowTopUpModal(true);
   };
 
   const handleCloseWallet = () => {
@@ -1633,7 +1613,6 @@ export default function WerqRoot() {
         {showTopUpModal && (
           <TopUpModal
             theme={colors}
-            packages={coinPackages}
             onClose={() => setShowTopUpModal(false)}
           />
         )}

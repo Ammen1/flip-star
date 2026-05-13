@@ -456,6 +456,7 @@ urlpatterns = [
     path('charging/on-demand/', initiate_on_demand_charging, name='on-demand-charging'),
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
     path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
+    path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),
     path('legal/<str:document_type>/', get_legal_document, name='legal-document'),
