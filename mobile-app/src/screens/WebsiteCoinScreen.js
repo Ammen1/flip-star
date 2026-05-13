@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator,
-  Image, Dimensions
+  Image, Dimensions, Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,18 +12,9 @@ import SoundManager from '../utils/SoundUtils';
 
 const { width } = Dimensions.get('window');
 
-// Coin packages matching the website
-const COIN_PACKAGES = [
-  { 
-    id: 1, 
-    coins: 100, 
-    price: 10, 
-    bonus: 0, 
-    popular: false,
-    description: 'Starter Pack',
-    savings: 0,
-    color: '#3B82F6'
-  },
+// Fallback packages if backend fetch fails
+const FALLBACK_PACKAGES = [
+  { id: 1, coins: 100, price: 10, bonus: 0, popular: false, description: 'Starter Pack', savings: 0, color: '#3B82F6' },
 ];
 
 export default function WebsiteCoinScreen({ navigation }) {
@@ -31,6 +22,7 @@ export default function WebsiteCoinScreen({ navigation }) {
   const { colors } = useTheme();
   const { user: authUser } = useAuth();
   const [userCoins, setUserCoins] = useState(0);
+  const [coinPackages, setCoinPackages] = useState(FALLBACK_PACKAGES);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -40,7 +32,31 @@ export default function WebsiteCoinScreen({ navigation }) {
 
   useEffect(() => {
     loadUserCoins();
+    loadPackages();
   }, []);
+
+  const loadPackages = async () => {
+    try {
+      const response = await api.request('/coins/packages/');
+      console.log('Packages API response:', response);
+      // Backend returns { packages: [...] }
+      const rawPkgs = response?.packages || response || [];
+      const pkgs = (Array.isArray(rawPkgs) ? rawPkgs : []).map(p => ({
+        id: p.id,
+        coins: p.coin_amount,
+        price: parseFloat(p.price_etb),
+        bonus: p.bonus_coins || 0,
+        popular: p.is_featured || false,
+        description: p.name,
+        savings: 0,
+        color: '#3B82F6',
+      }));
+      console.log('Loaded packages:', pkgs);
+      if (pkgs.length > 0) setCoinPackages(pkgs);
+    } catch (e) {
+      console.log('Using fallback packages:', e);
+    }
+  };
 
   const loadUserCoins = async () => {
     try {
@@ -90,103 +106,26 @@ export default function WebsiteCoinScreen({ navigation }) {
       return;
     }
 
-    setLoading(true);
-    try {
-      // Common payment flow for both methods
-      if (paymentMethod === 'airtime') {
-        // Show confirmation before airtime payment
-        Alert.alert(
-          'Confirm Airtime Payment',
-          `${selectedPackage.price} ETB will be deducted from your airtime balance and you'll receive ${selectedPackage.coins + selectedPackage.bonus} coins.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Confirm',
-              onPress: async () => {
-                await processAirtimeDirectPayment(selectedPackage);
-                setShowPaymentModal(false);
-              }
-            }
-          ]
-        );
-      } else if (paymentMethod === 'telebirr') {
-        // Handle Telebirr payment
-        Alert.alert(
-          'Confirm Telebirr Payment',
-          `You will be redirected to Telebirr to pay ${selectedPackage.price} ETB for ${selectedPackage.coins + selectedPackage.bonus} coins.`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Confirm',
-              onPress: async () => {
-                try {
-                  const response = await api.request('/payments/telebirr/coins', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      package_id: selectedPackage.id,
-                      amount: selectedPackage.price,
-                      coins: selectedPackage.coins,
-                      bonus: selectedPackage.bonus
-                    })
-                  });
-                  
-                  if (response.payment_url) {
-                    Alert.alert('Redirecting', 'Opening Telebirr payment...');
-                    // Open Telebirr app or web
-                    import('react-native').then(({ Linking }) => {
-                      Linking.openURL(response.payment_url).catch(() => {
-                        Alert.alert('Error', 'Could not open Telebirr app. Please try again.');
-                      });
-                    });
-                  }
-                } catch (error) {
-                  Alert.alert('Error', 'Telebirr payment failed. Please try again.');
-                }
-              }
-            }
-          ]
-        );
+    const confirmTitle = paymentMethod === 'airtime' ? 'Confirm Airtime Payment' : 'Confirm Telebirr Payment';
+    const confirmMsg = paymentMethod === 'airtime'
+      ? `${selectedPackage.price} ETB will be deducted from your airtime balance and you'll receive ${selectedPackage.coins + selectedPackage.bonus} coins.`
+      : `You will be redirected to Telebirr to pay ${selectedPackage.price} ETB for ${selectedPackage.coins + selectedPackage.bonus} coins.`;
+
+    Alert.alert(confirmTitle, confirmMsg, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Confirm',
+        onPress: () => processPurchase(selectedPackage),
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to process payment. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    ]);
   };
 
-  const processAirtimePayment = async (pkg) => {
-    try {
-      // Show confirmation with balance deduction info
-      Alert.alert(
-        'Confirm Airtime Payment',
-        `${pkg.price} ETB will be deducted from your airtime balance and you'll receive ${pkg.coins + pkg.bonus} coins.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Confirm',
-            onPress: async () => {
-              // Process the airtime payment
-              const smsCode = getSMSCode(pkg);
-              
-              // Process airtime payment directly like website
-                processAirtimeDirectPayment(pkg);
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to process payment. Please try again.');
-    }
-  };
-
-  const processAirtimeDirectPayment = async (pkg) => {
+  const processPurchase = async (pkg) => {
     try {
       setLoading(true);
-      
+
       // Get user's phone number
       let userPhoneNumber = authUser?.phone_number || authUser?.phone || authUser?.username;
-      
-      // Format phone number for backend (expects 2519XXXXXXXX format)
       if (userPhoneNumber) {
         if (userPhoneNumber.startsWith('0')) {
           userPhoneNumber = '251' + userPhoneNumber.substring(1);
@@ -194,98 +133,76 @@ export default function WebsiteCoinScreen({ navigation }) {
           userPhoneNumber = userPhoneNumber.substring(1);
         }
       }
-      
       if (!userPhoneNumber) {
         Alert.alert('Error', 'Phone number not found. Please update your profile.');
         return;
       }
 
-      // Get the on-demand subscription tier ID from backend
-      let tierId = null;
-      try {
-        const tiersData = await api.request('/subscriptions/tiers/active/');
-        const ondemandTier = (tiersData || []).find(t => t.duration_type === 'ondemand');
-        tierId = ondemandTier?.id;
-      } catch (e) {
-        console.error('Failed to fetch tiers:', e);
-      }
+      if (paymentMethod === 'airtime') {
+        // Use /coins/purchase/ endpoint - same as website "From Airtime" button
+        // This directly credits coins (no SMS, no Onevas call needed)
+        const response = await api.request('/coins/purchase/', {
+          method: 'POST',
+          body: JSON.stringify({
+            package_id: pkg.id,
+            payment_method: 'airtime',
+            phone_number: userPhoneNumber,
+            amount: pkg.price,
+          }),
+        });
 
-      if (!tierId) {
-        Alert.alert('Error', 'On-demand plan not found. Please try again later.');
-        return;
-      }
+        console.log('Airtime purchase response:', response);
 
-      // Use backend's /charging/on-demand/ endpoint (same as website)
-      // Backend handles Onevas API call and credits coins
-      const response = await api.request('/charging/on-demand/', {
-        method: 'POST',
-        body: JSON.stringify({
-          subscription_tier_id: tierId,
-          phone_number: userPhoneNumber,
-        }),
-      });
-
-      console.log('Charging response:', response);
-
-      if (response.success) {
-        // Reload balance from wallet API
-        await loadUserCoins();
-        
-        // Show success
-        setPurchasedCoins(pkg.coins + pkg.bonus);
-        setShowSuccessModal(true);
-        setShowPaymentModal(false);
-        
-        // Play coin sound
-        SoundManager.playCoinSound();
-      } else {
-        // Handle specific errors
-        if (response.error === 'insufficient_balance') {
-          Alert.alert('Insufficient Balance', 'Your airtime balance is not enough. Please recharge and try again.');
-        } else if (response.message === 'INTERNAL_ERROR' || response.error === 'charging_failed') {
-          Alert.alert('Service Unavailable', 'The payment service is temporarily unavailable. Please try again in a few minutes.');
+        if (response.coins_added || response.message?.includes('successfully')) {
+          await loadUserCoins();
+          setPurchasedCoins(response.coins_added || (pkg.coins + pkg.bonus));
+          setShowSuccessModal(true);
+          setShowPaymentModal(false);
+          SoundManager.playCoinSound();
         } else {
-          Alert.alert('Payment Failed', response.message || 'Charging failed. Please try again.');
+          Alert.alert('Payment Failed', response.error || 'Could not complete purchase. Please try again.');
+        }
+      } else {
+        // Telebirr - use /wallet/telebirr/initiate/ endpoint
+        const response = await api.request('/wallet/telebirr/initiate/', {
+          method: 'POST',
+          body: JSON.stringify({
+            package_id: pkg.id,
+            phone_number: userPhoneNumber,
+          }),
+        });
+
+        console.log('Telebirr initiation response:', response);
+
+        if (response.success && response.payment_url) {
+          setShowPaymentModal(false);
+          await Linking.openURL(response.payment_url);
+          
+          // Poll for balance update after payment
+          let pollCount = 0;
+          const pollInterval = setInterval(async () => {
+            pollCount++;
+            await loadUserCoins();
+            if (pollCount >= 12) clearInterval(pollInterval);
+          }, 5000);
+        } else {
+          Alert.alert('Payment Failed', response.error || 'Could not initiate payment. Please try again.');
         }
       }
-      
     } catch (error) {
       console.error('Payment error:', error);
-      const errMsg = error?.message || 'Payment failed. Please try again.';
-      if (errMsg.includes('insufficient_balance') || errMsg.includes('not enough')) {
-        Alert.alert('Insufficient Balance', 'Your airtime balance is not enough. Please recharge and try again.');
-      } else if (errMsg.includes('INTERNAL_ERROR') || errMsg.includes('charging_failed')) {
-        Alert.alert('Service Unavailable', 'The payment service is temporarily unavailable. Please try again in a few minutes.');
+      const errMsg = error?.message || '';
+      if (errMsg.includes('Package not found')) {
+        Alert.alert('Error', 'Coin package not available. Please try again later.');
       } else {
-        Alert.alert('Payment Failed', errMsg);
+        Alert.alert('Payment Failed', 'Could not complete purchase. Please try again.');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const getAirtimeSMSCode = (pkg) => {
-    // Use the correct SMS codes for airtime payments that work with carrier
-    const airtimeCodes = {
-      1: 'COIN100',  // 100 coins for 10 ETB
-      2: 'COIN250',  // 250 coins for 25 ETB
-      3: 'COIN500',  // 500 coins for 50 ETB
-      4: 'COIN1000', // 1000 coins for 100 ETB
-      5: 'COIN2500'  // 2500 coins for 250 ETB
-    };
-    return airtimeCodes[pkg.id] || 'COIN100';
-  };
 
-  const getSMSCode = (pkg) => {
-    const codes = {
-      1: 'COIN100',
-      2: 'COIN250', 
-      3: 'COIN500',
-      4: 'COIN1000',
-      5: 'COIN2500'
-    };
-    return codes[pkg.id] || 'COIN100';
-  };
 
   const formatSavings = (savings) => {
     return savings > 0 ? `Save ${savings}%` : '';
@@ -332,7 +249,7 @@ export default function WebsiteCoinScreen({ navigation }) {
 
         {/* Coin Package - Single Large Card */}
         <View style={styles.packagesGrid}>
-          {COIN_PACKAGES.map((pkg) => (
+          {coinPackages.map((pkg) => (
             <TouchableOpacity
               key={pkg.id}
               style={[
