@@ -36,7 +36,7 @@ function writeCache(summary, config) {
   } catch {}
 }
 
-export function WalletPage({ theme, onBack, showTopUpOnMount }) {
+export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase }) {
   const T = theme || defaultTheme();
   const [activeTab, setActiveTab] = useState('overview'); // overview | transactions | withdrawals
 
@@ -180,109 +180,128 @@ export function WalletPage({ theme, onBack, showTopUpOnMount }) {
         </button>
       </div>
 
-      {/* Balance Card */}
+      {/* Three Horizontal Dashboard Cards */}
       <div style={{
-        margin: '16px',
-        padding: 24,
-        borderRadius: 20,
-        background: `linear-gradient(135deg, ${T.pri} 0%, #6366F1 100%)`,
-        color: 'white',
-        boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+        padding: '16px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 12,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.9, fontSize: 13 }}>
-          <Coins size={16} /> Total Balance
-        </div>
-        <div style={{ fontSize: 42, fontWeight: 800, marginTop: 4, marginBottom: 4 }}>
-          {formatNumber(balance.total)}
-        </div>
-        <div style={{ fontSize: 13, opacity: 0.9 }}>
-          ≈ {coinsToBirr(balance.total, config?.coins_per_birr).toFixed(2)} ETB (Birr)
-        </div>
-
-        {/* Two-bucket breakdown */}
+        {/* Card 1: Coins */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 12,
-          marginTop: 20,
-          padding: '16px 0 0 0',
-          borderTop: '1px solid rgba(255,255,255,0.2)',
+          padding: 18,
+          borderRadius: 16,
+          background: 'linear-gradient(135deg, #D4AF37 0%, #C8A84B 100%)',
+          color: '#1A1A1A',
+          boxShadow: '0 6px 20px rgba(212,175,55,0.25)',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 180,
         }}>
-          <div>
-            <div style={{ fontSize: 11, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Earned
-            </div>
-            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 2 }}>
-              {formatNumber(balance.earned)}
-            </div>
-            <div style={{ fontSize: 11, opacity: 0.8 }}>Withdrawable to Birr</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Coins size={14} /> Coins
           </div>
-          <div>
-            <div style={{ fontSize: 11, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Purchased
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 6, lineHeight: 1 }}>
+            {formatNumber(balance.total)}
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.8, marginTop: 2 }}>Total Coins</div>
+          <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.15)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+              <span style={{ opacity: 0.8 }}>Earned</span>
+              <strong>{formatNumber(balance.earned)}</strong>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 2 }}>
-              {formatNumber(balance.purchased)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+              <span style={{ opacity: 0.8 }}>Purchased</span>
+              <strong>{formatNumber(balance.purchased)}</strong>
             </div>
-            <div style={{ fontSize: 11, opacity: 0.8 }}>For gifts & boosts</div>
           </div>
         </div>
-      </div>
 
-      {/* Points Card */}
-      <div style={{
-        margin: '0 16px 16px',
-        padding: 20,
-        borderRadius: 16,
-        background: T.card,
-        border: `1px solid ${T.border}`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <Gift size={16} color={T.pri} />
-          <span style={{ fontSize: 13, fontWeight: 600, color: T.txt }}>Points Balance</span>
-        </div>
-        <div style={{ fontSize: 36, fontWeight: 800, color: T.txt, marginBottom: 4 }}>
-          {formatNumber(points.current)}
-        </div>
-        <div style={{ fontSize: 12, color: T.sub, marginBottom: 12 }}>
-          From gifts & campaign wins (1 coin = 1 point)
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
-          <div>
-            <div style={{ fontSize: 11, color: T.sub, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Earned Total
+        {/* Card 2: Points */}
+        <div style={{
+          padding: 18,
+          borderRadius: 16,
+          background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
+          color: '#fff',
+          boxShadow: '0 6px 20px rgba(139,92,246,0.25)',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 180,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Gift size={14} /> Points
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 6, lineHeight: 1 }}>
+            {formatNumber(points.current)}
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>Current Balance</div>
+          <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+              <span style={{ opacity: 0.85 }}>Earned Total</span>
+              <strong>{formatNumber(points.earned_total)}</strong>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: T.txt, marginTop: 2 }}>
-              {formatNumber(points.earned_total)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+              <span style={{ opacity: 0.85 }}>From Gifts</span>
+              <strong>{formatNumber(points.earned_total)}</strong>
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: 11, color: T.sub, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Withdrawn
+        </div>
+
+        {/* Card 3: Withdrawal */}
+        <div style={{
+          padding: 18,
+          borderRadius: 16,
+          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+          color: '#fff',
+          boxShadow: '0 6px 20px rgba(16,185,129,0.25)',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 180,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, opacity: 0.9, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <ArrowUpFromLine size={14} /> Withdraw
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 900, marginTop: 6, lineHeight: 1 }}>
+            {pointsToBirr(points.current, config?.points_per_birr).toFixed(2)}
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>ETB Available</div>
+          <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
+              <span style={{ opacity: 0.85 }}>Min</span>
+              <strong>{config?.withdrawal_min_points || 100} pts</strong>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: T.txt, marginTop: 2 }}>
-              {formatNumber(points.withdrawn_total)}
-            </div>
+            <button
+              onClick={() => setShowWithdrawModal(true)}
+              disabled={(points.current || 0) < (config?.withdrawal_min_points || 100)}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.2)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.3)',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 'pointer' : 'not-allowed',
+                opacity: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 1 : 0.5,
+              }}
+            >
+              Points → Birr
+            </button>
           </div>
         </div>
       </div>
 
       {/* Action buttons */}
-      <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <button onClick={() => setShowTopUpModal(true)} style={btnPrimary(T)}>
-          <ArrowDownToLine size={18} /> Buy Coins
-        </button>
+      <div style={{ padding: '0 16px', display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
         <button
-          onClick={() => setShowWithdrawModal(true)}
-          disabled={!withdrawal.eligible}
-          style={{
-            ...btnSecondary(T),
-            opacity: withdrawal.eligible ? 1 : 0.5,
-            cursor: withdrawal.eligible ? 'pointer' : 'not-allowed',
+          onClick={() => {
+            if (onShowCoinPurchase) onShowCoinPurchase();
+            else setShowTopUpModal(true);
           }}
-          title={!withdrawal.eligible ? `Need ${withdrawal.min_coins} earned coins to withdraw` : ''}
+          style={btnPrimary(T)}
         >
-          <ArrowUpFromLine size={18} /> Withdraw to Birr
+          <ArrowDownToLine size={18} /> Buy Coins
         </button>
       </div>
 
@@ -342,6 +361,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount }) {
         <WithdrawModal
           theme={T}
           balance={balance}
+          points={points}
           config={config}
           onClose={() => setShowWithdrawModal(false)}
           onSuccess={() => {
@@ -467,6 +487,20 @@ function StatBox({ theme: T, icon, label, value, sub }) {
 function TransactionRow({ tx, theme: T }) {
   const isCredit = tx.is_credit;
   const color = isCredit ? '#10B981' : '#EF4444';
+  const isGift = tx.type === 'gift_sent' || tx.type === 'gift_received';
+  const isPointTx = tx.type === 'gift_received';
+
+  // Build a clear primary label
+  let primaryLabel = tx.type_display;
+  if (tx.type === 'gift_sent' && tx.other_user) {
+    primaryLabel = `Gift sent to @${tx.other_user.username}`;
+  } else if (tx.type === 'gift_received' && tx.other_user) {
+    primaryLabel = `Gift received from @${tx.other_user.username}`;
+  }
+
+  const Icon = isGift ? Gift : (isCredit ? TrendingUp : TrendingDown);
+  const unitLabel = isPointTx ? 'points' : 'coins';
+
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 4px',
@@ -477,21 +511,21 @@ function TransactionRow({ tx, theme: T }) {
         background: color + '15',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {isCredit ? <TrendingUp size={18} color={color} /> : <TrendingDown size={18} color={color} />}
+        <Icon size={18} color={color} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: T.txt }}>
-          {tx.type_display}
+          {primaryLabel}
         </div>
         <div style={{ fontSize: 12, color: T.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {tx.description || formatDate(tx.created_at)}
+          {formatDate(tx.created_at)}{tx.description ? ` • ${tx.description}` : ''}
         </div>
       </div>
       <div style={{ textAlign: 'right' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color }}>
           {isCredit ? '+' : ''}{tx.coins.toLocaleString()}
         </div>
-        <div style={{ fontSize: 11, color: T.sub }}>coins</div>
+        <div style={{ fontSize: 11, color: T.sub }}>{unitLabel}</div>
       </div>
     </div>
   );
@@ -568,9 +602,10 @@ function EmptyState({ theme: T, icon, title, subtitle }) {
 // Withdraw Modal
 // ---------------------------------------------------------------
 
-function WithdrawModal({ theme: T, balance, config, onClose, onSuccess }) {
+function WithdrawModal({ theme: T, balance, points, config, onClose, onSuccess }) {
   const [step, setStep] = useState(1); // 1: amount, 2: payout, 3: confirm
-  const [amount, setAmount] = useState(config?.withdrawal?.min_coins || 1000);
+  const minPoints = config?.withdrawal_min_points || 100;
+  const [amount, setAmount] = useState(minPoints);
   const [payoutMethod, setPayoutMethod] = useState('telebirr');
   const [payoutAccount, setPayoutAccount] = useState('');
   const [payoutAccountName, setPayoutAccountName] = useState('');
@@ -578,18 +613,18 @@ function WithdrawModal({ theme: T, balance, config, onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const minCoins = config?.withdrawal?.min_coins || 1000;
-  const coinsPerBirr = config?.coins_per_birr || 100;
+  const pointsPerBirr = config?.points_per_birr || 10;
   const feePercent = parseFloat(config?.withdrawal?.fee_percent || '5');
+  const availablePoints = points?.current || 0;
 
   useEffect(() => {
     if (amount > 0) {
-      const gross = amount / coinsPerBirr;
+      const gross = amount / pointsPerBirr;
       const fee = gross * (feePercent / 100);
       const net = gross - fee;
       setPreview({ gross_birr: gross, fee_birr: fee, net_birr: net });
     }
-  }, [amount, coinsPerBirr, feePercent]);
+  }, [amount, pointsPerBirr, feePercent]);
 
   async function handleSubmit() {
     try {
@@ -598,7 +633,7 @@ function WithdrawModal({ theme: T, balance, config, onClose, onSuccess }) {
       await api.request('/wallet/withdraw/', {
         method: 'POST',
         body: JSON.stringify({
-          coin_amount: parseInt(amount),
+          point_amount: parseInt(amount),
           payout_method: payoutMethod,
           payout_account: payoutAccount,
           payout_account_name: payoutAccountName,
@@ -613,21 +648,21 @@ function WithdrawModal({ theme: T, balance, config, onClose, onSuccess }) {
   }
 
   return (
-    <Modal onClose={onClose} theme={T} title="Withdraw to Birr">
+    <Modal onClose={onClose} theme={T} title="Withdraw Points to Birr">
       {step === 1 && (
         <div>
           <div style={{ marginBottom: 16 }}>
-            <label style={modalLabel(T)}>Amount in coins</label>
+            <label style={modalLabel(T)}>Amount in points</label>
             <input
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              min={minCoins}
-              max={balance.earned}
+              min={minPoints}
+              max={availablePoints}
               style={modalInput(T)}
             />
             <div style={{ fontSize: 12, color: T.sub, marginTop: 4 }}>
-              Min: {minCoins.toLocaleString()} • Available: {balance.earned.toLocaleString()} coins
+              Min: {minPoints.toLocaleString()} • Available: {availablePoints.toLocaleString()} points
             </div>
           </div>
 
@@ -646,7 +681,7 @@ function WithdrawModal({ theme: T, balance, config, onClose, onSuccess }) {
 
           <button
             onClick={() => setStep(2)}
-            disabled={!amount || amount < minCoins || amount > balance.earned}
+            disabled={!amount || amount < minPoints || amount > availablePoints}
             style={{ ...btnPrimary(T), width: '100%' }}
           >
             Continue
@@ -720,7 +755,7 @@ function WithdrawModal({ theme: T, balance, config, onClose, onSuccess }) {
             background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
             padding: 16, marginBottom: 16,
           }}>
-            <Row label="Amount" value={`${amount.toLocaleString()} coins`} theme={T} />
+            <Row label="Amount" value={`${Number(amount).toLocaleString()} points`} theme={T} />
             <Row label="You receive" value={`${preview.net_birr.toFixed(2)} ETB`} theme={T} bold />
             <div style={{ borderTop: `1px solid ${T.border}`, margin: '10px 0', paddingTop: 10 }}>
               <Row label="Method" value={payoutMethod.replace('_', ' ')} theme={T} />
@@ -952,6 +987,11 @@ function formatNumber(n) {
 function coinsToBirr(coins, coinsPerBirr) {
   if (!coinsPerBirr || coinsPerBirr <= 0) return 0;
   return coins / coinsPerBirr;
+}
+
+function pointsToBirr(points, pointsPerBirr) {
+  if (!pointsPerBirr || pointsPerBirr <= 0) return 0;
+  return points / pointsPerBirr;
 }
 
 function formatDate(iso) {

@@ -202,7 +202,8 @@ def change_password(request):
     if not current_password or not new_password:
         return Response({'error': 'current_password and new_password required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if not re.match(r'^\d{6}$', new_password):
+# App uses 6-digit numeric PIN as the password
+    if len(new_password) != 6 or not new_password.isdigit():
         return Response({'error': 'New password must be exactly 6 digits'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = request.user

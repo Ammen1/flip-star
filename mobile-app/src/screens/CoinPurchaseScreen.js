@@ -156,17 +156,20 @@ export default function CoinPurchaseScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* Phone Input */}
+      {/* Phone Input (locked to registered number) */}
       <View style={styles.inputContainer}>
         <Text style={[styles.label, { color: colors.textSecondary }]}>Phone Number</Text>
         <TextInput
-          style={[styles.input, { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text }]}
+          style={[styles.input, { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text, opacity: 0.85 }]}
           value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          editable={false}
           placeholder="+251 9xx xxx xxx"
           placeholderTextColor={colors.textSecondary}
           keyboardType="phone-pad"
         />
+        <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 6 }}>
+          Charges go to your registered phone number.
+        </Text>
       </View>
 
       {/* Payment Buttons */}

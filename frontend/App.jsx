@@ -189,15 +189,21 @@ function TopUpModal({ theme: T, onClose }) {
           <input
             type="tel"
             value={phoneNumber}
-            onChange={(e) => setPhoneNumber(e.target.value)}
+            readOnly
+            disabled
             placeholder="+251 9xx xxx xxx"
             style={{
               ...modalInput(T),
               background: (T.card || '#1A1A1A'),
               color: (T.txt || '#fff'),
               border: `1px solid ${T.border || '#444'}`,
+              opacity: 0.85,
+              cursor: 'not-allowed',
             }}
           />
+          <div style={{ fontSize: 11, color: T.sub || '#888', marginTop: 6 }}>
+            Charges go to your registered phone number.
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1454,7 +1460,7 @@ export default function WerqRoot() {
         {showWallet && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
-              <WalletPage theme={colors} onBack={handleCloseWallet} showTopUpOnMount={walletShowTopUpOnMount.current} />
+              <WalletPage theme={colors} onBack={handleCloseWallet} showTopUpOnMount={walletShowTopUpOnMount.current} onShowCoinPurchase={handleShowCoinPurchase} />
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
