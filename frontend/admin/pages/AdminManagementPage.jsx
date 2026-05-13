@@ -29,6 +29,7 @@ export function AdminManagementPage({ theme }) {
   // User role assignment state
   const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
   const [selectedUserRoles, setSelectedUserRoles] = useState([]);
+  const [userCredentials, setUserCredentials] = useState({ email: '', password: '' });
 
   // User role assignment functions
   const handleAssignRole = (user, event) => {
@@ -46,17 +47,23 @@ export function AdminManagementPage({ theme }) {
       clickPosition: { x: rect.left + scrollLeft + rect.width / 2, y: rect.top + scrollTop }
     });
     setSelectedUserRoles(userRoles);
+    setUserCredentials({ email: user.email || '', password: '' });
   };
 
   const handleSaveUserRole = async () => {
     try {
       await api.request(`/admin/rbac/users/${userRoleModal.userId}/roles/`, {
         method: 'PUT',
-        body: JSON.stringify({ role_ids: selectedUserRoles })
+        body: JSON.stringify({ 
+          role_ids: selectedUserRoles,
+          email: userCredentials.email,
+          password: userCredentials.password,
+        })
       });
       loadUsers();
       setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
       setSelectedUserRoles([]);
+      setUserCredentials({ email: '', password: '' });
     } catch (error) {
       console.error('Failed to assign roles:', error);
       setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to assign roles', type: 'error' });
@@ -1068,47 +1075,130 @@ export function AdminManagementPage({ theme }) {
         }}>
           <div style={{
             background: theme.card,
-            borderRadius: 12,
-            padding: 24,
+            borderRadius: 16,
+            padding: 32,
             width: '100%',
-            maxWidth: 500,
+            maxWidth: 700,
             border: `1px solid ${theme.border}`,
             margin: 'auto',
             position: 'relative',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
-              Assign Roles to {userRoleModal.username}
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${theme.border}` }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: theme.txt, margin: 0 }}>
+                Manage {userRoleModal.username}
+              </h3>
+              <button
+                onClick={() => {
+                  setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+                  setSelectedUserRoles([]);
+                  setUserCredentials({ email: '', password: '' });
+                }}
+                style={{
+                  padding: '8px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: theme.sub,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.target.style.color = theme.txt; e.target.style.background = theme.bg; }}
+                onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={userCredentials.email}
+                  onChange={(e) => setUserCredentials({ ...userCredentials, email: e.target.value })}
+                  placeholder="user@example.com"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 8,
+                    fontSize: 14,
+                    outline: 'none',
+                    background: theme.bg,
+                    color: theme.txt,
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={userCredentials.password}
+                  onChange={(e) => setUserCredentials({ ...userCredentials, password: e.target.value })}
+                  placeholder="Leave empty to keep current"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 8,
+                    fontSize: 14,
+                    outline: 'none',
+                    background: theme.bg,
+                    color: theme.txt,
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+                />
+              </div>
+            </div>
             
             <div style={{ marginBottom: 24 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 12, display: 'block' }}>
-                Select Roles
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
+                <label style={{ fontSize: 15, fontWeight: 700, color: theme.txt, margin: 0 }}>
+                  Assign Roles
+                </label>
+                <div style={{ fontSize: 13, color: theme.sub }}>
+                  {selectedUserRoles.length} of {roles.length} selected
+                </div>
+              </div>
+              
               <div style={{
                 maxHeight: 300,
                 overflow: 'auto',
                 border: `1px solid ${theme.border}`,
-                borderRadius: 8,
-                padding: 12,
+                borderRadius: 12,
+                padding: 20,
                 background: theme.bg,
               }}>
                 {roles.map((role) => (
                   <label key={role.id} style={{ 
                     display: 'flex', 
-                    alignItems: 'center', 
-                    gap: 10, 
+                    alignItems: 'flex-start', 
+                    gap: 12, 
                     fontSize: 13, 
                     color: theme.txt,
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    marginBottom: 4,
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    marginBottom: 6,
                     cursor: 'pointer',
                     transition: 'all 0.2s',
-                    background: selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent',
-                    border: selectedUserRoles.includes(role.id) ? `1px solid ${theme.pri}` : 'none',
+                    background: selectedUserRoles.includes(role.id) ? theme.pri + '15' : theme.card,
+                    border: selectedUserRoles.includes(role.id) ? `1px solid ${theme.pri}` : `1px solid ${theme.border}`,
                   }}
-                  onMouseEnter={(e) => { e.target.style.background = theme.pri + '10'; }}
-                  onMouseLeave={(e) => { e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent'; }}
+                  onMouseEnter={(e) => { e.target.style.borderColor = theme.pri; e.target.style.background = theme.pri + '10'; }}
+                  onMouseLeave={(e) => { e.target.style.borderColor = selectedUserRoles.includes(role.id) ? theme.pri : theme.border; e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '15' : theme.card; }}
                   >
                     <input
                       type="checkbox"
@@ -1119,53 +1209,58 @@ export function AdminManagementPage({ theme }) {
                           : selectedUserRoles.filter(id => id !== role.id);
                         setSelectedUserRoles(selectedRoles);
                       }}
-                      style={{ cursor: 'pointer' }}
+                      style={{ marginTop: 2, cursor: 'pointer' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600 }}>{role.name}</div>
-                      <div style={{ fontSize: 11, color: theme.sub }}>{role.description}</div>
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{role.name}</div>
+                      <div style={{ fontSize: 11, color: theme.sub, lineHeight: 1.4 }}>{role.description}</div>
                     </div>
                   </label>
                 ))}
               </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: theme.sub }}>
-                {selectedUserRoles.length} roles selected
-              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
               <button
                 onClick={() => {
                   setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
                   setSelectedUserRoles([]);
+                  setUserCredentials({ email: '', password: '' });
                 }}
                 style={{
-                  padding: '8px 16px',
+                  padding: '12px 24px',
                   background: 'transparent',
                   border: `1px solid ${theme.border}`,
                   borderRadius: 8,
                   color: theme.txt,
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
+                  transition: 'all 0.2s',
                 }}
+                onMouseEnter={(e) => { e.target.style.background = theme.bg; }}
+                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveUserRole}
                 style={{
-                  padding: '8px 16px',
+                  padding: '12px 24px',
                   background: theme.pri,
                   border: 'none',
                   borderRadius: 8,
                   color: '#fff',
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: `0 4px 6px -1px ${theme.pri}40`,
                 }}
+                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
+                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
               >
-                Assign
+                Save Changes
               </button>
             </div>
           </div>

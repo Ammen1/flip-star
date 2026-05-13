@@ -406,10 +406,12 @@ class UserRoleViewSet(viewsets.ViewSet):
             )
     
     def update(self, request, user_id=None):
-        """Assign or change a user's roles (supports multiple roles)"""
+        """Assign or change a user's roles and credentials (supports multiple roles)"""
         try:
             user = User.objects.get(id=user_id)
             role_ids = request.data.get('role_ids', [])
+            email = request.data.get('email')
+            password = request.data.get('password')
             
             # Get current roles
             old_role_ids = list(user.profile.roles.values_list('id', flat=True))
@@ -428,6 +430,16 @@ class UserRoleViewSet(viewsets.ViewSet):
             user.profile.is_staff = has_internal_role
             user.profile.save()
             
+            # Update email if provided
+            if email:
+                user.email = email
+                user.save()
+            
+            # Update password if provided
+            if password:
+                user.set_password(password)
+                user.save()
+            
             # Log the action
             AuditLog.objects.create(
                 actor=request.user,
@@ -436,7 +448,7 @@ class UserRoleViewSet(viewsets.ViewSet):
                 target_id=str(user.id),
                 target_name=user.username,
                 old_value={'roles': old_role_ids},
-                new_value={'roles': role_ids},
+                new_value={'roles': role_ids, 'email_updated': bool(email), 'password_updated': bool(password)},
                 ip_address=self.get_client_ip(),
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
             )
