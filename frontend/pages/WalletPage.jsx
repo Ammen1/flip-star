@@ -338,6 +338,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
             withdrawal={withdrawal}
             recentTx={summary?.recent_transactions || []}
             config={config}
+            points={points}
           />
         )}
         {activeTab === 'transactions' && (
@@ -392,7 +393,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
 // Tabs
 // ---------------------------------------------------------------
 
-function OverviewTab({ theme: T, totals, withdrawal, recentTx, config }) {
+function OverviewTab({ theme: T, totals, withdrawal, recentTx, config, points }) {
   return (
     <div>
       {/* Lifetime stats */}
