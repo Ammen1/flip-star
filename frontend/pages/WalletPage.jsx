@@ -724,6 +724,26 @@ function TopUpModal({ theme: T, packages, onClose }) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Fetch user's phone number when modal opens
+  useEffect(() => {
+    const fetchPhoneNumber = async () => {
+      try {
+        console.log('[TopUpModal] Fetching user profile for phone number...');
+        const profile = await api.request('/profile/me/');
+        console.log('[TopUpModal] Profile data:', profile);
+        if (profile && profile.phone_number) {
+          console.log('[TopUpModal] Phone number from profile:', profile.phone_number);
+          setPhoneNumber(profile.phone_number);
+        } else {
+          console.log('[TopUpModal] No phone number found in profile');
+        }
+      } catch (error) {
+        console.error('[TopUpModal] Failed to fetch phone number:', error);
+      }
+    };
+    fetchPhoneNumber();
+  }, []);
+
   const handlePurchase = async () => {
     if (!selected || !phoneNumber) return;
 
