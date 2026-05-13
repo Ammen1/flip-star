@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   X, User, Bell, Lock, Globe, HelpCircle, LogOut, ChevronRight, Moon, Sun, Wallet,
   ChevronLeft, MessageCircle, Heart, Users as UsersIcon, Mail, Eye, EyeOff, Activity,
-  Download, Trash2, Shield, FileText, Check, Crown
+  Trash2, Shield, FileText, Check, Crown
 } from "lucide-react";
 import api from "../api";
 import config from "../config";
@@ -349,27 +349,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
         });
       }
     });
-  };
-
-  const handleDownloadData = async () => {
-    try {
-      await api.downloadUserData();
-      setModal({
-        isOpen: true,
-        title: t('downloadInitiated'),
-        message: t('downloadEmail'),
-        type: 'info',
-        onConfirm: null
-      });
-    } catch (error) {
-      setModal({
-        isOpen: true,
-        title: t('error'),
-        message: 'Failed to request data download. Please try again.',
-        type: 'error',
-        onConfirm: null
-      });
-    }
   };
 
   // ─── MOBILE UI (mimics mobile app SettingsScreen) ────────────────────────────
