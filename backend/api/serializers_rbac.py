@@ -61,11 +61,12 @@ class RolePermissionSerializer(serializers.ModelSerializer):
 class AuditLogSerializer(serializers.ModelSerializer):
     """Serializer for AuditLog model (read-only)"""
     actor_username = serializers.CharField(source='actor.username', read_only=True)
+    actor_email = serializers.CharField(source='actor.email', read_only=True)
     
     class Meta:
         model = AuditLog
         fields = [
-            'id', 'actor', 'actor_username', 'action', 'target_type',
+            'id', 'actor', 'actor_username', 'actor_email', 'action', 'target_type',
             'target_id', 'target_name', 'old_value', 'new_value',
             'ip_address', 'user_agent', 'timestamp',
         ]
