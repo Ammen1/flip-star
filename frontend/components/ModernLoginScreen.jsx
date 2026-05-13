@@ -540,7 +540,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
         <div style={{ background: T.cardBg || "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>
-              {subscriptionOtpMode ? "Login to Your Account" : "Welcome Back!"}
+              {subscriptionOtpMode ? "Login to Your Account" : "Welcome"}
             </div>
             <div style={{ fontSize: 13, color: "#F9E08B" }}>
               {subscriptionOtpMode ? "Log in with your subscription OTP" : "Log in to continue to FLIPSTAR"}
@@ -649,7 +649,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Password field */}
             <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>6-Digit PIN</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>PIN</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
                 <input
@@ -687,7 +687,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           {/* Sign up */}
           <div style={{ textAlign: "center", fontSize: 13, color: "#666", marginBottom: 0 }}>
             Don't have an account?{" "}
-            <button type="button" onClick={onRegister} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Sign up free</button>
+            <button type="button" onClick={onRegister} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Subscribe</button>
           </div>
         </div>
 
