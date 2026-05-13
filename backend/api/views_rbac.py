@@ -393,10 +393,10 @@ class UserRoleViewSet(viewsets.ViewSet):
         serializer = UserRoleSerializer(users, many=True)
         return Response(serializer.data)
     
-    def retrieve(self, request, user_id=None):
+    def retrieve(self, request, pk=None):
         """Get a user's role"""
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=pk)
             serializer = UserRoleSerializer(user)
             return Response(serializer.data)
         except User.DoesNotExist:
@@ -405,10 +405,10 @@ class UserRoleViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
     
-    def update(self, request, user_id=None):
+    def update(self, request, pk=None):
         """Assign or change a user's roles and credentials (supports multiple roles)"""
         try:
-            user = User.objects.get(id=user_id)
+            user = User.objects.get(id=pk)
             role_ids = request.data.get('role_ids', [])
             email = request.data.get('email')
             password = request.data.get('password')
