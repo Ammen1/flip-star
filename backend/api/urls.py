@@ -32,6 +32,7 @@ from .views_messaging import (
 )
 from .views_charging import (
     initiate_on_demand_charging, get_charging_statistics, get_charging_transactions,
+    purchase_coins_on_demand,
 )
 from .views_push import push_public_key, push_subscribe, push_unsubscribe
 
