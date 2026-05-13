@@ -57,7 +57,10 @@ class Role(models.Model):
     
     def get_user_count(self):
         """Return the number of users with this role"""
-        return self.users.count()
+        try:
+            return self.users.count()
+        except Exception:
+            return 0
 
 
 class Permission(models.Model):
