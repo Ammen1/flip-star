@@ -306,11 +306,20 @@ def purchase_coins_on_demand(request):
     try:
         phone_number = request.data.get('phone_number')
         
+        logger.info(f"[Coin Purchase] Request received. Phone: {phone_number}, User: {request.user.username}")
+        
         if not phone_number:
             return Response(
                 {'error': 'phone_number is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # Normalize phone number (remove spaces, dashes, etc.)
+        phone_number = phone_number.replace(' ', '').replace('-', '').replace('+', '')
+        
+        # Ensure phone number starts with country code if needed
+        if not phone_number.startswith('251'):
+            phone_number = '251' + phone_number
         
         # Onevas configuration for on-demand coin purchase
         application_key = "4CROFBT0EGCM1OK8R88EQBTEZOMI3138"
@@ -318,12 +327,16 @@ def purchase_coins_on_demand(request):
         amount_etb = 10  # Fixed amount for on-demand
         coins_amount = 100  # Fixed coins for on-demand
         
+        logger.info(f"[Coin Purchase] Initiating Onevas charging. Phone: {phone_number}")
+        
         # Initiate charging with Onevas
         charging_response = onevas_charging_service.initiate_charging(
             phone_number=phone_number,
             product_number=product_number,
             application_key=application_key
         )
+        
+        logger.info(f"[Coin Purchase] Onevas response: {charging_response}")
         
         # Parse response to determine status
         parsed_status, error_message = onevas_charging_service.parse_charging_response(charging_response)
@@ -367,7 +380,7 @@ def purchase_coins_on_demand(request):
             }, status=status.HTTP_400_BAD_REQUEST)
             
     except Exception as e:
-        logger.error(f"[Coin Purchase] Error: {str(e)}")
+        logger.error(f"[Coin Purchase] Error: {str(e)}", exc_info=True)
         return Response(
             {'error': 'Internal server error', 'message': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
