@@ -53,6 +53,15 @@ class RoleViewSet(viewsets.ModelViewSet):
         # Set updated_by to the current user
         serializer.save(updated_by=self.request.user)
     
+    def get_client_ip(self):
+        """Get the client IP address from the request"""
+        x_forwarded_for = self.request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = self.request.META.get('REMOTE_ADDR')
+        return ip
+    
     def perform_destroy(self, instance):
         # Log the deletion
         AuditLog.objects.create(
