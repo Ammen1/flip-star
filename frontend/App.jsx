@@ -78,6 +78,9 @@ function TopUpModal({ theme: T, onClose }) {
   const [loading, setLoading] = useState(false);
   const [loadingAirtime, setLoadingAirtime] = useState(false);
   const [loadingTelebirr, setLoadingTelebirr] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultSuccess, setResultSuccess] = useState(false);
+  const [resultMessage, setResultMessage] = useState('');
 
   // Fetch user's phone number when modal opens
   useEffect(() => {
@@ -96,7 +99,9 @@ function TopUpModal({ theme: T, onClose }) {
 
   const handleAirtimePurchase = async () => {
     if (!phoneNumber) {
-      alert('Please enter your phone number');
+      setResultSuccess(false);
+      setResultMessage('Please enter your phone number');
+      setShowResultModal(true);
       return;
     }
 
@@ -110,14 +115,22 @@ function TopUpModal({ theme: T, onClose }) {
       });
 
       if (response.success) {
-        alert(response.message);
-        onClose();
+        setResultSuccess(true);
+        setResultMessage(response.message);
+        setShowResultModal(true);
+        setTimeout(() => {
+          onClose();
+        }, 2000);
       } else {
-        alert(response.message || 'Purchase failed');
+        setResultSuccess(false);
+        setResultMessage(response.message || 'Purchase failed');
+        setShowResultModal(true);
       }
     } catch (error) {
       console.error('airtime coin purchase error:', error);
-      alert('Purchase failed. Please try again.');
+      setResultSuccess(false);
+      setResultMessage('Purchase failed. Please try again.');
+      setShowResultModal(true);
     } finally {
       setLoadingAirtime(false);
     }
@@ -125,7 +138,9 @@ function TopUpModal({ theme: T, onClose }) {
 
   const handleTelebirrPurchase = async () => {
     if (!phoneNumber) {
-      alert('Please enter your phone number');
+      setResultSuccess(false);
+      setResultMessage('Please enter your phone number');
+      setShowResultModal(true);
       return;
     }
 
@@ -143,72 +158,100 @@ function TopUpModal({ theme: T, onClose }) {
         window.open(response.payment_url, '_blank');
         onClose();
       } else {
-        alert(response.error || 'Payment initiation failed');
+        setResultSuccess(false);
+        setResultMessage(response.error || 'Payment initiation failed');
+        setShowResultModal(true);
       }
     } catch (error) {
       console.error('telebirr payment error:', error);
-      alert('Payment initiation failed. Please try again.');
+      setResultSuccess(false);
+      setResultMessage('Payment initiation failed. Please try again.');
+      setShowResultModal(true);
     } finally {
       setLoadingTelebirr(false);
     }
   };
 
   return (
-    <Modal onClose={onClose} theme={T} title="Buy Coins">
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <div style={{ fontSize: 32, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
-          100 Coins
+    <>
+      <Modal onClose={onClose} theme={T} title="Buy Coins">
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 32, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
+            100 Coins
+          </div>
+          <div style={{ fontSize: 16, color: T.sub }}>
+            for 10 ETB
+          </div>
         </div>
-        <div style={{ fontSize: 16, color: T.sub }}>
-          for 10 ETB
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ ...modalLabel(T), marginBottom: 8 }}>Phone Number</label>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="+251 9xx xxx xxx"
+            style={{
+              ...modalInput(T),
+              background: (T.card || '#1A1A1A'),
+              color: (T.txt || '#fff'),
+              border: `1px solid ${T.border || '#444'}`,
+            }}
+          />
         </div>
-      </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <label style={{ ...modalLabel(T), marginBottom: 8 }}>Phone Number</label>
-        <input
-          type="tel"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
-          placeholder="+251 9xx xxx xxx"
-          style={{
-            ...modalInput(T),
-            background: (T.card || '#1A1A1A'),
-            color: (T.txt || '#fff'),
-            border: `1px solid ${T.border || '#444'}`,
-          }}
-        />
-      </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <button
+            onClick={handleAirtimePurchase}
+            disabled={loadingAirtime || loadingTelebirr}
+            style={{
+              ...btnPrimary(T),
+              opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
+              background: T.pri,
+              color: '#000',
+              border: 'none',
+            }}
+          >
+            {loadingAirtime ? 'Processing...' : 'From Airtime'}
+          </button>
+          <button
+            onClick={handleTelebirrPurchase}
+            disabled={loadingAirtime || loadingTelebirr}
+            style={{
+              ...btnPrimary(T),
+              opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
+              background: T.pri,
+              color: '#000',
+              border: 'none',
+            }}
+          >
+            {loadingTelebirr ? 'Processing...' : 'From Telebirr'}
+          </button>
+        </div>
+      </Modal>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <button
-          onClick={handleAirtimePurchase}
-          disabled={loadingAirtime || loadingTelebirr}
-          style={{
-            ...btnPrimary(T),
-            opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
-            background: T.pri,
-            color: '#000',
-            border: 'none',
-          }}
-        >
-          {loadingAirtime ? 'Processing...' : 'From Airtime'}
-        </button>
-        <button
-          onClick={handleTelebirrPurchase}
-          disabled={loadingAirtime || loadingTelebirr}
-          style={{
-            ...btnPrimary(T),
-            opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
-            background: T.pri,
-            color: '#000',
-            border: 'none',
-          }}
-        >
-          {loadingTelebirr ? 'Processing...' : 'From Telebirr'}
-        </button>
-      </div>
-    </Modal>
+      {showResultModal && (
+        <Modal onClose={() => setShowResultModal(false)} theme={T} title={resultSuccess ? 'Success' : 'Error'}>
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: '50%',
+              background: resultSuccess ? '#10B981' : '#EF4444',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              {resultSuccess ? (
+                <CheckCircle size={32} color="#fff" />
+              ) : (
+                <XCircle size={32} color="#fff" />
+              )}
+            </div>
+            <p style={{ fontSize: 16, color: T.txt, margin: 0 }}>
+              {resultMessage}
+            </p>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
