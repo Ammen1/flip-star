@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('api', '0072_permission_role_userprofile_is_staff_and_more'),
+        ('api', '0073_remove_userprofile_role_userprofile_roles_mention'),
     ]
 
     operations = [
