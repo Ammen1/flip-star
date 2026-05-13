@@ -409,27 +409,7 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  const handleDeleteAccount = () => {
-    Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data will be deleted.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-        Alert.alert('Final Confirmation', 'Are you absolutely sure you want to delete your account? This cannot be undone.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: async () => {
-            try {
-              await api.request('/auth/delete-account/', { method: 'POST' });
-              Alert.alert('Account Deleted', 'Your account is being deleted', [
-                { text: 'OK', onPress: logout }
-              ]);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete account');
-            }
-          }},
-        ]);
-      }},
-    ]);
-  };
-
+  
   
   const handleUnblockUser = async (userId, username) => {
     try {
@@ -546,12 +526,6 @@ export default function SettingsScreen({ navigation }) {
               </View>
             ))
           )}
-        </SectionCard>
-
-        {/* Danger Zone */}
-        <SectionLabel colors={colors}>{t('dangerZone')}</SectionLabel>
-        <SectionCard colors={colors}>
-          <SettingRow icon="trash-outline" label={t('deleteAccount')} danger onPress={handleDeleteAccount} colors={colors} />
         </SectionCard>
 
         {/* Logout */}

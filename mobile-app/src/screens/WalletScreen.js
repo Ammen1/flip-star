@@ -327,7 +327,7 @@ export default function WalletScreen({ navigation }) {
 
         {/* Action buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowTopUpModal(true)}>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => navigation.navigate('CoinPurchase')}>
             <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
               <Ionicons name="add-circle" size={24} color="#fff" />
               <Text style={styles.actionText}>Buy Coins</Text>

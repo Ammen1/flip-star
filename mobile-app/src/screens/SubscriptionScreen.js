@@ -160,16 +160,16 @@ export default function SubscriptionScreen({ navigation }) {
           </View>
         )}
 
-        {/* Debug Info - Show if no subscription data */}
+        {/* No Subscription Info */}
         {!currentSub && !loading && (
           <View style={[styles.currentSubCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
             <View style={styles.currentSubHeader}>
               <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
-              <Text style={[styles.currentSubTitle, { color: colors.text }]}>No Active Subscription</Text>
+              <Text style={[styles.currentSubTitle, { color: colors.text }]}>No Subscription Plan</Text>
             </View>
             <View style={styles.currentSubDetails}>
               <Text style={[styles.currentPlanName, { color: colors.text }]}>
-                You don't have an active subscription
+                Upgrade Now
               </Text>
               <Text style={[styles.currentPlanDesc, { color: colors.textSecondary }]}>
                 Choose a plan below to subscribe

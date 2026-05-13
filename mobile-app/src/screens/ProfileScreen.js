@@ -25,6 +25,32 @@ const mediaUrl = (url) => {
   if (url.startsWith('http')) return url;
   return `${BASE}${url}`;
 };
+
+// Format phone number to start with +251
+const formatPhoneNumber = (phoneNumber) => {
+  if (!phoneNumber) return '';
+  
+  // Remove all non-digit characters
+  const digits = phoneNumber.replace(/\D/g, '');
+  
+  // If already starts with 251, just add +
+  if (digits.startsWith('251')) {
+    return `+${digits}`;
+  }
+  
+  // If starts with 0 (Ethiopian format), replace 0 with +251
+  if (digits.startsWith('0') && digits.length >= 9) {
+    return `+251${digits.substring(1)}`;
+  }
+  
+  // If just 9 digits, assume Ethiopian format and add +251
+  if (digits.length === 9) {
+    return `+251${digits}`;
+  }
+  
+  // Default: add +251 prefix
+  return `+251${digits}`;
+};
 const GAP = 1;
 const ITEM_SIZE = Math.floor((width - (GAP * (COLS - 1)) - 32) / COLS);
 
@@ -634,10 +660,10 @@ export default function ProfileScreen({ navigation, route }) {
             <Text style={[styles.profileUsername, { color: '#fff' }]}>@{profile?.username || profile?.user?.username}</Text>
             
             {/* Phone Number - Only show in own profile */}
-            {isOwnProfile && profile?.user?.phone_number && (
-              <View style={styles.phoneContainer}>
-                <Text style={[styles.phoneNumber, { color: '#fff' }]}>
-                  {profile?.user?.phone_number}
+            {isOwnProfile && (
+              <View style={[styles.phoneContainer, { backgroundColor: colors.cardBg, borderColor: colors.border, borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, marginTop: 4 }]}>
+                <Text style={[styles.phoneNumber, { color: colors.primary }]}>
+                  {formatPhoneNumber(profile?.user?.phone_number || profile?.phone_number || 'No phone number')}
                 </Text>
               </View>
             )}
