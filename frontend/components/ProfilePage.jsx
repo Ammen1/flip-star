@@ -513,6 +513,16 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
                     <Coins size={24} />
                   </button>
                   <button
+                    onClick={onShowWallet}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: 8, display: 'flex', alignItems: 'center', color: '#F9E08B',
+                    }}
+                    title="Wallet"
+                  >
+                    <Wallet size={24} />
+                  </button>
+                  <button
                     onClick={onShowSubscription}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
