@@ -186,7 +186,7 @@ class AuditLog(models.Model):
     
     def save(self, *args, **kwargs):
         """Override save to prevent updates (immutable)"""
-        if self.pk:  # If this is an update (not a new record)
+        if self.pk and AuditLog.objects.filter(pk=self.pk).exists():  # If this is an update (not a new record)
             raise ValueError("AuditLog entries are immutable and cannot be updated")
         super().save(*args, **kwargs)
     
