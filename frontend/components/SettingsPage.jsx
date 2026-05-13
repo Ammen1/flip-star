@@ -32,34 +32,38 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
 
   useEffect(() => {
     // Fetch notification settings from server
-    api.getNotificationSettings().then(data => {
-      if (data) {
-        setNotifications({
-          likes: data.likes ?? true,
-          comments: data.comments ?? true,
-          follows: data.follows ?? true,
-          messages: data.messages ?? true,
-        });
-      }
-    }).catch(() => {
-      // Keep localStorage values if fetch fails - silent fail
-    });
-  }, []);
+    if (user) {
+      api.getNotificationSettings().then(data => {
+        if (data) {
+          setNotifications({
+            likes: data.likes ?? true,
+            comments: data.comments ?? true,
+            follows: data.follows ?? true,
+            messages: data.messages ?? true,
+          });
+        }
+      }).catch(() => {
+        // Keep localStorage values if fetch fails - silent fail
+      });
+    }
+  }, [user]);
 
   useEffect(() => {
     // Fetch privacy settings from server
-    api.getPrivacySettings().then(data => {
-      if (data) {
-        setPrivacy({
-          privateAccount: data.privateAccount ?? false,
-          showActivity: data.showActivity ?? true,
-          allowMessages: data.allowMessages ?? true,
-        });
-      }
-    }).catch(() => {
-      // Keep localStorage values if fetch fails - silent fail
-    });
-  }, []);
+    if (user) {
+      api.getPrivacySettings().then(data => {
+        if (data) {
+          setPrivacy({
+            privateAccount: data.privateAccount ?? false,
+            showActivity: data.showActivity ?? true,
+            allowMessages: data.allowMessages ?? true,
+          });
+        }
+      }).catch(() => {
+        // Keep localStorage values if fetch fails - silent fail
+      });
+    }
+  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('notifications', JSON.stringify(notifications));
@@ -135,8 +139,10 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
   };
 
   useEffect(() => {
-    loadSupportRequests();
-  }, []);
+    if (user) {
+      loadSupportRequests();
+    }
+  }, [user]);
 
   const handleSubmitSupport = async () => {
     if (!supportForm.subject.trim() || !supportForm.message.trim()) {
@@ -314,42 +320,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
     }
   };
 
-  const handleDeleteAccount = () => {
-    setModal({
-      isOpen: true,
-      title: t('deleteAccount'),
-      message: t('deleteConfirm'),
-      type: 'warning',
-      onConfirm: () => {
-        setModal({
-          isOpen: true,
-          title: t('finalConfirm'),
-          message: t('deleteWarning'),
-          type: 'warning',
-          onConfirm: async () => {
-            try {
-              await api.deleteAccount();
-              setModal({
-                isOpen: true,
-                title: t('accountDeleted'),
-                message: t('accountDeleting'),
-                type: 'info',
-                onConfirm: () => onLogout()
-              });
-            } catch (error) {
-              setModal({
-                isOpen: true,
-                title: t('error'),
-                message: 'Failed to delete account. Please try again.',
-                type: 'error',
-                onConfirm: null
-              });
-            }
-          }
-        });
-      }
-    });
-  };
 
   // ─── MOBILE UI (mimics mobile app SettingsScreen) ────────────────────────────
   const [showPassModal, setShowPassModal] = useState(false);
@@ -531,12 +501,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           <SectionCard>
             <Row icon={Shield} title={t('privacyPolicy')} onPress={() => window.open('/legal/privacy-policy', '_blank')} />
             <Row icon={FileText} title={t('termsOfService')} onPress={() => window.open('/legal/terms-of-service', '_blank')} />
-          </SectionCard>
-
-          {/* Danger Zone */}
-          <SectionLabel>{t('dangerZone')}</SectionLabel>
-          <SectionCard>
-            <Row icon={Trash2} title={t('deleteAccount')} danger onPress={handleDeleteAccount} />
           </SectionCard>
 
           {/* Logout */}
@@ -918,34 +882,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
                       {t('updatePassword')}
                     </button>
                   </div>
-                </div>
-
-                {/* Danger Zone */}
-                <div style={{
-                  padding: isSmallMobile ? 16 : 20,
-                  background: "#FEE2E2",
-                  borderRadius: 12,
-                  border: "2px solid #EF4444",
-                }}>
-                  <h3 style={{ fontSize: isSmallMobile ? 14 : 16, fontWeight: 600, color: "#DC2626", marginBottom: 8 }}>{t('dangerZone')}</h3>
-                  <p style={{ fontSize: isSmallMobile ? 11 : 13, color: "#991B1B", marginBottom: 16 }}>
-                    {t('deleteWarning')}
-                  </p>
-                  <button
-                    onClick={handleDeleteAccount}
-                    style={{
-                      padding: isSmallMobile ? "10px 16px" : "12px 24px",
-                      background: "#DC2626",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 8,
-                      fontSize: isSmallMobile ? 12 : 14,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {t('deleteAccount')}
-                  </button>
                 </div>
               </div>
             </div>
