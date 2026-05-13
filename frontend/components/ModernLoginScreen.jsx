@@ -558,7 +558,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Phone field */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Phone Number</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>Phone Number</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
                 <input type="tel" value={subPhone} onChange={e => setSubPhone(e.target.value)}
@@ -572,7 +572,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Username field */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Username</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>Username</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
                 <input type="text" value={subUsername} onChange={e => setSubUsername(e.target.value)}
@@ -586,7 +586,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* OTP field */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Subscription OTP</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>Subscription OTP</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
                 <input type="text" inputMode="numeric" maxLength={6} value={subOtp} onChange={e => setSubOtp(e.target.value)}
@@ -600,7 +600,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* New Password field */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>New Password (6 digits)</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>New Password (6 digits)</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
                 <input
@@ -635,7 +635,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Username field */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>Username</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Username</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
                 <input type="text" value={email} onChange={e => setEmail(e.target.value)}
@@ -649,7 +649,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Password field */}
             <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>PIN</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
                 <input

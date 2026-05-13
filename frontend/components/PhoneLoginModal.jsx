@@ -96,7 +96,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* Phone */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>Phone Number</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Phone Number</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Phone size={17} /></div>
                   <input
@@ -114,7 +114,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* PIN */}
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>6-Digit PIN</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
                   <input
