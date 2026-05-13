@@ -399,6 +399,10 @@ export function AdminManagementPage({ theme }) {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`Search ${activeTab}...`}
           autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck="false"
+          formNoValidate
           style={{
             width: '100%',
             padding: '12px 16px 12px 48px',
