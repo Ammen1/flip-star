@@ -9,12 +9,10 @@ def is_field_exists(model_name, field_name):
     try:
         with connection.cursor() as cursor:
             table_name = f'api_{model_name}'
-            cursor.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = %s AND column_name = %s
-            """, [table_name, field_name])
-            return cursor.fetchone() is not None
+            # Use SQLite-specific query to check column existence
+            cursor.execute(f"PRAGMA table_info({table_name})")
+            columns = cursor.fetchall()
+            return any(col[1] == field_name for col in columns)
     except:
         return False
 
