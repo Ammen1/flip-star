@@ -35,6 +35,9 @@ from .views_charging import (
     purchase_coins_on_demand,
 )
 from .views_push import push_public_key, push_subscribe, push_unsubscribe
+from .views_support import (
+    my_support_requests, admin_support_requests, admin_update_support_request,
+)
 
 @api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
@@ -450,6 +453,11 @@ urlpatterns = [
     path('admin/subscriptions/analytics/', AdminSubscriptionViewSet.as_view({'get': 'analytics'}), name='admin-subscriptions-analytics'),
     path('admin/subscriptions/revenue/', AdminSubscriptionViewSet.as_view({'get': 'revenue'}), name='admin-subscriptions-revenue'),
     path('admin/subscriptions/charging/', AdminSubscriptionViewSet.as_view({'get': 'charging_analytics'}), name='admin-subscriptions-charging'),
+    # ============ SUPPORT REQUESTS ============
+    path('support/requests/', my_support_requests, name='support-requests'),
+    path('admin/support/requests/', admin_support_requests, name='admin-support-requests'),
+    path('admin/support/requests/<int:request_id>/', admin_update_support_request, name='admin-support-request-update'),
+
     path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-wallet-withdrawals'),
     path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-wallet-withdrawal-action'),
     path('admin/wallet/adjust-balance/', admin_adjust_balance, name='admin-wallet-adjust-balance'),

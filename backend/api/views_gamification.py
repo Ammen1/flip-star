@@ -68,13 +68,9 @@ SPIN_REWARDS = [
 ]
 
 DAILY_LOGIN_BONUS = {
-    1: {'coins': 3, 'label': 'Day 1 Bonus'},
-    2: {'coins': 10, 'label': 'Day 2 Bonus'},
-    3: {'coins': 15, 'label': 'Day 3 Bonus'},
-    4: {'coins': 20, 'label': 'Day 4 Bonus'},
-    5: {'coins': 25, 'label': 'Day 5 Bonus'},
-    6: {'coins': 30, 'label': 'Day 6 Bonus'},
-    7: {'coins': 50, 'label': 'Week Streak! 🎉'},
+    'daily': {'coins': 3, 'label': 'Daily Bonus'},
+    7: {'coins': 50, 'label': '7 Day Streak Bonus! 🎉'},
+    30: {'coins': 150, 'label': '30 Day Streak Bonus! �'},
 }
 
 
@@ -102,9 +98,13 @@ def get_gamification_status(request):
         # Check login bonus for today
         login_bonus_available = profile.last_login_date != today
 
-        # Calculate next login bonus
-        streak_day = min(profile.login_streak + 1, 7)
-        next_bonus = DAILY_LOGIN_BONUS.get(streak_day, DAILY_LOGIN_BONUS[7])
+        # Calculate next login bonus (3 coins daily, with milestone bonuses at 7 and 30 days)
+        next_streak = profile.login_streak + 1
+        next_bonus = DAILY_LOGIN_BONUS.get('daily')
+        if next_streak == 7:
+            next_bonus = DAILY_LOGIN_BONUS.get(7)
+        elif next_streak == 30:
+            next_bonus = DAILY_LOGIN_BONUS.get(30)
 
         # Reset daily counters if needed
         if profile.last_gift_reset != today:
@@ -265,17 +265,25 @@ def claim_login_bonus(request):
             # Streak broken
             profile.login_streak = 0
     
-    # Increment streak (capped at 7)
-    profile.login_streak = min(profile.login_streak + 1, 7)
+    # Increment streak (capped at 30)
+    profile.login_streak = min(profile.login_streak + 1, 30)
     profile.last_login_date = today
     
     # Update longest streak
     if profile.login_streak > profile.longest_login_streak:
         profile.longest_login_streak = profile.login_streak
     
-    # Get bonus for current streak day
-    bonus = DAILY_LOGIN_BONUS.get(profile.login_streak, DAILY_LOGIN_BONUS[7])
-    coins_earned = bonus['coins']
+    # Calculate bonus: 3 coins daily, with milestone bonuses at 7 and 30 days
+    coins_earned = DAILY_LOGIN_BONUS['daily']['coins']  # Base daily bonus
+    label = DAILY_LOGIN_BONUS['daily']['label']
+    
+    # Add milestone bonuses
+    if profile.login_streak == 7:
+        coins_earned = DAILY_LOGIN_BONUS[7]['coins']
+        label = DAILY_LOGIN_BONUS[7]['label']
+    elif profile.login_streak == 30:
+        coins_earned = DAILY_LOGIN_BONUS[30]['coins']
+        label = DAILY_LOGIN_BONUS[30]['label']
     
     with transaction.atomic():
         profile.coins += coins_earned
@@ -290,18 +298,18 @@ def claim_login_bonus(request):
             activity_date=today,
             metadata={
                 'streak_day': profile.login_streak,
-                'label': bonus['label']
+                'label': label
             }
         )
     
     return Response({
         'streak_day': profile.login_streak,
         'coins_earned': coins_earned,
-        'label': bonus['label'],
+        'label': label,
         'new_balance': profile.coins,
         'login_streak': profile.login_streak,
         'longest_streak': profile.longest_login_streak,
-        'next_bonus': DAILY_LOGIN_BONUS.get(min(profile.login_streak + 1, 7), DAILY_LOGIN_BONUS[7]) if profile.login_streak < 7 else DAILY_LOGIN_BONUS[7]
+        'next_bonus': DAILY_LOGIN_BONUS.get('daily')
     })
 
 

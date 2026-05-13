@@ -83,7 +83,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
           {/* Card */}
           <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Welcome Back!</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Welcome</div>
               <div style={{ fontSize: 13, color: "#aaa" }}>Log in to continue to FlipStar</div>
             </div>
 
@@ -96,7 +96,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* Phone */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>Phone Number</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Phone Number</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Phone size={17} /></div>
                   <input
@@ -114,7 +114,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* PIN */}
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.5 }}>6-Digit PIN</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
                 <div style={{ position: "relative" }}>
                   <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
                   <input
@@ -152,7 +152,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
             <div style={{ textAlign: "center", fontSize: 13, color: "#666" }}>
               Don't have an account?{" "}
               <button type="button" onClick={onSignUp} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
-                Subscribe & Register
+                Subscribe
               </button>
             </div>
           </div>

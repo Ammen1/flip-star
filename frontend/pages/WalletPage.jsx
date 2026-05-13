@@ -418,7 +418,7 @@ function OverviewTab({ theme: T, totals, withdrawal, recentTx, config }) {
         }}>
           <AlertCircle size={20} color="#F59E0B" />
           <div style={{ flex: 1, fontSize: 13, color: T.sub }}>
-            Earn <strong style={{ color: T.txt }}>{withdrawal.min_coins?.toLocaleString()}</strong> coins
+            Earn <strong style={{ color: T.txt }}>{withdrawal.min_points?.toLocaleString()}</strong> points
             to unlock withdrawal to Birr. You have <strong style={{ color: T.txt }}>
               {/* current earned shown in main balance card */}
             </strong>
@@ -456,7 +456,7 @@ function TransactionsTab({ theme: T, transactions }) {
 function WithdrawalsTab({ theme: T, withdrawals, onCancel }) {
   if (withdrawals.length === 0) {
     return <EmptyState theme={T} icon={<ArrowUpFromLine size={32} />} title="No withdrawals yet"
-                       subtitle="When you convert coins to Birr, requests show here." />;
+                       subtitle="When you convert points to Birr, requests show here." />;
   }
   return (
     <div>
@@ -549,9 +549,9 @@ function WithdrawalRow({ w, theme: T, onCancel }) {
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-        <Coins size={14} color={T.sub} />
+        <Gift size={14} color={T.sub} />
         <span style={{ fontSize: 13, color: T.txt }}>
-          {w.coin_amount.toLocaleString()} coins
+          {w.point_amount?.toLocaleString() || w.coin_amount?.toLocaleString()} points
         </span>
         <ChevronRight size={14} color={T.sub} />
         <span style={{ fontSize: 13, fontWeight: 700, color: T.pri }}>
@@ -577,7 +577,7 @@ function WithdrawalRow({ w, theme: T, onCancel }) {
       {w.can_cancel && (
         <button
           onClick={() => {
-            if (confirm('Cancel this withdrawal? Coins will be refunded.')) onCancel(w.id);
+            if (confirm('Cancel this withdrawal? Points will be refunded.')) onCancel(w.id);
           }}
           style={{ ...btnSecondary(T), marginTop: 10, width: '100%' }}
         >
@@ -766,7 +766,7 @@ function WithdrawModal({ theme: T, balance, points, config, onClose, onSuccess }
 
           <div style={{ fontSize: 12, color: T.sub, marginBottom: 16, lineHeight: 1.5 }}>
             ⏱ Processing takes {config?.withdrawal?.processing_days || 3} business days.
-            Coins will be deducted now and refunded if rejected.
+            Points will be deducted now and refunded if rejected.
           </div>
 
           {error && (
