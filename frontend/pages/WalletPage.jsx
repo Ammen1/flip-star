@@ -266,13 +266,15 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
           </div>
           <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>ETB Available</div>
           <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
-              <span style={{ opacity: 0.85 }}>Min</span>
-              <strong>{config?.withdrawal_min_points || 100} pts</strong>
-            </div>
+            {config?.withdrawal_min_points && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
+                <span style={{ opacity: 0.85 }}>Min</span>
+                <strong>{config.withdrawal_min_points.toLocaleString()} pts</strong>
+              </div>
+            )}
             <button
               onClick={() => setShowWithdrawModal(true)}
-              disabled={(points.current || 0) < (config?.withdrawal_min_points || 100)}
+              disabled={config?.withdrawal_min_points && (points.current || 0) < config.withdrawal_min_points}
               style={{
                 width: '100%',
                 padding: '6px 8px',
@@ -282,8 +284,8 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
                 border: '1px solid rgba(255,255,255,0.3)',
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 'pointer' : 'not-allowed',
-                opacity: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 1 : 0.5,
+                cursor: !config?.withdrawal_min_points || (points.current || 0) >= config.withdrawal_min_points ? 'pointer' : 'not-allowed',
+                opacity: !config?.withdrawal_min_points || (points.current || 0) >= config.withdrawal_min_points ? 1 : 0.5,
               }}
             >
               Points → Birr
