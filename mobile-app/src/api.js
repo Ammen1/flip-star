@@ -148,8 +148,10 @@ const api = {
       }
 
       const currentToken = await this.getAuthToken();
-      const isPublicEndpoint = endpoint.includes('/auth/') || endpoint.includes('/settings/public');
-      // Don't send Authorization header for auth endpoints (like login)
+      // Auth endpoints that DO require token
+      const isAuthenticatedAuthEndpoint = endpoint.includes('/auth/change-password') || endpoint.includes('/auth/delete-account') || endpoint.includes('/auth/password/change');
+      const isPublicEndpoint = (endpoint.includes('/auth/') && !isAuthenticatedAuthEndpoint) || endpoint.includes('/settings/public');
+      // Don't send Authorization header for public auth endpoints (like login/register)
       if (currentToken && !isPublicEndpoint) {
         headers['Authorization'] = `Token ${currentToken}`;
       }
@@ -545,10 +547,13 @@ const api = {
       body: JSON.stringify(settings),
     }),
 
-  changePassword: (data) =>
-    api.request('/auth/password/change/', {
+  changePassword: (currentPassword, newPassword) =>
+    api.request('/auth/change-password/', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
     }),
 
   deleteAccount: () =>
@@ -691,16 +696,6 @@ const api = {
   // Search by hashtag
   searchByHashtag: (hashtag) =>
     api.request(`/reels/?hashtags__icontains=${encodeURIComponent(hashtag)}`),
-
-  // Change password
-  changePassword: (currentPassword, newPassword) =>
-    api.request('/auth/change-password/', {
-      method: 'POST',
-      body: JSON.stringify({
-        current_password: currentPassword,
-        new_password: newPassword,
-      }),
-    }),
 
   // Delete account
   deleteAccount: () =>

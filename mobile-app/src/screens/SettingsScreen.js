@@ -375,20 +375,16 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handlePasswordChange = async () => {
+    if (!password.current) {
+      Alert.alert('Error', 'Please enter your current password');
+      return;
+    }
     if (password.new !== password.confirm) {
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
     if (password.new.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 digits');
-      return;
-    }
-    if (!/^\d{6}$/.test(password.new)) {
-      Alert.alert('Error', 'Password must be exactly 6 digits');
-      return;
-    }
-    if (!password.current) {
-      Alert.alert('Error', 'Please enter your current password');
+      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
     
@@ -397,13 +393,19 @@ export default function SettingsScreen({ navigation }) {
       const response = await api.changePassword(password.current, password.new);
       
       console.log('Password change response:', response);
-      Alert.alert('Success', 'Password changed successfully');
       setPassword({ current: '', new: '', confirm: '' });
       setShowPassModal(false);
+      Alert.alert('Success', 'Password changed successfully. Please login again.', [
+        { text: 'OK', onPress: () => logout() }
+      ]);
     } catch (error) {
       console.error('Password change error:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to change password';
-      Alert.alert('Error', errorMessage);
+      const errMsg = error?.message || 'Failed to change password';
+      if (errMsg.includes('Current password is incorrect')) {
+        Alert.alert('Error', 'Current password is incorrect');
+      } else {
+        Alert.alert('Error', errMsg);
+      }
     }
   };
 

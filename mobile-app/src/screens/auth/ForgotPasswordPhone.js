@@ -17,6 +17,7 @@ export default function ForgotPasswordPhone({ onClose, onSuccess }) {
   const [pwd, setPwd] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
@@ -134,15 +135,18 @@ export default function ForgotPasswordPhone({ onClose, onSuccess }) {
               <View style={[s.inputRow, { marginBottom: 16 }]}>
                 <Ionicons name="lock-closed-outline" size={17} color={GOLD} style={s.inputIcon} />
                 <TextInput
-                  style={s.textInput}
+                  style={[s.textInput, { flex: 1 }]}
                   placeholder="Confirm new PIN"
                   placeholderTextColor="#555"
                   value={confirm}
                   onChangeText={t => setConfirm(t.replace(/\D/g, '').slice(0, 6))}
-                  secureTextEntry
+                  secureTextEntry={!showConfirm}
                   keyboardType="number-pad"
                   maxLength={6}
                 />
+                <TouchableOpacity onPress={() => setShowConfirm(v => !v)} style={{ padding: 4 }}>
+                  <Ionicons name={showConfirm ? 'eye-off-outline' : 'eye-outline'} size={17} color={GOLD} />
+                </TouchableOpacity>
               </View>
               <TouchableOpacity style={[s.goldBtn, loading && s.goldBtnDisabled]} onPress={confirmReset} disabled={loading}>
                 {loading ? <ActivityIndicator color="#000" /> : <Text style={s.goldBtnText}>Reset PIN</Text>}

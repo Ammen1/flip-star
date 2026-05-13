@@ -2484,10 +2484,10 @@ def get_privacy_settings(request):
     try:
         profile = request.user.profile
         return Response({
-            'private_account': profile.private_account,
-            'show_activity_status': profile.show_activity_status,
+            'private_account': profile.is_private,
+            'show_activity_status': profile.show_activity,
             'allow_mentions': profile.allow_mentions,
-            'allow_messages_from_anyone': profile.allow_messages_from_anyone,
+            'allow_messages': profile.allow_messages,
         })
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -2499,21 +2499,30 @@ def update_privacy_settings(request):
     try:
         profile = request.user.profile
         
-        # Update fields from request data
-        update_fields = ['private_account', 'show_activity_status', 'allow_mentions', 'allow_messages_from_anyone']
-        for field in update_fields:
-            if field in request.data:
-                setattr(profile, field, request.data[field])
+        # Map frontend field names to model field names
+        field_map = {
+            'private_account': 'is_private',
+            'is_private': 'is_private',
+            'show_activity_status': 'show_activity',
+            'show_activity': 'show_activity',
+            'allow_messages': 'allow_messages',
+            'allow_messages_from_anyone': 'allow_messages',
+            'allow_mentions': 'allow_mentions',
+        }
+        
+        for req_field, model_field in field_map.items():
+            if req_field in request.data:
+                setattr(profile, model_field, request.data[req_field])
         
         profile.save()
         
         return Response({
             'message': 'Privacy settings updated successfully',
             'settings': {
-                'private_account': profile.private_account,
-                'show_activity_status': profile.show_activity_status,
+                'private_account': profile.is_private,
+                'show_activity_status': profile.show_activity,
                 'allow_mentions': profile.allow_mentions,
-                'allow_messages_from_anyone': profile.allow_messages_from_anyone,
+                'allow_messages': profile.allow_messages,
             }
         })
     except Exception as e:

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Modal, ActivityIndicator, KeyboardAvoidingView,
-  Platform, StatusBar, Image,
+  Platform, StatusBar, Image, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -560,7 +560,15 @@ export default function LoginScreen({ navigation }) {
       console.log('✅ Login successful with phone + PIN');
     } catch (error) {
       console.log('Login error:', error);
-      setError(error.message || 'Login failed. Please check your phone number and PIN.');
+      const errMsg = error?.message || '';
+      if (errMsg.includes('Invalid password') || errMsg.includes('Invalid credentials') || errMsg.includes('401')) {
+        Alert.alert('Invalid PIN', 'The PIN you entered is incorrect. Please try again or use "Forgot PIN" to reset it.');
+      } else if (errMsg.includes('not found') || errMsg.includes('No account')) {
+        Alert.alert('Account Not Found', 'No account found with this phone number. Please check and try again.');
+      } else {
+        Alert.alert('Login Failed', 'Unable to login. Please check your phone number and PIN.');
+      }
+      setError('');
     } finally {
       setLoading(false);
     }

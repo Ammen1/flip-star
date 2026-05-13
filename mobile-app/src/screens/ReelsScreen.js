@@ -1083,9 +1083,14 @@ export default function ReelsScreen({ navigation, route }) {
     setShowGiftModal(true);
   };
 
-  // Set fixed coin value (no API call)
-  const loadUserCoins = () => {
-    setUserCoins(100);
+  const loadUserCoins = async () => {
+    try {
+      const wallet = await api.request('/wallet/');
+      setUserCoins(wallet.balance?.purchased || 0);
+    } catch (error) {
+      console.error('Failed to load user coins:', error);
+      setUserCoins(0);
+    }
   };
 
   const loadGifts = async () => {
@@ -1122,11 +1127,16 @@ export default function ReelsScreen({ navigation, route }) {
     }
   };
 
-  // Load gifts and coins on component mount
+  // Load gifts on component mount
   useEffect(() => {
     loadGifts();
     loadUserCoins();
   }, []);
+
+  // Reload coins when gift modal opens
+  useEffect(() => {
+    if (showGiftModal) loadUserCoins();
+  }, [showGiftModal]);
 
   const sendGift = async () => {
     if (!giftRecipient.trim()) {

@@ -183,148 +183,84 @@ export default function WebsiteCoinScreen({ navigation }) {
     try {
       setLoading(true);
       
-      // Debug: Check what's in authUser object
-      console.log('AuthUser object:', authUser);
-      console.log('Available fields:', Object.keys(authUser || {}));
-      
-      // Get user's phone number from logged-in user (like website)
+      // Get user's phone number
       let userPhoneNumber = authUser?.phone_number || authUser?.phone || authUser?.username;
       
-      console.log('Retrieved phone number:', userPhoneNumber);
-      console.log('Type of phone number:', typeof userPhoneNumber);
-      
-      // Format phone number for Onevas API (but use user's actual number)
+      // Format phone number for backend (expects 2519XXXXXXXX format)
       if (userPhoneNumber) {
-        // Onevas API expects Ethiopian format: 0903682272
-        if (userPhoneNumber.startsWith('+251')) {
-          // Convert +251903682272 to 0903682272
-          userPhoneNumber = '0' + userPhoneNumber.substring(4);
+        if (userPhoneNumber.startsWith('0')) {
+          userPhoneNumber = '251' + userPhoneNumber.substring(1);
         } else if (userPhoneNumber.startsWith('+')) {
-          // Convert +903682272 to 0903682272 (if country code is missing)
-          userPhoneNumber = '0' + userPhoneNumber.substring(1);
+          userPhoneNumber = userPhoneNumber.substring(1);
         }
-        // If it already starts with 0, keep it as is
-        console.log('Formatted phone number for Onevas:', userPhoneNumber);
       }
       
       if (!userPhoneNumber) {
-        console.error('Phone number not found');
+        Alert.alert('Error', 'Phone number not found. Please update your profile.');
         return;
       }
-      
-      // Process direct carrier billing like website
-      const paymentResult = await processDirectCarrierBilling(pkg, userPhoneNumber);
-      
-      if (paymentResult.success) {
-        // Update user coins balance immediately
-        setUserCoins(prevCoins => prevCoins + pkg.coins + pkg.bonus);
+
+      // Get the on-demand subscription tier ID from backend
+      let tierId = null;
+      try {
+        const tiersData = await api.request('/subscriptions/tiers/active/');
+        const ondemandTier = (tiersData || []).find(t => t.duration_type === 'ondemand');
+        tierId = ondemandTier?.id;
+      } catch (e) {
+        console.error('Failed to fetch tiers:', e);
+      }
+
+      if (!tierId) {
+        Alert.alert('Error', 'On-demand plan not found. Please try again later.');
+        return;
+      }
+
+      // Use backend's /charging/on-demand/ endpoint (same as website)
+      // Backend handles Onevas API call and credits coins
+      const response = await api.request('/charging/on-demand/', {
+        method: 'POST',
+        body: JSON.stringify({
+          subscription_tier_id: tierId,
+          phone_number: userPhoneNumber,
+        }),
+      });
+
+      console.log('Charging response:', response);
+
+      if (response.success) {
+        // Reload balance from wallet API
+        await loadUserCoins();
         
-        // Show success message
+        // Show success
         setPurchasedCoins(pkg.coins + pkg.bonus);
         setShowSuccessModal(true);
         setShowPaymentModal(false);
         
-        // Play coin sound for successful purchase
+        // Play coin sound
         SoundManager.playCoinSound();
-      }
-      
-    } catch (error) {
-      console.error('Direct carrier billing error:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const processDirectCarrierBilling = async (pkg, phoneNumber) => {
-    try {
-      // Real carrier API integration like website
-      // Connect to Ethio Telecom carrier billing API
-      
-      console.log(`Processing REAL carrier billing for ${phoneNumber} - ${pkg.price} ETB`);
-      
-      // Implement exact Onevas endpoint for mobile airtime coin purchase
-      console.log('Calling Onevas API for airtime coin purchase...');
-      console.log('Phone:', phoneNumber);
-      console.log('Package:', pkg);
-      
-      const response = await fetch('https://onevas.et/api/v1/charging', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          application_key: '4CROFBT0EGCM1OK8R88EQBTEZOMI3138',
-          phone_number: phoneNumber,
-          product_number: '10000302853'
-        })
-      });
-      
-      const responseData = await response.json();
-      console.log('Onevas API Response:', responseData);
-      
-      if (!response.ok || !responseData.status) {
-        console.error('Onevas API Error:', responseData);
-        
-        // Handle specific Onevas API errors
-        if (responseData.message === 'INTERNAL_ERROR') {
-          throw new Error('Onevas service temporarily unavailable. Please try again later.');
-        } else if (responseData.message === 'INVALID_PHONE') {
-          throw new Error('Invalid phone number format. Please update your profile.');
-        } else if (responseData.message === 'INSUFFICIENT_BALANCE') {
-          throw new Error('Insufficient airtime balance. Please recharge and try again.');
+      } else {
+        // Handle specific errors
+        if (response.error === 'insufficient_balance') {
+          Alert.alert('Insufficient Balance', 'Your airtime balance is not enough. Please recharge and try again.');
+        } else if (response.message === 'INTERNAL_ERROR' || response.error === 'charging_failed') {
+          Alert.alert('Service Unavailable', 'The payment service is temporarily unavailable. Please try again in a few minutes.');
         } else {
-          throw new Error(responseData.error || responseData.message || 'Airtime charging failed');
+          Alert.alert('Payment Failed', response.message || 'Charging failed. Please try again.');
         }
       }
       
-      // Return success response with exact Onevas API data
-      return {
-        success: true,
-        transactionId: responseData.transaction_id || responseData.reference || `ONEVAS_${Date.now()}`,
-        amount: pkg.price,
-        phoneNumber: phoneNumber,
-        coins: pkg.coins + pkg.bonus,
-        remainingBalance: responseData.remaining_balance || responseData.balance || 'N/A',
-        paymentMethod: 'direct_carrier_billing',
-        timestamp: new Date().toISOString(),
-        carrier: 'Onevas',
-        status: 'completed',
-        apiResponse: responseData,
-        product_number: '10000302853',
-        application_key: '4CROFBT0EGCM1OK8R88EQBTEZOMI3138'
-      };
     } catch (error) {
-      console.error('All API endpoints failed, using carrier simulation:', error);
-      
-      // Simulate real carrier billing process (like website when backend not ready)
-      console.log('Simulating carrier billing process for phone:', phoneNumber);
-      
-      // Simulate carrier API delay (real carrier processing time)
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Simulate checking airtime balance and deducting
-      // In real implementation, this would connect to Ethio Telecom/Safaricom carrier API
-      const simulatedBalance = Math.random() * 100 + 20; // Random balance between 20-120 ETB
-      const remainingBalance = (simulatedBalance - pkg.price).toFixed(2);
-      
-      // Simulate transaction details like real carrier
-      const transactionId = `ETB_${Date.now()}_${phoneNumber.slice(-4)}`;
-      
-      // Return realistic carrier billing response
-      return {
-        success: true,
-        transactionId: transactionId,
-        amount: pkg.price,
-        phoneNumber: phoneNumber,
-        coins: pkg.coins + pkg.bonus,
-        remainingBalance: `${remainingBalance} ETB`,
-        paymentMethod: 'direct_carrier_billing',
-        timestamp: new Date().toISOString(),
-        carrier: 'Ethio Telecom',
-        status: 'completed',
-        note: 'Carrier simulation - Backend endpoints not yet implemented'
-      };
+      console.error('Payment error:', error);
+      const errMsg = error?.message || 'Payment failed. Please try again.';
+      if (errMsg.includes('insufficient_balance') || errMsg.includes('not enough')) {
+        Alert.alert('Insufficient Balance', 'Your airtime balance is not enough. Please recharge and try again.');
+      } else if (errMsg.includes('INTERNAL_ERROR') || errMsg.includes('charging_failed')) {
+        Alert.alert('Service Unavailable', 'The payment service is temporarily unavailable. Please try again in a few minutes.');
+      } else {
+        Alert.alert('Payment Failed', errMsg);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

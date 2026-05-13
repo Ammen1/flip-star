@@ -178,70 +178,96 @@ export default function SubscriptionScreen({ navigation }) {
           </View>
         )}
 
-        {/* Available Plans */}
-        <Text style={[styles.sectionLabel, { color: colors.text }]}>
-          {isActive ? 'Upgrade Your Plan' : 'Available Plans'}
-        </Text>
+        {/* Available Plans - filter based on current subscription */}
+        {(() => {
+          const PLAN_ORDER = { daily: 1, weekly: 2, monthly: 3 };
+          const currentType = currentSub?.tier?.duration_type || currentSub?.duration_type || null;
+          const currentRank = isActive && currentType ? (PLAN_ORDER[currentType] || 0) : 0;
 
-        {tiers.filter(tier => tier.duration_type !== 'ondemand')
-          .map((tier, i) => {
-          const isSelected = selectedTier?.id === tier.id;
-          const isCurrent = currentSub?.tier?.id === tier.id && isActive;
-          const color = PLAN_COLORS[tier.duration_type] || GOLD;
-          const icon = PLAN_ICONS[tier.duration_type] || 'star';
+          // Filter: remove ondemand, and only show plans higher than current
+          const visibleTiers = tiers.filter(tier => {
+            if (tier.duration_type === 'ondemand') return false;
+            const tierRank = PLAN_ORDER[tier.duration_type] || 0;
+            // If no active sub, show all plans
+            if (!isActive) return true;
+            // If monthly (highest), show nothing - only current sub card above
+            if (currentRank >= 3) return false;
+            // Show only plans higher than current
+            return tierRank > currentRank;
+          });
+
+          const sectionTitle = isActive 
+            ? (currentRank >= 3 ? null : 'Upgrade Your Plan')
+            : 'Available Plans';
 
           return (
-            <View
-              key={tier.id}
-              style={[
-                styles.planCard,
-                { backgroundColor: colors.cardBg, borderColor: colors.border },
-                isSelected && { borderColor: color, borderWidth: 2 },
-                isCurrent && styles.planCardCurrent,
-              ]}
-            >
-              {isCurrent && (
-                <View style={[styles.currentTag, { backgroundColor: color }]}>
-                  <Text style={styles.currentTagText}>Current</Text>
-                </View>
+            <>
+              {sectionTitle && (
+                <Text style={[styles.sectionLabel, { color: colors.text }]}>
+                  {sectionTitle}
+                </Text>
               )}
 
-              <View style={styles.planTop}>
-                <View style={[styles.planIconBox, { backgroundColor: color + '22' }]}>
-                  <Ionicons name={icon} size={22} color={color} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 14 }}>
-                  <Text style={[styles.planName, { color: colors.text }]}>{tier.name}</Text>
-                  <Text style={[styles.planDesc, { color: colors.textSecondary }]}>{tier.description}</Text>
-                </View>
-                <View style={styles.planPriceBox}>
-                  <Text style={[styles.planPrice, { color }]}>{tier.price_etb}</Text>
-                  <Text style={[styles.planCurrency, { color: colors.textSecondary }]}>ETB</Text>
-                </View>
-              </View>
+              {visibleTiers.map((tier, i) => {
+                const isSelected = selectedTier?.id === tier.id;
+                const isCurrent = currentSub?.tier?.id === tier.id && isActive;
+                const color = PLAN_COLORS[tier.duration_type] || GOLD;
+                const icon = PLAN_ICONS[tier.duration_type] || 'star';
 
-              <View style={styles.planFeatures}>
-                {(tier.features || []).map((f, fi) => (
-                  <View key={fi} style={styles.featureRow}>
-                    <Ionicons name="checkmark" size={14} color={colors.primary} />
-                    <Text style={[styles.featureText, { color: colors.text }]}>{f}</Text>
+                return (
+                  <View
+                    key={tier.id}
+                    style={[
+                      styles.planCard,
+                      { backgroundColor: colors.cardBg, borderColor: colors.border },
+                      isSelected && { borderColor: color, borderWidth: 2 },
+                      isCurrent && styles.planCardCurrent,
+                    ]}
+                  >
+                    {isCurrent && (
+                      <View style={[styles.currentTag, { backgroundColor: color }]}>
+                        <Text style={styles.currentTagText}>Current</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.planTop}>
+                      <View style={[styles.planIconBox, { backgroundColor: color + '22' }]}>
+                        <Ionicons name={icon} size={22} color={color} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 14 }}>
+                        <Text style={[styles.planName, { color: colors.text }]}>{tier.name}</Text>
+                        <Text style={[styles.planDesc, { color: colors.textSecondary }]}>{tier.description}</Text>
+                      </View>
+                      <View style={styles.planPriceBox}>
+                        <Text style={[styles.planPrice, { color }]}>{tier.price_etb}</Text>
+                        <Text style={[styles.planCurrency, { color: colors.textSecondary }]}>ETB</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.planFeatures}>
+                      {(tier.features || []).map((f, fi) => (
+                        <View key={fi} style={styles.featureRow}>
+                          <Ionicons name="checkmark" size={14} color={colors.primary} />
+                          <Text style={[styles.featureText, { color: colors.text }]}>{f}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.planBtn, { backgroundColor: color }]}
+                      onPress={() => handleSubscribe(tier)}
+                    >
+                      <Ionicons name="chatbubble-ellipses-outline" size={15} color="#000" />
+                      <Text style={[styles.planBtnText, { color: '#000' }]}>
+                        Upgrade to {tier.name}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                ))}
-              </View>
-
-              <TouchableOpacity
-                style={[styles.planBtn, { backgroundColor: isCurrent ? colors.border : color }]}
-                onPress={() => handleSubscribe(tier)}
-                disabled={isCurrent}
-              >
-                <Ionicons name="chatbubble-ellipses-outline" size={15} color={isCurrent ? colors.textSecondary : '#000'} />
-                <Text style={[styles.planBtnText, { color: isCurrent ? colors.textSecondary : '#000' }]}>
-                  {isCurrent ? 'Current Plan' : `Upgrade to ${tier.name}`}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                );
+              })}
+            </>
           );
-        })}
+        })()}
       </ScrollView>
     </View>
   );
