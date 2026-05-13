@@ -758,66 +758,95 @@ export function AdminManagementPage({ theme }) {
         }}>
           <div style={{
             background: theme.card,
-            borderRadius: 12,
-            padding: 24,
+            borderRadius: 16,
+            padding: 32,
             width: '100%',
-            maxWidth: 500,
-            maxHeight: '85vh',
+            maxWidth: 900,
+            maxHeight: '90vh',
             overflow: 'auto',
             border: `1px solid ${theme.border}`,
             margin: 'auto',
             position: 'relative',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
-              {roleModal.mode === 'create' ? 'Create Role' : 'Edit Role'}
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${theme.border}` }}>
+              <h3 style={{ fontSize: 20, fontWeight: 700, color: theme.txt, margin: 0 }}>
+                {roleModal.mode === 'create' ? 'Create New Role' : 'Edit Role'}
+              </h3>
+              <button
+                onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
+                style={{
+                  padding: '8px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: theme.sub,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.target.style.color = theme.txt; e.target.style.background = theme.bg; }}
+                onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
+              >
+                ✕
+              </button>
+            </div>
             
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
-                Role ID
-              </label>
-              <input
-                type="text"
-                value={roleForm.id}
-                onChange={(e) => setRoleForm({ ...roleForm, id: e.target.value })}
-                disabled={roleModal.mode === 'edit'}
-                placeholder="e.g., content_manager"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  fontSize: 14,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                }}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                  Role ID
+                </label>
+                <input
+                  type="text"
+                  value={roleForm.id}
+                  onChange={(e) => setRoleForm({ ...roleForm, id: e.target.value })}
+                  disabled={roleModal.mode === 'edit'}
+                  placeholder="e.g., content_manager"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 8,
+                    fontSize: 14,
+                    outline: 'none',
+                    background: theme.bg,
+                    color: theme.txt,
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                  Role Name
+                </label>
+                <input
+                  type="text"
+                  value={roleForm.name}
+                  onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                  placeholder="e.g., Content Manager"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 8,
+                    fontSize: 14,
+                    outline: 'none',
+                    background: theme.bg,
+                    color: theme.txt,
+                    transition: 'border-color 0.2s',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+                />
+              </div>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
-                Role Name
-              </label>
-              <input
-                type="text"
-                value={roleForm.name}
-                onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
-                placeholder="e.g., Content Manager"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  fontSize: 14,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 24 }}>
               <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
                 Description
               </label>
@@ -828,7 +857,7 @@ export function AdminManagementPage({ theme }) {
                 rows={3}
                 style={{
                   width: '100%',
-                  padding: '10px 12px',
+                  padding: '12px 16px',
                   border: `1px solid ${theme.border}`,
                   borderRadius: 8,
                   fontSize: 14,
@@ -836,88 +865,105 @@ export function AdminManagementPage({ theme }) {
                   background: theme.bg,
                   color: theme.txt,
                   resize: 'vertical',
+                  transition: 'border-color 0.2s',
+                  fontFamily: 'inherit',
                 }}
+                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
               />
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
-                Role Type
-              </label>
-              <select
-                value={roleForm.type}
-                onChange={(e) => setRoleForm({ ...roleForm, type: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  fontSize: 14,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                }}
-              >
-                <option value="platform_user">Platform User</option>
-                <option value="internal_operator">Internal Operator</option>
-              </select>
-            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                  Role Type
+                </label>
+                <select
+                  value={roleForm.type}
+                  onChange={(e) => setRoleForm({ ...roleForm, type: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 8,
+                    fontSize: 14,
+                    outline: 'none',
+                    background: theme.bg,
+                    color: theme.txt,
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="platform_user">Platform User</option>
+                  <option value="internal_operator">Internal Operator</option>
+                </select>
+              </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
-                Surfaces
-              </label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt }}>
-                  <input
-                    type="checkbox"
-                    checked={roleForm.surfaces.includes('mobile')}
-                    onChange={(e) => {
-                      const surfaces = e.target.checked 
-                        ? [...roleForm.surfaces, 'mobile']
-                        : roleForm.surfaces.filter(s => s !== 'mobile');
-                      setRoleForm({ ...roleForm, surfaces });
-                    }}
-                  />
-                  Mobile
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                  Surfaces
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt }}>
-                  <input
-                    type="checkbox"
-                    checked={roleForm.surfaces.includes('web')}
-                    onChange={(e) => {
-                      const surfaces = e.target.checked 
-                        ? [...roleForm.surfaces, 'web']
-                        : roleForm.surfaces.filter(s => s !== 'web');
-                      setRoleForm({ ...roleForm, surfaces });
-                    }}
-                  />
-                  Web
-                </label>
+                <div style={{ display: 'flex', gap: 16, padding: '12px 16px', border: `1px solid ${theme.border}`, borderRadius: 8, background: theme.bg }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={roleForm.surfaces.includes('mobile')}
+                      onChange={(e) => {
+                        const surfaces = e.target.checked 
+                          ? [...roleForm.surfaces, 'mobile']
+                          : roleForm.surfaces.filter(s => s !== 'mobile');
+                        setRoleForm({ ...roleForm, surfaces });
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Mobile
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={roleForm.surfaces.includes('web')}
+                      onChange={(e) => {
+                        const surfaces = e.target.checked 
+                          ? [...roleForm.surfaces, 'web']
+                          : roleForm.surfaces.filter(s => s !== 'web');
+                        setRoleForm({ ...roleForm, surfaces });
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Web
+                  </label>
+                </div>
               </div>
             </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt }}>
-                <input
-                  type="checkbox"
-                  checked={roleForm.is_active}
-                  onChange={(e) => setRoleForm({ ...roleForm, is_active: e.target.checked })}
-                />
-                Active
+            <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, padding: '16px', background: theme.bg, borderRadius: 8, border: `1px solid ${theme.border}` }}>
+              <input
+                type="checkbox"
+                checked={roleForm.is_active}
+                onChange={(e) => setRoleForm({ ...roleForm, is_active: e.target.checked })}
+                id="role-active"
+                style={{ cursor: 'pointer', width: 18, height: 18 }}
+              />
+              <label htmlFor="role-active" style={{ fontSize: 14, color: theme.txt, cursor: 'pointer' }}>
+                Active Role
               </label>
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 12, display: 'block' }}>
-                Assign Permissions
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
+                <label style={{ fontSize: 15, fontWeight: 700, color: theme.txt, margin: 0 }}>
+                  Assign Permissions
+                </label>
+                <div style={{ fontSize: 13, color: theme.sub }}>
+                  {roleForm.selectedPermissions.length} of {permissions.length} selected
+                </div>
+              </div>
+              
               <div style={{
-                maxHeight: 300,
+                maxHeight: 400,
                 overflow: 'auto',
                 border: `1px solid ${theme.border}`,
-                borderRadius: 8,
-                padding: 12,
+                borderRadius: 12,
+                padding: 20,
                 background: theme.bg,
               }}>
                 {Object.entries(
@@ -927,13 +973,39 @@ export function AdminManagementPage({ theme }) {
                     return acc;
                   }, {})
                 ).map(([domain, perms]) => (
-                  <div key={domain} style={{ marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: theme.pri, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <div key={domain} style={{ marginBottom: 24 }}>
+                    <div style={{ 
+                      fontSize: 12, 
+                      fontWeight: 700, 
+                      color: theme.pri, 
+                      marginBottom: 12, 
+                      textTransform: 'uppercase', 
+                      letterSpacing: '1px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}>
+                      <div style={{ width: 4, height: 4, background: theme.pri, borderRadius: '50%' }} />
                       {domain}
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
                       {perms.map((perm) => (
-                        <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: theme.txt }}>
+                        <label key={perm.id} style={{ 
+                          display: 'flex', 
+                          alignItems: 'flex-start', 
+                          gap: 10, 
+                          fontSize: 13, 
+                          color: theme.txt,
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          background: theme.card,
+                          border: `1px solid ${theme.border}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { e.target.style.borderColor = theme.pri; e.target.style.background = theme.pri + '10'; }}
+                        onMouseLeave={(e) => { e.target.style.borderColor = theme.border; e.target.style.background = theme.card; }}
+                        >
                           <input
                             type="checkbox"
                             checked={roleForm.selectedPermissions.includes(perm.id)}
@@ -943,49 +1015,57 @@ export function AdminManagementPage({ theme }) {
                                 : roleForm.selectedPermissions.filter(id => id !== perm.id);
                               setRoleForm({ ...roleForm, selectedPermissions });
                             }}
+                            style={{ marginTop: 2, cursor: 'pointer' }}
                           />
-                          {perm.name}
+                          <div>
+                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{perm.name}</div>
+                            <div style={{ fontSize: 11, color: theme.sub, lineHeight: 1.4 }}>{perm.description}</div>
+                          </div>
                         </label>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop: 8, fontSize: 11, color: theme.sub }}>
-                {roleForm.selectedPermissions.length} permissions selected
-              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
               <button
                 onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
                 style={{
-                  padding: '8px 16px',
+                  padding: '12px 24px',
                   background: 'transparent',
                   border: `1px solid ${theme.border}`,
                   borderRadius: 8,
                   color: theme.txt,
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
+                  transition: 'all 0.2s',
                 }}
+                onMouseEnter={(e) => { e.target.style.background = theme.bg; }}
+                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveRole}
                 style={{
-                  padding: '8px 16px',
+                  padding: '12px 24px',
                   background: theme.pri,
                   border: 'none',
                   borderRadius: 8,
                   color: '#fff',
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: `0 4px 6px -1px ${theme.pri}40`,
                 }}
+                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
+                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
               >
-                Save
+                {roleModal.mode === 'create' ? 'Create Role' : 'Save Changes'}
               </button>
             </div>
           </div>
