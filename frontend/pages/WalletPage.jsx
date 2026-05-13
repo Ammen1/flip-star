@@ -156,6 +156,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount }) {
   }
 
   const balance = summary?.balance || { total: 0, earned: 0, purchased: 0 };
+  const points = summary?.points || { current: 0, earned_total: 0, withdrawn_total: 0 };
   const totals = summary?.totals || {};
   const withdrawal = summary?.withdrawal || {};
 
@@ -224,6 +225,44 @@ export function WalletPage({ theme, onBack, showTopUpOnMount }) {
               {formatNumber(balance.purchased)}
             </div>
             <div style={{ fontSize: 11, opacity: 0.8 }}>For gifts & boosts</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Points Card */}
+      <div style={{
+        margin: '0 16px 16px',
+        padding: 20,
+        borderRadius: 16,
+        background: T.card,
+        border: `1px solid ${T.border}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Gift size={16} color={T.pri} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.txt }}>Points Balance</span>
+        </div>
+        <div style={{ fontSize: 36, fontWeight: 800, color: T.txt, marginBottom: 4 }}>
+          {formatNumber(points.current)}
+        </div>
+        <div style={{ fontSize: 12, color: T.sub, marginBottom: 12 }}>
+          From gifts & campaign wins (1 coin = 1 point)
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+          <div>
+            <div style={{ fontSize: 11, color: T.sub, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Earned Total
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.txt, marginTop: 2 }}>
+              {formatNumber(points.earned_total)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: T.sub, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Withdrawn
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.txt, marginTop: 2 }}>
+              {formatNumber(points.withdrawn_total)}
+            </div>
           </div>
         </div>
       </div>

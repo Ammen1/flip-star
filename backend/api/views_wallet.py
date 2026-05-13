@@ -87,7 +87,7 @@ def _serialize_withdrawal(w):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def wallet_summary(request):
-    """Get user's wallet summary: balances, totals, recent transactions."""
+    """Get user's wallet summary: balances, points, totals, recent transactions."""
     balance = _get_or_create_balance(request.user)
     config = WalletConfig.get_config()
 
@@ -107,6 +107,11 @@ def wallet_summary(request):
             'total': balance.balance,
             'earned': balance.earned_balance,
             'purchased': balance.purchased_balance,
+        },
+        'points': {
+            'current': request.user.profile.points,
+            'earned_total': request.user.profile.points_earned_total,
+            'withdrawn_total': request.user.profile.points_withdrawn_total,
         },
         'totals': {
             'lifetime_earned': balance.total_earned,
