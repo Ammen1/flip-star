@@ -28,7 +28,7 @@ export function AdminManagementPage({ theme }) {
   
   // User role assignment state
   const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
-  const [selectedUserRole, setSelectedUserRole] = useState('');
+  const [selectedUserRoles, setSelectedUserRoles] = useState([]);
 
   // User role assignment functions
   const handleAssignRole = (user, event) => {
@@ -36,26 +36,30 @@ export function AdminManagementPage({ theme }) {
     const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
     const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
     
+    // Load user's existing roles from the new API format
+    const userRoles = user.roles ? user.roles.map(r => r.id) : [];
+    
     setUserRoleModal({ 
       isOpen: true, 
       userId: user.id, 
       username: user.username,
       clickPosition: { x: rect.left + scrollLeft + rect.width / 2, y: rect.top + scrollTop }
     });
-    setSelectedUserRole(user.profile?.role?.id || '');
+    setSelectedUserRoles(userRoles);
   };
 
   const handleSaveUserRole = async () => {
     try {
-      await api.request(`/admin/rbac/users/${userRoleModal.userId}/role/`, {
+      await api.request(`/admin/rbac/users/${userRoleModal.userId}/roles/`, {
         method: 'PUT',
-        body: JSON.stringify({ role_id: selectedUserRole })
+        body: JSON.stringify({ role_ids: selectedUserRoles })
       });
       loadUsers();
-      setUserRoleModal({ isOpen: false, userId: null, username: '' });
+      setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+      setSelectedUserRoles([]);
     } catch (error) {
-      console.error('Failed to assign role:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to assign role', type: 'error' });
+      console.error('Failed to assign roles:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to assign roles', type: 'error' });
     }
   };
 
@@ -534,8 +538,8 @@ export function AdminManagementPage({ theme }) {
                           {user.is_superuser ? 'Full Access' : user.is_staff ? 'Admin Access' : 'No Admin Access'}
                         </div>
                       </td>
-                      <td style={cellStyle}>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                      <td style={{ ...cellStyle, width: '200px', verticalAlign: 'middle' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                           <button
                             onClick={() => handleToggleAdmin(user.id, user.is_staff)}
                             style={{
@@ -551,6 +555,7 @@ export function AdminManagementPage({ theme }) {
                               alignItems: 'center',
                               gap: 4,
                               transition: 'all 0.2s',
+                              whiteSpace: 'nowrap',
                             }}
                             onMouseEnter={(e) => {
                               e.target.style.background = user.is_staff ? theme.orange + '50' : theme.pri + '50';
@@ -577,6 +582,7 @@ export function AdminManagementPage({ theme }) {
                               alignItems: 'center',
                               gap: 4,
                               transition: 'all 0.2s',
+                              whiteSpace: 'nowrap',
                             }}
                             onMouseEnter={(e) => {
                               e.target.style.background = theme.purple + '50';
@@ -604,6 +610,7 @@ export function AdminManagementPage({ theme }) {
                                 alignItems: 'center',
                                 gap: 4,
                                 transition: 'all 0.2s',
+                                whiteSpace: 'nowrap',
                               }}
                               onMouseEnter={(e) => {
                                 e.target.style.background = user.is_superuser ? theme.red + '50' : theme.pri + '50';
@@ -1093,46 +1100,75 @@ export function AdminManagementPage({ theme }) {
             borderRadius: 12,
             padding: 24,
             width: '100%',
-            maxWidth: 400,
+            maxWidth: 500,
             border: `1px solid ${theme.border}`,
             margin: 'auto',
             position: 'relative',
             top: userRoleModal.clickPosition.y > 300 ? (userRoleModal.clickPosition.y - 300) / 2 : 0,
           }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
-              Assign Role to {userRoleModal.username}
+              Assign Roles to {userRoleModal.username}
             </h3>
             
             <div style={{ marginBottom: 24 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
-                Select Role
+              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 12, display: 'block' }}>
+                Select Roles
               </label>
-              <select
-                value={selectedUserRole}
-                onChange={(e) => setSelectedUserRole(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  fontSize: 14,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                }}
-              >
-                <option value="">No Role</option>
+              <div style={{
+                maxHeight: 300,
+                overflow: 'auto',
+                border: `1px solid ${theme.border}`,
+                borderRadius: 8,
+                padding: 12,
+                background: theme.bg,
+              }}>
                 {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
+                  <label key={role.id} style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 10, 
+                    fontSize: 13, 
+                    color: theme.txt,
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    marginBottom: 4,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    background: selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent',
+                    border: selectedUserRoles.includes(role.id) ? `1px solid ${theme.pri}` : 'none',
+                  }}
+                  onMouseEnter={(e) => { e.target.style.background = theme.pri + '10'; }}
+                  onMouseLeave={(e) => { e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent'; }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedUserRoles.includes(role.id)}
+                      onChange={(e) => {
+                        const selectedRoles = e.target.checked
+                          ? [...selectedUserRoles, role.id]
+                          : selectedUserRoles.filter(id => id !== role.id);
+                        setSelectedUserRoles(selectedRoles);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{role.name}</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{role.description}</div>
+                    </div>
+                  </label>
                 ))}
-              </select>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: theme.sub }}>
+                {selectedUserRoles.length} roles selected
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button
-                onClick={() => setUserRoleModal({ isOpen: false, userId: null, username: '' })}
+                onClick={() => {
+                  setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+                  setSelectedUserRoles([]);
+                }}
                 style={{
                   padding: '8px 16px',
                   background: 'transparent',
