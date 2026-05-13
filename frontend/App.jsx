@@ -1178,8 +1178,8 @@ export default function WerqRoot() {
     if (!authUser) { setShowLogin(true); return; }
     // Load coin packages
     try {
-      const packages = await api.request('/contest/packages/');
-      setCoinPackages(packages || []);
+      const response = await api.request('/coins/packages/');
+      setCoinPackages(response.packages || []);
       setShowTopUpModal(true);
     } catch (error) {
       console.error('Failed to load coin packages:', error);
