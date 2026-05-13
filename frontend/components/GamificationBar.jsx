@@ -16,7 +16,7 @@ const SPIN_SEGMENTS = [
 ];
 
 /* ─── FULL-SCREEN MODAL WRAPPER ──────────────── */
-const Modal = memo(function Modal({ onClose, children }) {
+const Modal = memo(function Modal({ onClose, children, theme }) {
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
@@ -24,19 +24,19 @@ const Modal = memo(function Modal({ onClose, children }) {
   return createPortal(
     <div onClick={onClose} style={{
       position:'fixed',top:0,left:0,right:0,bottom:0,
-      background:'rgba(0,0,0,.6)',
-      display:'flex',alignItems:'flex-end',justifyContent:'center',
+      background:'rgba(0,0,0,.8)',
+      display:'flex',alignItems:'center',justifyContent:'center',
       zIndex:99999,
+      padding:20
     }}>
       <div onClick={e=>e.stopPropagation()} style={{
-        background:'#fff',borderRadius:'24px 24px 0 0',
-        width:'100%',maxWidth:480,maxHeight:'80vh',
-        paddingBottom:'calc(80px + env(safe-area-inset-bottom, 0px))',
-        boxShadow:'0 -8px 40px rgba(0,0,0,.25)',
+        background:theme?.card||'#1A1A1A',borderRadius:20,
+        width:'100%',maxWidth:420,maxHeight:'80vh',
+        boxShadow:'0 20px 60px rgba(0,0,0,.4)',
         display:'flex',flexDirection:'column',
+        overflow:'hidden'
       }}>
-        <div style={{width:40,height:4,background:'#E7E5E4',borderRadius:4,margin:'12px auto 0'}}/>
-        <div style={{overflowY:'auto',flex:1}}>
+        <div style={{overflowY:'auto',flex:1,padding:'20px'}}>
           {children}
         </div>
       </div>
@@ -45,22 +45,22 @@ const Modal = memo(function Modal({ onClose, children }) {
   );
 });
 
-const ModalHeader = memo(function ModalHeader({ title, onClose }) {
+const ModalHeader = memo(function ModalHeader({ title, onClose, theme }) {
   return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px 8px'}}>
-      <span style={{fontSize:18,fontWeight:700,color:'#F9E08B'}}>{title}</span>
+      <span style={{fontSize:18,fontWeight:700,color:theme?.pri||'#F9E08B'}}>{title}</span>
       <button onClick={onClose} style={{background:'rgba(249,224,139,0.1)',border:'1px solid rgba(249,224,139,0.2)',borderRadius:'50%',width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-        <X size={16} color='#F9E08B'/>
+        <X size={16} color={theme?.pri||'#F9E08B'}/>
       </button>
     </div>
   );
 });
 
 /* ─── COINS MODAL ────────────────────────────── */
-const CoinsModal = memo(function CoinsModal({ coins, points, onClose }) {
+const CoinsModal = memo(function CoinsModal({ coins, points, onClose, theme }) {
   return (
-    <Modal onClose={onClose}>
-      <ModalHeader title="💰 Balance" onClose={onClose}/>
+    <Modal onClose={onClose} theme={theme}>
+      <ModalHeader title="💰 Balance" onClose={onClose} theme={theme}/>
       <div style={{padding:'12px 20px'}}>
         {/* Coins Balance */}
         <div style={{background:'linear-gradient(135deg,#F9E08B,#F59E0B)',borderRadius:20,padding:'28px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(249,224,139,0.3)'}}>
@@ -71,7 +71,7 @@ const CoinsModal = memo(function CoinsModal({ coins, points, onClose }) {
         {/* Points Balance */}
         <div style={{background:'linear-gradient(135deg,#8B5CF6,#6D28D9)',borderRadius:20,padding:'28px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(139,92,246,0.3)'}}>
           <div style={{fontSize:56,marginBottom:4}}>⭐</div>
-          <div style={{fontSize:48,fontWeight:900,color:'#000',lineHeight:1}}>{points ?? 0}</div>
+          <div style={{fontSize:48,fontWeight:900,color:'#000',lineHeight:1}}>{points?.balance ?? 0}</div>
           <div style={{fontSize:14,color:'rgba(0,0,0,.75)',marginTop:4,fontWeight:600}}>Available Points (Withdrawable)</div>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
@@ -97,7 +97,7 @@ const CoinsModal = memo(function CoinsModal({ coins, points, onClose }) {
 });
 
 /* ─── STREAK MODAL ───────────────────────────── */
-const StreakModal = memo(function StreakModal({ streak, onClaim, onClose }) {
+const StreakModal = memo(function StreakModal({ streak, onClaim, onClose, theme }) {
   const [claimed, setClaimed] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const cur = streak?.current ?? 0;
@@ -135,8 +135,8 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose }) {
   };
 
   return (
-    <Modal onClose={onClose}>
-      <ModalHeader title="🔥 Login Streak" onClose={onClose}/>
+    <Modal onClose={onClose} theme={theme}>
+      <ModalHeader title="🔥 Login Streak" onClose={onClose} theme={theme}/>
       <div style={{padding:'8px 20px 0'}}>
         <div style={{background:'linear-gradient(135deg,#F9E08B,#F59E0B)',borderRadius:20,padding:'24px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(249,224,139,0.3)'}}>
           <div style={{fontSize:52}}>🔥</div>
@@ -175,15 +175,25 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose }) {
         </div>
 
         {(streak?.bonus_available && !claimed) ? (
-          <button onClick={handleClaim} disabled={claiming} style={{
-            width:'100%',padding:'16px',borderRadius:14,border:'none',
-            background: claiming ? 'rgba(249,224,139,0.5)' : '#F9E08B',
-            color: '#000',fontSize:17,fontWeight:700,
-            cursor: claiming ? 'not-allowed' : 'pointer',
-            boxShadow: claiming ? 'none' : '0 4px 16px rgba(249,224,139,0.4)'
-          }}>
-            {claiming ? 'Claiming...' : `Claim +${streak.next_bonus?.coins ?? 0} Coins`}
-          </button>
+          <div>
+            {/* Milestone info */}
+            <div style={{background:'rgba(249,224,139,0.1)',borderRadius:12,padding:'12px 16px',marginBottom:16,border:'1px solid rgba(249,224,139,0.2)'}}>
+              <div style={{fontSize:12,color:'#78716C',marginBottom:8,fontWeight:600}}>🎁 Milestone Rewards:</div>
+              <div style={{display:'flex',gap:12,fontSize:11,color:'#78716C'}}>
+                <div>7 days: <span style={{color:'#F9E08B',fontWeight:700}}>50 coins</span></div>
+                <div>30 days: <span style={{color:'#F9E08B',fontWeight:700}}>150 coins</span></div>
+              </div>
+            </div>
+            <button onClick={handleClaim} disabled={claiming} style={{
+              width:'100%',padding:'16px',borderRadius:14,border:'none',
+              background: claiming ? 'rgba(249,224,139,0.5)' : '#F9E08B',
+              color: '#000',fontSize:17,fontWeight:700,
+              cursor: claiming ? 'not-allowed' : 'pointer',
+              boxShadow: claiming ? 'none' : '0 4px 16px rgba(249,224,139,0.4)'
+            }}>
+              {claiming ? 'Claiming...' : `Claim +${streak.next_bonus?.coins ?? 3} Coins`}
+            </button>
+          </div>
         ) : claimed ? (
           <div style={{textAlign:'center',padding:'16px',background:'#ECFDF5',borderRadius:14,color:'#10B981',fontWeight:700}}>
             ✅ Bonus Claimed!
@@ -199,7 +209,7 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose }) {
 });
 
 /* ─── SPIN MODAL ─────────────────────────────── */
-const SpinModal = memo(function SpinModal({ spin, onSpin, onClose }) {
+const SpinModal = memo(function SpinModal({ spin, onSpin, onClose, theme }) {
   const [angle, setAngle] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState(null);
@@ -229,8 +239,8 @@ const SpinModal = memo(function SpinModal({ spin, onSpin, onClose }) {
   };
 
   return (
-    <Modal onClose={onClose}>
-      <ModalHeader title="🔄 Daily Spin" onClose={onClose}/>
+    <Modal onClose={onClose} theme={theme}>
+      <ModalHeader title="🔄 Daily Spin" onClose={onClose} theme={theme}/>
       <div style={{padding:'8px 20px 0',textAlign:'center'}}>
         {result ? (
           <div style={{padding:'20px 0'}}>
@@ -307,7 +317,7 @@ const SpinModal = memo(function SpinModal({ spin, onSpin, onClose }) {
 });
 
 /* ─── GIFT MODAL ─────────────────────────────── */
-const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWallet }) {
+const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWallet, theme }) {
   const [recipientId, setRecipientId] = useState('');
   const [amount, setAmount] = useState(10);
   const [message, setMessage] = useState('');
@@ -332,8 +342,8 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
   };
 
   return (
-    <Modal onClose={onClose}>
-      <ModalHeader title="🎁 Send Coin Gift" onClose={onClose}/>
+    <Modal onClose={onClose} theme={theme}>
+      <ModalHeader title="🎁 Send Coin Gift" onClose={onClose} theme={theme}/>
       <div style={{padding:'8px 20px 20px', maxHeight:'70vh', display:'flex', flexDirection:'column'}}>
         {done ? (
           <div style={{textAlign:'center',padding:'24px 0'}}>
@@ -607,9 +617,9 @@ export function GamificationBar({ userId, theme, onShowWallet }) {
       </div>
 
       {/* Modals — spin modal intentionally removed. */}
-      {modal === 'coins'  && <CoinsModal  coins={coins} points={points} onClose={()=>setModal(null)}/>}
-      {modal === 'streak' && <StreakModal streak={login_streak} onClaim={handleLoginBonus} onClose={()=>setModal(null)}/>}
-      {modal === 'gift'   && <GiftModal  coins={coins} onClose={()=>setModal(null)} onRefresh={load} onShowWallet={onShowWallet}/>}
+      {modal === 'coins'  && <CoinsModal  coins={coins} points={points} onClose={()=>setModal(null)} theme={theme}/>}
+      {modal === 'streak' && <StreakModal streak={login_streak} onClaim={handleLoginBonus} onClose={()=>setModal(null)} theme={theme}/>}
+      {modal === 'gift'   && <GiftModal  coins={coins} onClose={()=>setModal(null)} onRefresh={load} onShowWallet={onShowWallet} theme={theme}/>}
     </>
   );
 }
