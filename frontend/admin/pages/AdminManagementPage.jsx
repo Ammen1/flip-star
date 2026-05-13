@@ -4,7 +4,11 @@ import api from '../../api';
 import { AlertModal } from '../components/AlertModal';
 
 export function AdminManagementPage({ theme }) {
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Restore active tab from localStorage
+    const savedTab = localStorage.getItem('adminActiveTab');
+    return savedTab || 'users';
+  });
   const [users, setUsers] = useState([]);
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
@@ -12,6 +16,11 @@ export function AdminManagementPage({ theme }) {
   const [loading, setLoading] = useState(true);
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
   const [search, setSearch] = useState('');
+  
+  // Save active tab to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('adminActiveTab', activeTab);
+  }, [activeTab]);
   
   // Role CRUD state
   const [roleModal, setRoleModal] = useState({ isOpen: false, mode: 'create', role: null });
@@ -736,6 +745,7 @@ export function AdminManagementPage({ theme }) {
           justifyContent: 'center',
           zIndex: 1000,
           padding: 20,
+          overflowY: 'auto',
         }}>
           <div style={{
             background: theme.card,
@@ -743,9 +753,11 @@ export function AdminManagementPage({ theme }) {
             padding: 24,
             width: '100%',
             maxWidth: 500,
-            maxHeight: '90vh',
+            maxHeight: '85vh',
             overflow: 'auto',
             border: `1px solid ${theme.border}`,
+            margin: 'auto',
+            position: 'relative',
           }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
               {roleModal.mode === 'create' ? 'Create Role' : 'Edit Role'}
@@ -985,6 +997,7 @@ export function AdminManagementPage({ theme }) {
           justifyContent: 'center',
           zIndex: 1000,
           padding: 20,
+          overflowY: 'auto',
         }}>
           <div style={{
             background: theme.card,
@@ -993,6 +1006,8 @@ export function AdminManagementPage({ theme }) {
             width: '100%',
             maxWidth: 400,
             border: `1px solid ${theme.border}`,
+            margin: 'auto',
+            position: 'relative',
           }}>
             <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
               Assign Role to {userRoleModal.username}
@@ -1059,6 +1074,19 @@ export function AdminManagementPage({ theme }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Alert Modal */}
+      {alertModal.isOpen && (
+        <AlertModal
+          isOpen={alertModal.isOpen}
+          title={alertModal.title}
+          message={alertModal.message}
+          type={alertModal.type}
+          showCancel={alertModal.showCancel}
+          onConfirm={alertModal.onConfirm}
+          onClose={() => setAlertModal({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null })}
+        />
       )}
 
       {activeTab === 'permissions' && (
