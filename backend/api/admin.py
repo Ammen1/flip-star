@@ -16,6 +16,7 @@ from .models_campaign_extended import (
 from .models_legal import LegalDocument, LegalDocumentVersion, UserLegalAcceptance
 from .models_gift import Gift, GiftTransaction, GiftCombo, UserGiftStats
 from .models_wallet import WalletConfig, WithdrawalRequest
+from .models_support import SupportRequest
 from .admin_subscription import *
 
 # Custom Admin Site Configuration
@@ -695,6 +696,49 @@ class WithdrawalRequestAdmin(admin.ModelAdmin):
         }),
         ('Timestamps', {'fields': ('created_at',), 'classes': ('collapse',)}),
     )
+
+
+# ============ SUPPORT REQUESTS ============
+@admin.register(SupportRequest, site=admin_site)
+class SupportRequestAdmin(admin.ModelAdmin):
+    list_display = ['id', 'user', 'category', 'status', 'subject', 'created_at', 'handled_by']
+    list_filter = ['status', 'category', 'created_at']
+    search_fields = ['user__username', 'user__email', 'subject', 'message']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
+    fieldsets = (
+        ('Request Information', {
+            'fields': ('user', 'category', 'subject', 'message', 'status')
+        }),
+        ('Admin Response', {
+            'fields': ('admin_response', 'handled_by')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    actions = ['mark_received', 'mark_pending', 'mark_in_progress', 'mark_solved', 'mark_closed']
+
+    def mark_received(self, request, queryset):
+        queryset.update(status='received')
+    mark_received.short_description = 'Mark as Received'
+
+    def mark_pending(self, request, queryset):
+        queryset.update(status='pending')
+    mark_pending.short_description = 'Mark as Pending'
+
+    def mark_in_progress(self, request, queryset):
+        queryset.update(status='in_progress', handled_by=request.user)
+    mark_in_progress.short_description = 'Mark as In Progress'
+
+    def mark_solved(self, request, queryset):
+        queryset.update(status='solved', handled_by=request.user)
+    mark_solved.short_description = 'Mark as Solved'
+
+    def mark_closed(self, request, queryset):
+        queryset.update(status='closed', handled_by=request.user)
+    mark_closed.short_description = 'Mark as Closed'
 
 
 # Register User with custom admin

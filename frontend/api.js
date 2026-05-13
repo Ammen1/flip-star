@@ -627,6 +627,25 @@ const api = {
     api.request('/auth/download-data/', {
       method: 'GET',
     }),
+
+  // Support requests (user side)
+  getMySupportRequests: () => api.request('/support/requests/'),
+  createSupportRequest: ({ category, subject, message }) =>
+    api.request('/support/requests/', {
+      method: 'POST',
+      body: JSON.stringify({ category, subject, message }),
+    }),
+
+  // Support requests (admin)
+  adminListSupportRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return api.request(`/admin/support/requests/${qs ? `?${qs}` : ''}`);
+  },
+  adminUpdateSupportRequest: (id, payload) =>
+    api.request(`/admin/support/requests/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
 };
 
 export default api;

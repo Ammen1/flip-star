@@ -17,6 +17,8 @@ from .models_messaging import Conversation, Message, MessageRead
 from .models_gift import Gift, GiftTransaction, GiftCombo, UserGiftStats
 # Import wallet models
 from .models_wallet import WalletConfig, WithdrawalRequest
+# Import support models
+from .models_support import SupportRequest
 # Import subscription models
 from .models_subscription import (
     SubscriptionTier, SubscriptionPlan, SubscriptionPayment, SubscriptionHistory,

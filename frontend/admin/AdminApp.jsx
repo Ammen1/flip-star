@@ -23,6 +23,7 @@ import { LeaderboardPage } from './pages/LeaderboardPage';
 import { AdminSidebar } from './components/AdminSidebar';
 import { AdminLogin } from './pages/AdminLogin';
 import { ReportsPage } from './pages/ReportsPage';
+import { SupportRequestsPage } from './pages/SupportRequestsPage';
 import { SecurityPage } from './pages/SecurityPage';
 import { LegalDocumentsPage } from './pages/LegalDocumentsPage';
 import { MobileAppPage } from './pages/MobileAppPage';
@@ -219,6 +220,8 @@ export function AdminApp() {
         return <AntiCheatPage theme={T} />;
       case 'reports':
         return <ReportsPage theme={T} />;
+      case 'support':
+        return <SupportRequestsPage theme={T} />;
       case 'security':
         return <SecurityPage theme={T} onNavigate={setCurrentPage} />;
       case 'legal':

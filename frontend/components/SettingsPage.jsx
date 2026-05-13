@@ -102,6 +102,165 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
 
+  // Support / help requests
+  const [supportRequests, setSupportRequests] = useState([]);
+  const [supportForm, setSupportForm] = useState({ category: 'other', subject: '', message: '' });
+  const [supportSubmitting, setSupportSubmitting] = useState(false);
+
+  const SUPPORT_CATEGORIES = [
+    { value: 'account', label: 'Account' },
+    { value: 'payment', label: 'Payment / Wallet' },
+    { value: 'technical', label: 'Technical Issue' },
+    { value: 'content', label: 'Content / Post' },
+    { value: 'abuse', label: 'Abuse / Report' },
+    { value: 'suggestion', label: 'Suggestion / Feedback' },
+    { value: 'other', label: 'Other' },
+  ];
+
+  const STATUS_STYLES = {
+    received: { color: '#3B82F6', bg: '#DBEAFE', label: 'Received' },
+    pending: { color: '#F59E0B', bg: '#FEF3C7', label: 'Pending' },
+    in_progress: { color: '#8B5CF6', bg: '#EDE9FE', label: 'In Progress' },
+    solved: { color: '#10B981', bg: '#D1FAE5', label: 'Solved' },
+    closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
+  };
+
+  const loadSupportRequests = async () => {
+    try {
+      const data = await api.getMySupportRequests();
+      setSupportRequests(data?.results || []);
+    } catch (e) {
+      console.error('Failed to load support requests', e);
+    }
+  };
+
+  useEffect(() => {
+    loadSupportRequests();
+  }, []);
+
+  const handleSubmitSupport = async () => {
+    if (!supportForm.subject.trim() || !supportForm.message.trim()) {
+      setModal({ isOpen: true, title: t('error'), message: 'Subject and message are required.', type: 'error', onConfirm: null });
+      return;
+    }
+    try {
+      setSupportSubmitting(true);
+      await api.createSupportRequest(supportForm);
+      setSupportForm({ category: 'other', subject: '', message: '' });
+      await loadSupportRequests();
+      setModal({ isOpen: true, title: t('success'), message: 'Your request has been submitted. We will get back to you soon.', type: 'success', onConfirm: null });
+    } catch (e) {
+      setModal({ isOpen: true, title: t('error'), message: e?.message || 'Failed to submit request', type: 'error', onConfirm: null });
+    } finally {
+      setSupportSubmitting(false);
+    }
+  };
+
+  const SupportSection = ({ compact = false }) => (
+    <div>
+      {/* Submit new request */}
+      <div style={{
+        background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+        padding: 16, marginBottom: 16,
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 12 }}>Submit a Request</div>
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Category</label>
+        <select
+          value={supportForm.category}
+          onChange={(e) => setSupportForm(f => ({ ...f, category: e.target.value }))}
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 10,
+            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+            marginBottom: 10, fontSize: 14,
+          }}
+        >
+          {SUPPORT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Subject</label>
+        <input
+          type="text"
+          maxLength={200}
+          value={supportForm.subject}
+          onChange={(e) => setSupportForm(f => ({ ...f, subject: e.target.value }))}
+          placeholder="Brief summary of your issue"
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 10,
+            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+            marginBottom: 10, fontSize: 14, boxSizing: 'border-box',
+          }}
+        />
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Message</label>
+        <textarea
+          rows={compact ? 4 : 5}
+          maxLength={5000}
+          value={supportForm.message}
+          onChange={(e) => setSupportForm(f => ({ ...f, message: e.target.value }))}
+          placeholder="Describe your issue or request in detail"
+          style={{
+            width: '100%', padding: '10px 12px', borderRadius: 10,
+            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+            marginBottom: 12, fontSize: 14, boxSizing: 'border-box', resize: 'vertical',
+          }}
+        />
+
+        <button
+          onClick={handleSubmitSupport}
+          disabled={supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim()}
+          style={{
+            width: '100%', padding: '12px 16px', borderRadius: 12, border: 'none',
+            background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
+            cursor: supportSubmitting ? 'not-allowed' : 'pointer',
+            opacity: supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim() ? 0.6 : 1,
+          }}
+        >
+          {supportSubmitting ? 'Submitting...' : 'Submit Request'}
+        </button>
+      </div>
+
+      {/* My requests */}
+      <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 10 }}>My Requests</div>
+      {supportRequests.length === 0 ? (
+        <div style={{ padding: 20, textAlign: 'center', color: T.sub, fontSize: 13 }}>
+          You haven't submitted any requests yet.
+        </div>
+      ) : (
+        supportRequests.map(req => {
+          const s = STATUS_STYLES[req.status] || STATUS_STYLES.received;
+          return (
+            <div key={req.id} style={{
+              background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+              padding: 14, marginBottom: 10,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1 }}>{req.subject}</div>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
+                  background: s.bg, color: s.color,
+                }}>{s.label}</span>
+              </div>
+              <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>
+                {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
+              </div>
+              <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
+              {req.admin_response && (
+                <div style={{
+                  marginTop: 10, padding: 10, background: '#0F172A10',
+                  border: `1px dashed ${T.border}`, borderRadius: 8,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
+                  <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+
   const sections = [
     { id: "account", icon: User, label: t('account') },
     { id: "wallet", icon: Wallet, label: 'Wallet', isExternal: true },
@@ -359,7 +518,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
             <Row icon={Wallet} title="Wallet" subtitle="Coins & transactions" onPress={() => { onClose?.(); onShowWallet?.(); }} />
             <Row icon={Crown} title="Subscription" subtitle="Plans & billing" onPress={() => { onClose?.(); onShowSubscription?.(); }} />
             <Row icon={Lock} title={t('changePassword')} onPress={() => setShowPassModal(true)} />
-            <Row icon={Download} title={t('downloadData')} subtitle={t('downloadDataDesc')} onPress={handleDownloadData} />
           </SectionCard>
 
           {/* Notifications */}
@@ -386,10 +544,12 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
             <Row icon={Globe} title={t('language')} subtitle={language === 'en' ? 'English' : language === 'am' ? 'አማርኛ' : language} onPress={() => setShowLangModal(true)} />
           </SectionCard>
 
-          {/* Help */}
+          {/* Help & Support */}
           <SectionLabel>{t('help')}</SectionLabel>
+          <div style={{ background: T.cardBg, borderRadius: 16, padding: 16, marginBottom: 16 }}>
+            <SupportSection compact />
+          </div>
           <SectionCard>
-            <Row icon={HelpCircle} title={t('helpCenter')} onPress={() => setModal({ isOpen: true, title: 'Help', message: 'Contact support@flipstar.com', type: 'info', onConfirm: null })} />
             <Row icon={Shield} title={t('privacyPolicy')} onPress={() => window.open('/legal/privacy-policy', '_blank')} />
             <Row icon={FileText} title={t('termsOfService')} onPress={() => window.open('/legal/terms-of-service', '_blank')} />
           </SectionCard>
@@ -781,32 +941,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
                   </div>
                 </div>
 
-                {/* Data Management */}
-                <div>
-                  <h3 style={{ fontSize: isSmallMobile ? 14 : 16, fontWeight: 600, color: T.txt, marginBottom: 16 }}>{t('dataManagement')}</h3>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                    <button
-                      onClick={handleDownloadData}
-                      style={{
-                        padding: isSmallMobile ? "10px 16px" : "12px 20px",
-                        background: T.bg,
-                        border: `1px solid ${T.border}`,
-                        borderRadius: 8,
-                        fontSize: isSmallMobile ? 12 : 14,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        textAlign: "left",
-                        color: T.txt,
-                      }}
-                    >
-                      📥 {t('downloadData')}
-                    </button>
-                    <p style={{ fontSize: isSmallMobile ? 10 : 12, color: T.sub, marginTop: -8 }}>
-                      {t('downloadDataDesc')}
-                    </p>
-                  </div>
-                </div>
-
                 {/* Danger Zone */}
                 <div style={{
                   padding: isSmallMobile ? 16 : 20,
@@ -1068,73 +1202,24 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           {activeSection === "help" && (
             <div>
               <h2 style={{ fontSize: isSmallMobile ? 18 : 24, fontWeight: 700, marginBottom: 8, color: T.txt }}>{t('help')}</h2>
-              <p style={{ fontSize: isSmallMobile ? 12 : 14, color: T.sub, marginBottom: isSmallMobile ? 20 : 32 }}>{t('getHelp')}</p>
+              <p style={{ fontSize: isSmallMobile ? 12 : 14, color: T.sub, marginBottom: isSmallMobile ? 20 : 24 }}>{t('getHelp')}</p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <button style={{
-                  padding: isSmallMobile ? "12px 16px" : "16px 20px",
-                  background: T.bg,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}>
-                  <span style={{ fontSize: isSmallMobile ? 13 : 15, fontWeight: 600, color: T.txt }}>{t('helpCenter')}</span>
-                  <ChevronRight size={20} color={T.sub} />
-                </button>
+              <SupportSection />
 
-                <button style={{
-                  padding: isSmallMobile ? "12px 16px" : "16px 20px",
-                  background: T.bg,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}>
-                  <span style={{ fontSize: isSmallMobile ? 13 : 15, fontWeight: 600, color: T.txt }}>{t('reportProblem')}</span>
-                  <ChevronRight size={20} color={T.sub} />
-                </button>
-
+              <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
                 <button onClick={() => window.open('/legal/terms-of-service', '_blank')} style={{
-                  padding: isSmallMobile ? "12px 16px" : "16px 20px",
-                  background: T.bg,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}>
-                  <span style={{ fontSize: isSmallMobile ? 13 : 15, fontWeight: 600, color: T.txt }}>{t('termsOfService')}</span>
-                  <ChevronRight size={20} color={T.sub} />
-                </button>
-
+                  padding: '10px 14px', background: T.bg, border: `1px solid ${T.border}`,
+                  borderRadius: 10, cursor: 'pointer', color: T.txt, fontSize: 13, fontWeight: 600,
+                }}>{t('termsOfService')}</button>
                 <button onClick={() => window.open('/legal/privacy-policy', '_blank')} style={{
-                  padding: isSmallMobile ? "12px 16px" : "16px 20px",
-                  background: T.bg,
-                  border: `1px solid ${T.border}`,
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}>
-                  <span style={{ fontSize: isSmallMobile ? 13 : 15, fontWeight: 600, color: T.txt }}>{t('privacyPolicy')}</span>
-                  <ChevronRight size={20} color={T.sub} />
-                </button>
+                  padding: '10px 14px', background: T.bg, border: `1px solid ${T.border}`,
+                  borderRadius: 10, cursor: 'pointer', color: T.txt, fontSize: 13, fontWeight: 600,
+                }}>{t('privacyPolicy')}</button>
+              </div>
 
-                <div style={{ marginTop: 20, padding: isSmallMobile ? 16 : 20, background: T.bg, borderRadius: 12, textAlign: "center" }}>
-                  <div style={{ fontSize: isSmallMobile ? 11 : 13, color: T.sub, marginBottom: 4 }}>{t('version')}</div>
-                  <div style={{ fontSize: isSmallMobile ? 13 : 15, fontWeight: 600, color: T.txt }}>FlipStar 1.0.0</div>
-                </div>
+              <div style={{ marginTop: 20, padding: 16, background: T.bg, borderRadius: 12, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>{t('version')}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: T.txt }}>FlipStar 1.0.0</div>
               </div>
             </div>
           )}

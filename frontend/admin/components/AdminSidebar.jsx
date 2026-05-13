@@ -2,6 +2,7 @@ import {
   BarChart3, Users, FileVideo, CreditCard, LogOut, LayoutDashboard,
   Settings, Key, FileText, Activity, Bell, Shield, Lock, Trophy,
   Target, Zap, Award, Flag, Scale, Smartphone, Gift as GiftIcon, Coins, Zap as ChargingIcon,
+  LifeBuoy,
 } from 'lucide-react';
 export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLogout }) {
   // Grouped menu structure for cleaner navigation
@@ -21,6 +22,7 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
         { id: 'judging',    icon: Target,     label: 'Judging Portal' },
         { id: 'anti-cheat', icon: Zap,        label: 'Anti-Cheat' },
         { id: 'reports',    icon: Flag,       label: 'Reports' },
+        { id: 'support',    icon: LifeBuoy,   label: 'Support Requests' },
       ],
     },
     {
