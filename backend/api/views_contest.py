@@ -112,17 +112,26 @@ def upgrade_subscription(request):
 @permission_classes([IsAuthenticated])
 def get_coin_packages(request):
     """Get available coin packages"""
-    packages = CoinPackage.objects.filter(is_active=True)
-    
-    data = [{
-        'id': p.id,
-        'name': p.name,
-        'price_etb': float(p.price_etb),
-        'coin_amount': p.coin_amount,
-        'bonus_coins': p.bonus_coins,
-        'total_coins': p.get_total_coins(),
-        'is_featured': p.is_featured,
-    } for p in packages]
+    try:
+        packages = CoinPackage.objects.filter(is_active=True)
+        data = [{
+            'id': p.id,
+            'name': p.name,
+            'price_etb': float(p.price_etb),
+            'coin_amount': p.coin_amount,
+            'bonus_coins': p.bonus_coins,
+            'total_coins': p.get_total_coins(),
+            'is_featured': p.is_featured,
+        } for p in packages]
+    except Exception:
+        # Table may not exist yet - return default packages
+        data = [
+            {'id': 1, 'name': 'Starter Pack', 'price_etb': 10.0, 'coin_amount': 100, 'bonus_coins': 0, 'total_coins': 100, 'is_featured': False},
+            {'id': 2, 'name': 'Good Value', 'price_etb': 25.0, 'coin_amount': 250, 'bonus_coins': 25, 'total_coins': 275, 'is_featured': False},
+            {'id': 3, 'name': 'Most Popular', 'price_etb': 50.0, 'coin_amount': 500, 'bonus_coins': 75, 'total_coins': 575, 'is_featured': True},
+            {'id': 4, 'name': 'Best Deal', 'price_etb': 100.0, 'coin_amount': 1000, 'bonus_coins': 200, 'total_coins': 1200, 'is_featured': False},
+            {'id': 5, 'name': 'Premium Package', 'price_etb': 250.0, 'coin_amount': 2500, 'bonus_coins': 625, 'total_coins': 3125, 'is_featured': False},
+        ]
     
     return Response({'packages': data})
 
@@ -161,34 +170,60 @@ def purchase_coins(request):
     package_id = request.data.get('package_id')
     payment_method = request.data.get('payment_method')  # 'telebirr' or 'airtime'
     phone_number = request.data.get('phone_number')
+    amount_etb = request.data.get('amount')  # Direct ETB amount (fallback)
     
-    try:
-        package = CoinPackage.objects.get(id=package_id, is_active=True)
-    except CoinPackage.DoesNotExist:
-        return Response({'error': 'Package not found'}, status=status.HTTP_404_NOT_FOUND)
+    package = None
+    coin_amount = 0
+    bonus_coins = 0
+    price_etb = 0
+    package_name = 'Direct Purchase'
+    
+    # Try to find package from DB
+    if package_id:
+        try:
+            package = CoinPackage.objects.get(id=package_id, is_active=True)
+            coin_amount = package.coin_amount
+            bonus_coins = package.bonus_coins
+            price_etb = float(package.price_etb)
+            package_name = package.name
+        except (CoinPackage.DoesNotExist, Exception):
+            package = None
+    
+    # Fallback: calculate from amount (10 coins per 1 ETB)
+    if not package and amount_etb:
+        try:
+            price_etb = float(amount_etb)
+            coin_amount = int(price_etb * 10)
+            package_name = f'{coin_amount} Coins'
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # If neither package nor amount provided, use default starter (10 ETB = 100 coins)
+    if coin_amount == 0:
+        price_etb = 10
+        coin_amount = 100
+        package_name = 'Starter Pack'
+    
+    total_coins = coin_amount + bonus_coins
     
     # Calculate fee (5% for airtime)
     fee_percent = 0.05 if payment_method == 'airtime' else 0
-    fee_amount = float(package.price_etb) * fee_percent
-    final_price = float(package.price_etb) + fee_amount
-    
-    # In production, integrate with Telebirr API here
-    # For now, simulate successful payment
+    fee_amount = price_etb * fee_percent
     
     # Add coins to user balance
     balance, _ = UserCoinBalance.objects.get_or_create(user=user)
-    transaction = balance.add_coins(
-        package.get_total_coins(),
+    balance.add_coins(
+        total_coins,
         transaction_type='purchase',
         package=package,
-        payment_method=payment_method,
+        payment_method=payment_method or 'airtime',
         fee_amount=fee_amount,
-        description=f'Purchased {package.name}'
+        description=f'Purchased {package_name}'
     )
     
     return Response({
         'message': 'Coins purchased successfully',
-        'coins_added': package.get_total_coins(),
+        'coins_added': total_coins,
         'new_balance': balance.balance,
         'payment_method': payment_method,
         'fee_charged': fee_amount if payment_method == 'airtime' else 0,

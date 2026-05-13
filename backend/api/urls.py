@@ -443,7 +443,6 @@ urlpatterns = [
     path('trial/popup/', TrialPopupViewSet.as_view({'get': 'list', 'post': 'create'}), name='trial-popup'),
     # Coin Transactions
     path('coins/transactions/', CoinTransactionViewSet.as_view({'get': 'list'}), name='coin-transactions'),
-    path('coins/purchase/', CoinTransactionViewSet.as_view({'post': 'purchase'}), name='coin-purchase'),
     # Admin Subscription Management
     path('admin/subscriptions/', AdminSubscriptionViewSet.as_view({'get': 'list'}), name='admin-subscriptions'),
     path('admin/subscriptions/analytics/', AdminSubscriptionViewSet.as_view({'get': 'analytics'}), name='admin-subscriptions-analytics'),
