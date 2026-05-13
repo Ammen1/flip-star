@@ -548,6 +548,12 @@ export default function SettingsScreen({ navigation }) {
           )}
         </SectionCard>
 
+        {/* Danger Zone */}
+        <SectionLabel colors={colors}>{t('dangerZone')}</SectionLabel>
+        <SectionCard colors={colors}>
+          <SettingRow icon="trash-outline" label={t('deleteAccount')} danger onPress={handleDeleteAccount} colors={colors} />
+        </SectionCard>
+
         {/* Logout */}
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={logout}>
           <Ionicons name="log-out-outline" size={20} color={colors.error} />

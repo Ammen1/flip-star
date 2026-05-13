@@ -418,9 +418,12 @@ const api = {
       body: JSON.stringify(settings),
     }),
 
+  getPrivacySettings: () =>
+    api.request('/profile/privacy/'),
+
   updatePrivacySettings: (settings) =>
-    api.request('/profile/update_privacy/', {
-      method: 'POST',
+    api.request('/profile/privacy/update/', {
+      method: 'PATCH',
       body: JSON.stringify(settings),
     }),
 

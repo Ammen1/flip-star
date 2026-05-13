@@ -1,108 +1,117 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert, ActivityIndicator
+  View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, TextInput, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 
-const COIN_PACKAGES = [
-  { id: 1, coins: 100, price: 10, bonus: 0, popular: false, description: 'Starter Package' },
-  { id: 2, coins: 250, price: 25, bonus: 25, popular: false, description: 'Good Value' },
-  { id: 3, coins: 500, price: 50, bonus: 75, popular: true, description: 'Most Popular' },
-  { id: 4, coins: 1000, price: 100, bonus: 200, popular: false, description: 'Best Deal' },
-  { id: 5, coins: 2500, price: 250, bonus: 625, popular: false, description: 'Premium Package' },
-];
-
 export default function CoinPurchaseScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
-  const [userCoins, setUserCoins] = useState(0);
-  const [selectedPackage, setSelectedPackage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [loadingAirtime, setLoadingAirtime] = useState(false);
+  const [loadingTelebirr, setLoadingTelebirr] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultSuccess, setResultSuccess] = useState(false);
+  const [resultMessage, setResultMessage] = useState('');
+
+  // Fixed on-demand offer
+  const COINS_AMOUNT = 100;
+  const ETB_AMOUNT = 10;
 
   useEffect(() => {
-    loadUserCoins();
+    loadUserPhone();
   }, []);
 
-  const loadUserCoins = async () => {
+  const loadUserPhone = async () => {
     try {
-      const response = await api.request('/user/profile/');
-      setUserCoins(response.coins || 0);
-    } catch (error) {
-      console.error('Failed to load user coins:', error);
-    }
-  };
-
-  const handlePackageSelect = (pkg) => {
-    setSelectedPackage(pkg);
-    setShowPaymentModal(true);
-  };
-
-  const handlePaymentMethod = async (method) => {
-    if (!selectedPackage) return;
-
-    setLoading(true);
-    try {
-      if (method === 'airtime') {
-        // Show confirmation before sending SMS
-        Alert.alert(
-          'Confirm Purchase',
-          `Purchase ${selectedPackage.coins + selectedPackage.bonus} coins for ${selectedPackage.price} ETB via airtime?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Confirm',
-              onPress: () => sendAirtimeSMS(selectedPackage)
-            }
-          ]
-        );
-      } else if (method === 'telebirr') {
-        // Handle Telebirr payment
-        const response = await api.request('/payments/telebirr/coins', {
-          method: 'POST',
-          body: JSON.stringify({
-            package_id: selectedPackage.id,
-            amount: selectedPackage.price,
-            coins: selectedPackage.coins,
-            bonus: selectedPackage.bonus
-          })
-        });
-        
-        if (response.payment_url) {
-          // Open Telebirr app or web
-          Alert.alert('Redirecting', 'Opening Telebirr payment...');
-        }
+      const profile = await api.request('/profile/me/');
+      if (profile && profile.phone_number) {
+        setPhoneNumber(profile.phone_number);
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to process payment. Please try again.');
-    } finally {
-      setLoading(false);
-      setShowPaymentModal(false);
+      console.error('[CoinPurchase] Failed to fetch phone number:', error);
     }
   };
 
-  const sendAirtimeSMS = (pkg) => {
-    const smsCode = getSMSCode(pkg);
-    // Open SMS with the code
-    import('react-native').then(({ Linking }) => {
-      Linking.openURL(`sms:9286?body=${encodeURIComponent(smsCode)}`).catch(() => {
-        Alert.alert('Error', 'Could not open SMS app. Please try again.');
+  const handleAirtimePurchase = async () => {
+    if (!phoneNumber) {
+      setResultSuccess(false);
+      setResultMessage('Please enter your phone number');
+      setShowResultModal(true);
+      return;
+    }
+
+    setLoadingAirtime(true);
+    try {
+      const response = await api.request('/charging/coin-purchase/', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone_number: phoneNumber,
+        }),
       });
-    });
+
+      if (response.success) {
+        setResultSuccess(true);
+        setResultMessage(response.message);
+        setShowResultModal(true);
+        setTimeout(() => {
+          setShowResultModal(false);
+          navigation.goBack();
+        }, 2000);
+      } else {
+        setResultSuccess(false);
+        setResultMessage(response.message || 'Purchase failed');
+        setShowResultModal(true);
+      }
+    } catch (error) {
+      console.error('airtime coin purchase error:', error);
+      setResultSuccess(false);
+      setResultMessage('Purchase failed. Please try again.');
+      setShowResultModal(true);
+    } finally {
+      setLoadingAirtime(false);
+    }
   };
 
-  const getSMSCode = (pkg) => {
-    const codes = {
-      1: 'COIN100',
-      2: 'COIN250', 
-      3: 'COIN500',
-      4: 'COIN1000',
-      5: 'COIN2500'
-    };
-    return codes[pkg.id] || 'COIN100';
+  const handleTelebirrPurchase = async () => {
+    if (!phoneNumber) {
+      setResultSuccess(false);
+      setResultMessage('Please enter your phone number');
+      setShowResultModal(true);
+      return;
+    }
+
+    setLoadingTelebirr(true);
+    try {
+      const response = await api.request('/wallet/telebirr/initiate/', {
+        method: 'POST',
+        body: JSON.stringify({
+          package_id: 1, // On-demand package ID
+          phone_number: phoneNumber,
+        }),
+      });
+
+      if (response.success && response.payment_url) {
+        // Open Telebirr payment URL
+        Alert.alert('Redirecting', 'Opening Telebirr payment...', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      } else {
+        setResultSuccess(false);
+        setResultMessage(response.error || 'Payment initiation failed');
+        setShowResultModal(true);
+      }
+    } catch (error) {
+      console.error('telebirr payment error:', error);
+      setResultSuccess(false);
+      setResultMessage('Payment initiation failed. Please try again.');
+      setShowResultModal(true);
+    } finally {
+      setLoadingTelebirr(false);
+    }
   };
 
   return (
@@ -112,132 +121,91 @@ export default function CoinPurchaseScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Purchase Coins</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Buy Coins</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Coin Balance Card */}
-      <View style={[styles.balanceCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-        <View style={styles.balanceLeft}>
+      {/* Coin Offer Card */}
+      <View style={[styles.offerCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+        <View style={styles.offerContent}>
           <View style={[styles.coinIcon, { backgroundColor: colors.primary + '20' }]}>
-            <Ionicons name="wallet" size={28} color={colors.primary} />
+            <Ionicons name="wallet" size={32} color={colors.primary} />
           </View>
-          <View>
-            <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>Current Balance</Text>
-            <Text style={[styles.balanceAmount, { color: colors.text }]}>{userCoins.toLocaleString()} Coins</Text>
+          <View style={styles.offerText}>
+            <Text style={[styles.coinAmount, { color: colors.text }]}>{COINS_AMOUNT} Coins</Text>
+            <Text style={[styles.offerPrice, { color: colors.textSecondary }]}>for {ETB_AMOUNT} ETB</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.addBtn}>
-          <Ionicons name="add" size={20} color={colors.primary} />
+      </View>
+
+      {/* Phone Input */}
+      <View style={styles.inputContainer}>
+        <Text style={[styles.label, { color: colors.textSecondary }]}>Phone Number</Text>
+        <TextInput
+          style={[styles.input, { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text }]}
+          value={phoneNumber}
+          onChangeText={setPhoneNumber}
+          placeholder="+251 9xx xxx xxx"
+          placeholderTextColor={colors.textSecondary}
+          keyboardType="phone-pad"
+        />
+      </View>
+
+      {/* Payment Buttons */}
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity
+          style={[styles.paymentButton, { backgroundColor: colors.primary }]}
+          onPress={handleAirtimePurchase}
+          disabled={loadingAirtime || loadingTelebirr}
+        >
+          {loadingAirtime ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={styles.buttonText}>From Airtime</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.paymentButton, { backgroundColor: colors.primary }]}
+          onPress={handleTelebirrPurchase}
+          disabled={loadingAirtime || loadingTelebirr}
+        >
+          {loadingTelebirr ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={styles.buttonText}>From Telebirr</Text>
+          )}
         </TouchableOpacity>
       </View>
 
-      {/* Coin Packages */}
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Choose Package</Text>
-        
-        {COIN_PACKAGES.map((pkg) => (
-          <TouchableOpacity
-            key={pkg.id}
-            style={[
-              styles.packageCard,
-              { backgroundColor: colors.cardBg, borderColor: colors.border },
-              selectedPackage?.id === pkg.id && { borderColor: colors.primary, borderWidth: 2 }
-            ]}
-            onPress={() => handlePackageSelect(pkg)}
-          >
-            <View style={styles.packageLeft}>
-              <View style={styles.coinDisplay}>
-                <Ionicons name="coin" size={32} color={colors.primary} />
-                <Text style={[styles.coinAmount, { color: colors.text }]}>{pkg.coins.toLocaleString()}</Text>
-              </View>
-              <View style={styles.packageInfo}>
-                <Text style={[styles.packageName, { color: colors.text }]}>{pkg.description}</Text>
-                <Text style={[styles.packageDesc, { color: colors.textSecondary }]}>
-                  {pkg.price} ETB
-                  {pkg.bonus > 0 && ` • +${pkg.bonus} Bonus`}
-                </Text>
-              </View>
-            </View>
-            
-            <View style={styles.packageRight}>
-              {pkg.popular && (
-                <View style={[styles.popularBadge, { backgroundColor: colors.primary }]}>
-                  <Text style={styles.popularText}>Popular</Text>
-                </View>
-              )}
-              <View style={styles.totalDisplay}>
-                <Text style={[styles.totalCoins, { color: colors.text }]}>
-                  {(pkg.coins + pkg.bonus).toLocaleString()}
-                </Text>
-                <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Total Coins</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Payment Method Modal */}
+      {/* Result Modal */}
       <Modal
-        visible={showPaymentModal}
+        visible={showResultModal}
         transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowPaymentModal(false)}
+        animationType="fade"
+        onRequestClose={() => setShowResultModal(false)}
       >
-        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-          <View style={[styles.paymentModal, { backgroundColor: colors.cardBg }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Payment Method</Text>
-              <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.resultModal, { backgroundColor: colors.cardBg }]}>
+            <View style={[styles.resultIcon, { backgroundColor: resultSuccess ? '#10B981' : '#EF4444' }]}>
+              <Ionicons 
+                name={resultSuccess ? 'checkmark-circle' : 'close-circle'} 
+                size={32} 
+                color="#fff" 
+              />
             </View>
-
-            {selectedPackage && (
-              <View style={[styles.selectedPackage, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                <View style={styles.selectedPackageLeft}>
-                  <Ionicons name="coin" size={24} color={colors.primary} />
-                  <View>
-                    <Text style={[styles.selectedAmount, { color: colors.text }]}>
-                      {selectedPackage.coins + selectedPackage.bonus} Coins
-                    </Text>
-                    <Text style={[styles.selectedPrice, { color: colors.textSecondary }]}>
-                      {selectedPackage.price} ETB
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.paymentOptions}>
-              <TouchableOpacity
-                style={[styles.paymentOption, { backgroundColor: colors.bg, borderColor: colors.border }]}
-                onPress={() => handlePaymentMethod('airtime')}
-                disabled={loading}
-              >
-                <Ionicons name="phone-portrait" size={24} color={colors.primary} />
-                <Text style={[styles.paymentOptionText, { color: colors.text }]}>Pay with Airtime</Text>
-                {loading ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.paymentOption, { backgroundColor: colors.bg, borderColor: colors.border }]}
-                onPress={() => handlePaymentMethod('telebirr')}
-                disabled={loading}
-              >
-                <Ionicons name="card" size={24} color={colors.primary} />
-                <Text style={[styles.paymentOptionText, { color: colors.text }]}>Pay with Telebirr</Text>
-                {loading ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-            </View>
+            <Text style={[styles.resultTitle, { color: colors.text }]}>
+              {resultSuccess ? 'Success' : 'Error'}
+            </Text>
+            <Text style={[styles.resultMessage, { color: colors.textSecondary }]}>
+              {resultMessage}
+            </Text>
+            <TouchableOpacity
+              style={[styles.okButton, { backgroundColor: colors.primary }]}
+              onPress={() => setShowResultModal(false)}
+            >
+              <Text style={styles.buttonText}>OK</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -261,158 +229,101 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
-  balanceCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  offerCard: {
     margin: 16,
-    padding: 16,
-    borderRadius: 12,
+    padding: 20,
+    borderRadius: 16,
     borderWidth: 1,
-  },
-  balanceLeft: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+  },
+  offerContent: {
+    alignItems: 'center',
+    gap: 16,
   },
   coinIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  balanceLabel: {
-    fontSize: 12,
-  },
-  balanceAmount: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  addBtn: {
-    padding: 8,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  packageCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 12,
-  },
-  packageLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  coinDisplay: {
+  offerText: {
     alignItems: 'center',
   },
   coinAmount: {
-    fontSize: 16,
+    fontSize: 32,
     fontWeight: '700',
+  },
+  offerPrice: {
+    fontSize: 16,
     marginTop: 4,
   },
-  packageInfo: {
-    flex: 1,
+  inputContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
-  packageName: {
-    fontSize: 16,
+  label: {
+    fontSize: 13,
     fontWeight: '600',
-  },
-  packageDesc: {
-    fontSize: 14,
-    marginTop: 2,
-  },
-  packageRight: {
-    alignItems: 'flex-end',
-  },
-  popularBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
     marginBottom: 8,
   },
-  popularText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
+  input: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    fontSize: 15,
   },
-  totalDisplay: {
+  buttonContainer: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  paymentButton: {
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
   },
-  totalCoins: {
-    fontSize: 18,
+  buttonText: {
+    fontSize: 15,
     fontWeight: '700',
-  },
-  totalLabel: {
-    fontSize: 12,
+    color: '#000',
   },
   modalOverlay: {
     flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 16,
   },
-  paymentModal: {
-    width: '90%',
+  resultModal: {
+    width: '100%',
     maxWidth: 400,
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
   },
-  modalTitle: {
+  resultIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  resultTitle: {
     fontSize: 18,
     fontWeight: '700',
+    marginBottom: 8,
   },
-  selectedPackage: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
+  resultMessage: {
+    fontSize: 16,
+    textAlign: 'center',
     marginBottom: 20,
   },
-  selectedPackageLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  selectedAmount: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  selectedPrice: {
-    fontSize: 14,
-  },
-  paymentOptions: {
-    gap: 12,
-  },
-  paymentOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
+  okButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
     borderRadius: 12,
-    borderWidth: 1,
-  },
-  paymentOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    flex: 1,
-    marginLeft: 12,
+    alignItems: 'center',
   },
 });

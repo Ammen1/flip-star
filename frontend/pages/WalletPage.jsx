@@ -36,7 +36,7 @@ function writeCache(summary, config) {
   } catch {}
 }
 
-export function WalletPage({ theme, onBack }) {
+export function WalletPage({ theme, onBack, showTopUpOnMount }) {
   const T = theme || defaultTheme();
   const [activeTab, setActiveTab] = useState('overview'); // overview | transactions | withdrawals
 
@@ -51,7 +51,7 @@ export function WalletPage({ theme, onBack }) {
   const [error, setError] = useState('');
 
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(showTopUpOnMount || false);
 
   useEffect(() => {
     if (cached) {
@@ -156,6 +156,7 @@ export function WalletPage({ theme, onBack }) {
   }
 
   const balance = summary?.balance || { total: 0, earned: 0, purchased: 0 };
+  const points = summary?.points || { current: 0, earned_total: 0, withdrawn_total: 0 };
   const totals = summary?.totals || {};
   const withdrawal = summary?.withdrawal || {};
 
@@ -224,6 +225,44 @@ export function WalletPage({ theme, onBack }) {
               {formatNumber(balance.purchased)}
             </div>
             <div style={{ fontSize: 11, opacity: 0.8 }}>For gifts & boosts</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Points Card */}
+      <div style={{
+        margin: '0 16px 16px',
+        padding: 20,
+        borderRadius: 16,
+        background: T.card,
+        border: `1px solid ${T.border}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <Gift size={16} color={T.pri} />
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.txt }}>Points Balance</span>
+        </div>
+        <div style={{ fontSize: 36, fontWeight: 800, color: T.txt, marginBottom: 4 }}>
+          {formatNumber(points.current)}
+        </div>
+        <div style={{ fontSize: 12, color: T.sub, marginBottom: 12 }}>
+          From gifts & campaign wins (1 coin = 1 point)
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+          <div>
+            <div style={{ fontSize: 11, color: T.sub, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Earned Total
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.txt, marginTop: 2 }}>
+              {formatNumber(points.earned_total)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: T.sub, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Withdrawn
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.txt, marginTop: 2 }}>
+              {formatNumber(points.withdrawn_total)}
+            </div>
           </div>
         </div>
       </div>
@@ -723,6 +762,26 @@ function TopUpModal({ theme: T, packages, onClose }) {
   const [selected, setSelected] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Fetch user's phone number when modal opens
+  useEffect(() => {
+    const fetchPhoneNumber = async () => {
+      try {
+        console.log('[TopUpModal] Fetching user profile for phone number...');
+        const profile = await api.request('/profile/me/');
+        console.log('[TopUpModal] Profile data:', profile);
+        if (profile && profile.phone_number) {
+          console.log('[TopUpModal] Phone number from profile:', profile.phone_number);
+          setPhoneNumber(profile.phone_number);
+        } else {
+          console.log('[TopUpModal] No phone number found in profile');
+        }
+      } catch (error) {
+        console.error('[TopUpModal] Failed to fetch phone number:', error);
+      }
+    };
+    fetchPhoneNumber();
+  }, []);
 
   const handlePurchase = async () => {
     if (!selected || !phoneNumber) return;

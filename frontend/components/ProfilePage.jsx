@@ -1,5 +1,5 @@
 import { useState, useEffect, memo } from "react";
-import { Grid, Film, Bookmark, Settings, ChevronLeft, UserPlus, UserCheck, Edit, Trash2, Edit2, MoreVertical, Trophy, Flag, Share2, Wallet, Gem, X, Crown } from "lucide-react";
+import { Grid, Film, Bookmark, Settings, ChevronLeft, UserPlus, UserCheck, Edit, Trash2, Edit2, MoreVertical, Trophy, Flag, Share2, Wallet, Gem, X, Crown, Coins } from "lucide-react";
 import { GamificationBar } from "./GamificationBar";
 import api from "../api";
 import config from "../config";
@@ -55,7 +55,7 @@ function writeFollowCache(userId, data) {
   } catch {}
 }
 
-export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowers, onShowFollowing, onShowSettings, onShowWallet, onShowSubscription }) {
+export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowers, onShowFollowing, onShowSettings, onShowWallet, onShowSubscription, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   const { t } = useLanguage();
   const isOwnProfile = !userId || userId === user?.id;
@@ -503,10 +503,21 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
                     <Gem size={24} />
                   </button>
                   <button
+                    onClick={onShowCoinPurchase}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      padding: 8, display: 'flex', alignItems: 'center', color: '#F9E08B',
+                    }}
+                    title="Buy Coins"
+                  >
+                    <Coins size={24} />
+                  </button>
+                  <button
                     onClick={onShowWallet}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
                       padding: 8, display: 'flex', alignItems: 'center', color: '#F9E08B',
+                      pointerEvents: 'auto', zIndex: 10,
                     }}
                     title="Wallet"
                   >

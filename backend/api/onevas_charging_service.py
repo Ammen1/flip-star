@@ -90,8 +90,8 @@ class OnevasChargingService:
         if data.get('error') == 'insufficient_balance' or data.get('code') == 'INSUFFICIENT_BALANCE':
             return 'insufficient_balance', 'Insufficient airtime balance'
         
-        # Check for successful charging
-        if data.get('success') or data.get('status') == 'success':
+        # Check for successful charging (handle both string and boolean status)
+        if data.get('success') or data.get('status') == 'success' or data.get('status') is True:
             return 'success', None
         
         # Default to failed

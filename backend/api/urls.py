@@ -32,6 +32,7 @@ from .views_messaging import (
 )
 from .views_charging import (
     initiate_on_demand_charging, get_charging_statistics, get_charging_transactions,
+    purchase_coins_on_demand,
 )
 from .views_push import push_public_key, push_subscribe, push_unsubscribe
 
@@ -443,6 +444,7 @@ urlpatterns = [
     path('trial/popup/', TrialPopupViewSet.as_view({'get': 'list', 'post': 'create'}), name='trial-popup'),
     # Coin Transactions
     path('coins/transactions/', CoinTransactionViewSet.as_view({'get': 'list'}), name='coin-transactions'),
+    path('coins/purchase/', CoinTransactionViewSet.as_view({'post': 'purchase'}), name='coin-purchase'),
     # Admin Subscription Management
     path('admin/subscriptions/', AdminSubscriptionViewSet.as_view({'get': 'list'}), name='admin-subscriptions'),
     path('admin/subscriptions/analytics/', AdminSubscriptionViewSet.as_view({'get': 'analytics'}), name='admin-subscriptions-analytics'),
@@ -455,6 +457,7 @@ urlpatterns = [
     path('charging/on-demand/', initiate_on_demand_charging, name='on-demand-charging'),
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
     path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
+    path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),
     path('legal/<str:document_type>/', get_legal_document, name='legal-document'),
