@@ -15,7 +15,31 @@ export function AdminManagementPage({ theme }) {
   
   // Role CRUD state
   const [roleModal, setRoleModal] = useState({ isOpen: false, mode: 'create', role: null });
-  const [roleForm, setRoleForm] = useState({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true });
+  const [roleForm, setRoleForm] = useState({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true, selectedPermissions: [] });
+  
+  // User role assignment state
+  const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '' });
+  const [selectedUserRole, setSelectedUserRole] = useState('');
+
+  // User role assignment functions
+  const handleAssignRole = (user) => {
+    setUserRoleModal({ isOpen: true, userId: user.id, username: user.username });
+    setSelectedUserRole(user.profile?.role?.id || '');
+  };
+
+  const handleSaveUserRole = async () => {
+    try {
+      await api.request(`/admin/rbac/users/${userRoleModal.userId}/assign-role/`, {
+        method: 'POST',
+        body: JSON.stringify({ role_id: selectedUserRole })
+      });
+      loadUsers();
+      setUserRoleModal({ isOpen: false, userId: null, username: '' });
+    } catch (error) {
+      console.error('Failed to assign role:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to assign role', type: 'error' });
+    }
+  };
 
   const headerStyle = {
     padding: '16px',
@@ -80,20 +104,40 @@ export function AdminManagementPage({ theme }) {
 
   // Role CRUD functions
   const handleCreateRole = () => {
-    setRoleForm({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true });
+    setRoleForm({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true, selectedPermissions: [] });
     setRoleModal({ isOpen: true, mode: 'create', role: null });
   };
 
-  const handleEditRole = (role) => {
-    setRoleForm({
-      id: role.id,
-      name: role.name,
-      description: role.description,
-      type: role.type,
-      surfaces: role.surfaces || ['mobile'],
-      is_active: role.is_active,
-    });
-    setRoleModal({ isOpen: true, mode: 'edit', role });
+  const handleEditRole = async (role) => {
+    // Load role permissions
+    try {
+      const response = await api.request(`/admin/rbac/role-permissions/?role_id=${role.id}`);
+      const rolePermissions = response.results || response;
+      const selectedPermissions = rolePermissions.map(rp => rp.permission_id);
+      
+      setRoleForm({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+        type: role.type,
+        surfaces: role.surfaces || ['mobile'],
+        is_active: role.is_active,
+        selectedPermissions,
+      });
+      setRoleModal({ isOpen: true, mode: 'edit', role });
+    } catch (error) {
+      console.error('Failed to load role permissions:', error);
+      setRoleForm({
+        id: role.id,
+        name: role.name,
+        description: role.description,
+        type: role.type,
+        surfaces: role.surfaces || ['mobile'],
+        is_active: role.is_active,
+        selectedPermissions: [],
+      });
+      setRoleModal({ isOpen: true, mode: 'edit', role });
+    }
   };
 
   const handleDeleteRole = (role) => {
@@ -119,15 +163,63 @@ export function AdminManagementPage({ theme }) {
   const handleSaveRole = async () => {
     try {
       if (roleModal.mode === 'create') {
-        await api.request('/admin/rbac/roles/', {
+        // Create role
+        const roleResponse = await api.request('/admin/rbac/roles/', {
           method: 'POST',
-          body: JSON.stringify(roleForm)
+          body: JSON.stringify({
+            id: roleForm.id,
+            name: roleForm.name,
+            description: roleForm.description,
+            type: roleForm.type,
+            surfaces: roleForm.surfaces,
+            is_active: roleForm.is_active,
+          })
         });
+        
+        // Create role-permission mappings
+        for (const permissionId of roleForm.selectedPermissions) {
+          await api.request('/admin/rbac/role-permissions/', {
+            method: 'POST',
+            body: JSON.stringify({
+              role_id: roleForm.id,
+              permission_id: permissionId,
+              access_level: 'full',
+            })
+          });
+        }
       } else {
+        // Update role
         await api.request(`/admin/rbac/roles/${roleForm.id}/`, {
           method: 'PUT',
-          body: JSON.stringify(roleForm)
+          body: JSON.stringify({
+            id: roleForm.id,
+            name: roleForm.name,
+            description: roleForm.description,
+            type: roleForm.type,
+            surfaces: roleForm.surfaces,
+            is_active: roleForm.is_active,
+          })
         });
+        
+        // Delete existing role-permission mappings
+        const existingMappings = await api.request(`/admin/rbac/role-permissions/?role_id=${roleForm.id}`);
+        for (const mapping of existingMappings.results || existingMappings) {
+          await api.request(`/admin/rbac/role-permissions/${mapping.id}/`, {
+            method: 'DELETE'
+          });
+        }
+        
+        // Create new role-permission mappings
+        for (const permissionId of roleForm.selectedPermissions) {
+          await api.request('/admin/rbac/role-permissions/', {
+            method: 'POST',
+            body: JSON.stringify({
+              role_id: roleForm.id,
+              permission_id: permissionId,
+              access_level: 'full',
+            })
+          });
+        }
       }
       loadRoles();
       setRoleModal({ isOpen: false, mode: 'create', role: null });
@@ -452,15 +544,41 @@ export function AdminManagementPage({ theme }) {
                             {user.is_staff ? <UserMinus size={14} /> : <UserPlus size={14} />}
                             {user.is_staff ? 'Revoke Admin' : 'Make Admin'}
                           </button>
+                          <button
+                            onClick={() => handleAssignRole(user)}
+                            style={{
+                              padding: '6px 12px',
+                              background: theme.purple + '30',
+                              border: `1px solid ${theme.purple}`,
+                              borderRadius: 6,
+                              color: theme.purple,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              transition: 'all 0.2s',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.background = theme.purple + '50';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.background = theme.purple + '30';
+                            }}
+                          >
+                            <Settings size={14} />
+                            Assign Role
+                          </button>
                           {user.is_staff && (
                             <button
                               onClick={() => handleToggleSuperuser(user.id, user.is_superuser)}
                               style={{
                                 padding: '6px 12px',
-                                background: user.is_superuser ? theme.red + '30' : theme.purple + '30',
-                                border: `1px solid ${user.is_superuser ? theme.red : theme.purple}`,
+                                background: user.is_superuser ? theme.red + '30' : theme.pri + '30',
+                                border: `1px solid ${user.is_superuser ? theme.red : theme.pri}`,
                                 borderRadius: 6,
-                                color: user.is_superuser ? theme.red : theme.purple,
+                                color: user.is_superuser ? theme.red : theme.pri,
                                 fontSize: 12,
                                 fontWeight: 600,
                                 cursor: 'pointer',
@@ -470,10 +588,10 @@ export function AdminManagementPage({ theme }) {
                                 transition: 'all 0.2s',
                               }}
                               onMouseEnter={(e) => {
-                                e.target.style.background = user.is_superuser ? theme.red + '50' : theme.purple + '50';
+                                e.target.style.background = user.is_superuser ? theme.red + '50' : theme.pri + '50';
                               }}
                               onMouseLeave={(e) => {
-                                e.target.style.background = user.is_superuser ? theme.red + '30' : theme.purple + '30';
+                                e.target.style.background = user.is_superuser ? theme.red + '30' : theme.pri + '30';
                               }}
                             >
                               <Shield size={14} />
@@ -769,6 +887,54 @@ export function AdminManagementPage({ theme }) {
               </label>
             </div>
 
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 12, display: 'block' }}>
+                Assign Permissions
+              </label>
+              <div style={{
+                maxHeight: 300,
+                overflow: 'auto',
+                border: `1px solid ${theme.border}`,
+                borderRadius: 8,
+                padding: 12,
+                background: theme.bg,
+              }}>
+                {Object.entries(
+                  permissions.reduce((acc, perm) => {
+                    if (!acc[perm.domain]) acc[perm.domain] = [];
+                    acc[perm.domain].push(perm);
+                    return acc;
+                  }, {})
+                ).map(([domain, perms]) => (
+                  <div key={domain} style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: theme.pri, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {domain}
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {perms.map((perm) => (
+                        <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: theme.txt }}>
+                          <input
+                            type="checkbox"
+                            checked={roleForm.selectedPermissions.includes(perm.id)}
+                            onChange={(e) => {
+                              const selectedPermissions = e.target.checked
+                                ? [...roleForm.selectedPermissions, perm.id]
+                                : roleForm.selectedPermissions.filter(id => id !== perm.id);
+                              setRoleForm({ ...roleForm, selectedPermissions });
+                            }}
+                          />
+                          {perm.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: theme.sub }}>
+                {roleForm.selectedPermissions.length} permissions selected
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
               <button
                 onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
@@ -799,6 +965,96 @@ export function AdminManagementPage({ theme }) {
                 }}
               >
                 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Role Assignment Modal */}
+      {userRoleModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: 20,
+        }}>
+          <div style={{
+            background: theme.card,
+            borderRadius: 12,
+            padding: 24,
+            width: '100%',
+            maxWidth: 400,
+            border: `1px solid ${theme.border}`,
+          }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
+              Assign Role to {userRoleModal.username}
+            </h3>
+            
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                Select Role
+              </label>
+              <select
+                value={selectedUserRole}
+                onChange={(e) => setSelectedUserRole(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  outline: 'none',
+                  background: theme.bg,
+                  color: theme.txt,
+                }}
+              >
+                <option value="">No Role</option>
+                {roles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setUserRoleModal({ isOpen: false, userId: null, username: '' })}
+                style={{
+                  padding: '8px 16px',
+                  background: 'transparent',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 8,
+                  color: theme.txt,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveUserRole}
+                style={{
+                  padding: '8px 16px',
+                  background: theme.pri,
+                  border: 'none',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Assign
               </button>
             </div>
           </div>
