@@ -83,7 +83,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
           {/* Card */}
           <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Welcome Back!</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Welcome</div>
               <div style={{ fontSize: 13, color: "#aaa" }}>Log in to continue to FlipStar</div>
             </div>
 

@@ -67,7 +67,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         </button>
         <div style={{ textAlign:"center", marginTop:20 }}>
           <div style={{ fontSize:34, marginBottom:6 }}>⭐</div>
-          <div style={{ fontSize:24, fontWeight:900, color:"#fff" }}>Welcome back!</div>
+          <div style={{ fontSize:24, fontWeight:900, color:"#fff" }}>Welcome</div>
           <div style={{ fontSize:13, color:"rgba(255,255,255,0.55)", marginTop:4 }}>Log in to your account</div>
         </div>
       </div>
