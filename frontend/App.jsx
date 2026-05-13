@@ -74,6 +74,7 @@ function EmptyState({ theme: T, icon, title, subtitle }) {
 function TopUpModal({ theme: T, packages, onClose }) {
   const [selected, setSelected] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState(null); // 'airtime' | 'telebirr'
   const [loading, setLoading] = useState(false);
 
   // Fetch user's phone number when modal opens
@@ -92,39 +93,35 @@ function TopUpModal({ theme: T, packages, onClose }) {
   }, []);
 
   const handlePurchase = async () => {
-    if (!selected || !phoneNumber) return;
+    if (!selected || !phoneNumber || !paymentMethod) return;
 
     setLoading(true);
     try {
-      const response = await fetch(`${window.location.origin}/api/wallet/telebirr/initiate/`, {
+      const response = await api.request('/contest/purchase-coins/', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           package_id: selected.id,
           phone_number: phoneNumber,
+          payment_method: paymentMethod,
         }),
       });
 
-      const data = await response.json();
-
-      if (data.success && data.payment_url) {
-        window.open(data.payment_url, '_blank');
+      if (response.message) {
+        alert(response.message);
         onClose();
       } else {
-        alert(data.error || 'Payment initiation failed');
+        alert('Purchase failed');
       }
     } catch (error) {
-      console.error('telebirr payment error:', error);
-      alert('Payment initiation failed. Please try again.');
+      console.error('coin purchase error:', error);
+      alert('Purchase failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal onClose={onClose} theme={T} title="Buy Coins with telebirr">
+    <Modal onClose={onClose} theme={T} title="Buy Coins">
       {packages.length === 0 ? (
         <EmptyState theme={T} icon={<Gift size={32} />} title="No packages available"
                     subtitle="Check back soon for coin packages." />
@@ -169,7 +166,7 @@ function TopUpModal({ theme: T, packages, onClose }) {
       )}
 
       <div style={{ marginBottom: 16 }}>
-        <label style={{ ...modalLabel(T), marginBottom: 6 }}>Phone Number (for telebirr)</label>
+        <label style={{ ...modalLabel(T), marginBottom: 6 }}>Phone Number</label>
         <input
           type="tel"
           value={phoneNumber}
@@ -179,12 +176,41 @@ function TopUpModal({ theme: T, packages, onClose }) {
         />
       </div>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+        <button
+          onClick={() => setPaymentMethod('airtime')}
+          disabled={loading}
+          style={{
+            ...btnPrimary(T),
+            opacity: paymentMethod === 'airtime' ? 1 : 0.5,
+            background: paymentMethod === 'airtime' ? T.pri : T.card,
+            color: paymentMethod === 'airtime' ? '#000' : T.txt,
+            border: paymentMethod === 'airtime' ? 'none' : `1px solid ${T.border}`,
+          }}
+        >
+          From Airtime
+        </button>
+        <button
+          onClick={() => setPaymentMethod('telebirr')}
+          disabled={loading}
+          style={{
+            ...btnPrimary(T),
+            opacity: paymentMethod === 'telebirr' ? 1 : 0.5,
+            background: paymentMethod === 'telebirr' ? T.pri : T.card,
+            color: paymentMethod === 'telebirr' ? '#000' : T.txt,
+            border: paymentMethod === 'telebirr' ? 'none' : `1px solid ${T.border}`,
+          }}
+        >
+          From Telebirr
+        </button>
+      </div>
+
       <button
         onClick={handlePurchase}
-        disabled={!selected || !phoneNumber || loading}
-        style={{ ...btnPrimary(T), width: '100%', opacity: (!selected || !phoneNumber || loading) ? 0.5 : 1 }}
+        disabled={!selected || !phoneNumber || !paymentMethod || loading}
+        style={{ ...btnPrimary(T), width: '100%', opacity: (!selected || !phoneNumber || !paymentMethod || loading) ? 0.5 : 1 }}
       >
-        {loading ? 'Processing...' : selected ? `Pay ${Number(selected.price_etb).toFixed(0)} ETB via telebirr` : 'Select a package'}
+        {loading ? 'Processing...' : 'Purchase Coins'}
       </button>
     </Modal>
   );
@@ -1152,8 +1178,8 @@ export default function WerqRoot() {
     if (!authUser) { setShowLogin(true); return; }
     // Load coin packages
     try {
-      const config = await api.request('/wallet/config/');
-      setCoinPackages(config.packages || []);
+      const packages = await api.request('/contest/packages/');
+      setCoinPackages(packages || []);
       setShowTopUpModal(true);
     } catch (error) {
       console.error('Failed to load coin packages:', error);
