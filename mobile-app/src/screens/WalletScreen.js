@@ -166,6 +166,35 @@ export default function WalletScreen({ navigation }) {
     finally { setProcessing(false); }
   };
 
+  const renderTxRow = (tx) => {
+    const isGift = tx.type === 'gift_sent' || tx.type === 'gift_received';
+    const isPointTx = tx.type === 'gift_received';
+    let primaryLabel = tx.type_display || tx.type;
+    if (tx.type === 'gift_sent' && tx.other_user) {
+      primaryLabel = `Gift sent to @${tx.other_user.username}`;
+    } else if (tx.type === 'gift_received' && tx.other_user) {
+      primaryLabel = `Gift from @${tx.other_user.username}`;
+    }
+    const iconName = isGift ? 'gift' : (tx.is_credit ? 'arrow-down' : 'arrow-up');
+    return (
+      <View key={tx.id} style={styles.txItem}>
+        <View style={[styles.txIcon, { backgroundColor: tx.is_credit ? '#0D2D1A' : '#2D1010' }]}>
+          <Ionicons name={iconName} size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={styles.txType}>{primaryLabel}</Text>
+          <Text style={styles.txDate}>{timeAgo(tx.created_at)}{tx.description ? ` • ${tx.description}` : ''}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={[styles.txAmount, { color: tx.is_credit ? '#10B981' : '#EF4444' }]}>
+            {tx.is_credit ? '+' : '-'}{Math.abs(tx.coins)}
+          </Text>
+          <Text style={{ fontSize: 10, color: '#666' }}>{isPointTx ? 'points' : 'coins'}</Text>
+        </View>
+      </View>
+    );
+  };
+
   const total = summary?.balance?.total ?? summary?.total ?? 0;
   const earned = summary?.balance?.earned ?? summary?.earned_total ?? 0;
   const purchased = summary?.balance?.purchased ?? summary?.purchased_total ?? 0;
@@ -201,14 +230,75 @@ export default function WalletScreen({ navigation }) {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
-        {/* Balance Card */}
-        <View style={[styles.balanceCard, { backgroundColor: '#C8A84B' }]}>
-          <View style={styles.balanceHeader}>
-            <Ionicons name="wallet" size={22} color="#000" />
-            <Text style={styles.balanceLabel}>My Wallet</Text>
+        {/* Three Horizontal Dashboard Cards */}
+        <View style={styles.dashboardRow}>
+          {/* Card 1: Coins */}
+          <View style={[styles.dashCard, { backgroundColor: '#D4AF37' }]}>
+            <View style={styles.dashCardHeader}>
+              <Ionicons name="wallet" size={14} color="#1A1A1A" />
+              <Text style={styles.dashCardTitle}>COINS</Text>
+            </View>
+            <Text style={styles.dashCardValue}>{total}</Text>
+            <Text style={styles.dashCardSubtitle}>Total Coins</Text>
+            <View style={[styles.dashCardDivider, { borderTopColor: 'rgba(0,0,0,0.15)' }]}>
+              <View style={styles.dashCardRow}>
+                <Text style={styles.dashCardLabel}>Earned</Text>
+                <Text style={styles.dashCardStrong}>{earned}</Text>
+              </View>
+              <View style={styles.dashCardRow}>
+                <Text style={styles.dashCardLabel}>Purchased</Text>
+                <Text style={styles.dashCardStrong}>{purchased}</Text>
+              </View>
+            </View>
           </View>
-          <Text style={styles.balanceAmount}>{total}</Text>
-          <Text style={styles.balanceSubtext}>Coins</Text>
+
+          {/* Card 2: Points */}
+          <View style={[styles.dashCard, { backgroundColor: '#8B5CF6' }]}>
+            <View style={styles.dashCardHeader}>
+              <Ionicons name="gift" size={14} color="#fff" />
+              <Text style={[styles.dashCardTitle, { color: '#fff' }]}>POINTS</Text>
+            </View>
+            <Text style={[styles.dashCardValue, { color: '#fff' }]}>{points.current || 0}</Text>
+            <Text style={[styles.dashCardSubtitle, { color: 'rgba(255,255,255,0.85)' }]}>Balance</Text>
+            <View style={[styles.dashCardDivider, { borderTopColor: 'rgba(255,255,255,0.2)' }]}>
+              <View style={styles.dashCardRow}>
+                <Text style={[styles.dashCardLabel, { color: 'rgba(255,255,255,0.85)' }]}>Earned</Text>
+                <Text style={[styles.dashCardStrong, { color: '#fff' }]}>{points.earned_total || 0}</Text>
+              </View>
+              <View style={styles.dashCardRow}>
+                <Text style={[styles.dashCardLabel, { color: 'rgba(255,255,255,0.85)' }]}>Gifts</Text>
+                <Text style={[styles.dashCardStrong, { color: '#fff' }]}>{points.earned_total || 0}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Card 3: Withdraw */}
+          <View style={[styles.dashCard, { backgroundColor: '#10B981' }]}>
+            <View style={styles.dashCardHeader}>
+              <Ionicons name="cash" size={14} color="#fff" />
+              <Text style={[styles.dashCardTitle, { color: '#fff' }]}>WITHDRAW</Text>
+            </View>
+            <Text style={[styles.dashCardValue, { color: '#fff' }]}>
+              {(((points.current || 0) / (config?.points_per_birr || 10))).toFixed(1)}
+            </Text>
+            <Text style={[styles.dashCardSubtitle, { color: 'rgba(255,255,255,0.85)' }]}>ETB Available</Text>
+            <View style={[styles.dashCardDivider, { borderTopColor: 'rgba(255,255,255,0.2)' }]}>
+              <View style={styles.dashCardRow}>
+                <Text style={[styles.dashCardLabel, { color: 'rgba(255,255,255,0.85)' }]}>Min</Text>
+                <Text style={[styles.dashCardStrong, { color: '#fff' }]}>{config?.withdrawal_min_points || 100} pts</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowWithdrawModal(true)}
+                disabled={(points.current || 0) < (config?.withdrawal_min_points || 100)}
+                style={[
+                  styles.dashCardBtn,
+                  { opacity: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 1 : 0.5 },
+                ]}
+              >
+                <Text style={styles.dashCardBtnText}>Points → Birr</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         {/* Gamification Stats */}
@@ -273,68 +363,11 @@ export default function WalletScreen({ navigation }) {
           {/* Overview */}
           {activeTab === 'overview' && (
             <>
-              {/* Wallet Summary Cards */}
-              <View style={styles.summaryCards}>
-                <View style={[styles.summaryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                  <Ionicons name="wallet" size={24} color={colors.primary} />
-                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Available Balance</Text>
-                  <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.balance?.total || 0}</Text>
-                  <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
-                </View>
-                
-                <View style={[styles.summaryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                  <Ionicons name="trending-up" size={24} color="#10B981" />
-                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Earned</Text>
-                  <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.totals?.lifetime_earned || summary?.balance?.earned || 0}</Text>
-                  <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
-                </View>
-                
-                <View style={[styles.summaryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                  <Ionicons name="trending-down" size={24} color="#EF4444" />
-                  <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Spent</Text>
-                  <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.totals?.lifetime_spent || 0}</Text>
-                  <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
-                </View>
-              </View>
-
-              {/* Points Card */}
-              <View style={[styles.pointsCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                <View style={styles.pointsHeader}>
-                  <Ionicons name="gift" size={20} color={colors.primary} />
-                  <Text style={[styles.pointsTitle, { color: colors.text }]}>Points Balance</Text>
-                </View>
-                <Text style={[styles.pointsAmount, { color: colors.text }]}>{points.current || 0}</Text>
-                <Text style={[styles.pointsSubtitle, { color: colors.textSecondary }]}>From gifts & campaign wins (1 coin = 1 point)</Text>
-                <View style={[styles.pointsStats, { borderTopColor: colors.border }]}>
-                  <View style={styles.pointsStatItem}>
-                    <Text style={[styles.pointsStatLabel, { color: colors.textSecondary }]}>Earned Total</Text>
-                    <Text style={[styles.pointsStatValue, { color: colors.text }]}>{points.earned_total || 0}</Text>
-                  </View>
-                  <View style={styles.pointsStatItem}>
-                    <Text style={[styles.pointsStatLabel, { color: colors.textSecondary }]}>Withdrawn</Text>
-                    <Text style={[styles.pointsStatValue, { color: colors.text }]}>{points.withdrawn_total || 0}</Text>
-                  </View>
-                </View>
-              </View>
-
               {/* Recent Transactions */}
               <Text style={styles.sectionTitle}>Recent Transactions</Text>
               {transactions.length === 0
                 ? <Text style={styles.emptyText}>No transactions yet</Text>
-                : transactions.slice(0, 5).map(tx => (
-                  <View key={tx.id} style={styles.txItem}>
-                    <View style={[styles.txIcon, { backgroundColor: tx.is_credit ? '#0D2D1A' : '#2D1010' }]}>
-                      <Ionicons name={tx.is_credit ? 'arrow-down' : 'arrow-up'} size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.txType}>{tx.type_display || tx.type}</Text>
-                      <Text style={styles.txDate}>{timeAgo(tx.created_at)}</Text>
-                    </View>
-                    <Text style={[styles.txAmount, { color: tx.is_credit ? '#10B981' : '#EF4444' }]}>
-                      {tx.is_credit ? '+' : '-'}{tx.coins}
-                    </Text>
-                  </View>
-                ))}
+                : transactions.slice(0, 5).map(renderTxRow)}
               {transactions.length > 5 && (
                 <TouchableOpacity onPress={() => setActiveTab('transactions')}>
                   <Text style={[styles.viewAllText, { color: colors.primary }]}>View all transactions →</Text>
@@ -375,26 +408,7 @@ export default function WalletScreen({ navigation }) {
               <Text style={styles.sectionTitle}>All Transactions</Text>
               {transactions.length === 0
                 ? <Text style={styles.emptyText}>No transactions yet</Text>
-                : transactions.map(tx => (
-                  <View key={tx.id} style={styles.txItem}>
-                    <View style={[styles.txIcon, { backgroundColor: tx.is_credit ? '#0D2D1A' : '#2D1010' }]}>
-                      <Ionicons name={
-                        tx.type === 'gift' || tx.type_display?.includes('gift') 
-                          ? (tx.is_credit ? 'trending-up' : 'trending-down')
-                          : tx.type === 'airtime' || tx.type_display?.includes('airtime')
-                          ? (tx.is_credit ? 'trending-up' : 'trending-down')
-                          : (tx.is_credit ? 'arrow-down' : 'arrow-up')
-                      } size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.txType}>{tx.type_display || tx.type}</Text>
-                      <Text style={styles.txDate}>{timeAgo(tx.created_at)}</Text>
-                    </View>
-                    <Text style={[styles.txAmount, { color: tx.is_credit ? '#10B981' : '#EF4444' }]}>
-                      {tx.is_credit ? '+' : '-'}{tx.coins}
-                    </Text>
-                  </View>
-                ))}
+                : transactions.map(renderTxRow)}
               {activeTab === 'transactions' && transactions.length > 0 && (
                 <View style={[styles.monetizeSection, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={styles.monetizeHeader}>
@@ -524,6 +538,18 @@ const styles = StyleSheet.create({
   balanceLabel: { fontSize: 13, color: '#000', fontWeight: '600' },
   balanceAmount: { fontSize: 44, fontWeight: '900', color: '#000', marginVertical: 4 },
   balanceSubtext: { fontSize: 13, color: '#000', opacity: 0.8 },
+  dashboardRow: { flexDirection: 'row', paddingHorizontal: 12, paddingTop: 16, gap: 8, marginBottom: 12 },
+  dashCard: { flex: 1, padding: 12, borderRadius: 14, minHeight: 160 },
+  dashCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 6 },
+  dashCardTitle: { fontSize: 10, fontWeight: '800', color: '#1A1A1A', letterSpacing: 0.5 },
+  dashCardValue: { fontSize: 22, fontWeight: '900', color: '#1A1A1A', lineHeight: 24 },
+  dashCardSubtitle: { fontSize: 10, color: 'rgba(0,0,0,0.7)', marginTop: 2, marginBottom: 8 },
+  dashCardDivider: { marginTop: 'auto', paddingTop: 8, borderTopWidth: 1 },
+  dashCardRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 3 },
+  dashCardLabel: { fontSize: 10, color: 'rgba(0,0,0,0.7)' },
+  dashCardStrong: { fontSize: 10, fontWeight: '700', color: '#1A1A1A' },
+  dashCardBtn: { marginTop: 6, padding: 6, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center' },
+  dashCardBtnText: { fontSize: 10, fontWeight: '700', color: '#fff' },
   actionRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 8 },
   actionBtn: { flex: 1, borderRadius: 14, overflow: 'hidden' },
   actionGrad: { padding: 14, alignItems: 'center', gap: 6, backgroundColor: '#2A2A2A', borderRadius: 14 },

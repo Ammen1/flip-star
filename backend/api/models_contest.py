@@ -159,7 +159,7 @@ class CoinTransaction(models.Model):
     Coin purchase and spending transactions
     """
     TRANSACTION_TYPES = [
-        ('purchase', 'Purchase (Telebirr)'),
+        ('purchase', 'Coin Purchase'),
         ('welcome_bonus', 'Welcome Bonus'),
         ('daily_login', 'Daily Login Bonus'),
         ('spin_reward', 'Daily Spin Reward'),

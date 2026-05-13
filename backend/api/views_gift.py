@@ -246,7 +246,8 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
                 transaction_type='gift_sent',
                 restrict_earned=True,  # Only use purchased coins for gifting
                 recipient=recipient,
-                reel=reel
+                reel=reel,
+                description=f'Sent {gift.name} to @{recipient.username}'
             )
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -267,6 +268,18 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         recipient_profile.points_earned_total += points_received
         recipient_profile.gifts_received_total += 1
         recipient_profile.save()
+        
+        # Log gift_received as a CoinTransaction for the recipient's activity feed
+        # coins field stores the points received (1 coin = 1 point conversion)
+        from .models_contest import CoinTransaction
+        CoinTransaction.objects.create(
+            user=recipient,
+            transaction_type='gift_received',
+            coins=points_received,
+            recipient=request.user,  # The sender (stored as "other party")
+            reel=reel,
+            description=f'Received {gift.name} from @{request.user.username}',
+        )
         
         # Handle combo logic
         is_combo = False

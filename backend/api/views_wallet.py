@@ -40,13 +40,32 @@ def _get_or_create_balance(user):
 
 
 def _serialize_transaction(tx):
+    # Method-aware display label for purchases
+    type_display = TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type)
+    if tx.transaction_type == 'purchase' and tx.payment_method:
+        method_label = {
+            'airtime': 'Airtime',
+            'telebirr': 'Telebirr',
+            'coins': 'Coins',
+        }.get(tx.payment_method, tx.payment_method.title())
+        type_display = f'Coin Purchase ({method_label})'
+
+    # For gifts, show the other party
+    other_user = None
+    if tx.recipient_id:
+        other_user = {
+            'id': tx.recipient_id,
+            'username': tx.recipient.username,
+        }
+
     return {
         'id': tx.id,
         'type': tx.transaction_type,
-        'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
+        'type_display': type_display,
         'coins': tx.coins,
         'is_credit': tx.coins > 0,
         'description': tx.description or '',
+        'other_user': other_user,
         'recipient_username': tx.recipient.username if tx.recipient_id else None,
         'reel_id': tx.reel_id,
         'payment_method': tx.payment_method or None,
@@ -383,6 +402,10 @@ def public_wallet_config(request):
         'currency': 'ETB',
         'currency_label': 'Birr',
         'coins_per_birr': config.coins_per_birr,
+        'points_per_birr': config.points_per_birr,
+        'withdrawal_min_points': config.withdrawal_min_points,
+        'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
+        'coins_to_points_conversion': config.coins_to_points_conversion,
         'rewards': {
             'welcome_bonus': config.welcome_bonus,
             'daily_post_bonus': config.daily_post_bonus,
