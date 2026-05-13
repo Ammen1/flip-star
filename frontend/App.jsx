@@ -4,7 +4,7 @@ import { TikTokLayout } from './components/TikTokLayout';
 import { useTheme } from './contexts/ThemeContext';
 import api from './api';
 import webPush from './services/WebPushService';
-import { Coins, Gift, X } from 'lucide-react';
+import { Coins, Gift, X, CheckCircle, XCircle } from 'lucide-react';
 
 // ---------------------------------------------------------------
 // Helper Styles for Modal
