@@ -140,12 +140,12 @@ def wallet_summary(request):
         },
         'withdrawal': {
             'enabled': config.withdrawal_enabled,
-            'min_coins': config.withdrawal_min_coins,
-            'coins_per_birr': config.coins_per_birr,
+            'min_points': config.withdrawal_min_coins,
+            'points_per_birr': config.coins_per_birr,
             'fee_percent': str(config.withdrawal_fee_percent),
             'eligible': (
                 config.withdrawal_enabled
-                and balance.earned_balance >= config.withdrawal_min_coins
+                and request.user.profile.points >= config.withdrawal_min_coins
             ),
             'pending_requests': pending_withdrawals,
         },
