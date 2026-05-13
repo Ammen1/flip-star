@@ -246,8 +246,7 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
                 transaction_type='gift_sent',
                 restrict_earned=True,  # Only use purchased coins for gifting
                 recipient=recipient,
-                reel=reel,
-                gift=gift
+                reel=reel
             )
         except ValueError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)

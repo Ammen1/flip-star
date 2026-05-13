@@ -4,6 +4,256 @@ import { TikTokLayout } from './components/TikTokLayout';
 import { useTheme } from './contexts/ThemeContext';
 import api from './api';
 import webPush from './services/WebPushService';
+import { Coins, Gift, X, CheckCircle, XCircle } from 'lucide-react';
+
+// ---------------------------------------------------------------
+// Helper Styles for Modal
+// ---------------------------------------------------------------
+
+const btnPrimary = (T) => ({
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  padding: '12px 16px', borderRadius: 12, border: 'none',
+  background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
+  cursor: 'pointer',
+});
+
+const modalLabel = (T) => ({
+  display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6,
+});
+
+const modalInput = (T) => ({
+  width: '100%', padding: '12px 14px', borderRadius: 10,
+  border: `1px solid ${T.border}`, background: T.card, color: T.txt,
+  fontSize: 15, outline: 'none', boxSizing: 'border-box',
+  cursor: 'text', pointerEvents: 'auto',
+});
+
+// ---------------------------------------------------------------
+// Modal Components
+// ---------------------------------------------------------------
+
+function Modal({ children, onClose, theme: T, title }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9999, padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: T.card || '#1A1A1A', borderRadius: 16, padding: 20,
+          maxWidth: 400, width: '100%', maxHeight: '80vh', overflowY: 'auto',
+          border: `1px solid ${T.border || '#333'}`,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: T.txt || '#fff', margin: 0 }}>{title}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.sub || '#999' }}>
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ theme: T, icon, title, subtitle }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '40px 20px', color: T.sub }}>
+      <div style={{ marginBottom: 12, opacity: 0.5 }}>{icon}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: T.txt, marginBottom: 4 }}>{title}</div>
+      {subtitle && <div style={{ fontSize: 13 }}>{subtitle}</div>}
+    </div>
+  );
+}
+
+function TopUpModal({ theme: T, onClose }) {
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [loadingAirtime, setLoadingAirtime] = useState(false);
+  const [loadingTelebirr, setLoadingTelebirr] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [resultSuccess, setResultSuccess] = useState(false);
+  const [resultMessage, setResultMessage] = useState('');
+
+  // Fetch user's phone number when modal opens
+  useEffect(() => {
+    const fetchPhoneNumber = async () => {
+      try {
+        const profile = await api.request('/profile/me/');
+        if (profile && profile.phone_number) {
+          setPhoneNumber(profile.phone_number);
+        }
+      } catch (error) {
+        console.error('[TopUpModal] Failed to fetch phone number:', error);
+      }
+    };
+    fetchPhoneNumber();
+  }, []);
+
+  const handleAirtimePurchase = async () => {
+    if (!phoneNumber) {
+      setResultSuccess(false);
+      setResultMessage('Please enter your phone number');
+      setShowResultModal(true);
+      return;
+    }
+
+    setLoadingAirtime(true);
+    try {
+      const response = await api.request('/charging/coin-purchase/', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone_number: phoneNumber,
+        }),
+      });
+
+      if (response.success) {
+        setResultSuccess(true);
+        setResultMessage(response.message);
+        setShowResultModal(true);
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } else {
+        setResultSuccess(false);
+        setResultMessage(response.message || 'Purchase failed');
+        setShowResultModal(true);
+      }
+    } catch (error) {
+      console.error('airtime coin purchase error:', error);
+      setResultSuccess(false);
+      setResultMessage('Purchase failed. Please try again.');
+      setShowResultModal(true);
+    } finally {
+      setLoadingAirtime(false);
+    }
+  };
+
+  const handleTelebirrPurchase = async () => {
+    if (!phoneNumber) {
+      setResultSuccess(false);
+      setResultMessage('Please enter your phone number');
+      setShowResultModal(true);
+      return;
+    }
+
+    setLoadingTelebirr(true);
+    try {
+      const response = await api.request('/wallet/telebirr/initiate/', {
+        method: 'POST',
+        body: JSON.stringify({
+          package_id: 1, // On-demand package ID
+          phone_number: phoneNumber,
+        }),
+      });
+
+      if (response.success && response.payment_url) {
+        window.open(response.payment_url, '_blank');
+        onClose();
+      } else {
+        setResultSuccess(false);
+        setResultMessage(response.error || 'Payment initiation failed');
+        setShowResultModal(true);
+      }
+    } catch (error) {
+      console.error('telebirr payment error:', error);
+      setResultSuccess(false);
+      setResultMessage('Payment initiation failed. Please try again.');
+      setShowResultModal(true);
+    } finally {
+      setLoadingTelebirr(false);
+    }
+  };
+
+  return (
+    <>
+      <Modal onClose={onClose} theme={T} title="Buy Coins">
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 32, fontWeight: 700, color: T.txt, marginBottom: 8 }}>
+            100 Coins
+          </div>
+          <div style={{ fontSize: 16, color: T.sub }}>
+            for 10 ETB
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ ...modalLabel(T), marginBottom: 8 }}>Phone Number</label>
+          <input
+            type="tel"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+            placeholder="+251 9xx xxx xxx"
+            style={{
+              ...modalInput(T),
+              background: (T.card || '#1A1A1A'),
+              color: (T.txt || '#fff'),
+              border: `1px solid ${T.border || '#444'}`,
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <button
+            onClick={handleAirtimePurchase}
+            disabled={loadingAirtime || loadingTelebirr}
+            style={{
+              ...btnPrimary(T),
+              opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
+              background: T.pri,
+              color: '#000',
+              border: 'none',
+            }}
+          >
+            {loadingAirtime ? 'Processing...' : 'From Airtime'}
+          </button>
+          <button
+            onClick={handleTelebirrPurchase}
+            disabled={loadingAirtime || loadingTelebirr}
+            style={{
+              ...btnPrimary(T),
+              opacity: loadingAirtime || loadingTelebirr ? 0.5 : 1,
+              background: T.pri,
+              color: '#000',
+              border: 'none',
+            }}
+          >
+            {loadingTelebirr ? 'Processing...' : 'From Telebirr'}
+          </button>
+        </div>
+      </Modal>
+
+      {showResultModal && (
+        <Modal onClose={() => setShowResultModal(false)} theme={T} title={resultSuccess ? 'Success' : 'Error'}>
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{
+              width: 60, height: 60, borderRadius: '50%',
+              background: resultSuccess ? '#10B981' : '#EF4444',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              {resultSuccess ? (
+                <CheckCircle size={32} color="#fff" />
+              ) : (
+                <XCircle size={32} color="#fff" />
+              )}
+            </div>
+            <p style={{ fontSize: 16, color: T.txt, margin: 0 }}>
+              {resultMessage}
+            </p>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
 
 // Lazy load ALL non-critical components for smaller initial bundle
 const PhoneLoginModal = lazy(() => import('./components/PhoneLoginModal').then(m => ({ default: m.PhoneLoginModal })));
@@ -233,8 +483,10 @@ export default function WerqRoot() {
   const [showSettings, setShowSettings] = useState(_historyState.showSettings || false);
   const [showWallet, setShowWallet] = useState(_historyState.showWallet || false);
   const [showSubscription, setShowSubscription] = useState(_historyState.showSubscription || false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
   const settingsReturnState = useRef(null); // tracks where to go back to when settings closes
   const walletReturnState = useRef(null); // tracks where to go back to when wallet closes
+  const walletShowTopUpOnMount = useRef(false); // tracks whether to show top-up modal on wallet mount
   const subscriptionReturnState = useRef(null); // tracks where to go back to when subscription closes
   const prevNavState = useRef(null); // tracks nav state before any overlay page opens
   const [showNotifications, setShowNotifications] = useState(_historyState.showNotifications || false);
@@ -960,8 +1212,14 @@ export default function WerqRoot() {
     pushHistoryState({ showWallet: true });
   };
 
+  const handleShowCoinPurchase = async () => {
+    if (!authUser) { setShowLogin(true); return; }
+    setShowTopUpModal(true);
+  };
+
   const handleCloseWallet = () => {
     setShowWallet(false);
+    walletShowTopUpOnMount.current = false;
     const ret = walletReturnState.current;
     if (ret) {
       walletReturnState.current = null;
@@ -970,16 +1228,14 @@ export default function WerqRoot() {
         setProfileUserId(ret.profileUserId);
         setActiveTab(ret.activeTab || 'profile');
         pushHistoryState({ showWallet: false, showProfile: true, profileUserId: ret.profileUserId, activeTab: ret.activeTab || 'profile' }, true);
-        return;
-      }
-      if (ret.showSettings) {
+      } else if (ret.showSettings) {
         setShowSettings(true);
         setActiveTab(ret.activeTab || 'settings');
         pushHistoryState({ showWallet: false, showSettings: true, activeTab: ret.activeTab || 'settings' }, true);
-        return;
       }
+    } else {
+      pushHistoryState({ showWallet: false }, true);
     }
-    pushHistoryState({ showWallet: false }, true);
   };
 
   const handleShowSubscription = () => {
@@ -1198,7 +1454,7 @@ export default function WerqRoot() {
         {showWallet && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
-              <WalletPage theme={colors} onBack={handleCloseWallet} />
+              <WalletPage theme={colors} onBack={handleCloseWallet} showTopUpOnMount={walletShowTopUpOnMount.current} />
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
@@ -1299,6 +1555,7 @@ export default function WerqRoot() {
                 onShowSettings={handleShowSettings}
                 onShowWallet={handleShowWallet}
                 onShowSubscription={handleShowSubscription}
+                onShowCoinPurchase={handleShowCoinPurchase}
                 onShowFollowers={(userId) =>
                   handleShowFollowers(userId, 'followers')
                 }
@@ -1401,6 +1658,12 @@ export default function WerqRoot() {
               />
             </Suspense>
           </LazyLoadErrorBoundary>
+        )}
+        {showTopUpModal && (
+          <TopUpModal
+            theme={colors}
+            onClose={() => setShowTopUpModal(false)}
+          />
         )}
         {showVideoDetail && (
           <LazyLoadErrorBoundary>

@@ -169,11 +169,11 @@ export default function WalletScreen({ navigation }) {
   const total = summary?.balance?.total ?? summary?.total ?? 0;
   const earned = summary?.balance?.earned ?? summary?.earned_total ?? 0;
   const purchased = summary?.balance?.purchased ?? summary?.purchased_total ?? 0;
+  const points = summary?.points || { current: 0, earned_total: 0, withdrawn_total: 0 };
   
   // Gamification stats from profile
   const profile = summary?.profile || {};
   const coins = profile.coins || 0;
-  const points = profile.points || 0;
   const loginStreak = profile.login_streak || 0;
   const xp = profile.xp || 0;
   const level = profile.level || 1;
@@ -220,7 +220,7 @@ export default function WalletScreen({ navigation }) {
           </View>
           <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
             <Ionicons name="star" size={28} color={colors.primary} />
-            <Text style={[styles.statNumber, { color: colors.text }]}>{points}</Text>
+            <Text style={[styles.statNumber, { color: colors.text }]}>{points.current || 0}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Points</Text>
           </View>
           <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
@@ -294,6 +294,26 @@ export default function WalletScreen({ navigation }) {
                   <Text style={[styles.summaryLabel, { color: colors.textSecondary }]}>Total Spent</Text>
                   <Text style={[styles.summaryAmount, { color: colors.text }]}>{summary?.totals?.lifetime_spent || 0}</Text>
                   <Text style={[styles.summarySubtext, { color: colors.textSecondary }]}>Coins</Text>
+                </View>
+              </View>
+
+              {/* Points Card */}
+              <View style={[styles.pointsCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <View style={styles.pointsHeader}>
+                  <Ionicons name="gift" size={20} color={colors.primary} />
+                  <Text style={[styles.pointsTitle, { color: colors.text }]}>Points Balance</Text>
+                </View>
+                <Text style={[styles.pointsAmount, { color: colors.text }]}>{points.current || 0}</Text>
+                <Text style={[styles.pointsSubtitle, { color: colors.textSecondary }]}>From gifts & campaign wins (1 coin = 1 point)</Text>
+                <View style={[styles.pointsStats, { borderTopColor: colors.border }]}>
+                  <View style={styles.pointsStatItem}>
+                    <Text style={[styles.pointsStatLabel, { color: colors.textSecondary }]}>Earned Total</Text>
+                    <Text style={[styles.pointsStatValue, { color: colors.text }]}>{points.earned_total || 0}</Text>
+                  </View>
+                  <View style={styles.pointsStatItem}>
+                    <Text style={[styles.pointsStatLabel, { color: colors.textSecondary }]}>Withdrawn</Text>
+                    <Text style={[styles.pointsStatValue, { color: colors.text }]}>{points.withdrawn_total || 0}</Text>
+                  </View>
                 </View>
               </View>
 
@@ -530,6 +550,15 @@ const styles = StyleSheet.create({
   summaryLabel: { fontSize: 12, fontWeight: '500', marginTop: 8, marginBottom: 4 },
   summaryAmount: { fontSize: 20, fontWeight: '700', marginBottom: 2 },
   summarySubtext: { fontSize: 11, fontWeight: '500' },
+  pointsCard: { margin: 16, padding: 20, borderRadius: 16, borderWidth: 1 },
+  pointsHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  pointsTitle: { fontSize: 13, fontWeight: '600' },
+  pointsAmount: { fontSize: 36, fontWeight: '800', marginBottom: 4 },
+  pointsSubtitle: { fontSize: 12, marginBottom: 12 },
+  pointsStats: { flexDirection: 'row', gap: 12, paddingTop: 12, borderTopWidth: 1 },
+  pointsStatItem: { flex: 1 },
+  pointsStatLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
+  pointsStatValue: { fontSize: 16, fontWeight: '700', marginTop: 2 },
   viewAllText: { textAlign: 'center', padding: 12, fontWeight: '600' },
   txItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   txIcon: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
