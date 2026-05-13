@@ -266,15 +266,13 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
           </div>
           <div style={{ fontSize: 11, opacity: 0.85, marginTop: 2 }}>ETB Available</div>
           <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
-            {config?.withdrawal_min_points && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
-                <span style={{ opacity: 0.85 }}>Min</span>
-                <strong>{config.withdrawal_min_points.toLocaleString()} pts</strong>
-              </div>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
+              <span style={{ opacity: 0.85 }}>Min</span>
+              <strong>{config?.withdrawal_min_points?.toLocaleString() || 1000} pts</strong>
+            </div>
             <button
               onClick={() => setShowWithdrawModal(true)}
-              disabled={config?.withdrawal_min_points && (points.current || 0) < config.withdrawal_min_points}
+              disabled={(points.current || 0) < (config?.withdrawal_min_points || 1000)}
               style={{
                 width: '100%',
                 padding: '6px 8px',
@@ -284,8 +282,8 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
                 border: '1px solid rgba(255,255,255,0.3)',
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: !config?.withdrawal_min_points || (points.current || 0) >= config.withdrawal_min_points ? 'pointer' : 'not-allowed',
-                opacity: !config?.withdrawal_min_points || (points.current || 0) >= config.withdrawal_min_points ? 1 : 0.5,
+                cursor: (points.current || 0) >= (config?.withdrawal_min_points || 1000) ? 'pointer' : 'not-allowed',
+                opacity: (points.current || 0) >= (config?.withdrawal_min_points || 1000) ? 1 : 0.5,
               }}
             >
               Points → Birr
@@ -422,7 +420,7 @@ function OverviewTab({ theme: T, totals, withdrawal, recentTx, config }) {
           <div style={{ flex: 1, fontSize: 13, color: T.sub }}>
             Earn <strong style={{ color: T.txt }}>{withdrawal.min_points?.toLocaleString()}</strong> points
             to unlock withdrawal to Birr. You have <strong style={{ color: T.txt }}>
-              {/* current earned shown in main balance card */}
+              {points.current?.toLocaleString() || 0} points
             </strong>
           </div>
         </div>
@@ -606,7 +604,7 @@ function EmptyState({ theme: T, icon, title, subtitle }) {
 
 function WithdrawModal({ theme: T, balance, points, config, onClose, onSuccess }) {
   const [step, setStep] = useState(1); // 1: amount, 2: payout, 3: confirm
-  const minPoints = config?.withdrawal_min_points || 100;
+  const minPoints = config?.withdrawal_min_points || 1000;
   const [amount, setAmount] = useState(minPoints);
   const [payoutMethod, setPayoutMethod] = useState('telebirr');
   const [payoutAccount, setPayoutAccount] = useState('');
