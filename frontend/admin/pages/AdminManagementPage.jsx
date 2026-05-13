@@ -541,33 +541,6 @@ export function AdminManagementPage({ theme }) {
                       <td style={{ ...cellStyle, width: '200px', verticalAlign: 'middle' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                           <button
-                            onClick={() => handleToggleAdmin(user.id, user.is_staff)}
-                            style={{
-                              padding: '6px 12px',
-                              background: user.is_staff ? theme.orange + '30' : theme.pri + '30',
-                              border: `1px solid ${user.is_staff ? theme.orange : theme.pri}`,
-                              borderRadius: 6,
-                              color: user.is_staff ? theme.orange : theme.pri,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              transition: 'all 0.2s',
-                              whiteSpace: 'nowrap',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.target.style.background = user.is_staff ? theme.orange + '50' : theme.pri + '50';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.target.style.background = user.is_staff ? theme.orange + '30' : theme.pri + '30';
-                            }}
-                          >
-                            {user.is_staff ? <UserMinus size={14} /> : <UserPlus size={14} />}
-                            {user.is_staff ? 'Revoke Admin' : 'Make Admin'}
-                          </button>
-                          <button
                             onClick={(e) => handleAssignRole(user, e)}
                             style={{
                               padding: '6px 12px',
