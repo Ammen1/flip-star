@@ -132,9 +132,13 @@ const api = {
         headers['Content-Type'] = 'application/json';
       }
 
-      // Only add token if it exists AND it's not an auth or public endpoint
+      // Only add token if it exists AND it's not a public endpoint.
+      // Auth endpoints that REQUIRE a token (change-password, delete-account, download-data) must
+      // be excluded from the "public" classification so the Authorization header is attached.
       const currentToken = authToken || localStorage.getItem('authToken') || localStorage.getItem('adminToken');
-      const isPublicEndpoint = endpoint.includes('/auth/') || endpoint.includes('/settings/public');
+      const AUTHED_AUTH_ENDPOINTS = ['/auth/change-password/', '/auth/delete-account/', '/auth/download-data/'];
+      const isAuthedAuthEndpoint = AUTHED_AUTH_ENDPOINTS.some((p) => endpoint.startsWith(p));
+      const isPublicEndpoint = (endpoint.includes('/auth/') && !isAuthedAuthEndpoint) || endpoint.includes('/settings/public');
       if (currentToken && !isPublicEndpoint) {
         headers['Authorization'] = `Token ${currentToken}`;
       }

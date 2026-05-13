@@ -9,7 +9,7 @@ import config from "../config";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLanguage } from "../contexts/LanguageContext";
 
-export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEditProfile }) {
+export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubscription, onShowEditProfile }) {
   const { darkMode, toggleDarkMode, colors: T } = useTheme();
   const { language, changeLanguage, t } = useLanguage();
   const [activeSection, setActiveSection] = useState("account");
@@ -216,6 +216,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEdit
   // ─── MOBILE UI (mimics mobile app SettingsScreen) ────────────────────────────
   const [showPassModal, setShowPassModal] = useState(false);
   const [showLangModal, setShowLangModal] = useState(false);
+  const [passVisible, setPassVisible] = useState({ current: false, new: false, confirm: false });
 
   if (isMobile) {
     const Switch = ({ value, onChange }) => (
@@ -434,9 +435,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEdit
                 {[
                   { id: 'en', label: 'English' },
                   { id: 'am', label: 'አማርኛ (Amharic)' },
-                  { id: 'es', label: 'Español' },
-                  { id: 'fr', label: 'Français' },
-                  { id: 'ar', label: 'العربية' },
                 ].map(l => (
                   <button
                     key={l.id}
@@ -474,16 +472,30 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEdit
                 ].map(f => (
                   <div key={f.key} style={{ marginBottom: 14 }}>
                     <label style={{ fontSize: 13, fontWeight: 700, color: T.txt, display: 'block', marginBottom: 6 }}>{f.label}</label>
-                    <input
-                      type="password"
-                      value={password[f.key]}
-                      onChange={(e) => setPassword({ ...password, [f.key]: e.target.value })}
-                      style={{
-                        width: '100%', padding: 14, borderRadius: 12,
-                        border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-                        fontSize: 15, boxSizing: 'border-box', outline: 'none',
-                      }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={passVisible[f.key] ? 'text' : 'password'}
+                        value={password[f.key]}
+                        onChange={(e) => setPassword({ ...password, [f.key]: e.target.value })}
+                        style={{
+                          width: '100%', padding: 14, paddingRight: 44, borderRadius: 12,
+                          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+                          fontSize: 15, boxSizing: 'border-box', outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPassVisible(v => ({ ...v, [f.key]: !v[f.key] }))}
+                        style={{
+                          position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                          background: 'none', border: 'none', cursor: 'pointer', color: T.sub || '#888',
+                          padding: 6, display: 'flex', alignItems: 'center',
+                        }}
+                        aria-label={passVisible[f.key] ? 'Hide password' : 'Show password'}
+                      >
+                        {passVisible[f.key] ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </div>
                 ))}
                 <button
@@ -717,51 +729,39 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEdit
                 <div>
                   <h3 style={{ fontSize: isSmallMobile ? 14 : 16, fontWeight: 600, color: T.txt, marginBottom: 16 }}>{t('changePassword')}</h3>
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="••••••"
-                      value={password.current}
-                      onChange={(e) => setPassword({...password, current: e.target.value.replace(/\D/g, "").slice(0, 6)})}
-                      style={{
-                        width: "100%",
-                        padding: isSmallMobile ? "10px 12px" : "12px 16px",
-                        border: `1px solid ${T.border}`,
-                        borderRadius: 8,
-                        fontSize: isSmallMobile ? 12 : 14,
-                      }}
-                    />
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="••••••"
-                      value={password.new}
-                      onChange={(e) => setPassword({...password, new: e.target.value.replace(/\D/g, "").slice(0, 6)})}
-                      style={{
-                        width: "100%",
-                        padding: isSmallMobile ? "10px 12px" : "12px 16px",
-                        border: `1px solid ${T.border}`,
-                        borderRadius: 8,
-                        fontSize: isSmallMobile ? 12 : 14,
-                      }}
-                    />
-                    <input
-                      type="password"
-                      inputMode="numeric"
-                      maxLength={6}
-                      placeholder="••••••"
-                      value={password.confirm}
-                      onChange={(e) => setPassword({...password, confirm: e.target.value.replace(/\D/g, "").slice(0, 6)})}
-                      style={{
-                        width: "100%",
-                        padding: isSmallMobile ? "10px 12px" : "12px 16px",
-                        border: `1px solid ${T.border}`,
-                        borderRadius: 8,
-                        fontSize: isSmallMobile ? 12 : 14,
-                      }}
-                    />
+                    {['current', 'new', 'confirm'].map((k) => (
+                      <div key={k} style={{ position: 'relative' }}>
+                        <input
+                          type={passVisible[k] ? 'text' : 'password'}
+                          inputMode="numeric"
+                          maxLength={6}
+                          placeholder="••••••"
+                          value={password[k]}
+                          onChange={(e) => setPassword({ ...password, [k]: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                          style={{
+                            width: "100%",
+                            padding: isSmallMobile ? "10px 12px" : "12px 16px",
+                            paddingRight: 44,
+                            border: `1px solid ${T.border}`,
+                            borderRadius: 8,
+                            fontSize: isSmallMobile ? 12 : 14,
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPassVisible(v => ({ ...v, [k]: !v[k] }))}
+                          style={{
+                            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                            background: 'none', border: 'none', cursor: 'pointer', color: T.sub || '#888',
+                            padding: 6, display: 'flex', alignItems: 'center',
+                          }}
+                          aria-label={passVisible[k] ? 'Hide password' : 'Show password'}
+                        >
+                          {passVisible[k] ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                    ))}
                     <button
                       onClick={handlePasswordChange}
                       style={{
@@ -1061,9 +1061,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowEdit
               >
                 <option value="en">English</option>
                 <option value="am">አማርኛ (Amharic)</option>
-                <option value="es">Español</option>
-                <option value="fr">Français</option>
-                <option value="ar">العربية</option>
               </select>
             </div>
           )}
