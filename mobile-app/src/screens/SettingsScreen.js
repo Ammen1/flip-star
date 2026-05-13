@@ -383,8 +383,8 @@ export default function SettingsScreen({ navigation }) {
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
-    if (password.new.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (!/^\d{6}$/.test(password.new)) {
+      Alert.alert('Error', 'PIN must be exactly 6 digits');
       return;
     }
     
@@ -612,7 +612,9 @@ export default function SettingsScreen({ navigation }) {
                 placeholder="Enter current 6-digit password"
                 placeholderTextColor={colors.textSecondary}
                 value={password.current}
-                onChangeText={text => setPassword(prev => ({ ...prev, current: text }))}
+                onChangeText={text => setPassword(prev => ({ ...prev, current: text.replace(/\D/g, '').slice(0, 6) }))}
+                keyboardType="number-pad"
+                maxLength={6}
               />
               <TouchableOpacity 
                 onPress={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
@@ -635,7 +637,9 @@ export default function SettingsScreen({ navigation }) {
                 placeholder="Enter new 6-digit password"
                 placeholderTextColor={colors.textSecondary}
                 value={password.new}
-                onChangeText={text => setPassword(prev => ({ ...prev, new: text }))}
+                onChangeText={text => setPassword(prev => ({ ...prev, new: text.replace(/\D/g, '').slice(0, 6) }))}
+                keyboardType="number-pad"
+                maxLength={6}
               />
               <TouchableOpacity 
                 onPress={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
@@ -658,7 +662,9 @@ export default function SettingsScreen({ navigation }) {
                 placeholder="Confirm new 6-digit password"
                 placeholderTextColor={colors.textSecondary}
                 value={password.confirm}
-                onChangeText={text => setPassword(prev => ({ ...prev, confirm: text }))}
+                onChangeText={text => setPassword(prev => ({ ...prev, confirm: text.replace(/\D/g, '').slice(0, 6) }))}
+                keyboardType="number-pad"
+                maxLength={6}
               />
               <TouchableOpacity 
                 onPress={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
