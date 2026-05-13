@@ -118,6 +118,8 @@ export function AdminManagementPage({ theme }) {
             borderRadius: 8,
             fontSize: 14,
             outline: 'none',
+            background: theme.card,
+            color: theme.txt,
           }}
         />
       </div>
@@ -265,8 +267,8 @@ export function AdminManagementPage({ theme }) {
                         onClick={() => handleToggleAdmin(user.id, user.is_staff)}
                         style={{
                           padding: '6px 12px',
-                          background: user.is_staff ? theme.orange + '15' : theme.pri + '15',
-                          border: 'none',
+                          background: user.is_staff ? theme.orange + '30' : theme.pri + '30',
+                          border: `1px solid ${user.is_staff ? theme.orange : theme.pri}`,
                           borderRadius: 6,
                           color: user.is_staff ? theme.orange : theme.pri,
                           fontSize: 12,
@@ -275,6 +277,13 @@ export function AdminManagementPage({ theme }) {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 4,
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.background = user.is_staff ? theme.orange + '50' : theme.pri + '50';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.background = user.is_staff ? theme.orange + '30' : theme.pri + '30';
                         }}
                       >
                         {user.is_staff ? <UserMinus size={14} /> : <UserPlus size={14} />}
@@ -285,8 +294,8 @@ export function AdminManagementPage({ theme }) {
                           onClick={() => handleToggleSuperuser(user.id, user.is_superuser)}
                           style={{
                             padding: '6px 12px',
-                            background: user.is_superuser ? theme.red + '15' : theme.purple + '15',
-                            border: 'none',
+                            background: user.is_superuser ? theme.red + '30' : theme.purple + '30',
+                            border: `1px solid ${user.is_superuser ? theme.red : theme.purple}`,
                             borderRadius: 6,
                             color: user.is_superuser ? theme.red : theme.purple,
                             fontSize: 12,
@@ -295,6 +304,13 @@ export function AdminManagementPage({ theme }) {
                             display: 'flex',
                             alignItems: 'center',
                             gap: 4,
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.target.style.background = user.is_superuser ? theme.red + '50' : theme.purple + '50';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.target.style.background = user.is_superuser ? theme.red + '30' : theme.purple + '30';
                           }}
                         >
                           <Shield size={14} />
@@ -318,7 +334,7 @@ const headerStyle = {
   textAlign: 'left',
   fontSize: 13,
   fontWeight: 700,
-  color: '#78716C',
+  color: theme.sub,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
 };
