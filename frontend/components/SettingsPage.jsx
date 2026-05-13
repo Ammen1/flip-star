@@ -148,7 +148,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
       setModal({
         isOpen: true,
         title: t('error'),
-        message: t('passwordChangeFailed'),
+        message: error?.message || t('passwordChangeFailed'),
         type: 'error',
         onConfirm: null
       });
