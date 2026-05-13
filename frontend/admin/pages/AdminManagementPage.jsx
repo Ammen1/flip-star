@@ -60,6 +60,7 @@ export function AdminManagementPage({ theme }) {
           password: userCredentials.password,
         })
       });
+      setSearch('');
       loadUsers();
       setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
       setSelectedUserRoles([]);

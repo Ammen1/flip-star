@@ -79,15 +79,16 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
 class UserRoleSerializer(serializers.ModelSerializer):
     """Serializer for User with Role information"""
-    username = serializers.CharField(source='user.username', read_only=True)
-    email = serializers.CharField(source='user.email', read_only=True)
+    username = serializers.CharField(source='username', read_only=True)
+    email = serializers.CharField(source='email', read_only=True)
     roles = serializers.SerializerMethodField()
-    is_staff = serializers.BooleanField(source='profile.is_staff', read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'roles', 'is_staff']
-        read_only_fields = ['id', 'username', 'email', 'roles', 'is_staff']
+        fields = ['id', 'username', 'email', 'roles', 'is_staff', 'is_superuser']
+        read_only_fields = ['id', 'username', 'email', 'roles', 'is_staff', 'is_superuser']
     
     def get_roles(self, obj):
         """Get user's roles as a list of role objects"""
