@@ -58,6 +58,21 @@ def _serialize_transaction(tx):
             'username': tx.recipient.username,
         }
 
+    # Get post details for gift transactions
+    post_details = None
+    if tx.reel_id and (tx.transaction_type == 'gift_sent' or tx.transaction_type == 'gift_received'):
+        try:
+            reel = tx.reel
+            if reel:
+                post_details = {
+                    'id': reel.id,
+                    'title': reel.title or '',
+                    'description': reel.description or '',
+                    'media_url': reel.media.url if reel.media else None,
+                }
+        except:
+            pass
+
     return {
         'id': tx.id,
         'type': tx.transaction_type,
@@ -68,6 +83,7 @@ def _serialize_transaction(tx):
         'other_user': other_user,
         'recipient_username': tx.recipient.username if tx.recipient_id else None,
         'reel_id': tx.reel_id,
+        'post_details': post_details,
         'payment_method': tx.payment_method or None,
         'payment_reference': tx.payment_reference or None,
         'is_successful': tx.is_successful,
@@ -325,11 +341,27 @@ def request_withdrawal(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def my_withdrawals(request):
-    """List current user's withdrawal requests."""
+    """List current user's withdrawal requests with pagination."""
     qs = WithdrawalRequest.objects.filter(user=request.user).order_by('-created_at')
+    
+    try:
+        page = max(int(request.query_params.get('page', 1)), 1)
+        page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
+    except ValueError:
+        page, page_size = 1, 20
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = qs[start:end]
+
     return Response({
-        'count': qs.count(),
-        'results': [_serialize_withdrawal(w) for w in qs[:50]],
+        'count': total,
+        'page': page,
+        'page_size': page_size,
+        'has_next': end < total,
+        'has_prev': page > 1,
+        'results': [_serialize_withdrawal(w) for w in items],
     })
 
 
