@@ -180,7 +180,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
                 x2="65"
                 y2="0"
                 stroke="#D4AF37"
-                strokeWidth="14"
+                strokeWidth="16"
                 strokeLinecap="round"
               />
             </svg>
