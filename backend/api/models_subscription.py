@@ -154,6 +154,29 @@ class SubscriptionPlan(models.Model):
             total_days = self.tier.duration_days + self.free_trial_days
             self.end_date = timezone.now() + timezone.timedelta(days=total_days)
         self.save()
+
+        # Assign default roles to user on subscription
+        from .models_rbac import Role
+        try:
+            profile = self.user.profile
+            # Get default roles: 'view' and 'contester' (contestant)
+            view_role = Role.objects.filter(name='view').first()
+            contester_role = Role.objects.filter(name='contester').first()
+            # If 'contester' doesn't exist, try 'contestant'
+            if not contester_role:
+                contester_role = Role.objects.filter(name='contestant').first()
+
+            # Assign roles if they exist
+            if view_role:
+                profile.roles.add(view_role)
+            if contester_role:
+                profile.roles.add(contester_role)
+            profile.save()
+        except Exception as e:
+            # Log error but don't fail activation
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to assign default roles to user {self.user.username}: {e}")
     
     def cancel(self, reason=''):
         """Cancel subscription"""
