@@ -574,12 +574,82 @@ function WithdrawalCard({ w, theme: T, onAction }) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------
 // Balance Adjustment Tab
 // ---------------------------------------------------------------
 
-function AdjustTab({ theme: T, form, setForm, onSubmit, result }) {
+function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchType, setSearchType] = useState('id');
+  const [searching, setSearching] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [adjustmentType, setAdjustmentType] = useState('coins');
+
+  const searchUser = async () => {
+    if (!searchQuery.trim()) {
+      setResult && setResult({ type: 'error', message: 'Please enter a search term' });
+      return;
+    }
+    try {
+      setSearching(true);
+      console.log('Searching for user:', searchType, searchQuery);
+      let user;
+      
+      if (searchType === 'id') {
+        const data = await api.request(`/admin/users/${searchQuery}/`);
+        user = data;
+      } else {
+        // For phone and username, use the search parameter
+        const data = await api.request(`/admin/users/?search=${searchQuery}`);
+        console.log('Search results:', data);
+        user = data.users?.[0] || data;
+      }
+      
+      console.log('Found user:', user);
+      
+      if (user && user.id) {
+        setUserData(user);
+        setForm({ ...form, user_id: user.id });
+        
+        // Load user's wallet data using admin endpoint
+        try {
+          const walletData = await api.request(`/admin/wallet/user/${user.id}/`);
+          setUserData(prev => ({ ...prev, wallet: walletData }));
+        } catch (walletErr) {
+          console.error('Wallet data load failed:', walletErr);
+          // Set empty wallet if endpoint doesn't exist
+          setUserData(prev => ({ ...prev, wallet: { balance: { total: 0, earned: 0, purchased: 0 }, points: { current: 0 } } }));
+        }
+        
+        // Load recent transactions using admin endpoint
+        try {
+          const txData = await api.request(`/admin/wallet/transactions/?user_id=${user.id}&page_size=10`);
+          setTransactions(txData.results || []);
+        } catch (txErr) {
+          console.error('Transaction history load failed:', txErr);
+          setTransactions([]);
+        }
+      } else {
+        setResult && setResult({ type: 'error', message: 'User not found' });
+      }
+    } catch (err) {
+      console.error('User search failed:', err);
+      setResult && setResult({ type: 'error', message: 'User not found' });
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleAdjust = async () => {
+    if (!userData) {
+      setResult && setResult({ type: 'error', message: 'Please search and select a user first' });
+      return;
+    }
+    
+    const coinType = adjustmentType === 'points' ? 'points' : form.bucket;
+    await onSubmit();
+  };
+
   return (
     <div style={{ maxWidth: 500 }}>
       <SectionCard theme={T} title="Manual Balance Adjustment" icon={<User size={20} color="#8B5CF6" />}>

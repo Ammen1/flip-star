@@ -199,6 +199,7 @@ from .views_wallet import (
     wallet_summary, wallet_transactions, withdrawal_info, request_withdrawal,
     my_withdrawals, cancel_withdrawal, public_wallet_config,
     admin_wallet_config, admin_withdrawals_list, admin_withdrawal_action, admin_adjust_balance,
+    admin_user_wallet, admin_user_transactions,
     telebirr_initiate_payment, telebirr_callback,
 )
 
@@ -429,6 +430,11 @@ urlpatterns = [
     path('wallet/telebirr-callback/', telebirr_callback, name='telebirr-callback'),
     # ============ WALLET (Admin) ============
     path('admin/wallet/config/', admin_wallet_config, name='admin-wallet-config'),
+    path('admin/wallet/user/<int:user_id>/', admin_user_wallet, name='admin-user-wallet'),
+    path('admin/wallet/transactions/', admin_user_transactions, name='admin-user-transactions'),
+    path('admin/wallet/adjust-balance/', admin_adjust_balance, name='admin-adjust-balance'),
+    path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-withdrawals-list'),
+    path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-withdrawal-action'),
     # ============ SUBSCRIPTION SYSTEM ============
     # Onevas Webhooks
     path('onevas/subscription/', OnevasWebhookView.as_view(), {'webhook_type': 'subscription'}, name='onevas-subscription'),
