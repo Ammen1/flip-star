@@ -773,8 +773,8 @@ class OnevasWebhookView(APIView):
                 )
                 
                 # Update user trial status
-                profile.is_trial_user = False
-                profile.save()
+                user.profile.is_trial_user = False
+                user.profile.save()
 
                 # Send simple confirmation SMS - existing user already has account & PIN
                 stop_keywords = {
