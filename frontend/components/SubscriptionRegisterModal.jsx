@@ -175,7 +175,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
           >
             {/* White path covering left side of diagonal */}
             <path
-              d="M 0,0 L 55,0 L 20,90 L 0,90 Z"
+              d="M 0,0 L 50,0 L 20,90 L 0,90 Z"
               fill="#FFFFFF"
             />
             {/* Gold diagonal line */}
