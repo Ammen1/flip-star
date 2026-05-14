@@ -102,7 +102,28 @@ export function AdminManagementPage({ theme }) {
     try {
       setLoading(true);
       const response = await api.request(`/admin/users/?search=${search}`);
-      setUsers(response.users);
+      const users = response.users;
+
+      // Fetch phone numbers from user profile API for each user
+      const usersWithPhone = await Promise.all(
+        users.map(async (user) => {
+          try {
+            const profileResponse = await api.request(`/users/${user.id}/profile/`);
+            return {
+              ...user,
+              phone_number: profileResponse.phone_number || null,
+            };
+          } catch (error) {
+            console.error(`Failed to load profile for user ${user.id}:`, error);
+            return {
+              ...user,
+              phone_number: null,
+            };
+          }
+        })
+      );
+
+      setUsers(usersWithPhone);
     } catch (error) {
       console.error('Failed to load users:', error);
     } finally {
