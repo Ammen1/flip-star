@@ -195,22 +195,22 @@ export function GiftManagementPage({ theme }) {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '32px',
+        marginBottom: '24px',
       }}>
         <div>
           <h1 style={{
-            fontSize: '32px',
+            fontSize: '28px',
             fontWeight: '700',
-            color: theme.text,
+            color: theme.txt,
             marginBottom: '8px',
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
           }}>
-            <GiftIcon size={32} />
+            <GiftIcon size={28} />
             Gift Management
           </h1>
-          <p style={{ color: theme.sub, fontSize: '14px' }}>
+          <p style={{ color: theme.sub, fontSize: '13px' }}>
             Configure virtual gifts with coin values and gamification settings
           </p>
         </div>
@@ -238,32 +238,32 @@ export function GiftManagementPage({ theme }) {
       {/* Gift Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-        gap: '24px',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: '16px',
       }}>
         {gifts.map((gift) => (
           <div key={gift.id} style={{
             background: theme.card,
-            borderRadius: '16px',
-            padding: '24px',
+            borderRadius: '12px',
+            padding: '16px',
             border: `1px solid ${theme.border}`,
             position: 'relative',
             boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
             transition: 'all 0.2s ease',
             cursor: 'pointer',
           }} onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-4px)';
-            e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
           }} onMouseLeave={(e) => {
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
           }}>
             <div style={{
               position: 'absolute',
-              top: '16px',
-              right: '16px',
+              top: '12px',
+              right: '12px',
               display: 'flex',
-              gap: '8px',
+              gap: '6px',
               zIndex: 2,
             }}>
               <button
@@ -271,8 +271,8 @@ export function GiftManagementPage({ theme }) {
                 style={{
                   background: theme.bg,
                   border: `1px solid ${theme.border}`,
-                  borderRadius: '8px',
-                  padding: '8px',
+                  borderRadius: '6px',
+                  padding: '6px',
                   cursor: 'pointer',
                   color: theme.txt,
                   transition: 'all 0.2s',
@@ -286,15 +286,15 @@ export function GiftManagementPage({ theme }) {
                   e.currentTarget.style.borderColor = theme.border;
                 }}
               >
-                <Edit2 size={16} />
+                <Edit2 size={14} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDelete(gift.id); }}
                 style={{
                   background: theme.bg,
                   border: `1px solid ${theme.border}`,
-                  borderRadius: '8px',
-                  padding: '8px',
+                  borderRadius: '6px',
+                  padding: '6px',
                   cursor: 'pointer',
                   color: theme.red,
                   transition: 'all 0.2s',
@@ -308,16 +308,16 @@ export function GiftManagementPage({ theme }) {
                   e.currentTarget.style.borderColor = theme.border;
                 }}
               >
-                <Trash2 size={16} />
+                <Trash2 size={14} />
               </button>
             </div>
 
             <div style={{
-              width: '100px',
-              height: '100px',
-              borderRadius: '16px',
+              width: '70px',
+              height: '70px',
+              borderRadius: '12px',
               overflow: 'hidden',
-              marginBottom: '20px',
+              marginBottom: '12px',
               background: theme.bg,
               display: 'flex',
               alignItems: 'center',
@@ -331,19 +331,19 @@ export function GiftManagementPage({ theme }) {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <GiftIcon size={40} color={theme.sub} />
+                <GiftIcon size={28} color={theme.sub} />
               )}
             </div>
 
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '10px',
-              marginBottom: '12px',
+              gap: '8px',
+              marginBottom: '8px',
             }}>
-              <span style={{ fontSize: '28px' }}>{getCategoryIcon(gift.category)}</span>
+              <span style={{ fontSize: '20px' }}>{getCategoryIcon(gift.category)}</span>
               <h3 style={{
-                fontSize: '18px',
+                fontSize: '15px',
                 fontWeight: '700',
                 color: theme.txt,
                 margin: 0,
@@ -356,34 +356,34 @@ export function GiftManagementPage({ theme }) {
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              marginBottom: '12px',
-              padding: '12px',
+              gap: '6px',
+              marginBottom: '8px',
+              padding: '8px',
               background: theme.bg,
-              borderRadius: '8px',
+              borderRadius: '6px',
               border: `1px solid ${theme.border}`,
             }}>
-              <Coins size={18} color={theme.pri} />
+              <Coins size={14} color={theme.pri} />
               <span style={{
-                fontSize: '18px',
+                fontSize: '15px',
                 fontWeight: '700',
                 color: theme.pri,
               }}>
                 {gift.coin_value}
               </span>
-              <span style={{ fontSize: '13px', color: theme.sub, fontWeight: '500' }}>coins</span>
+              <span style={{ fontSize: '11px', color: theme.sub, fontWeight: '500' }}>coins</span>
             </div>
 
             <div style={{
               display: 'flex',
-              gap: '8px',
+              gap: '6px',
               flexWrap: 'wrap',
-              marginBottom: '12px',
+              marginBottom: '8px',
             }}>
               <span style={{
-                fontSize: '12px',
-                padding: '6px 12px',
-                borderRadius: '20px',
+                fontSize: '10px',
+                padding: '4px 8px',
+                borderRadius: '12px',
                 background: getRarityColor(gift.rarity) + '15',
                 color: getRarityColor(gift.rarity),
                 fontWeight: '600',
@@ -393,9 +393,9 @@ export function GiftManagementPage({ theme }) {
                 {gift.rarity}
               </span>
               <span style={{
-                fontSize: '12px',
-                padding: '6px 12px',
-                borderRadius: '20px',
+                fontSize: '10px',
+                padding: '4px 8px',
+                borderRadius: '12px',
                 background: theme.bg,
                 color: theme.sub,
                 fontWeight: '600',
@@ -408,10 +408,10 @@ export function GiftManagementPage({ theme }) {
 
             {gift.description && (
               <div style={{
-                fontSize: '13px',
+                fontSize: '11px',
                 color: theme.sub,
-                marginBottom: '12px',
-                lineHeight: 1.5,
+                marginBottom: '8px',
+                lineHeight: 1.4,
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: 'vertical',
@@ -424,16 +424,16 @@ export function GiftManagementPage({ theme }) {
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              fontSize: '13px',
+              gap: '4px',
+              fontSize: '11px',
               color: theme.sub,
               fontWeight: '500',
             }}>
-              <Sparkles size={14} color={theme.purple} />
+              <Sparkles size={12} color={theme.purple} />
               <span>+{gift.xp_reward} XP</span>
               {gift.animation_type && (
                 <>
-                  <Zap size={14} color={theme.yellow} style={{ marginLeft: '12px' }} />
+                  <Zap size={12} color={theme.yellow} style={{ marginLeft: '8px' }} />
                   <span>{gift.animation_type}</span>
                 </>
               )}
@@ -447,7 +447,7 @@ export function GiftManagementPage({ theme }) {
                 right: '0',
                 bottom: '0',
                 background: 'rgba(0,0,0,0.6)',
-                borderRadius: '16px',
+                borderRadius: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -455,11 +455,11 @@ export function GiftManagementPage({ theme }) {
               }}>
                 <span style={{
                   color: '#fff',
-                  fontSize: '16px',
+                  fontSize: '14px',
                   fontWeight: '700',
-                  padding: '12px 24px',
+                  padding: '8px 16px',
                   background: 'rgba(0,0,0,0.8)',
-                  borderRadius: '8px',
+                  borderRadius: '6px',
                 }}>
                   Inactive
                 </span>
