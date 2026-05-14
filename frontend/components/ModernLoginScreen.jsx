@@ -521,7 +521,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: T.bg || "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
+    <div style={{ minHeight: "100vh", background: T.bg || "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
       {modal === "forgot" && <ForgotPasswordPhone onClose={() => setModal(null)} onSuccess={() => setModal(null)} />}
       {modal === "faq" && <FaqModal onClose={() => setModal(null)} />}
       {modal === "terms" && <TermsModal onClose={() => setModal(null)} />}

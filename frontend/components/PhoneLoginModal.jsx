@@ -72,7 +72,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
     <>
       {showForgot && <ForgotPasswordPhone onClose={() => setShowForgot(false)} onSuccess={() => setShowForgot(false)} />}
 
-      <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
+      <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0" }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
 
           {/* Logo Header */}
