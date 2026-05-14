@@ -565,14 +565,12 @@ def login_with_subscription_otp(request):
     if not phone:
         return Response({'error': 'Invalid Ethiopian phone number'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Find SMS-first subscription with matching OTP
+    # Find subscription with matching OTP (works for both SMS and app subscriptions)
     print(f"[SUBSCRIPTION LOGIN DEBUG] Searching for subscription with phone: {phone}, otp: {otp}")
     subscription = UserSubscription.objects.filter(
         onevas_phone_number=phone,
         setup_otp=otp,
-        status='active',
-        subscription_source='sms',
-        user__isnull=True
+        status='active'
     ).first()
 
     if not subscription:
@@ -585,6 +583,31 @@ def login_with_subscription_otp(request):
         return Response({'error': 'Invalid OTP or no active subscription found'}, status=status.HTTP_400_BAD_REQUEST)
     
     print(f"[SUBSCRIPTION LOGIN DEBUG] Subscription found: ID {subscription.id}")
+    
+    # Check if subscription already has a user (existing user renewal/login)
+    if subscription.user:
+        print(f"[SUBSCRIPTION LOGIN DEBUG] Subscription already has user: {subscription.user.username}")
+        
+        # Verify the provided password matches the user's password
+        user = subscription.user
+        if not user.check_password(password):
+            return Response({'error': 'Invalid password'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Clear OTP after successful login
+        subscription.setup_otp = None
+        subscription.save()
+        
+        print(f"[SUBSCRIPTION LOGIN DEBUG] User logged in successfully: {user.username}")
+        
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            'user': UserSerializer(user).data, 
+            'token': token.key,
+            'message': 'Login successful'
+        }, status=status.HTTP_200_OK)
+    
+    # No user yet - create new account (SMS-first flow)
+    print(f"[SUBSCRIPTION LOGIN DEBUG] No user linked, creating new account")
     
     # Check if username already exists
     if User.objects.filter(username=username).exists():
