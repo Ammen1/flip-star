@@ -37,6 +37,8 @@ export function AdminManagementPage({ theme, adminUser }) {
   const [advancedSelectedUser, setAdvancedSelectedUser] = useState(null);
   const [advancedModal, setAdvancedModal] = useState({ isOpen: false, type: '' });
   const [advancedForm, setAdvancedForm] = useState({ email: '', password: '', newPassword: '', reason: '' });
+  const [createUserModal, setCreateUserModal] = useState({ isOpen: false });
+  const [createUserForm, setCreateUserForm] = useState({ username: '', email: '', phone: '', password: '', selectedRoles: [] });
 
   // User role assignment functions
   const handleAssignRole = (user, event) => {
@@ -428,6 +430,41 @@ export function AdminManagementPage({ theme, adminUser }) {
     }
   };
 
+  const handleCreateUser = async () => {
+    if (!createUserForm.username || !createUserForm.email || !createUserForm.password) {
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Please fill in all required fields', type: 'error' });
+      return;
+    }
+    try {
+      // Create user
+      const response = await api.request('/admin/users/', {
+        method: 'POST',
+        body: JSON.stringify({
+          username: createUserForm.username,
+          email: createUserForm.email,
+          password: createUserForm.password,
+          phone_number: createUserForm.phone,
+        })
+      });
+
+      // Assign roles
+      if (createUserForm.selectedRoles.length > 0) {
+        await api.request(`/admin/rbac/users/${response.id}/`, {
+          method: 'PUT',
+          body: JSON.stringify({ role_ids: createUserForm.selectedRoles })
+        });
+      }
+
+      loadUsers();
+      setCreateUserModal({ isOpen: false });
+      setCreateUserForm({ username: '', email: '', phone: '', password: '', selectedRoles: [] });
+      setAlertModal({ isOpen: true, title: 'Success', message: 'User created successfully', type: 'success' });
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to create user', type: 'error' });
+    }
+  };
+
   return (
     <div>
       {/* Header */}
@@ -796,9 +833,35 @@ export function AdminManagementPage({ theme, adminUser }) {
             border: `1px solid ${theme.border}`,
             marginBottom: 24,
           }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0, marginBottom: 16 }}>
-              Select User
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
+                User Management
+              </h3>
+              <button
+                onClick={() => setCreateUserModal({ isOpen: true })}
+                style={{
+                  padding: '8px 16px',
+                  background: theme.pri,
+                  border: 'none',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+                onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
+                onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
+              >
+                <UserPlus size={16} />
+                Create User
+              </button>
+            </div>
+            <h4 style={{ fontSize: 14, fontWeight: 600, color: theme.sub, margin: 0, marginBottom: 12 }}>
+              Select User to Edit
+            </h4>
             <div style={{ display: 'flex', gap: 12 }}>
               <select
                 value={advancedSelectedUser?.id || ''}
@@ -1863,6 +1926,232 @@ export function AdminManagementPage({ theme, adminUser }) {
               Showing first 50 entries. Use the API to view more.
             </div>
           )}
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {createUserModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: 20,
+        }}>
+          <div style={{
+            background: theme.card,
+            borderRadius: 16,
+            padding: 24,
+            width: '100%',
+            maxWidth: 500,
+            maxHeight: '90vh',
+            overflow: 'auto',
+            border: `1px solid ${theme.border}`,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
+                Create New User
+              </h3>
+              <button
+                onClick={() => setCreateUserModal({ isOpen: false })}
+                style={{
+                  padding: '6px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 6,
+                  color: theme.sub,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.target.style.color = theme.txt; e.target.style.background = theme.bg; }}
+                onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                Username *
+              </label>
+              <input
+                type="text"
+                value={createUserForm.username}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, username: e.target.value })}
+                placeholder="Enter username"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  outline: 'none',
+                  background: theme.bg,
+                  color: theme.txt,
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                Email *
+              </label>
+              <input
+                type="email"
+                value={createUserForm.email}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
+                placeholder="Enter email address"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  outline: 'none',
+                  background: theme.bg,
+                  color: theme.txt,
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={createUserForm.phone}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, phone: e.target.value })}
+                placeholder="Enter phone number"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  outline: 'none',
+                  background: theme.bg,
+                  color: theme.txt,
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                Password *
+              </label>
+              <input
+                type="password"
+                value={createUserForm.password}
+                onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
+                placeholder="Enter password"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  outline: 'none',
+                  background: theme.bg,
+                  color: theme.txt,
+                  transition: 'border-color 0.2s',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                Assign Roles
+              </label>
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8 }}>
+                {roles.map((role) => (
+                  <label key={role.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12,
+                    color: theme.txt,
+                    padding: '6px 8px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={createUserForm.selectedRoles.includes(role.id)}
+                      onChange={(e) => {
+                        const selectedRoles = e.target.checked
+                          ? [...createUserForm.selectedRoles, role.id]
+                          : createUserForm.selectedRoles.filter(id => id !== role.id);
+                        setCreateUserForm({ ...createUserForm, selectedRoles });
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {role.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
+              <button
+                onClick={() => setCreateUserModal({ isOpen: false })}
+                style={{
+                  padding: '10px 20px',
+                  background: 'transparent',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 6,
+                  color: theme.txt,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => { e.target.style.background = theme.bg; }}
+                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                style={{
+                  padding: '10px 20px',
+                  background: theme.pri,
+                  border: 'none',
+                  borderRadius: 6,
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: `0 4px 6px -1px ${theme.pri}40`,
+                }}
+                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
+                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
+              >
+                Create User
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
