@@ -55,7 +55,10 @@ export function AdminApp() {
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [adminUser, setAdminUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [currentPage, setCurrentPage] = useState(() => {
+    const savedPage = localStorage.getItem('adminCurrentPage');
+    return savedPage || 'dashboard';
+  });
   const [loading, setLoading] = useState(true);
   const [selectedCampaignId, setSelectedCampaignId] = useState(null);
   const [selectedCampaignType, setSelectedCampaignType] = useState('daily');
@@ -66,6 +69,10 @@ export function AdminApp() {
     checkAdminAuth();
     loadAdminFonts();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('adminCurrentPage', currentPage);
+  }, [currentPage]);
 
   const loadAdminFonts = async () => {
     try {
@@ -136,6 +143,7 @@ export function AdminApp() {
     setIsAuthenticated(false);
     setAdminUser(null);
     setCurrentPage('dashboard');
+    localStorage.removeItem('adminCurrentPage');
   };
 
   if (loading) {
