@@ -75,62 +75,17 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
       <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
 
-          {/* Co-Branded Logo Header */}
+          {/* Logo Header */}
           <div style={{ 
-            position: "relative", 
+            background: "#FFFFFF", 
             height: 90, 
             marginBottom: 24, 
             borderRadius: 12, 
-            overflow: "hidden",
-            display: "flex"
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center"
           }}>
-            {/* Left White Section - Ethio Logo */}
-            <div style={{ 
-              flex: 1, 
-              background: "#FFFFFF", 
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center",
-              position: "relative",
-              zIndex: 2
-            }}>
-              <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 120, height: 70, objectFit: "contain" }} />
-            </div>
-
-            {/* Right Dark Section - FlipStar Logo */}
-            <div style={{ 
-              flex: 1, 
-              background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", 
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center"
-            }}>
-              <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 120, height: 70, objectFit: "contain" }} />
-            </div>
-
-            {/* Gold Diagonal Line SVG Overlay */}
-            {/* <svg 
-              height="100%" 
-              width="100" 
-              style={{ 
-                position: "absolute", 
-                left: "50%", 
-                transform: "translateX(-50%)", 
-                top: 0,
-                zIndex: 3 
-              }}
-              preserveAspectRatio="none"
-            >
-              <line
-                x1="30"
-                y1="90"
-                x2="65"
-                y2="0"
-                stroke="#D4AF37"
-                strokeWidth="16"
-                strokeLinecap="round"
-              />
-            </svg> */}
+            <img src="/assets/70x20.png" alt="Logo" style={{ width: 140, height: 40, objectFit: "contain" }} />
           </div>
 
           {/* Card */}
