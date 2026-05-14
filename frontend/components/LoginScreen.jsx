@@ -75,7 +75,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
           alignItems: "center", 
           justifyContent: "center"
         }}>
-          <img src="/assets/70x20.png" alt="Logo" style={{ width: 380, height: 80, objectFit: "contain" }} />
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 398, height: 90, objectFit: "contain" }} />
         </div>
       </div>
       <div style={{ flex:1, background:"#fff", borderRadius:"28px 28px 0 0", marginTop:30, padding:"28px 24px 40px" }}>
