@@ -744,7 +744,7 @@ class OnevasWebhookView(APIView):
                         onevas_phone_number=phone_number,
                         onevas_subscription_id=str(uuid.uuid4()),
                         status='pending',
-                        start_date=timezone.now(),
+                        subscription_source='app',
                         end_date=timezone.now() + timedelta(days=total_duration_days),
                         setup_otp=otp_code,  # Set OTP for account login
                         free_trial_days=free_trial_days  # Track free trial days granted
