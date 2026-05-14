@@ -29,7 +29,7 @@ export function AdminManagementPage({ theme, adminUser }) {
   const [roleForm, setRoleForm] = useState({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true, selectedPermissions: [] });
   
   // User role assignment state
-  const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+  const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '' });
   const [selectedUserRoles, setSelectedUserRoles] = useState([]);
   const [userCredentials, setUserCredentials] = useState({ email: '', password: '' });
 
@@ -43,18 +43,13 @@ export function AdminManagementPage({ theme, adminUser }) {
 
   // User role assignment functions
   const handleAssignRole = (user, event) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-    
     // Load user's existing roles from the new API format
     const userRoles = user.roles ? user.roles.map(r => r.id) : [];
-    
-    setUserRoleModal({ 
-      isOpen: true, 
-      userId: user.id, 
-      username: user.username,
-      clickPosition: { x: rect.left + scrollLeft + rect.width / 2, y: rect.top + scrollTop }
+
+    setUserRoleModal({
+      isOpen: true,
+      userId: user.id,
+      username: user.username
     });
     setSelectedUserRoles(userRoles);
     setUserCredentials({ email: user.email || '', password: '' });
@@ -64,7 +59,7 @@ export function AdminManagementPage({ theme, adminUser }) {
     try {
       await api.request(`/admin/rbac/users/${userRoleModal.userId}/`, {
         method: 'PUT',
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           role_ids: selectedUserRoles,
           email: userCredentials.email,
           password: userCredentials.password,
@@ -75,7 +70,7 @@ export function AdminManagementPage({ theme, adminUser }) {
         searchInputRef.current.blur();
       }
       loadUsers();
-      setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+      setUserRoleModal({ isOpen: false, userId: null, username: '' });
       setSelectedUserRoles([]);
       setUserCredentials({ email: '', password: '' });
     } catch (error) {
@@ -1625,7 +1620,7 @@ export function AdminManagementPage({ theme, adminUser }) {
               </h3>
               <button
                 onClick={() => {
-                  setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+                  setUserRoleModal({ isOpen: false, userId: null, username: '' });
                   setSelectedUserRoles([]);
                   setUserCredentials({ email: '', password: '' });
                 }}
@@ -1752,7 +1747,7 @@ export function AdminManagementPage({ theme, adminUser }) {
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
               <button
                 onClick={() => {
-                  setUserRoleModal({ isOpen: false, userId: null, username: '', clickPosition: { x: 0, y: 0 } });
+                  setUserRoleModal({ isOpen: false, userId: null, username: '' });
                   setSelectedUserRoles([]);
                   setUserCredentials({ email: '', password: '' });
                 }}
