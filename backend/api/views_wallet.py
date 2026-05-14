@@ -551,6 +551,17 @@ def _serialize_full_config(config):
             'earned_coins_withdrawable': config.earned_coins_withdrawable,
             'purchased_coins_withdrawable': config.purchased_coins_withdrawable,
         },
+        'points': {
+            'coins_to_points_conversion': config.coins_to_points_conversion,
+            'points_per_birr': config.points_per_birr,
+            'withdrawal_min_points': config.withdrawal_min_points,
+            'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
+            'daily_winner_points': config.daily_winner_points,
+            'weekly_winner_points': config.weekly_winner_points,
+            'monthly_winner_points': config.monthly_winner_points,
+            'grand_finalist_points': config.grand_finalist_points,
+            'grand_winner_points': config.grand_winner_points,
+        },
         'expiry': {
             'earned_coins_expire_days': config.earned_coins_expire_days,
         },
