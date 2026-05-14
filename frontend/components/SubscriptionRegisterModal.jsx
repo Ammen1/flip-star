@@ -129,7 +129,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
         {/* Logo Header */}
         <div style={{ 
-          background: "#FFFFFF", 
+          background: "#000000", 
           height: 90, 
           marginBottom: 24, 
           borderRadius: 12, 

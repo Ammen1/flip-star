@@ -67,7 +67,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         </button>
         {/* Logo Header */}
         <div style={{ 
-          background: "#FFFFFF", 
+          background: "#000000", 
           height: 90, 
           marginTop: 20, 
           borderRadius: 12, 

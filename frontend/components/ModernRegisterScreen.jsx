@@ -242,7 +242,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
 
         {/* Logo Header */}
         <div style={{ 
-          background: "#FFFFFF", 
+          background: "#000000", 
           height: 90, 
           marginBottom: 24, 
           borderRadius: 12, 

@@ -529,7 +529,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
       <div style={{ width: "100%", maxWidth: 420 }}>
         {/* Logo Header */}
         <div style={{ 
-          background: "#FFFFFF", 
+          background: "#000000", 
           height: 90, 
           marginBottom: 24, 
           borderRadius: 12, 
