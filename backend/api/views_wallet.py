@@ -466,6 +466,10 @@ def admin_wallet_config(request):
         'earned_coins_giftable', 'purchased_coins_giftable',
         'earned_coins_withdrawable', 'purchased_coins_withdrawable',
         'earned_coins_expire_days',
+        'coins_to_points_conversion', 'points_per_birr',
+        'withdrawal_min_points', 'withdrawal_max_points_per_request',
+        'daily_winner_points', 'weekly_winner_points', 'monthly_winner_points',
+        'grand_finalist_points', 'grand_winner_points',
     ]
     for field in editable_fields:
         if field in request.data:
