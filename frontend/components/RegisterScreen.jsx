@@ -137,7 +137,7 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
           alignItems: "center", 
           justifyContent: "center"
         }}>
-          <img src="/assets/70x20.png" alt="Logo" style={{ width: 398, height: 90, objectFit: "contain" }} />
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
         </div>
         <div style={{ marginTop:14, padding:"0 4px" }}>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontWeight:600, marginBottom:7 }}>STEP {step+1} OF {steps.length}</div>
