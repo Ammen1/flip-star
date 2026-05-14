@@ -353,7 +353,7 @@ export function AdminManagementPage({ theme, adminUser }) {
           color: theme.txt,
           marginBottom: 8,
         }}>
-          Admin mgmt
+          Admin Management
         </h1>
         <p style={{
           margin: 0,
