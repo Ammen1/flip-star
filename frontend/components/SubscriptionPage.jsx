@@ -176,7 +176,7 @@ export function SubscriptionPage({ user, onBack }) {
   const M_CARD   = '#161616';
   const M_BORDER = '#242424';
   const GOLD     = '#C8B56A';
-  const PLAN_COLORS = { daily: '#F59E0B', weekly: '#8B5CF6', monthly: GOLD };
+  const PLAN_COLORS = { daily: '#8fc441', weekly: '#8B5CF6', monthly: GOLD };
   const PLAN_ICON   = { daily: Zap,       weekly: Star,      monthly: Trophy };
   const BENEFITS = [
     { icon: Video,  text: 'HD Videos' },

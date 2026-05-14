@@ -283,7 +283,7 @@ export function SidebarCampaigns({ onCampaignClick }) {
           background: `linear-gradient(135deg,#FFD70010,${T.bg})`,
           border: `1px solid #FFD70030`,
         }}>
-          <SectionHeader icon={Trophy} label="Recent Winners" color="#F59E0B" T={T} />
+          <SectionHeader icon={Trophy} label="Recent Winners" color="#8fc441" T={T} />
           {loading
             ? [0, 1, 2].map(i => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>

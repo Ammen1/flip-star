@@ -626,7 +626,7 @@ export function SettingsPage({ theme }) {
                 marginTop: 16,
                 padding: 12,
                 background: '#FEF3C7',
-                border: '2px solid #F59E0B',
+                border: '2px solid #8fc441',
                 borderRadius: 8,
                 fontSize: 11,
               }}>
@@ -644,7 +644,7 @@ export function SettingsPage({ theme }) {
                   style={{
                     marginTop: 8,
                     padding: '6px 12px',
-                    background: '#F59E0B',
+                    background: '#8fc441',
                     border: 'none',
                     borderRadius: 6,
                     color: '#fff',
@@ -974,12 +974,12 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
 
         {/* Secondary (legacy) */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
-          <input type="color" value={settings.secondary_color || '#F97316'}
+          <input type="color" value={settings.secondary_color || '#8fc441'}
             onChange={(e) => handleChange('secondary_color', e.target.value)}
             style={{ width: 36, height: 36, border: `1px solid ${theme.border}`, borderRadius: 6, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt, marginBottom: 2 }}>Secondary / Accent Color</div>
-            <input type="text" value={settings.secondary_color || '#F97316'}
+            <input type="text" value={settings.secondary_color || '#8fc441'}
               onChange={(e) => handleChange('secondary_color', e.target.value)}
               style={{ width: '100%', padding: '8px 10px', border: `1px solid ${theme.border}`, borderRadius: 6, fontSize: 13, outline: 'none', background: theme.card, color: theme.txt }} />
           </div>

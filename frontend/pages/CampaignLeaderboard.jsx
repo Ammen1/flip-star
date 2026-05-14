@@ -61,7 +61,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
             <div style={{
               width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-              background: `linear-gradient(135deg, ${T.pri}, #F59E0B)`,
+              background: `linear-gradient(135deg, ${T.pri}, #8fc441)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <TrendingUp size={20} color="#fff" />
@@ -160,7 +160,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                       <Crown size={28} color="#FFD700" style={{ marginBottom: 6 }} />
                       <div style={{
                         width: 80, height: 80, borderRadius: '50%', margin: '0 auto 10px',
-                        background: `linear-gradient(135deg, ${T.pri}, #F59E0B)`,
+                        background: `linear-gradient(135deg, ${T.pri}, #8fc441)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 32, fontWeight: 800, color: '#fff',
                         border: `4px solid ${T.pri}`,
@@ -226,7 +226,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
                         background: medalColor
                           ? `linear-gradient(135deg, ${medalColor}, ${medalColor}bb)`
-                          : `linear-gradient(135deg, ${T.pri}60, #F59E0B60)`,
+                          : `linear-gradient(135deg, ${T.pri}60, #8fc44160)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontSize: 15, fontWeight: 800,
                       }}>

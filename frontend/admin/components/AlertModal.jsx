@@ -6,7 +6,7 @@ export function AlertModal({ isOpen, title, message, type = 'info', onClose, onC
   const config = {
     success: { color: '#10B981', bg: '#ECFDF5', Icon: CheckCircle2 },
     error:   { color: '#EF4444', bg: '#FEF2F2', Icon: XCircle },
-    warning: { color: '#F59E0B', bg: '#FFFBEB', Icon: AlertTriangle },
+    warning: { color: '#8fc441', bg: '#F0F9E8', Icon: AlertTriangle },
     info:    { color: '#2563EB', bg: '#EFF6FF', Icon: Info },
   }[type] || { color: '#2563EB', bg: '#EFF6FF', Icon: Info };
 

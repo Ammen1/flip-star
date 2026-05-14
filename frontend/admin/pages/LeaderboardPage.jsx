@@ -164,7 +164,7 @@ export function LeaderboardPage({ theme, campaignId, campaign }) {
                     <div
                       key={entry.id}
                       style={{
-                        background: isFirst ? 'linear-gradient(135deg, #FFD700 0%, #F9E08B 100%)' : theme.card,
+                        background: isFirst ? 'linear-gradient(135deg, #FFD700 0%, #b8d97a 100%)' : theme.card,
                         borderRadius: 16,
                         padding: 24,
                         textAlign: 'center',

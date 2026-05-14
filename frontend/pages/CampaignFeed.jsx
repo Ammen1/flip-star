@@ -38,7 +38,7 @@ const mediaUrl = (url) => {
 };
 
 const RANK_STYLES = {
-  1: { bg: 'rgba(249,224,139,0.2)', border: '#F9E08B', text: '#F9E08B', label: '🥇 #1' },
+  1: { bg: 'rgba(249,224,139,0.2)', border: '#b8d97a', text: '#b8d97a', label: '🥇 #1' },
   2: { bg: 'rgba(249,224,139,0.15)', border: 'rgba(249,224,139,0.7)', text: 'rgba(249,224,139,0.8)', label: '🥈 #2' },
   3: { bg: 'rgba(249,224,139,0.12)', border: 'rgba(249,224,139,0.6)', text: 'rgba(249,224,139,0.7)', label: '🥉 #3' },
 };
@@ -289,7 +289,7 @@ const PostCard = ({ post, rank, onVote, campaignType, isVotingOpen }) => {
       <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{
           width: 40, height: 40, borderRadius: '50%',
-          background: `linear-gradient(135deg, ${T.pri}, #F59E0B)`,
+          background: `linear-gradient(135deg, ${T.pri}, #8fc441)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontSize: 16, fontWeight: 700, flexShrink: 0,
         }}>

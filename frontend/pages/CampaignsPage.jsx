@@ -4,7 +4,7 @@ import api from '../api';
 import config from '../config.js';
 import { useTheme } from '../contexts/ThemeContext';
 
-const BRAND = '#F9E08B';
+const BRAND = '#b8d97a';
 
 const mediaUrl = (url) => {
   if (!url) return null;
@@ -55,7 +55,7 @@ if (!document.head.querySelector('style[data-campaigns-v2]')) {
 const STATUS_META = {
   active:    { color: '#10B981', label: 'Active', icon: Flame },
   voting:    { color: '#3B82F6', label: 'Voting', icon: Award },
-  upcoming:  { color: '#F59E0B', label: 'Soon',   icon: Clock },
+  upcoming:  { color: '#8fc441', label: 'Soon',   icon: Clock },
   completed: { color: '#94A3B8', label: 'Ended',  icon: Calendar },
 };
 
@@ -201,7 +201,7 @@ export function CampaignsPage({ onCampaignClick, onBack }) {
             <div style={{
               width: 56, height: 56, margin: '0 auto 12px',
               borderRadius: '50%',
-              background: `linear-gradient(135deg, ${BRAND}, #F59E0B)`,
+              background: `linear-gradient(135deg, ${BRAND}, #8fc441)`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: `0 8px 24px ${BRAND}50`,
               animation: 'camp-float 3s ease-in-out infinite',
@@ -309,7 +309,7 @@ export function CampaignsPage({ onCampaignClick, onBack }) {
                       overflow: 'hidden',
                       background: campaign.image
                         ? '#000'
-                        : `linear-gradient(135deg, ${BRAND}30, #F59E0B30)`,
+                        : `linear-gradient(135deg, ${BRAND}30, #8fc44130)`,
                     }}>
                       {campaign.image ? (
                         <div className="camp-card-img" style={{
@@ -416,7 +416,7 @@ export function CampaignsPage({ onCampaignClick, onBack }) {
                       }}>
                         <div style={{
                           width: 32, height: 32, borderRadius: '50%',
-                          background: `linear-gradient(135deg, ${BRAND}, #F59E0B)`,
+                          background: `linear-gradient(135deg, ${BRAND}, #8fc441)`,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           flexShrink: 0,
                           boxShadow: `0 2px 8px ${BRAND}50`,

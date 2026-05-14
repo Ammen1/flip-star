@@ -7,7 +7,7 @@ export const adminTheme = {
     primaryLight: '#3B82F6', // Lighter Blue
     secondary: '#7C3AED',    // Violet
     success: '#10B981',      // Emerald
-    warning: '#F59E0B',      // Amber
+    warning: '#8fc441',      // Amber
     error: '#EF4444',        // Red
     info: '#3B82F6',         // Blue
     

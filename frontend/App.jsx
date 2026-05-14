@@ -1577,7 +1577,7 @@ export default function WerqRoot() {
             <Suspense fallback={<PageSkeleton />}>
               <CampaignDetailPage
                 theme={{
-                  pri: '#DA9B2A',
+                  pri: '#8fc441',
                   txt: '#1C1917',
                   sub: '#78716C',
                   bg: '#FAFAF9',
@@ -1586,7 +1586,7 @@ export default function WerqRoot() {
                   blue: '#3B82F6',
                   green: '#10B981',
                   red: '#EF4444',
-                  orange: '#F59E0B',
+                  orange: '#8fc441',
                   purple: '#8B5CF6',
                 }}
                 campaignId={campaignId}

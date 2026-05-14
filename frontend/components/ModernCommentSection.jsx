@@ -39,7 +39,7 @@ function renderTextWithMentions(text, accentColor, onMentionTap) {
           if (onMentionTap) onMentionTap(username);
         }}
         style={{
-          color: accentColor || '#F9E08B',
+          color: accentColor || '#b8d97a',
           fontWeight: 700,
           cursor: onMentionTap ? 'pointer' : 'default',
         }}
@@ -676,7 +676,7 @@ export function ModernCommentSection({ reelId, user, onClose, onCommentPosted, o
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              color: "#F9E08B",
+              color: "#b8d97a",
               flexShrink: 0,
               zIndex: 10,
             }}
@@ -696,7 +696,7 @@ export function ModernCommentSection({ reelId, user, onClose, onCommentPosted, o
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              color: "#F9E08B",
+              color: "#b8d97a",
               flexShrink: 0,
               zIndex: 10,
             }}

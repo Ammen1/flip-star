@@ -16,7 +16,7 @@ const RARITY_COLORS = {
   common: '#A0A0A0',
   rare: '#3B82F6',
   epic: '#8B5CF6',
-  legendary: '#F59E0B',
+  legendary: '#8fc441',
 };
 
 export default function GiftPage({ username, onClose, onShowWallet }) {
@@ -150,7 +150,7 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
   const surface = T?.border || '#333';
   const txt = T?.txt || '#fff';
   const sub = T?.sub || '#999';
-  const pri = T?.pri || '#F9E08B';
+  const pri = T?.pri || '#b8d97a';
   const border = T?.border || '#333';
 
   const inputStyle = {

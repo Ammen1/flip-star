@@ -169,12 +169,12 @@ export function AppShell({
         }
         .appshell-main::-webkit-scrollbar { display: none; }
         .appshell-main { -ms-overflow-style: none; scrollbar-width: none; }
-        .mob-nav-btn svg { color: #F9E08B !important; }
-        .mob-nav-btn span { color: #F9E08B !important; }
-        .mob-nav-gold svg { color: #F9E08B !important; filter: drop-shadow(0 0 6px #F9E08B); }
-        .mob-nav-gold span { color: #F9E08B !important; text-shadow: 0 0 8px #F9E08B; }
-        .mob-nav-btn:hover svg { filter: drop-shadow(0 0 8px #F9E08B); transform: scale(1.15); transition: all 0.2s; }
-        .mob-nav-btn:hover span { text-shadow: 0 0 8px #F9E08B; transition: all 0.2s; }
+        .mob-nav-btn svg { color: #b8d97a !important; }
+        .mob-nav-btn span { color: #b8d97a !important; }
+        .mob-nav-gold svg { color: #b8d97a !important; filter: drop-shadow(0 0 6px #b8d97a); }
+        .mob-nav-gold span { color: #b8d97a !important; text-shadow: 0 0 8px #b8d97a; }
+        .mob-nav-btn:hover svg { filter: drop-shadow(0 0 8px #b8d97a); transform: scale(1.15); transition: all 0.2s; }
+        .mob-nav-btn:hover span { text-shadow: 0 0 8px #b8d97a; transition: all 0.2s; }
         .mob-nav-btn { transition: all 0.2s; }
       `}</style>
       {/* 1. Desktop Sidebar */}
@@ -243,10 +243,10 @@ export function AppShell({
                     gap: 12,
                     padding: '12px 16px',
                     border: 'none',
-                    background: isActive ? `${T.priFallback || '#E2B355'}18` : 'transparent',
+                    background: isActive ? `${T.priFallback || '#8fc441'}18` : 'transparent',
                     borderRadius: 12,
                     cursor: 'pointer',
-                    color: isActive ? (T.priFallback || '#E2B355') : T.txt,
+                    color: isActive ? (T.priFallback || '#8fc441') : T.txt,
                     fontWeight: isActive ? 700 : 500,
                     transition: 'all 0.2s',
                     position: 'relative',
@@ -281,7 +281,7 @@ export function AppShell({
                     )}
                   </div>
                   <span style={isActive ? {
-                    background: 'linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)',
+                    background: 'linear-gradient(to bottom, #8fc441 0%, #b8d97a 50%, #6fa32e 100%)',
                     WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
                   } : {}}>{item.label}</span>
@@ -452,7 +452,7 @@ export function AppShell({
                     width: 54,
                     height: 54,
                     borderRadius: '50%',
-                    background: 'linear-gradient(145deg, #F9E08B 0%, #D4A017 100%)',
+                    background: 'linear-gradient(145deg, #b8d97a 0%, #D4A017 100%)',
                     boxShadow: '0 4px 18px rgba(249,224,139,0.5), 0 2px 6px rgba(0,0,0,0.3)',
                     display: 'flex',
                     alignItems: 'center',
@@ -471,7 +471,7 @@ export function AppShell({
                     <Icon
                       size={24}
                       strokeWidth={1.8}
-                      color='#F9E08B'
+                      color='#b8d97a'
                       fill='none'
                     />
                     {badgeCount > 0 && (
@@ -495,7 +495,7 @@ export function AppShell({
                   <span style={{
                     fontSize: 10,
                     fontWeight: 500,
-                    color: '#F9E08B',
+                    color: '#b8d97a',
                     lineHeight: 1,
                     marginTop: 'auto',
                     paddingBottom: 4,
@@ -505,7 +505,7 @@ export function AppShell({
                     style={{
                       fontSize: 10,
                       fontWeight: isActive ? 700 : 400,
-                      color: '#F9E08B',
+                      color: '#b8d97a',
                       lineHeight: 1,
                     }}>{label}</span>
                 ) : null}

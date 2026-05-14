@@ -180,8 +180,8 @@ export function VideoCard({ video, onLike, onComment, onShare }) {
                 display: 'flex', alignItems: 'center', gap: 3,
               }}
             >
-              <MessageCircle size={16} color={T?.priFallback || '#E2B355'} />
-              <span style={{ fontSize: 11, color: T?.priFallback || '#E2B355', fontWeight: 600 }}>{video?.comments || 0}</span>
+              <MessageCircle size={16} color={T?.priFallback || '#8fc441'} />
+              <span style={{ fontSize: 11, color: T?.priFallback || '#8fc441', fontWeight: 600 }}>{video?.comments || 0}</span>
             </button>
             {/* Share */}
             <button
@@ -192,8 +192,8 @@ export function VideoCard({ video, onLike, onComment, onShare }) {
                 display: 'flex', alignItems: 'center', gap: 3,
               }}
             >
-              <Share2 size={16} color={T?.priFallback || '#E2B355'} />
-              <span style={{ fontSize: 11, color: T?.priFallback || '#E2B355', fontWeight: 600 }}>{video?.shares || 0}</span>
+              <Share2 size={16} color={T?.priFallback || '#8fc441'} />
+              <span style={{ fontSize: 11, color: T?.priFallback || '#8fc441', fontWeight: 600 }}>{video?.shares || 0}</span>
             </button>
           </div>
           {/* Save */}
@@ -206,7 +206,7 @@ export function VideoCard({ video, onLike, onComment, onShare }) {
             <Bookmark
               size={16}
               fill={false}
-              color={T?.priFallback || '#E2B355'}
+              color={T?.priFallback || '#8fc441'}
             />
           </button>
         </div>

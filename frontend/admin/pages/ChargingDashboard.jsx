@@ -70,7 +70,7 @@ export function ChargingDashboard({ theme }) {
     switch (status) {
       case 'success': return '#10B981';
       case 'failed': return '#EF4444';
-      case 'insufficient_balance': return '#F59E0B';
+      case 'insufficient_balance': return '#8fc441';
       case 'pending': return '#3B82F6';
       default: return '#6B7280';
     }
@@ -214,7 +214,7 @@ export function ChargingDashboard({ theme }) {
               icon={AlertCircle}
               label="Insufficient Balance"
               value={statistics.insufficient_balance}
-              color="#F59E0B"
+              color="#8fc441"
               theme={theme}
             />
             <StatCard

@@ -191,7 +191,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
         <div style={{
           padding: 18,
           borderRadius: 16,
-          background: 'linear-gradient(135deg, #D4AF37 0%, #C8A84B 100%)',
+          background: 'linear-gradient(135deg, #8fc441 0%, #C8A84B 100%)',
           color: '#1A1A1A',
           boxShadow: '0 6px 20px rgba(212,175,55,0.25)',
           display: 'flex',
@@ -406,7 +406,7 @@ function OverviewTab({ theme: T, totals, withdrawal, recentTx, config }) {
                  label="Total Spent" value={formatNumber(totals.lifetime_spent)} sub="coins" />
         <StatBox theme={T} icon={<CreditCard size={18} color={T.pri} />}
                  label="Total Bought" value={formatNumber(totals.lifetime_purchased)} sub="coins" />
-        <StatBox theme={T} icon={<ArrowUpFromLine size={18} color="#F59E0B" />}
+        <StatBox theme={T} icon={<ArrowUpFromLine size={18} color="#8fc441" />}
                  label="Total Withdrawn" value={formatNumber(totals.lifetime_withdrawn)} sub="coins" />
       </div>
 
@@ -416,7 +416,7 @@ function OverviewTab({ theme: T, totals, withdrawal, recentTx, config }) {
           background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
           padding: 16, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12,
         }}>
-          <AlertCircle size={20} color="#F59E0B" />
+          <AlertCircle size={20} color="#8fc441" />
           <div style={{ flex: 1, fontSize: 13, color: T.sub }}>
             Earn <strong style={{ color: T.txt }}>{withdrawal.min_points?.toLocaleString()}</strong> points
             to unlock withdrawal to Birr. You have <strong style={{ color: T.txt }}>
@@ -971,7 +971,7 @@ function Row({ label, value, theme: T, muted, bold }) {
 // ---------------------------------------------------------------
 
 const WITHDRAWAL_STATUS = {
-  pending: { color: '#F59E0B', icon: Clock },
+  pending: { color: '#8fc441', icon: Clock },
   approved: { color: '#3B82F6', icon: CheckCircle2 },
   processing: { color: '#3B82F6', icon: Loader },
   completed: { color: '#10B981', icon: CheckCircle2 },

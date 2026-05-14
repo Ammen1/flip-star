@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../api';
 import { ArrowLeft, Plus, Edit2, Trash2, CheckCircle, Calendar, Hash, X, Save } from 'lucide-react';
 
-const PRI = '#DA9B2A';
+const PRI = '#8fc441';
 const BG = '#FAFAF9';
 const CARD = '#FFFFFF';
 const BORDER = '#E7E5E4';
@@ -244,7 +244,7 @@ const ThemeModal = ({ campaignId, theme, onClose, onSuccess }) => {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px', borderBottom: `1.5px solid ${BORDER}`, position: 'sticky', top: 0, background: CARD, borderRadius: '16px 16px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 9, background: `linear-gradient(135deg, ${PRI}, #F59E0B)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 9, background: `linear-gradient(135deg, ${PRI}, #8fc441)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Calendar size={18} color="#fff" />
             </div>
             <div>

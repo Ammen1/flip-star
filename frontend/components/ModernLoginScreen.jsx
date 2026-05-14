@@ -4,7 +4,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import api from "../api";
 import { ForgotPasswordPhone } from "./ForgotPasswordPhone";
 
-const GOLD = "linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)";
+const GOLD = "linear-gradient(to bottom, #8fc441 0%, #b8d97a 50%, #6fa32e 100%)";
 
 const FAQ_ITEMS = [
   { q: "What is FlipStar?", a: "FlipStar is a premium, subscription-based gamified social media platform by Ethio Telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr." },
@@ -53,15 +53,15 @@ function FaqModal({ onClose }) {
   return (
     <Overlay onClose={onClose}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: "#F9E08B" }}>FAQ</div>
-        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}><X size={22} /></button>
+        <div style={{ fontSize: 20, fontWeight: 900, color: "#b8d97a" }}>FAQ</div>
+        <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#b8d97a" }}><X size={22} /></button>
       </div>
       {FAQ_ITEMS.map((item, i) => (
         <div key={i} style={{ borderBottom: "1px solid #262626", marginBottom: 2 }}>
           <button onClick={() => setOpen(open === i ? null : i)}
             style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", textAlign: "left" }}>{item.q}</span>
-            {open === i ? <ChevronUp size={16} color="#F9E08B" style={{ flexShrink: 0 }} /> : <ChevronDown size={16} color="#F9E08B" style={{ flexShrink: 0 }} />}
+            {open === i ? <ChevronUp size={16} color="#b8d97a" style={{ flexShrink: 0 }} /> : <ChevronDown size={16} color="#b8d97a" style={{ flexShrink: 0 }} />}
           </button>
           {open === i && <div style={{ fontSize: 13, color: "#ccc", paddingBottom: 14, lineHeight: 1.6 }}>{item.a}</div>}
         </div>
@@ -516,7 +516,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
   const inp = (focused) => ({
     width: "100%", padding: "13px 16px 13px 46px",
     background: T.cardBg || "#1A1A1A",
-    border: `1.5px solid ${focused ? "#F9E08B" : T.border || "#262626"}`,
+    border: `1.5px solid ${focused ? "#b8d97a" : T.border || "#262626"}`,
     borderRadius: 10, fontSize: 15, color: T.txt || "#fff", outline: "none", boxSizing: "border-box",
   });
 
@@ -543,12 +543,12 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
         </div>
 
         {/* Card */}
-        <div style={{ background: T.cardBg || "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
+        <div style={{ background: T.cardBg || "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #b8d97a30" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
-            <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#b8d97a", marginBottom: 4 }}>
               {subscriptionOtpMode ? "Login to Your Account" : "Welcome"}
             </div>
-            <div style={{ fontSize: 13, color: "#F9E08B" }}>
+            <div style={{ fontSize: 13, color: "#b8d97a" }}>
               {subscriptionOtpMode ? "Log in with your subscription OTP" : "Log in to continue to FLIPSTAR"}
             </div>
           </div>
@@ -564,13 +564,13 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Phone field */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>Phone Number</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#b8d97a", marginBottom: 6, letterSpacing: 0.5 }}>Phone Number</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#b8d97a", display: "flex" }}><User size={17} /></div>
                 <input type="tel" value={subPhone} onChange={e => setSubPhone(e.target.value)}
                   placeholder="09XXXXXXXX"
                   style={inp(false)}
-                  onFocus={e => e.target.style.border = "1.5px solid #F9E08B"}
+                  onFocus={e => e.target.style.border = "1.5px solid #b8d97a"}
                   onBlur={e => e.target.style.border = "1.5px solid #262626"}
                 />
               </div>
@@ -578,13 +578,13 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Username field */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>Username</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#b8d97a", marginBottom: 6, letterSpacing: 0.5 }}>Username</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#b8d97a", display: "flex" }}><User size={17} /></div>
                 <input type="text" value={subUsername} onChange={e => setSubUsername(e.target.value)}
                   placeholder="Choose a username"
                   style={inp(false)}
-                  onFocus={e => e.target.style.border = "1.5px solid #F9E08B"}
+                  onFocus={e => e.target.style.border = "1.5px solid #b8d97a"}
                   onBlur={e => e.target.style.border = "1.5px solid #262626"}
                 />
               </div>
@@ -592,13 +592,13 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* OTP field */}
             <div style={{ marginBottom: 14 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>Subscription OTP</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#b8d97a", marginBottom: 6, letterSpacing: 0.5 }}>Subscription OTP</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#b8d97a", display: "flex" }}><Lock size={17} /></div>
                 <input type="text" inputMode="numeric" maxLength={6} value={subOtp} onChange={e => setSubOtp(e.target.value)}
                   placeholder="Enter OTP from SMS"
                   style={inp(false)}
-                  onFocus={e => e.target.style.border = "1.5px solid #F9E08B"}
+                  onFocus={e => e.target.style.border = "1.5px solid #b8d97a"}
                   onBlur={e => e.target.style.border = "1.5px solid #262626"}
                 />
               </div>
@@ -606,20 +606,20 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* New Password field */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 6, letterSpacing: 0.5 }}>New Password (6 digits)</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#b8d97a", marginBottom: 6, letterSpacing: 0.5 }}>New Password (6 digits)</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#b8d97a", display: "flex" }}><Lock size={17} /></div>
                 <input
                   type={showSubPassword ? "text" : "password"}
                   inputMode="numeric" maxLength={6}
                   value={subPassword} onChange={e => setSubPassword(e.target.value)}
                   placeholder="••••••"
                   style={{ ...inp(false), paddingRight: 46 }}
-                  onFocus={e => e.target.style.border = "1.5px solid #F9E08B"}
+                  onFocus={e => e.target.style.border = "1.5px solid #b8d97a"}
                   onBlur={e => e.target.style.border = "1.5px solid #262626"}
                 />
                 <button type="button" onClick={() => setShowSubPassword(!showSubPassword)}
-                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#b8d97a" }}>
                   {showSubPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
@@ -641,13 +641,13 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Username field */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Username</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#b8d97a", marginBottom: 7, letterSpacing: 0.5 }}>Username</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#b8d97a", display: "flex" }}><User size={17} /></div>
                 <input type="text" value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="Enter your username"
                   style={inp(false)}
-                  onFocus={e => e.target.style.border = "1.5px solid #F9E08B"}
+                  onFocus={e => e.target.style.border = "1.5px solid #b8d97a"}
                   onBlur={e => e.target.style.border = "1.5px solid #262626"}
                 />
               </div>
@@ -655,20 +655,20 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
 
             {/* Password field */}
             <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#b8d97a", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#b8d97a", display: "flex" }}><Lock size={17} /></div>
                 <input
                   type={showPassword ? "text" : "password"}
                   inputMode="numeric" maxLength={6}
                   value={password} onChange={e => setPassword(e.target.value)}
                   placeholder="••••••"
                   style={{ ...inp(false), paddingRight: 46 }}
-                  onFocus={e => e.target.style.border = "1.5px solid #F9E08B"}
+                  onFocus={e => e.target.style.border = "1.5px solid #b8d97a"}
                   onBlur={e => e.target.style.border = "1.5px solid #262626"}
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#b8d97a" }}>
                   {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
@@ -683,7 +683,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
             {/* Forgot password */}
             <div style={{ textAlign: "center", marginBottom: 16 }}>
               <button type="button" onClick={() => setModal("forgot")}
-                style={{ background: "none", border: "none", color: "#F9E08B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                style={{ background: "none", border: "none", color: "#b8d97a", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                 Forgot password?
               </button>
             </div>
@@ -693,15 +693,15 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           {/* Sign up */}
           <div style={{ textAlign: "center", fontSize: 13, color: "#666", marginBottom: 0 }}>
             Don't have an account?{" "}
-            <button type="button" onClick={onRegister} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Subscribe</button>
+            <button type="button" onClick={onRegister} style={{ background: "none", border: "none", color: "#b8d97a", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Subscribe</button>
           </div>
         </div>
 
         {/* Footer links */}
         <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 20, paddingBottom: 20 }}>
-          <button onClick={() => setModal("faq")} style={{ background: "none", border: "none", color: "#F9E08B", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>FAQ</button>
+          <button onClick={() => setModal("faq")} style={{ background: "none", border: "none", color: "#b8d97a", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>FAQ</button>
           <span style={{ color: "#262626" }}>|</span>
-          <button onClick={() => setModal("terms")} style={{ background: "none", border: "none", color: "#F9E08B", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Terms & Conditions</button>
+          <button onClick={() => setModal("terms")} style={{ background: "none", border: "none", color: "#b8d97a", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Terms & Conditions</button>
         </div>
       </div>
 

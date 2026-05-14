@@ -24,7 +24,7 @@ const STATUS_OPTIONS = [
 
 const STATUS_COLORS = {
   received: { color: '#3B82F6', bg: '#1E3A8A33' },
-  pending: { color: '#F59E0B', bg: '#78350F33' },
+  pending: { color: '#8fc441', bg: '#78350F33' },
   in_progress: { color: '#8B5CF6', bg: '#4C1D9533' },
   solved: { color: '#10B981', bg: '#064E3B33' },
   closed: { color: '#9CA3AF', bg: '#37415133' },
@@ -80,7 +80,7 @@ export function SupportRequestsPage({ theme }) {
   const BORDER = '#262626';
   const TXT = '#fff';
   const SUB = '#9CA3AF';
-  const PRI = T.pri || '#DA9B2A';
+  const PRI = T.pri || '#8fc441';
 
   return (
     <div style={{ padding: 24, color: TXT, minHeight: '100%', background: BG }}>

@@ -123,7 +123,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
 
   const STATUS_STYLES = {
     received: { color: '#3B82F6', bg: '#DBEAFE', label: 'Received' },
-    pending: { color: '#F59E0B', bg: '#FEF3C7', label: 'Pending' },
+    pending: { color: '#8fc441', bg: '#FEF3C7', label: 'Pending' },
     in_progress: { color: '#8B5CF6', bg: '#EDE9FE', label: 'In Progress' },
     solved: { color: '#10B981', bg: '#D1FAE5', label: 'Solved' },
     closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
@@ -621,7 +621,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
         {modal.isOpen && (
           <div onClick={() => setModal({ ...modal, isOpen: false })} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000, padding: 16 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: T.cardBg, borderRadius: 16, padding: 20, maxWidth: 360, width: '100%' }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#F59E0B' : modal.type === 'success' ? '#10B981' : T.txt, marginBottom: 8 }}>{modal.title}</h3>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#8fc441' : modal.type === 'success' ? '#10B981' : T.txt, marginBottom: 8 }}>{modal.title}</h3>
               <p style={{ margin: 0, fontSize: 14, color: T.txt, lineHeight: 1.5, marginBottom: 16 }}>{modal.message}</p>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 {modal.onConfirm && (
@@ -631,7 +631,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
                 )}
                 <button
                   onClick={() => { if (modal.onConfirm) modal.onConfirm(); setModal({ ...modal, isOpen: false }); }}
-                  style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#F59E0B' : modal.type === 'success' ? '#10B981' : T.pri, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#8fc441' : modal.type === 'success' ? '#10B981' : T.pri, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
                 >
                   {modal.onConfirm ? t('confirm') : t('ok')}
                 </button>
@@ -1172,7 +1172,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
             <h3 style={{ 
               fontSize: isSmallMobile ? 16 : 20, 
               fontWeight: 700, 
-              color: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#F59E0B' : modal.type === 'success' ? '#10B981' : T.txt, 
+              color: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#8fc441' : modal.type === 'success' ? '#10B981' : T.txt, 
               marginBottom: 12 
             }}>
               {modal.title}
@@ -1210,7 +1210,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
                   padding: isSmallMobile ? "8px 16px" : "10px 20px",
                   border: "none",
                   borderRadius: 8,
-                  background: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#F59E0B' : modal.type === 'success' ? '#10B981' : T.pri,
+                  background: modal.type === 'error' ? '#EF4444' : modal.type === 'warning' ? '#8fc441' : modal.type === 'success' ? '#10B981' : T.pri,
                   cursor: "pointer",
                   fontSize: isSmallMobile ? 12 : 14,
                   fontWeight: 600,

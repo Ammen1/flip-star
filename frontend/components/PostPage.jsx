@@ -205,7 +205,7 @@ export function PostPage({ user, onBack }) {
       left: 0,
       right: 0,
       bottom: 0,
-      background: "linear-gradient(160deg, #fff7ed 0%, #fef3c7 50%, #ffedd5 100%)",
+      background: "linear-gradient(160deg, #F0F9E8 0%, #fef3c7 50%, #ffedd5 100%)",
       zIndex: 4000,
       display: "flex",
       flexDirection: "column",
@@ -257,7 +257,7 @@ export function PostPage({ user, onBack }) {
             <div style={{
               width: 88,
               height: 88,
-              background: "linear-gradient(135deg, #f59e0b, #d97706)",
+              background: "linear-gradient(135deg, #8fc441, #d97706)",
               borderRadius: "50%",
               display: "flex",
               alignItems: "center",
@@ -281,7 +281,7 @@ export function PostPage({ user, onBack }) {
               right: -4,
               width: 28,
               height: 28,
-              background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+              background: "linear-gradient(135deg, #fbbf24, #8fc441)",
               borderRadius: "50%",
               display: "flex",
               alignItems: "center",
@@ -434,7 +434,7 @@ export function PostPage({ user, onBack }) {
               disabled={isUploading}
               style={{
                 padding: "9px 22px",
-                background: !isUploading ? "linear-gradient(135deg, #f59e0b, #d97706)" : "#e5e7eb",
+                background: !isUploading ? "linear-gradient(135deg, #8fc441, #d97706)" : "#e5e7eb",
                 border: "none",
                 borderRadius: 10,
                 color: !isUploading ? "#fff" : "#9ca3af",
@@ -512,7 +512,7 @@ export function PostPage({ user, onBack }) {
                   transition: "border-color 0.2s",
                   boxSizing: "border-box",
                 }}
-                onFocus={(e) => e.currentTarget.style.borderColor = "#f59e0b"}
+                onFocus={(e) => e.currentTarget.style.borderColor = "#8fc441"}
                 onBlur={(e) => e.currentTarget.style.borderColor = "#e0e4ff"}
               />
             </div>
@@ -538,7 +538,7 @@ export function PostPage({ user, onBack }) {
                   transition: "border-color 0.2s",
                   boxSizing: "border-box",
                 }}
-                onFocus={(e) => e.currentTarget.style.borderColor = "#f59e0b"}
+                onFocus={(e) => e.currentTarget.style.borderColor = "#8fc441"}
                 onBlur={(e) => e.currentTarget.style.borderColor = "#e0e4ff"}
               />
               <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 5 }}>Separate with commas</div>
@@ -546,12 +546,12 @@ export function PostPage({ user, onBack }) {
 
             {/* Post Settings */}
             <div style={{ padding: "16px 20px", background: "#fff", borderRadius: 16, border: "1.5px solid #e0e4ff" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", marginBottom: 14, textTransform: "uppercase", letterSpacing: 0.6 }}>Post Settings</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 14, textTransform: "uppercase", letterSpacing: 0.6 }}>Post Settings</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {[["Allow comments"], ["Allow duets"], ["Allow stitches"]].map(([label]) => (
                   <div key={label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 14, color: "#1a1a2e" }}>{label}</span>
-                    <input type="checkbox" defaultChecked style={{ cursor: "pointer", width: 18, height: 18, accentColor: "#f59e0b" }} />
+                    <input type="checkbox" defaultChecked style={{ cursor: "pointer", width: 18, height: 18, accentColor: "#8fc441" }} />
                   </div>
                 ))}
               </div>

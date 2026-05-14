@@ -330,7 +330,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }} onClick={e => e.stopPropagation()}>
         <div style={{ marginBottom: 20 }}>
-          <h2 style={{ margin: '0 0 6px 0', color: '#F9E08B', fontSize: 22, fontWeight: 700 }}>
+          <h2 style={{ margin: '0 0 6px 0', color: '#b8d97a', fontSize: 22, fontWeight: 700 }}>
             Daily Spin 🎰
           </h2>
           <p style={{ margin: 0, color: theme.sub, fontSize: 13 }}>
@@ -352,10 +352,10 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
                 height: '100%',
                 borderRadius: '50%',
                 background: `conic-gradient(
-                  #F9E08B 0deg 60deg,
+                  #b8d97a 0deg 60deg,
                   #3B82F6 60deg 120deg,
                   #10B981 120deg 180deg,
-                  #F59E0B 180deg 240deg,
+                  #8fc441 180deg 240deg,
                   #EF4444 240deg 300deg,
                   #8B5CF6 300deg 360deg
                 )`,
@@ -373,7 +373,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
                 height: 0,
                 borderLeft: '15px solid transparent',
                 borderRight: '15px solid transparent',
-                borderTop: '30px solid #F9E08B'
+                borderTop: '30px solid #b8d97a'
               }} />
               {/* Center with spinning icon */}
               <div style={{
@@ -392,7 +392,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
               }}>
                 <RefreshCw 
                   size={26} 
-                  color="#F9E08B"
+                  color="#b8d97a"
                   style={{
                     transform: `rotate(${rotation}deg)`,
                     transition: spinning ? 'transform 3s cubic-bezier(0.23, 1, 0.32, 1)' : 'none'
@@ -431,7 +431,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
                 padding: 14,
                 borderRadius: 12,
                 border: 'none',
-                background: canSpin ? '#F9E08B' : theme.border,
+                background: canSpin ? '#b8d97a' : theme.border,
                 color: canSpin ? '#000' : theme.sub,
                 fontSize: 16,
                 fontWeight: 700,
@@ -457,7 +457,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
               style={{ 
                 fontSize: 26, 
                 fontWeight: 700, 
-                color: '#F9E08B', 
+                color: '#b8d97a', 
                 marginBottom: 6,
                 transform: `rotate(${nameRotation}deg)`,
                 transition: 'transform 3s cubic-bezier(0.23, 1, 0.32, 1)',
@@ -470,7 +470,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
               +{result.coins_earned} coins added!
             </div>
             <div style={{ fontSize: 13, color: theme.sub }}>
-              New balance: <strong style={{ color: '#F9E08B' }}>{result.new_balance}</strong> coins
+              New balance: <strong style={{ color: '#b8d97a' }}>{result.new_balance}</strong> coins
             </div>
           </div>
         )}
@@ -487,7 +487,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
               border: '1px solid rgba(249, 224, 139, 0.15)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <Crown size={18} color="#F9E08B" />
+                <Crown size={18} color="#b8d97a" />
                 <h4 style={{ margin: 0, fontSize: 15, color: theme.txt, fontWeight: 700 }}>
                   Want More Spins?
                 </h4>
@@ -501,9 +501,9 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
                     flex: 1,
                     padding: 8,
                     borderRadius: 8,
-                    border: '1px solid #F9E08B',
+                    border: '1px solid #b8d97a',
                     background: theme.card,
-                    color: '#F9E08B',
+                    color: '#b8d97a',
                     fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer'
@@ -521,7 +521,7 @@ function SpinModal({ theme, onClose, onSpin, spinning, result, canSpin, rewards 
                     padding: 8,
                     borderRadius: 8,
                     border: 'none',
-                    background: '#F9E08B',
+                    background: '#b8d97a',
                     color: '#000',
                     fontSize: 12,
                     fontWeight: 700,
@@ -618,7 +618,7 @@ function GiftModal({ theme, onClose, onSuccess, coins, onShowWallet }) {
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h2 style={{ margin: 0, color: '#F9E08B', fontSize: 18, fontWeight: 700 }}>Send Coin Gift 🎁</h2>
+          <h2 style={{ margin: 0, color: '#b8d97a', fontSize: 18, fontWeight: 700 }}>Send Coin Gift 🎁</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
             <X size={20} color={theme.sub} />
           </button>
@@ -630,7 +630,7 @@ function GiftModal({ theme, onClose, onSuccess, coins, onShowWallet }) {
             <div style={{ fontSize: 16, color: theme.txt, marginBottom: 6, fontWeight: 600 }}>
               Gift sent to {result.recipient.username}!
             </div>
-            <div style={{ color: '#F9E08B', fontSize: 18, fontWeight: 700 }}>{result.amount} coins</div>
+            <div style={{ color: '#b8d97a', fontSize: 18, fontWeight: 700 }}>{result.amount} coins</div>
           </div>
         ) : (
           <>
@@ -638,7 +638,7 @@ function GiftModal({ theme, onClose, onSuccess, coins, onShowWallet }) {
               <label style={{ display: 'block', fontSize: 12, color: theme.sub, marginBottom: 6, fontWeight: 600 }}>
                 Your Balance
               </label>
-              <div style={{ fontSize: 22, fontWeight: 700, color: '#F9E08B' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#b8d97a' }}>
                 {coins} coins
               </div>
             </div>
@@ -721,7 +721,7 @@ function GiftModal({ theme, onClose, onSuccess, coins, onShowWallet }) {
                 padding: 14,
                 borderRadius: 10,
                 border: 'none',
-                background: '#F9E08B',
+                background: '#b8d97a',
                 color: '#000',
                 fontSize: 15,
                 fontWeight: 700,

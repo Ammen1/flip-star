@@ -151,20 +151,20 @@ const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, 
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: isReply ? 12 : 13, color: '#F9E08B' }}>{comment.user?.username}</span>
-            <span style={{ fontSize: isReply ? 12 : 13, color: '#F9E08B', wordBreak: 'break-word', lineHeight: 1.4 }}>
+            <span style={{ fontWeight: 700, fontSize: isReply ? 12 : 13, color: '#b8d97a' }}>{comment.user?.username}</span>
+            <span style={{ fontSize: isReply ? 12 : 13, color: '#b8d97a', wordBreak: 'break-word', lineHeight: 1.4 }}>
               {comment.text}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-            <span style={{ fontSize: 10, color: '#F9E08B' }}>{timeAgo(comment.created_at)}</span>
+            <span style={{ fontSize: 10, color: '#b8d97a' }}>{timeAgo(comment.created_at)}</span>
             {api.hasToken() && (
               <>
                 <button
                   onClick={() => onLike(comment, isReply)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
                 >
-                  <Heart size={14} fill={comment.is_liked ? '#E2B355' : 'none'} color={comment.is_liked ? '#E2B355' : (T?.sub || '#999')} />
+                  <Heart size={14} fill={comment.is_liked ? '#8fc441' : 'none'} color={comment.is_liked ? '#8fc441' : (T?.sub || '#999')} />
                   {comment.likes > 0 && <span style={{ fontSize: 10, color: T?.sub || '#666' }}>{comment.likes}</span>}
                 </button>
                 <button
@@ -475,7 +475,7 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
       >
         {/* Handle bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: `1px solid ${T?.border || '#e0e0e0'}` }}>
-          <span style={{ fontSize: 15, fontWeight: 700, background: 'linear-gradient(to right, #D4AF37, #F9E08B)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Comments</span>
+          <span style={{ fontSize: 15, fontWeight: 700, background: 'linear-gradient(to right, #8fc441, #b8d97a)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Comments</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: T?.sub || '#666' }}><X size={20} /></button>
         </div>
         {/* Comments list */}
@@ -555,7 +555,7 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
               type="button"
               onClick={() => { inputRef.current?.focus(); setText(prev => prev + '@'); }}
               disabled={!api.hasToken()}
-              style={{ background: 'none', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#F9E08B', flexShrink: 0, zIndex: 10 }}
+              style={{ background: 'none', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#b8d97a', flexShrink: 0, zIndex: 10 }}
             >
               <AtSign size={18} />
             </button>
@@ -563,7 +563,7 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
               type="button"
               onClick={() => setShowGiftModal(true)}
               disabled={!api.hasToken()}
-              style={{ background: 'none', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#F9E08B', flexShrink: 0, zIndex: 10 }}
+              style={{ background: 'none', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#b8d97a', flexShrink: 0, zIndex: 10 }}
             >
               <Gift size={18} />
             </button>
@@ -1343,7 +1343,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: T?.pri || '#DA9B2A',
+                      color: T?.pri || '#8fc441',
                       fontWeight: 700,
                       fontSize: 'calc(var(--font-size-base, 16px) * 0.8125)',
                       cursor: 'pointer',
@@ -1355,7 +1355,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 </div>
               )}
             </div>
-            <div style={{ fontSize: 'calc(var(--font-size-base, 16px) * 0.6875)', color: '#F9E08B' }}>{timeAgo(post.created_at)}</div>
+            <div style={{ fontSize: 'calc(var(--font-size-base, 16px) * 0.6875)', color: '#b8d97a' }}>{timeAgo(post.created_at)}</div>
           </div>
           <button
             className="hp-btn"
@@ -1494,12 +1494,12 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 ) : (
                   <Heart
                     size={baseFontSize}
-                    fill={liked ? '#F9E08B' : 'none'}
-                    color={liked ? '#F9E08B' : '#F9E08B'}
+                    fill={liked ? '#b8d97a' : 'none'}
+                    color={liked ? '#b8d97a' : '#b8d97a'}
                     style={{ transition: 'transform 0.15s' }}
                   />
                 )}
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#F9E08B', fontWeight: 600 }}>{likes}</span>
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#b8d97a', fontWeight: 600 }}>{likes}</span>
               </button>
               {/* Comment */}
               <button
@@ -1512,8 +1512,8 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                   '--hp-hover': (T?.border || '#e0e0e0') + '60',
                 }}
               >
-                <MessageCircle size={baseFontSize} color="#F9E08B" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#F9E08B', fontWeight: 600 }}>{commentCount}</span>
+                <MessageCircle size={baseFontSize} color="#b8d97a" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#b8d97a', fontWeight: 600 }}>{commentCount}</span>
               </button>
               {/* Share */}
               <button
@@ -1527,8 +1527,8 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                   '--hp-hover': (T?.border || '#e0e0e0') + '60',
                 }}
               >
-                <Share2 size={baseFontSize} color="#F9E08B" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#F9E08B', fontWeight: 600 }}>{post.shares > 0 ? post.shares : ''}</span>
+                <Share2 size={baseFontSize} color="#b8d97a" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#b8d97a', fontWeight: 600 }}>{post.shares > 0 ? post.shares : ''}</span>
               </button>
               {/* Gift - only show on other people's posts */}
               {post.user?.username !== currentUser?.username && (
@@ -1543,7 +1543,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                     '--hp-hover': (T?.border || '#e0e0e0') + '60',
                   }}
                 >
-                  <Gift size={baseFontSize} color="#F9E08B" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
+                  <Gift size={baseFontSize} color="#b8d97a" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
                 </button>
               )}
             </div>
@@ -1560,8 +1560,8 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
             >
               <Bookmark
                 size={baseFontSize}
-                fill={saved ? '#F9E08B' : 'none'}
-                color="#F9E08B"
+                fill={saved ? '#b8d97a' : 'none'}
+                color="#b8d97a"
               />
             </button>
           </div>
@@ -1571,7 +1571,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
             <div
               onClick={(e) => { e.stopPropagation(); setCaptionExpanded(v => !v); }}
               style={{
-                fontSize: 'calc(var(--font-size-base) * 0.75)', color: '#F9E08B', marginTop: 1, lineHeight: 1.3,
+                fontSize: 'calc(var(--font-size-base) * 0.75)', color: '#b8d97a', marginTop: 1, lineHeight: 1.3,
                 display: '-webkit-box',
                 WebkitBoxOrient: 'vertical',
                 WebkitLineClamp: captionExpanded ? 'unset' : 2,
@@ -1580,7 +1580,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 cursor: 'pointer',
               }}
             >
-              <span style={{ fontWeight: 700, color: '#F9E08B' }}>{post.user?.username} </span>
+              <span style={{ fontWeight: 700, color: '#b8d97a' }}>{post.user?.username} </span>
               {post.caption}
               {post.caption.length > 100 && (
                 <span
@@ -1602,13 +1602,13 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                   key={c.id}
                   onClick={(e) => { e.stopPropagation(); setShowComments(true); }}
                   style={{
-                    fontSize: 12, color: '#F9E08B', lineHeight: 1.3,
+                    fontSize: 12, color: '#b8d97a', lineHeight: 1.3,
                     display: '-webkit-box', WebkitBoxOrient: 'vertical',
                     WebkitLineClamp: 1, overflow: 'hidden',
                     wordBreak: 'break-word', cursor: 'pointer',
                   }}
                 >
-                  <span style={{ fontWeight: 700, color: '#F9E08B' }}>{c.user?.username} </span>
+                  <span style={{ fontWeight: 700, color: '#b8d97a' }}>{c.user?.username} </span>
                   {c.text}
                 </div>
               ))}
@@ -1620,7 +1620,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
             onClick={handleCommentClick}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              padding: 0, fontSize: 12, color: '#F9E08B',
+              padding: 0, fontSize: 12, color: '#b8d97a',
               display: 'block', marginTop: post.caption || inlineComments.length ? 2 : 0,
             }}
           >
@@ -1633,7 +1633,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
               fontSize: 13, marginTop: 4,
             }}>
               {post.hashtags_list.map(tag => (
-                <span key={tag} style={{ color: '#F9E08B', fontWeight: 700, marginRight: 4 }}>
+                <span key={tag} style={{ color: '#b8d97a', fontWeight: 700, marginRight: 4 }}>
                   #{tag}
                 </span>
               ))}
@@ -2079,9 +2079,9 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
                   border: 'none',
                   cursor: 'pointer',
                   background: isActive
-                    ? (T?.priGradient || `linear-gradient(to right, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)`)
+                    ? (T?.priGradient || `linear-gradient(to right, #8fc441 0%, #b8d97a 50%, #6fa32e 100%)`)
                     : (T?.cardBg || '#1A1A1A'),
-                  color: isActive ? '#000' : '#F9E08B',
+                  color: isActive ? '#000' : '#b8d97a',
                   fontWeight: isActive ? 700 : 600,
                   fontSize: 13,
                   whiteSpace: 'nowrap',
@@ -2115,7 +2115,7 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
             border: 'none',
             cursor: 'pointer',
             background: 'transparent',
-            color: T?.txt || '#F9E08B',
+            color: T?.txt || '#b8d97a',
             borderRadius: 8,
             display: 'flex',
             alignItems: 'center',
@@ -2309,11 +2309,11 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
 // Add CSS for icon hover and active states
 const iconStyles = `
   .hp-action:hover svg {
-    fill: #F9E08B !important;
+    fill: #b8d97a !important;
     transition: fill 0.15s ease;
   }
   .hp-action:active svg {
-    fill: #F9E08B !important;
+    fill: #b8d97a !important;
     transform: scale(0.9);
     transition: all 0.1s ease;
   }

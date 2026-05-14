@@ -17,7 +17,7 @@ const DOCUMENT_TYPE_ICONS = {
 };
 
 const STATUS_COLORS = {
-  draft: '#F59E0B',
+  draft: '#8fc441',
   published: '#10B981',
   archived: '#6B7280',
 };

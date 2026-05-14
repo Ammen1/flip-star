@@ -168,7 +168,7 @@ export function UserProfilePage({ user, onClose }) {
             style={{
               flex: 1,
               padding: 12,
-              background: `linear-gradient(135deg, ${T.pri}, #B8821E)`,
+              background: `linear-gradient(135deg, ${T.pri}, #6fa32e)`,
               border: "none",
               borderRadius: 8,
               color: "#fff",

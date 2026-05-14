@@ -5,13 +5,13 @@ import api from '../api';
 
 /* ─── CONSTANTS ─────────────────────────────── */
 const SPIN_SEGMENTS = [
-  { label: '10 Coins',  emoji: '🪙', color: '#F59E0B', coins: 10 },
-  { label: '25 Coins',  emoji: '💰', color: '#DA9B2A', coins: 25 },
+  { label: '10 Coins',  emoji: '🪙', color: '#8fc441', coins: 10 },
+  { label: '25 Coins',  emoji: '💰', color: '#8fc441', coins: 25 },
   { label: '5 Coins',   emoji: '🪙', color: '#FCD34D', coins: 5  },
   { label: '50 Coins',  emoji: '🏆', color: '#EF4444', coins: 50 },
-  { label: '15 Coins',  emoji: '🪙', color: '#F59E0B', coins: 15 },
+  { label: '15 Coins',  emoji: '🪙', color: '#8fc441', coins: 15 },
   { label: '100 Coins', emoji: '💎', color: '#8B5CF6', coins: 100 },
-  { label: '20 Coins',  emoji: '🪙', color: '#DA9B2A', coins: 20 },
+  { label: '20 Coins',  emoji: '🪙', color: '#8fc441', coins: 20 },
   { label: 'XP Boost',  emoji: '⚡', color: '#10B981', coins: 0  },
 ];
 
@@ -48,9 +48,9 @@ const Modal = memo(function Modal({ onClose, children, theme }) {
 const ModalHeader = memo(function ModalHeader({ title, onClose, theme }) {
   return (
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px 8px'}}>
-      <span style={{fontSize:18,fontWeight:700,color:theme?.pri||'#F9E08B'}}>{title}</span>
+      <span style={{fontSize:18,fontWeight:700,color:theme?.pri||'#b8d97a'}}>{title}</span>
       <button onClick={onClose} style={{background:'rgba(249,224,139,0.1)',border:'1px solid rgba(249,224,139,0.2)',borderRadius:'50%',width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-        <X size={16} color={theme?.pri||'#F9E08B'}/>
+        <X size={16} color={theme?.pri||'#b8d97a'}/>
       </button>
     </div>
   );
@@ -63,7 +63,7 @@ const CoinsModal = memo(function CoinsModal({ coins, points, onClose, theme }) {
       <ModalHeader title="💰 Balance" onClose={onClose} theme={theme}/>
       <div style={{padding:'12px 20px'}}>
         {/* Coins Balance */}
-        <div style={{background:'linear-gradient(135deg,#F9E08B,#F59E0B)',borderRadius:20,padding:'28px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(249,224,139,0.3)'}}>
+        <div style={{background:'linear-gradient(135deg,#b8d97a,#8fc441)',borderRadius:20,padding:'28px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(249,224,139,0.3)'}}>
           <div style={{fontSize:56,marginBottom:4}}>🪙</div>
           <div style={{fontSize:48,fontWeight:900,color:'#000',lineHeight:1}}>{coins?.balance ?? 0}</div>
           <div style={{fontSize:14,color:'rgba(0,0,0,.75)',marginTop:4,fontWeight:600}}>Available Coins</div>
@@ -79,7 +79,7 @@ const CoinsModal = memo(function CoinsModal({ coins, points, onClose, theme }) {
             {label:'Total Coins Earned',value:coins?.earned_total??0,color:'#10B981',emoji:'📈'},
             {label:'Total Coins Spent',value:coins?.spent_total??0,color:'#EF4444',emoji:'📉'},
             {label:'Total Points Earned',value:points?.earned_total??0,color:'#8B5CF6',emoji:'⭐'},
-            {label:'Total Points Withdrawn',value:points?.withdrawn_total??0,color:'#F59E0B',emoji:'💸'},
+            {label:'Total Points Withdrawn',value:points?.withdrawn_total??0,color:'#8fc441',emoji:'💸'},
           ].map(s=>(
             <div key={s.label} style={{background:s.color+'12',border:`1.5px solid ${s.color}30`,borderRadius:14,padding:'14px 16px',textAlign:'center'}}>
               <div style={{fontSize:24,marginBottom:4}}>{s.emoji}</div>
@@ -138,7 +138,7 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose, theme 
     <Modal onClose={onClose} theme={theme}>
       <ModalHeader title="🔥 Login Streak" onClose={onClose} theme={theme}/>
       <div style={{padding:'8px 20px 0'}}>
-        <div style={{background:'linear-gradient(135deg,#F9E08B,#F59E0B)',borderRadius:20,padding:'24px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(249,224,139,0.3)'}}>
+        <div style={{background:'linear-gradient(135deg,#b8d97a,#8fc441)',borderRadius:20,padding:'24px 20px',textAlign:'center',marginBottom:20,boxShadow:'0 8px 32px rgba(249,224,139,0.3)'}}>
           <div style={{fontSize:52}}>🔥</div>
           <div style={{fontSize:44,fontWeight:900,color:'#000',lineHeight:1}}>{cur}</div>
           <div style={{fontSize:14,color:'rgba(0,0,0,.75)',marginTop:4,fontWeight:600}}>Day Streak</div>
@@ -158,17 +158,17 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose, theme 
               <div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
                 <div style={{
                   width:36,height:36,borderRadius:'50%',
-                  background: active ? 'linear-gradient(135deg,#F9E08B,#F59E0B)' : isToday ? 'rgba(249,224,139,0.1)' : '#F5F5F4',
-                  border: isToday ? '2.5px solid #F9E08B' : active ? 'none' : '2px solid transparent',
+                  background: active ? 'linear-gradient(135deg,#b8d97a,#8fc441)' : isToday ? 'rgba(249,224,139,0.1)' : '#F5F5F4',
+                  border: isToday ? '2.5px solid #b8d97a' : active ? 'none' : '2px solid transparent',
                   display:'flex',alignItems:'center',justifyContent:'center',
                   fontSize: isToday ? 12 : 14,
                   fontWeight: 700,
-                  color: active ? '#000' : isToday ? '#F9E08B' : '#A8A29E',
+                  color: active ? '#000' : isToday ? '#b8d97a' : '#A8A29E',
                   boxShadow: active ? '0 2px 8px rgba(249,224,139,.35)' : isToday ? '0 2px 8px rgba(249,224,139,.2)' : 'none'
                 }}>
                   {active ? '✓' : day.date}
                 </div>
-                <span style={{fontSize:10,color: active || isToday ? '#F9E08B' : '#A8A29E',fontWeight:600}}>{day.name}</span>
+                <span style={{fontSize:10,color: active || isToday ? '#b8d97a' : '#A8A29E',fontWeight:600}}>{day.name}</span>
               </div>
             );
           })}
@@ -180,13 +180,13 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose, theme 
             <div style={{background:'rgba(249,224,139,0.1)',borderRadius:12,padding:'12px 16px',marginBottom:16,border:'1px solid rgba(249,224,139,0.2)'}}>
               <div style={{fontSize:12,color:'#78716C',marginBottom:8,fontWeight:600}}>🎁 Milestone Rewards:</div>
               <div style={{display:'flex',gap:12,fontSize:11,color:'#78716C'}}>
-                <div>7 days: <span style={{color:'#F9E08B',fontWeight:700}}>50 coins</span></div>
-                <div>30 days: <span style={{color:'#F9E08B',fontWeight:700}}>150 coins</span></div>
+                <div>7 days: <span style={{color:'#b8d97a',fontWeight:700}}>50 coins</span></div>
+                <div>30 days: <span style={{color:'#b8d97a',fontWeight:700}}>150 coins</span></div>
               </div>
             </div>
             <button onClick={handleClaim} disabled={claiming} style={{
               width:'100%',padding:'16px',borderRadius:14,border:'none',
-              background: claiming ? 'rgba(249,224,139,0.5)' : '#F9E08B',
+              background: claiming ? 'rgba(249,224,139,0.5)' : '#b8d97a',
               color: '#000',fontSize:17,fontWeight:700,
               cursor: claiming ? 'not-allowed' : 'pointer',
               boxShadow: claiming ? 'none' : '0 4px 16px rgba(249,224,139,0.4)'
@@ -245,14 +245,14 @@ const SpinModal = memo(function SpinModal({ spin, onSpin, onClose, theme }) {
         {result ? (
           <div style={{padding:'20px 0'}}>
             <div style={{fontSize:72,marginBottom:12}}>{result.reward?.emoji ?? '🎉'}</div>
-            <div style={{fontSize:26,fontWeight:800,color:'#DA9B2A',marginBottom:4}}>{result.reward?.label}</div>
+            <div style={{fontSize:26,fontWeight:800,color:'#8fc441',marginBottom:4}}>{result.reward?.label}</div>
             {result.coins_earned > 0 && (
               <div style={{fontSize:16,color:'#10B981',fontWeight:600,marginBottom:4}}>+{result.coins_earned} coins added!</div>
             )}
             <div style={{fontSize:13,color:'#78716C',marginBottom:24}}>New balance: <b>{result.new_balance}</b> 🪙</div>
             <button onClick={onClose} style={{
               width:'100%',padding:'16px',borderRadius:14,border:'none',
-              background:'linear-gradient(135deg,#DA9B2A,#F59E0B)',color:'#fff',
+              background:'linear-gradient(135deg,#8fc441,#8fc441)',color:'#fff',
               fontSize:16,fontWeight:700,cursor:'pointer',
               boxShadow:'0 4px 16px rgba(218,155,42,.4)'
             }}>
@@ -287,7 +287,7 @@ const SpinModal = memo(function SpinModal({ spin, onSpin, onClose, theme }) {
                     </g>
                   );
                 })}
-                <circle cx={120} cy={120} r={20} fill="#fff" stroke="#DA9B2A" strokeWidth={3}/>
+                <circle cx={120} cy={120} r={20} fill="#fff" stroke="#8fc441" strokeWidth={3}/>
                 <text x={120} y={120} textAnchor="middle" dominantBaseline="middle" fontSize={16}>⭐</text>
               </svg>
             </div>
@@ -295,7 +295,7 @@ const SpinModal = memo(function SpinModal({ spin, onSpin, onClose, theme }) {
             {spin?.can_spin ? (
               <button onClick={doSpin} disabled={spinning} style={{
                 width:'100%',padding:'18px',borderRadius:14,border:'none',
-                background: spinning ? '#E7E5E4' : 'linear-gradient(135deg,#DA9B2A,#F59E0B)',
+                background: spinning ? '#E7E5E4' : 'linear-gradient(135deg,#8fc441,#8fc441)',
                 color: spinning ? '#78716C' : '#fff',fontSize:18,fontWeight:800,
                 cursor: spinning ? 'not-allowed' : 'pointer',
                 boxShadow: spinning ? 'none' : '0 4px 20px rgba(218,155,42,.5)',
@@ -348,11 +348,11 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
         {done ? (
           <div style={{textAlign:'center',padding:'24px 0'}}>
             <div style={{fontSize:64,marginBottom:12}}>🎉</div>
-            <div style={{fontSize:20,fontWeight:800,color:'#F9E08B',marginBottom:4}}>Gift Sent!</div>
+            <div style={{fontSize:20,fontWeight:800,color:'#b8d97a',marginBottom:4}}>Gift Sent!</div>
             <div style={{fontSize:14,color:'#78716C',marginBottom:24}}>
-              You sent <b style={{color:'#F9E08B'}}>{done.amount} coins</b> to <b>@{done.recipient?.username}</b>
+              You sent <b style={{color:'#b8d97a'}}>{done.amount} coins</b> to <b>@{done.recipient?.username}</b>
             </div>
-            <button onClick={onClose} style={{width:'100%',padding:'16px',borderRadius:14,border:'none',background:'#F9E08B',color:'#000',fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 4px 16px rgba(249,224,139,0.4)'}}>
+            <button onClick={onClose} style={{width:'100%',padding:'16px',borderRadius:14,border:'none',background:'#b8d97a',color:'#000',fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 4px 16px rgba(249,224,139,0.4)'}}>
               Done 🎊
             </button>
           </div>
@@ -361,7 +361,7 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
             {/* balance chip */}
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'rgba(249,224,139,0.1)',borderRadius:12,padding:'10px 14px',marginBottom:16,border:'1px solid rgba(249,224,139,0.2)', flexShrink: 0}}>
               <span style={{fontSize:13,color:'#78716C'}}>Your balance</span>
-              <span style={{fontWeight:800,color:'#F9E08B',fontSize:16}}>🪙 {coins?.balance ?? 0}</span>
+              <span style={{fontWeight:800,color:'#b8d97a',fontSize:16}}>🪙 {coins?.balance ?? 0}</span>
             </div>
 
             <div style={{overflowY:'auto', flex: 1, marginBottom: 16, minHeight: 0}}>
@@ -374,14 +374,14 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
               <label style={{fontSize:13,fontWeight:600,color:'#78716C',display:'block',marginBottom:8}}>Amount</label>
               <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
                 <button onClick={()=>setAmount(a=>Math.max(1,a-5))}
-                  style={{width:40,height:40,borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#F9E08B'}}>
+                  style={{width:40,height:40,borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#b8d97a'}}>
                   −
                 </button>
-                <div style={{flex:1,textAlign:'center',fontSize:28,fontWeight:800,color:'#F9E08B'}}>
+                <div style={{flex:1,textAlign:'center',fontSize:28,fontWeight:800,color:'#b8d97a'}}>
                   🪙 {amount}
                 </div>
                 <button onClick={()=>setAmount(a=>Math.min(coins?.balance??100,a+5))}
-                  style={{width:40,height:40,borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#F9E08B'}}>
+                  style={{width:40,height:40,borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#b8d97a'}}>
                   +
                 </button>
               </div>
@@ -389,7 +389,7 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
               <div style={{display:'flex',gap:8,marginBottom:14}}>
                 {[10,25,50,100].map(v=>(
                   <button key={v} onClick={()=>setAmount(Math.min(v,coins?.balance??0))}
-                    style={{flex:1,padding:'8px 0',borderRadius:8,border:`1.5px solid ${amount===v?'#F9E08B':'rgba(249,224,139,0.3)'}`,background:amount===v?'rgba(249,224,139,0.15)':'#fff',color:amount===v?'#F9E08B':'#78716C',fontWeight:600,cursor:'pointer',fontSize:13}}>
+                    style={{flex:1,padding:'8px 0',borderRadius:8,border:`1.5px solid ${amount===v?'#b8d97a':'rgba(249,224,139,0.3)'}`,background:amount===v?'rgba(249,224,139,0.15)':'#fff',color:amount===v?'#b8d97a':'#78716C',fontWeight:600,cursor:'pointer',fontSize:13}}>
                     {v}
                   </button>
                 ))}
@@ -406,7 +406,7 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
 
             <button onClick={send} disabled={sending}
               style={{width:'100%',padding:'16px',borderRadius:14,border:'none',
-                background: sending ? 'rgba(249,224,139,0.5)' : '#F9E08B',
+                background: sending ? 'rgba(249,224,139,0.5)' : '#b8d97a',
                 color: '#000',fontSize:16,fontWeight:700,cursor:sending?'not-allowed':'pointer',
                 boxShadow: sending?'none':'0 4px 20px rgba(249,224,139,.4)', flexShrink: 0}}>
               {sending ? 'Sending...' : `🎁 Send ${amount} Coins`}
@@ -419,7 +419,7 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
 });
 
 /* ─── SPIN WHEEL ICON ──────────────────────────── */
-const SpinWheelIcon = memo(function SpinWheelIcon({ size = 28, color = '#DA9B2A' }) {
+const SpinWheelIcon = memo(function SpinWheelIcon({ size = 28, color = '#8fc441' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill="none"/>
@@ -497,7 +497,7 @@ export function GamificationBar({ userId, theme, onShowWallet }) {
     try { return !sessionStorage.getItem('gamification_status'); } catch { return true; }
   });
   const [modal, setModal] = useState(null); // 'coins' | 'streak' | 'gift'
-  const pri = theme?.pri || '#DA9B2A';
+  const pri = theme?.pri || '#8fc441';
 
   useEffect(() => {
     // Skip the network fetch entirely if we have a fresh cache.

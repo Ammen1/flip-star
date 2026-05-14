@@ -7,8 +7,8 @@ export const PRESET_THEMES = {
     emoji: '⭐',
     category: 'Premium',
     gradient: true,
-    light: { pri: 'linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)', priFallback: '#E2B355', bg: '#FAFAFA', txt: '#1A1A1A', sub: '#78716C', border: '#E5E5E5', cardBg: '#FFF' },
-    dark: { pri: 'linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)', priFallback: '#E2B355', bg: '#0D0D0D', txt: '#FFFFFF', sub: '#C2994B', border: '#262626', cardBg: '#1A1A1A' },
+    light: { pri: 'linear-gradient(to bottom, #8fc441 0%, #b8d97a 50%, #6fa32e 100%)', priFallback: '#8fc441', bg: '#FAFAFA', txt: '#1A1A1A', sub: '#78716C', border: '#E5E5E5', cardBg: '#FFF' },
+    dark: { pri: 'linear-gradient(to bottom, #8fc441 0%, #b8d97a 50%, #6fa32e 100%)', priFallback: '#8fc441', bg: '#0D0D0D', txt: '#FFFFFF', sub: '#b8d97a', border: '#262626', cardBg: '#1A1A1A' },
   },
   chrome: {
     name: 'Chrome Steel',
@@ -31,7 +31,7 @@ export const PRESET_THEMES = {
     emoji: '🟤',
     category: 'Metallic',
     gradient: true,
-    light: { pri: 'linear-gradient(135deg, #B87333 0%, #D4A574 50%, #B87333 100%)', priFallback: '#B87333', bg: '#FFF7ED', txt: '#7C2D12', sub: '#78716C', border: '#FED7AA', cardBg: '#FFF' },
+    light: { pri: 'linear-gradient(135deg, #B87333 0%, #D4A574 50%, #B87333 100%)', priFallback: '#B87333', bg: '#F0F9E8', txt: '#7C2D12', sub: '#78716C', border: '#FED7AA', cardBg: '#FFF' },
     dark: { pri: 'linear-gradient(135deg, #D4A574 0%, #F5C98B 50%, #D4A574 100%)', priFallback: '#D4A574', bg: '#1F1108', txt: '#FFEDD5', sub: '#A8A29E', border: '#4A2A0F', cardBg: '#3A2010' },
   },
   ocean: {
@@ -53,8 +53,8 @@ export const PRESET_THEMES = {
     emoji: '🌅',
     category: 'Warm',
     gradient: true,
-    light: { pri: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E53 50%, #FFA500 100%)', priFallback: '#F97316', bg: '#FFF7ED', txt: '#7C2D12', sub: '#78716C', border: '#FED7AA', cardBg: '#FFF' },
-    dark: { pri: 'linear-gradient(135deg, #FF7F50 0%, #FF6347 50%, #FF4500 100%)', priFallback: '#FB923C', bg: '#1F1108', txt: '#FFEDD5', sub: '#A8A29E', border: '#4A2A0F', cardBg: '#3A2010' },
+    light: { pri: 'linear-gradient(135deg, #8fc441 0%, #a8d957 50%, #8fc441 100%)', priFallback: '#8fc441', bg: '#F0F9E8', txt: '#1A1A1A', sub: '#78716C', border: '#b8d97a', cardBg: '#FFF' },
+    dark: { pri: 'linear-gradient(135deg, #8fc441 0%, #a8d957 50%, #6fa32e 100%)', priFallback: '#8fc441', bg: '#0D0D0D', txt: '#FFFFFF', sub: '#A8A29E', border: '#4A2A0F', cardBg: '#1A1A1A' },
   },
   royal: {
     name: 'Royal Purple',
@@ -114,7 +114,7 @@ function loadStored() {
 function normalizeColors(raw) {
   const rawPri = raw.pri || '';
   const isGradient = typeof rawPri === 'string' && rawPri.trim().toLowerCase().startsWith('linear-gradient');
-  const solid = raw.priFallback || (isGradient ? '#DA9B2A' : rawPri);
+  const solid = raw.priFallback || (isGradient ? '#8fc441' : rawPri);
   // Legacy components reference T.dark for gradient endpoints — provide a sensible default
   // so gradients stay valid. Use a dark contrast color that works for both light & dark themes.
   const darkAccent = raw.dark || '#0C1A12';
@@ -167,7 +167,7 @@ export const useLegacyT = () => {
   return {
     pri: colors.pri,
     priGradient: colors.priGradient || colors.pri,
-    priFallback: colors.priFallback || '#E2B355',
+    priFallback: colors.priFallback || '#8fc441',
     priD: colors.pri,
     priL: colors.bg,
     txt: colors.txt,
@@ -181,8 +181,8 @@ export const useLegacyT = () => {
     red: '#EF4444',
     redL: '#FEE2E2',
     white: '#FFFFFF',
-    gold: '#DA9B2A',
-    goldL: '#FFFBEB',
+    gold: '#8fc441',
+    goldL: '#F0F9E8',
     grn: '#10B981',
     secL: '#D1FAE5',
   };

@@ -126,12 +126,12 @@ export function NotificationsPage({ user, onUserClick, onBack, onShowPostPage, o
   const getIcon = (type) => {
     const s = { width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' };
     switch (type) {
-      case 'like':     return <div style={{ ...s, background: '#FEF3C7' }}><Heart size={18} color="#F59E0B" /></div>;
+      case 'like':     return <div style={{ ...s, background: '#FEF3C7' }}><Heart size={18} color="#8fc441" /></div>;
       case 'comment':  return <div style={{ ...s, background: '#DBEAFE' }}><MessageCircle size={18} color="#3B82F6" /></div>;
       case 'follow':   return <div style={{ ...s, background: '#D1FAE5' }}><UserPlus size={18} color="#10B981" /></div>;
       case 'mention':  return <div style={{ ...s, background: '#F3E8FF' }}><AtSign size={18} color="#8B5CF6" /></div>;
-      case 'campaign':return <div style={{ ...s, background: '#FEF9C3' }}><Trophy size={18} color="#F9E08B" /></div>;
-      default:        return <div style={{ ...s, background: T.bg }}><Bell size={18} color="#F9E08B" /></div>;
+      case 'campaign':return <div style={{ ...s, background: '#FEF9C3' }}><Trophy size={18} color="#b8d97a" /></div>;
+      default:        return <div style={{ ...s, background: T.bg }}><Bell size={18} color="#b8d97a" /></div>;
     }
   };
 
@@ -177,7 +177,7 @@ export function NotificationsPage({ user, onUserClick, onBack, onShowPostPage, o
               </button>
             )}
             <div style={{ position: 'relative' }}>
-              <Bell size={18} color="#F9E08B" strokeWidth={2.5} />
+              <Bell size={18} color="#b8d97a" strokeWidth={2.5} />
               {hasUnread && (
                 <div style={{
                   position: 'absolute', top: -2, right: -2,
@@ -197,7 +197,7 @@ export function NotificationsPage({ user, onUserClick, onBack, onShowPostPage, o
                 display: 'flex', alignItems: 'center', gap: 4,
                 padding: '4px 10px', background: 'none',
                 border: `1px solid ${T.border}`, borderRadius: 16,
-                color: '#F9E08B', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                color: '#b8d97a', fontSize: 11, fontWeight: 600, cursor: 'pointer',
               }}>
                 <Check size={10} /> Mark all read
               </button>
@@ -223,10 +223,10 @@ export function NotificationsPage({ user, onUserClick, onBack, onShowPostPage, o
               <button key={id} onClick={() => setActiveFilter(id)} style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 padding: '6px 12px', flexShrink: 0,
-                border: 'none', borderBottom: isActive ? `2px solid #F9E08B` : '2px solid transparent',
+                border: 'none', borderBottom: isActive ? `2px solid #b8d97a` : '2px solid transparent',
                 background: 'transparent', cursor: 'pointer',
                 fontSize: 12, fontWeight: isActive ? 700 : 500,
-                color: isActive ? '#F9E08B' : T.sub,
+                color: isActive ? '#b8d97a' : T.sub,
                 transition: 'all 0.15s', position: 'relative',
               }}>
                 <Icon size={13} />
@@ -286,8 +286,8 @@ export function NotificationsPage({ user, onUserClick, onBack, onShowPostPage, o
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '12px 20px',
-                  background: notif.read ? 'transparent' : '#F9E08B0a',
-                  borderLeft: notif.read ? '3px solid transparent' : '3px solid #F9E08B',
+                  background: notif.read ? 'transparent' : '#b8d97a0a',
+                  borderLeft: notif.read ? '3px solid transparent' : '3px solid #b8d97a',
                   cursor: 'pointer', transition: 'background 0.2s',
                 }}
               >

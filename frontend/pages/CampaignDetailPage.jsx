@@ -175,7 +175,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
     );
   }
 
-  const BRAND = '#F9E08B';
+  const BRAND = '#b8d97a';
   const toggleSection = (k) => setOpenSections(s => ({ ...s, [k]: !s[k] }));
 
   const Accordion = ({ id, icon: Icon, title, subtitle, children, defaultColor }) => {
@@ -241,7 +241,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
           style={{
             width: '100%',
             padding: '14px',
-            background: `linear-gradient(135deg, ${BRAND}, #F59E0B)`,
+            background: `linear-gradient(135deg, ${BRAND}, #8fc441)`,
             border: 'none', borderRadius: 12,
             color: '#000', fontSize: 15, fontWeight: 800,
             cursor: 'pointer',
@@ -326,7 +326,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
                         campaign.status === 'upcoming' ? 'rgba(245,158,11,0.15)' : 'rgba(148,163,184,0.15)',
             color: campaign.status === 'active' ? '#10B981' :
                    campaign.status === 'voting' ? '#3B82F6' :
-                   campaign.status === 'upcoming' ? '#F59E0B' : '#94A3B8',
+                   campaign.status === 'upcoming' ? '#8fc441' : '#94A3B8',
             fontSize: 10, fontWeight: 800,
             textTransform: 'uppercase', letterSpacing: '0.5px',
             flexShrink: 0,
@@ -343,7 +343,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
             overflow: 'hidden',
             marginBottom: 14,
             border: `1px solid ${T.border}`,
-            background: campaign.image ? '#000' : `linear-gradient(135deg, ${BRAND}30, #F59E0B30)`,
+            background: campaign.image ? '#000' : `linear-gradient(135deg, ${BRAND}30, #8fc44130)`,
             aspectRatio: isMobile ? '16/10' : '16/7',
           }}>
             {campaign.image ? (
@@ -371,7 +371,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
             }}>
               <div style={{
                 width: 42, height: 42, borderRadius: '50%',
-                background: `linear-gradient(135deg, ${BRAND}, #F59E0B)`,
+                background: `linear-gradient(135deg, ${BRAND}, #8fc441)`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 boxShadow: `0 4px 16px ${BRAND}70`,
                 flexShrink: 0,
@@ -547,7 +547,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
                 {campaign.min_level > 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: T.bg, borderRadius: 8 }}>
                     <span style={{ fontSize: 11, color: T.sub, fontWeight: 600, minWidth: 110 }}>Min level</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#F97316' }}>Level {campaign.min_level}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#8fc441' }}>Level {campaign.min_level}</span>
                   </div>
                 )}
                 {campaign.min_votes_per_reel > 0 && (
@@ -570,7 +570,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
                 { label: 'Starts',          date: campaign.start_date,      color: '#10B981' },
-                { label: 'Entry Deadline',  date: campaign.entry_deadline,  color: '#F59E0B' },
+                { label: 'Entry Deadline',  date: campaign.entry_deadline,  color: '#8fc441' },
                 { label: 'Voting Begins',   date: campaign.voting_start,    color: '#3B82F6' },
                 { label: 'Voting Ends',     date: campaign.voting_end,      color: '#EF4444' },
               ].map((t, i) => (
@@ -596,7 +596,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
                   { label: 'Comments', icon: MessageCircle, color: '#3B82F6' },
                   { label: 'Shares',   icon: Share2,        color: '#8B5CF6' },
                   { label: 'Votes',    icon: Award,         color: BRAND     },
-                  { label: 'Gifts',    icon: Gift,          color: '#F59E0B' },
+                  { label: 'Gifts',    icon: Gift,          color: '#8fc441' },
                 ].map((m, i) => {
                   const I = m.icon;
                   return (
@@ -809,14 +809,14 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
               width: 42,
               height: 42,
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #DA9B2A, #F97316)',
+              background: 'linear-gradient(135deg, #8fc441, #8fc441)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 16,
               fontWeight: 700,
               color: '#fff',
-              border: '2px solid #F9E08B',
+              border: '2px solid #b8d97a',
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             }}>
               {entry.user.username[0].toUpperCase()}
@@ -847,7 +847,7 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
           {entry.is_winner && (
             <div style={{
               padding: '4px 10px',
-              background: 'linear-gradient(135deg, #DA9B2A, #F97316)',
+              background: 'linear-gradient(135deg, #8fc441, #8fc441)',
               borderRadius: 12,
               fontSize: 11,
               fontWeight: 700,
@@ -921,7 +921,7 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
                 padding: '10px 20px',
                 background: hasVoted 
                   ? `#10B981` 
-                  : `linear-gradient(135deg, ${T.pri}, #F97316)`,
+                  : `linear-gradient(135deg, ${T.pri}, #8fc441)`,
                 border: 'none',
                 borderRadius: 20,
                 color: '#fff',
@@ -1535,7 +1535,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
               }}
               style={{
                 padding: '12px 24px',
-                background: 'linear-gradient(135deg, #DA9B2A, #F97316)',
+                background: 'linear-gradient(135deg, #8fc441, #8fc441)',
                 border: 'none',
                 borderRadius: 12,
                 color: '#fff',

@@ -4,22 +4,22 @@ import api from '../../api';
 
 // ─── Channel metadata ──────────────────────────────────────────────────────────
 const CHANNELS = [
-  { id: 'mass', label: 'Mass Push', desc: 'Send to all active users instantly', icon: Megaphone, color: '#DA9B2A' },
+  { id: 'mass', label: 'Mass Push', desc: 'Send to all active users instantly', icon: Megaphone, color: '#8fc441' },
   { id: 'in_app', label: 'By Username', desc: 'Target a specific FlipStar account', icon: User, color: '#7C3AED' },
   { id: 'email', label: 'By Email', desc: 'Send to a specific email address', icon: Mail, color: '#0EA5E9' },
   { id: 'phone', label: 'By Phone', desc: 'Send SMS to a phone number', icon: Phone, color: '#10B981' },
 ];
 
 const NOTIF_TYPES = [
-  { id: 'announcement', label: 'Announcement', color: '#DA9B2A' },
+  { id: 'announcement', label: 'Announcement', color: '#8fc441' },
   { id: 'alert', label: 'Alert', color: '#EF4444' },
   { id: 'promo', label: 'Promotion', color: '#10B981' },
   { id: 'update', label: 'Update', color: '#3B82F6' },
-  { id: 'warning', label: 'Warning', color: '#F59E0B' },
+  { id: 'warning', label: 'Warning', color: '#8fc441' },
   { id: 'info', label: 'Info', color: '#6B7280' },
 ];
 
-const STATUS_COLORS = { sent: '#10B981', pending: '#F59E0B', failed: '#EF4444', delivered: '#3B82F6' };
+const STATUS_COLORS = { sent: '#10B981', pending: '#8fc441', failed: '#EF4444', delivered: '#3B82F6' };
 
 export function NotificationsPage({ theme }) {
   const [tab, setTab] = useState('compose');

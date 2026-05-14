@@ -6,7 +6,7 @@ export function ConfirmModal({ theme = {}, isOpen, onClose, onConfirm, title, me
 
   const palette = {
     danger:  { color: adminTheme.colors.error,    bg: '#FEF2F2', Icon: AlertTriangle },
-    warning: { color: adminTheme.colors.warning, bg: '#FFFBEB', Icon: AlertCircle },
+    warning: { color: adminTheme.colors.warning, bg: '#F0F9E8', Icon: AlertCircle },
     success: { color: adminTheme.colors.success,  bg: '#ECFDF5', Icon: CheckCircle2 },
     info:    { color: adminTheme.colors.info,    bg: '#EFF6FF', Icon: Info },
   }[type] || { color: adminTheme.colors.primary, bg: '#EFF6FF', Icon: Info };

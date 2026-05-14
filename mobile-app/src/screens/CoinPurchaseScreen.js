@@ -66,7 +66,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
         // Map error messages to user-friendly text
         let errorMessage = response.message || response.error || 'Purchase failed';
         if (errorMessage === 'NO_BALANCE' || response.error === 'charging_failed') {
-          errorMessage = 'Your balance is not enough to complete this purchase';
+          errorMessage = 'You have insufficient balance';
         }
         setResultMessage(errorMessage);
         setShowResultModal(true);
@@ -80,11 +80,11 @@ export default function CoinPurchaseScreen({ navigation, route }) {
       
       // Parse the error message to extract NO_BALANCE
       if (error.message && error.message.includes('NO_BALANCE')) {
-        errorMessage = 'Your balance is not enough to complete this purchase';
+        errorMessage = 'You have insufficient balance';
       } else if (error.message && error.message.includes('charging_failed')) {
-        errorMessage = 'Your balance is not enough to complete this purchase';
+        errorMessage = 'You have insufficient balance';
       } else if (error.response && error.response.data && error.response.data.message === 'NO_BALANCE') {
-        errorMessage = 'Your balance is not enough to complete this purchase';
+        errorMessage = 'You have insufficient balance';
       }
       
       setResultMessage(errorMessage);
