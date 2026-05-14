@@ -67,15 +67,19 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         </button>
         {/* Logo Header */}
         <div style={{ 
-          background: "#000000", 
           height: 90, 
           marginTop: 20, 
           borderRadius: 12, 
           display: "flex", 
-          alignItems: "center", 
-          justifyContent: "center"
+          flexDirection: "row",
+          overflow: "hidden"
         }}>
-          <img src="/assets/logo-ethio-and-flip.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
+          <div style={{ width: "50%", backgroundColor: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "flex-start", paddingLeft: 16 }}>
+            <img src="/assets/ethio-logo.png" alt="Ethio Logo" style={{ height: 45, width: 130, objectFit: "contain" }} />
+          </div>
+          <div style={{ width: "50%", background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 16 }}>
+            <img src="/assets/flipstar-logo.png" alt="FlipStar Logo" style={{ height: 70, width: 180, objectFit: "contain" }} />
+          </div>
         </div>
       </div>
       <div style={{ flex:1, background:"#fff", borderRadius:"28px 28px 0 0", marginTop:30, padding:"28px 24px 40px" }}>
