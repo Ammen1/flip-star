@@ -1001,7 +1001,7 @@ export function AdminManagementPage({ theme, adminUser }) {
                   </div>
                   <div style={{ marginBottom: 12, maxHeight: 150, overflowY: 'auto' }}>
                     {roles.map((role) => (
-                      <label key={role.id} style={{
+                      <div key={role.id} style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8,
@@ -1010,15 +1010,24 @@ export function AdminManagementPage({ theme, adminUser }) {
                         padding: '6px 8px',
                         cursor: 'pointer',
                         transition: 'all 0.2s',
+                      }} onClick={(e) => {
+                        if (e.target.type !== 'checkbox') {
+                          const checkbox = e.currentTarget.querySelector('input[type="checkbox"]');
+                          if (checkbox) {
+                            checkbox.checked = !checkbox.checked;
+                            handleToggleRole(role.id, checkbox.checked);
+                          }
+                        }
                       }}>
                         <input
                           type="checkbox"
                           checked={advancedSelectedUser.roles?.some(r => r.id === role.id) || false}
                           onChange={(e) => handleToggleRole(role.id, e.target.checked)}
+                          onClick={(e) => e.stopPropagation()}
                           style={{ cursor: 'pointer' }}
                         />
                         {role.name}
-                      </label>
+                      </div>
                     ))}
                   </div>
                   <div style={{ fontSize: 11, color: theme.sub }}>
