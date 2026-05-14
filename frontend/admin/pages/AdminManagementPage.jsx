@@ -17,6 +17,7 @@ export function AdminManagementPage({ theme }) {
   const [loading, setLoading] = useState(true);
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('username-asc');
   
   // Save active tab to localStorage when it changes
   useEffect(() => {
@@ -133,6 +134,35 @@ export function AdminManagementPage({ theme }) {
       setAuditLogs(response.results || response);
     } catch (error) {
       console.error('Failed to load audit logs:', error);
+    }
+  };
+
+  // Sorting function
+  const getSortedUsers = () => {
+    const sorted = [...users];
+    switch (sortBy) {
+      case 'username-asc':
+        return sorted.sort((a, b) => a.username.localeCompare(b.username));
+      case 'username-desc':
+        return sorted.sort((a, b) => b.username.localeCompare(a.username));
+      case 'status-admin':
+        return sorted.sort((a, b) => {
+          const aPriority = a.is_superuser ? 3 : a.is_staff ? 2 : 1;
+          const bPriority = b.is_superuser ? 3 : b.is_staff ? 2 : 1;
+          return bPriority - aPriority;
+        });
+      case 'status-regular':
+        return sorted.sort((a, b) => {
+          const aPriority = a.is_superuser ? 3 : a.is_staff ? 2 : 1;
+          const bPriority = b.is_superuser ? 3 : b.is_staff ? 2 : 1;
+          return aPriority - bPriority;
+        });
+      case 'email-asc':
+        return sorted.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
+      case 'email-desc':
+        return sorted.sort((a, b) => (b.email || '').localeCompare(a.email || ''));
+      default:
+        return sorted;
     }
   };
 
@@ -454,6 +484,59 @@ export function AdminManagementPage({ theme }) {
             </div>
           </div>
 
+          {/* Sorting Controls */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+            }}>
+              <div style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: theme.sub,
+              }}>
+                Sort by:
+              </div>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  outline: 'none',
+                  background: theme.card,
+                  color: theme.txt,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
+                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
+              >
+                <option value="username-asc">Username (A-Z)</option>
+                <option value="username-desc">Username (Z-A)</option>
+                <option value="status-admin">Status (Admins First)</option>
+                <option value="status-regular">Status (Regular First)</option>
+                <option value="email-asc">Email (A-Z)</option>
+                <option value="email-desc">Email (Z-A)</option>
+              </select>
+            </div>
+            <div style={{
+              fontSize: 12,
+              color: theme.sub,
+            }}>
+              {users.length} users
+            </div>
+          </div>
+
           {/* Users List */}
           {loading ? (
             <div style={{ padding: 40, textAlign: 'center', color: theme.sub }}>
@@ -477,7 +560,7 @@ export function AdminManagementPage({ theme }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user, index) => (
+                  {getSortedUsers().map((user, index) => (
                     <tr key={user.id} style={{
                       borderTop: index > 0 ? `1px solid ${theme.border}` : 'none',
                     }}>
