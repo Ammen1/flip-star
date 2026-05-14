@@ -118,7 +118,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
               x2="65"
               y2="0"
               stroke="#D4AF37"
-              strokeWidth="12.5"
+              strokeWidth="14"
               strokeLinecap="round"
             />
           </svg>
