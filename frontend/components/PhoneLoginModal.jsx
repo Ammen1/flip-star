@@ -85,7 +85,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
             alignItems: "center", 
             justifyContent: "center"
           }}>
-            <img src="/assets/70x20.png" alt="Logo" style={{ width: 200, height: 70, objectFit: "contain" }} />
+            <img src="/assets/70x20.png" alt="Logo" style={{ width: 380, height: 80, objectFit: "contain" }} />
           </div>
 
           {/* Card */}
