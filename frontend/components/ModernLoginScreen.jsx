@@ -560,28 +560,30 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
             <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 120, height: 70, objectFit: "contain" }} />
           </div>
 
-          {/* Gold Diagonal Line */}
-          <div style={{
-            position: "absolute",
-            left: "50%",
-            top: 0,
-            bottom: 0,
-            width: "2px",
-            background: "transparent",
-            zIndex: 3,
-            transform: "rotate(-25deg)",
-            transformOrigin: "center"
-          }}>
-            <div style={{
-              position: "absolute",
-              left: "-6px",
+          {/* Gold Diagonal Line SVG Overlay */}
+          <svg 
+            height="100%" 
+            width="100" 
+            style={{ 
+              position: "absolute", 
+              left: "50%", 
+              transform: "translateX(-50%)", 
               top: 0,
-              bottom: 0,
-              width: "12.5px",
-              background: "#D4AF37",
-              borderRadius: "6px"
-            }}></div>
-          </div>
+              zIndex: 3 
+            }}
+            preserveAspectRatio="none"
+          >
+            {/* Gold diagonal line */}
+            <line
+              x1="20"
+              y1="90"
+              x2="55"
+              y2="0"
+              stroke="#D4AF37"
+              strokeWidth="12.5"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
 
         {/* Card */}
