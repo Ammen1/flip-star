@@ -288,9 +288,9 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
           >
             {/* Gold diagonal line */}
             <line
-              x1="20"
+              x1="30"
               y1="90"
-              x2="55"
+              x2="65"
               y2="0"
               stroke="#D4AF37"
               strokeWidth="12.5"
