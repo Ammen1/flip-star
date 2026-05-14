@@ -16,7 +16,9 @@ const BORDER = '#262626';
 function timeAgo(d) {
   if (!d) return '';
   const dt = new Date(d);
-  return dt.toLocaleDateString();
+  const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr} at ${timeStr}`;
 }
 
 export default function WalletScreen({ navigation }) {
