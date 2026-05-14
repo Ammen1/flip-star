@@ -416,7 +416,12 @@ export function AdminManagementPage({ theme, adminUser }) {
         method: 'PUT',
         body: JSON.stringify({ role_ids: newRoles })
       });
-      loadUsers();
+      await loadUsers();
+      // Update the selected user with the new roles from the refreshed users list
+      const updatedUser = users.find(u => u.id === advancedSelectedUser.id);
+      if (updatedUser) {
+        setAdvancedSelectedUser(updatedUser);
+      }
     } catch (error) {
       console.error('Failed to update roles:', error);
       setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update roles', type: 'error' });
