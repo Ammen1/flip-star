@@ -39,7 +39,6 @@ export function AdminManagementPage({ theme, adminUser }) {
   const [advancedForm, setAdvancedForm] = useState({ email: '', password: '', newPassword: '', reason: '' });
   const [createUserModal, setCreateUserModal] = useState({ isOpen: false });
   const [createUserForm, setCreateUserForm] = useState({ username: '', email: '', phone: '', password: '', selectedRoles: [] });
-  const [advancedSearch, setAdvancedSearch] = useState('');
 
   // User role assignment functions
   const handleAssignRole = (user, event) => {
@@ -856,68 +855,35 @@ export function AdminManagementPage({ theme, adminUser }) {
               </button>
             </div>
             <h4 style={{ fontSize: 14, fontWeight: 600, color: theme.sub, margin: 0, marginBottom: 12 }}>
-              Select User to Edit
+              Search User to Edit
             </h4>
-            <div style={{ marginBottom: 16 }}>
-              <input
-                type="text"
-                value={advancedSearch}
-                onChange={(e) => setAdvancedSearch(e.target.value)}
-                placeholder="Search by phone, email, or username..."
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  transition: 'border-color 0.2s',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <select
-                value={advancedSelectedUser?.id || ''}
-                onChange={(e) => {
-                  const userId = parseInt(e.target.value);
-                  const user = users.find(u => u.id === userId);
-                  setAdvancedSelectedUser(user);
-                  setAdvancedForm({ email: user?.email || '', password: '', newPassword: '', reason: '' });
-                }}
-                style={{
-                  flex: 1,
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="">Select a user...</option>
-                {users
-                  .filter(user => {
-                    if (!advancedSearch) return true;
-                    const searchLower = advancedSearch.toLowerCase();
-                    return (
-                      user.username?.toLowerCase().includes(searchLower) ||
-                      user.email?.toLowerCase().includes(searchLower) ||
-                      user.phone_number?.toLowerCase().includes(searchLower)
-                    );
-                  })
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.username} ({user.email || 'No email'}) - {user.phone_number || 'No phone'}
-                    </option>
-                  ))}
-              </select>
-            </div>
+            <select
+              value={advancedSelectedUser?.id || ''}
+              onChange={(e) => {
+                const userId = parseInt(e.target.value);
+                const user = users.find(u => u.id === userId);
+                setAdvancedSelectedUser(user);
+                setAdvancedForm({ email: user?.email || '', password: '', newPassword: '', reason: '' });
+              }}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                border: `1px solid ${theme.border}`,
+                borderRadius: 6,
+                fontSize: 13,
+                outline: 'none',
+                background: theme.bg,
+                color: theme.txt,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">Search by phone, email, or username...</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.username} ({user.email || 'No email'}) - {user.phone_number || 'No phone'}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* User Actions */}
