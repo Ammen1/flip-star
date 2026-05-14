@@ -527,13 +527,68 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
       {modal === "terms" && <TermsModal onClose={() => setModal(null)} />}
 
       <div style={{ width: "100%", maxWidth: 420 }}>
-        {/* Logo */}
+        {/* Co-Branded Logo Header */}
         <div style={{ 
-          display: "flex", justifyContent: "center", alignItems: "center", 
-          marginBottom: 24, borderRadius: 12, padding: "10px 12px",
-          background: "linear-gradient(to right, #ffffff, #888888, #000000)"
+          position: "relative", 
+          height: 90, 
+          marginBottom: 24, 
+          borderRadius: 12, 
+          overflow: "hidden",
+          display: "flex"
         }}>
-          <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 100, height: 50, objectFit: "contain" }} />
+          {/* Left White Section - Ethio Logo */}
+          <div style={{ 
+            flex: 1, 
+            background: "#FFFFFF", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            position: "relative",
+            zIndex: 2
+          }}>
+            <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 80, height: 50, objectFit: "contain" }} />
+          </div>
+
+          {/* Right Dark Section - FlipStar Logo */}
+          <div style={{ 
+            flex: 1, 
+            background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center"
+          }}>
+            <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 80, height: 50, objectFit: "contain" }} />
+          </div>
+
+          {/* Gold Diagonal Line SVG Overlay */}
+          <svg 
+            height="100%" 
+            width="100" 
+            style={{ 
+              position: "absolute", 
+              left: "50%", 
+              transform: "translateX(-50%)", 
+              top: 0,
+              zIndex: 3 
+            }}
+            preserveAspectRatio="none"
+          >
+            {/* White path covering left side of diagonal */}
+            <path
+              d="M 0,0 L 55,0 L 20,90 L 0,90 Z"
+              fill="#FFFFFF"
+            />
+            {/* Gold diagonal line */}
+            <line
+              x1="20"
+              y1="90"
+              x2="55"
+              y2="0"
+              stroke="#D4AF37"
+              strokeWidth="12.5"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
 
         {/* Card */}

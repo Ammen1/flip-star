@@ -65,10 +65,68 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         <button onClick={onBack} style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
           <ChevronLeft size={20} />
         </button>
-        <div style={{ textAlign:"center", marginTop:20 }}>
-          <div style={{ fontSize:34, marginBottom:6 }}>⭐</div>
-          <div style={{ fontSize:24, fontWeight:900, color:"#fff" }}>Welcome</div>
-          <div style={{ fontSize:13, color:"rgba(255,255,255,0.55)", marginTop:4 }}>Log in to your account</div>
+        {/* Co-Branded Logo Header */}
+        <div style={{ 
+          position: "relative", 
+          height: 90, 
+          marginTop: 20, 
+          borderRadius: 12, 
+          overflow: "hidden",
+          display: "flex"
+        }}>
+          {/* Left White Section - Ethio Logo */}
+          <div style={{ 
+            flex: 1, 
+            background: "#FFFFFF", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center",
+            position: "relative",
+            zIndex: 2
+          }}>
+            <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 80, height: 50, objectFit: "contain" }} />
+          </div>
+
+          {/* Right Dark Section - FlipStar Logo */}
+          <div style={{ 
+            flex: 1, 
+            background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center"
+          }}>
+            <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 80, height: 50, objectFit: "contain" }} />
+          </div>
+
+          {/* Gold Diagonal Line SVG Overlay */}
+          <svg 
+            height="100%" 
+            width="100" 
+            style={{ 
+              position: "absolute", 
+              left: "50%", 
+              transform: "translateX(-50%)", 
+              top: 0,
+              zIndex: 3 
+            }}
+            preserveAspectRatio="none"
+          >
+            {/* White path covering left side of diagonal */}
+            <path
+              d="M 0,0 L 55,0 L 20,90 L 0,90 Z"
+              fill="#FFFFFF"
+            />
+            {/* Gold diagonal line */}
+            <line
+              x1="20"
+              y1="90"
+              x2="55"
+              y2="0"
+              stroke="#D4AF37"
+              strokeWidth="12.5"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
       </div>
       <div style={{ flex:1, background:"#fff", borderRadius:"28px 28px 0 0", marginTop:30, padding:"28px 24px 40px" }}>
