@@ -84,11 +84,14 @@ export function AdminManagementPage({ theme }) {
     color: theme.sub,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
+    verticalAlign: 'middle',
   };
 
   const cellStyle = {
     padding: '16px',
     fontSize: 14,
+    verticalAlign: 'middle',
+    textAlign: 'left',
   };
 
   useEffect(() => {
@@ -570,14 +573,14 @@ export function AdminManagementPage({ theme }) {
               border: `1px solid ${theme.border}`,
               overflow: 'hidden',
             }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <thead>
                   <tr style={{ background: theme.bg }}>
-                    <th style={headerStyle}>User</th>
-                    <th style={headerStyle}>Status</th>
-                    <th style={headerStyle}>Email</th>
-                    <th style={headerStyle}>Phone</th>
-                    <th style={headerStyle}>Actions</th>
+                    <th style={{ ...headerStyle, width: '25%' }}>User</th>
+                    <th style={{ ...headerStyle, width: '20%' }}>Status</th>
+                    <th style={{ ...headerStyle, width: '25%' }}>Email</th>
+                    <th style={{ ...headerStyle, width: '20%' }}>Phone</th>
+                    <th style={{ ...headerStyle, width: '10%' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
