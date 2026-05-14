@@ -537,7 +537,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           alignItems: "center", 
           justifyContent: "center"
         }}>
-          <img src="/static/images/70x20.png" alt="Logo" style={{ width: 140, height: 40, objectFit: "contain" }} />
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 140, height: 40, objectFit: "contain" }} />
         </div>
 
         {/* Card */}
