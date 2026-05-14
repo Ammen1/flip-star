@@ -534,14 +534,12 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           borderRadius: 12, 
           display: "flex", 
           flexDirection: "row",
-          overflow: "hidden"
+          overflow: "hidden",
+          position: "relative"
         }}>
-          <div style={{ width: "50%", backgroundColor: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img src="/assets/logo-ethio-and-flip.png" alt="Logo" style={{ height: 90, width: 210, objectFit: "contain" }} />
-          </div>
-          <div style={{ width: "50%", background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <img src="/assets/logo-ethio-and-flip.png" alt="Logo" style={{ height: 90, width: 210, objectFit: "contain" }} />
-          </div>
+          <div style={{ width: "50%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
+          <div style={{ width: "50%", background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
+          <img src="/assets/logo-ethio-and-flip.png" alt="Logo" style={{ height: 90, width: "100%", objectFit: "contain", position: "relative", zIndex: 1 }} />
         </div>
 
         {/* Card */}
