@@ -29,6 +29,31 @@ function timeAgo(d) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// Parse notification type from message content
+function getNotificationType(message, type) {
+  // If backend already provides proper type, use it
+  if (type !== 'general') return type;
+  
+  // Parse from message text
+  const lowerMessage = message.toLowerCase();
+  
+  if (lowerMessage.includes('liked your') || lowerMessage.includes('likes')) {
+    return 'like';
+  } else if (lowerMessage.includes('commented on') || lowerMessage.includes('comment')) {
+    return 'comment';
+  } else if (lowerMessage.includes('started following') || lowerMessage.includes('follow')) {
+    return 'follow';
+  } else if (lowerMessage.includes('sent you') || lowerMessage.includes('gift')) {
+    return 'gift';
+  } else if (lowerMessage.includes('campaign') || lowerMessage.includes('approved')) {
+    return 'campaign';
+  } else if (lowerMessage.includes('mention') || lowerMessage.includes('@')) {
+    return 'mention';
+  }
+  
+  return 'general';
+}
+
 // Group notifications by type and time
 function groupNotifications(notifs) {
   const groups = [];
@@ -39,7 +64,12 @@ function groupNotifications(notifs) {
     if (seen[key] && n.actor && (new Date(n.created_at) - new Date(seen[key].created_at)) < ONE_HOUR) {
       seen[key].extras = (seen[key].extras || 0) + 1;
     } else {
-      const entry = { ...n, extras: 0 };
+      // Create a unique entry with original ID to prevent key conflicts
+      const entry = { 
+        ...n, 
+        extras: 0,
+        uniqueKey: `${n.id}_${n.type}_${n.reel_id || 'no-reel'}`
+      };
       seen[key] = entry;
       groups.push(entry);
     }
@@ -66,6 +96,7 @@ const FILTERS = [
   { id: 'follow', label: 'Follows', icon: 'person-add' },
   { id: 'mention', label: 'Mentions', icon: 'at' },
   { id: 'campaign', label: 'Campaigns', icon: 'trophy' },
+  { id: 'gift', label: 'Gifts', icon: 'gift' },
 ];
 
 export default function NotificationsScreen({ navigation }) {
@@ -150,8 +181,17 @@ export default function NotificationsScreen({ navigation }) {
     }
   };
 
+  // Parse notification types and filter
+  const notificationsWithParsedTypes = notifications.map(n => ({
+    ...n,
+    parsedType: getNotificationType(n.message || '', n.type || 'general')
+  }));
+  
   const filtered = groupNotifications(
-    notifications.filter(n => activeFilter === 'all' || n.type === activeFilter)
+    notificationsWithParsedTypes.filter(n => {
+      const matches = activeFilter === 'all' || n.parsedType === activeFilter;
+      return matches;
+    })
   );
   
   const hasUnread = notifications.some(n => !n.is_read);
@@ -186,7 +226,7 @@ export default function NotificationsScreen({ navigation }) {
           )}
           {/* Type badge overlay */}
         <View style={styles.typeBadge}>
-          <NotifIcon type={item.type} size={10} />
+          <NotifIcon type={item.parsedType || item.type} size={16} />
         </View>
       </View>
 
@@ -264,7 +304,7 @@ export default function NotificationsScreen({ navigation }) {
           const isActive = activeFilter === filter.id;
           const typeCount = filter.id === 'all' 
             ? unreadCount
-            : notifications.filter(n => n.type === filter.id && !n.is_read).length;
+            : notificationsWithParsedTypes.filter(n => n.parsedType === filter.id && !n.is_read).length;
           
           return (
             <TouchableOpacity
@@ -274,8 +314,9 @@ export default function NotificationsScreen({ navigation }) {
             >
               <Ionicons 
                 name={filter.icon} 
-                size={12} 
+                size={10} 
                 color={isActive ? LIGHT_GOLD : '#666'} 
+                style={{ marginRight: 1 }}
               />
               <Text style={[styles.filterLabel, isActive && styles.filterLabelActive]}>
                 {filter.label}
@@ -296,10 +337,11 @@ export default function NotificationsScreen({ navigation }) {
           <ActivityIndicator size="large" color={GOLD} />
         </View>
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={n => String(n.id)}
-          renderItem={renderItem}
+        <View style={styles.listContainer}>
+          <FlatList
+            data={filtered}
+            keyExtractor={n => n.uniqueKey || String(n.id)}
+            renderItem={renderItem}
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -323,6 +365,7 @@ export default function NotificationsScreen({ navigation }) {
             </View>
           }
         />
+        </View>
       )}
     </View>
   );
@@ -401,21 +444,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
     backgroundColor: BG,
+    maxHeight: 44,
   },
   filterContent: {
     paddingHorizontal: 8,
-    paddingVertical: 0,
-    paddingBottom: 2,
-    gap: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   filterTab: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingTop: 6,
-    paddingBottom: 4,
-    borderBottomWidth: 1.5,
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
   filterTabActive: {
@@ -435,34 +477,41 @@ const styles = StyleSheet.create({
   },
   filterBadge: {
     backgroundColor: '#EF4444',
-    borderRadius: 5,
-    paddingHorizontal: 2,
-    paddingVertical: 0,
-    minWidth: 10,
-    height: 10,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    minWidth: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   filterBadgeText: {
-    fontSize: 6,
+    fontSize: 9,
     fontWeight: '800',
     color: '#fff',
+  },
+  
+  // List container
+  listContainer: {
+    flex: 1,
+    backgroundColor: BG,
   },
   
   // List items
   item: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    paddingTop: 0,
-    paddingBottom: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     borderBottomWidth: 1, 
     borderBottomColor: BORDER,
-    borderLeftWidth: 3,
-    borderLeftColor: 'transparent',
+    backgroundColor: CARD,
+    marginHorizontal: 16,
+    marginVertical: 2,
+    borderRadius: 8,
   },
   unread: { 
-    backgroundColor: LIGHT_GOLD + '0a',
+    backgroundColor: LIGHT_GOLD + '15',
+    borderLeftWidth: 3,
     borderLeftColor: LIGHT_GOLD,
   },
   

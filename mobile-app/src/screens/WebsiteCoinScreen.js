@@ -133,10 +133,10 @@ export default function WebsiteCoinScreen({ navigation }) {
           ]
         );
       } else if (paymentMethod === 'telebirr') {
-        // Handle Telebirr payment
+        // Handle telebirr payment
         Alert.alert(
-          'Confirm Telebirr Payment',
-          `You will be redirected to Telebirr to pay ${selectedPackage.price} ETB for ${selectedPackage.coins + selectedPackage.bonus} coins.`,
+          'Confirm telebirr Payment',
+          `You will be redirected to telebirr to pay ${selectedPackage.price} ETB for ${selectedPackage.coins + selectedPackage.bonus} coins.`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -154,16 +154,16 @@ export default function WebsiteCoinScreen({ navigation }) {
                   });
                   
                   if (response.payment_url) {
-                    Alert.alert('Redirecting', 'Opening Telebirr payment...');
-                    // Open Telebirr app or web
+                    Alert.alert('Redirecting', 'Opening telebirr payment...');
+                    // Open telebirr app or web
                     import('react-native').then(({ Linking }) => {
                       Linking.openURL(response.payment_url).catch(() => {
-                        Alert.alert('Error', 'Could not open Telebirr app. Please try again.');
+                        Alert.alert('Error', 'Could not open telebirr app. Please try again.');
                       });
                     });
                   }
                 } catch (error) {
-                  Alert.alert('Error', 'Telebirr payment failed. Please try again.');
+                  Alert.alert('Error', 'telebirr payment failed. Please try again.');
                 }
               }
             }
@@ -410,7 +410,7 @@ export default function WebsiteCoinScreen({ navigation }) {
                   onPress={() => handlePackageSelect(pkg, 'telebirr')}
                 >
                   <Ionicons name="card" size={20} color="#fff" />
-                  <Text style={styles.purchaseBtnText}>Buy via Telebirr</Text>
+                  <Text style={styles.purchaseBtnText}>Buy via telebirr</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -452,7 +452,7 @@ export default function WebsiteCoinScreen({ navigation }) {
           <View style={[styles.paymentModal, { backgroundColor: colors.cardBg }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {paymentMethod === 'airtime' ? 'Airtime Payment' : 'Telebirr Payment'}
+                {paymentMethod === 'airtime' ? 'Airtime Payment' : 'telebirr Payment'}
               </Text>
               <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
@@ -488,12 +488,12 @@ export default function WebsiteCoinScreen({ navigation }) {
                 />
               </View>
               <Text style={[styles.paymentMethodTitle, { color: colors.text }]}>
-                {paymentMethod === 'airtime' ? 'Pay with Airtime' : 'Pay with Telebirr'}
+                {paymentMethod === 'airtime' ? 'Pay with Airtime' : 'Pay with telebirr'}
               </Text>
               <Text style={[styles.paymentMethodDesc, { color: colors.textSecondary }]}>
                 {paymentMethod === 'airtime' 
                   ? `${selectedPackage?.price || 0} ETB will be deducted from your airtime balance`
-                  : `You will be redirected to Telebirr to complete the payment`
+                  : `You will be redirected to telebirr to complete the payment`
                 }
               </Text>
             </View>
@@ -510,7 +510,7 @@ export default function WebsiteCoinScreen({ navigation }) {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.confirmPaymentBtnText}>
-                  {paymentMethod === 'airtime' ? 'Confirm Airtime Payment' : 'Proceed to Telebirr'}
+                  {paymentMethod === 'airtime' ? 'Confirm Airtime Payment' : 'Proceed to telebirr'}
                 </Text>
               )}
             </TouchableOpacity>

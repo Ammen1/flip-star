@@ -268,8 +268,9 @@ export default function ProfileScreen({ navigation, route }) {
     setIsFollowing(!prev);
     setFollowersCount(c => prev ? c - 1 : c + 1);
     try {
-      await api.request('/follows/toggle/', { method: 'POST', body: JSON.stringify({ following_id: targetUserId }) });
-    } catch {
+      await api.toggleFollow(targetUserId);
+    } catch (error) {
+      console.error('Follow toggle error:', error);
       setIsFollowing(prev);
       setFollowersCount(c => prev ? c + 1 : c - 1);
     }
@@ -878,8 +879,8 @@ export default function ProfileScreen({ navigation, route }) {
                   <View style={[styles.badgesSection, { backgroundColor: colors.cardBg }]}>
                     <Text style={[styles.badgesTitle, { color: colors.text }]}>Badges Earned</Text>
                     <View style={styles.badgesList}>
-                      {campaignStats.badges.map((badge, idx) => (
-                        <View key={idx} style={[styles.badgeItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                      {campaignStats.badges.map((badge) => (
+                        <View key={`badge-${badge.title}-${badge.id || Math.random()}`} style={[styles.badgeItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
                           <Ionicons name="award" size={13} color={colors.primary} />
                           <Text style={[styles.badgeText, { color: colors.text }]}>{badge.title}</Text>
                         </View>

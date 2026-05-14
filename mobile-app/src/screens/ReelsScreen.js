@@ -18,6 +18,7 @@ const MEDIA_BASE = config.API_BASE_URL.replace('/api', '');
 
 const { width, height } = Dimensions.get('window');
 const GOLD = '#C8B56A';
+const DARK_GOLD = '#DAA520';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const LIGHT_GOLD = '#F9E08B';
@@ -576,7 +577,8 @@ const ReelItem = React.memo(function ReelItem({
             <Ionicons 
               name={isMuted ? 'volume-mute' : 'volume-high'}
               size={28}
-              color={GOLD}
+              color={DARK_GOLD}
+              style={styles.iconShadow}
             />
           </View>
         </TouchableOpacity>
@@ -594,8 +596,9 @@ const ReelItem = React.memo(function ReelItem({
                   : (item.is_liked ? 'heart' : 'heart-outline')
               }
               size={28}
-              color={item.is_liked ? '#EF4444' : GOLD}
+              color={item.is_liked ? '#EF4444' : DARK_GOLD}
               fill={item.is_liked ? '#EF4444' : 'none'}
+              style={styles.iconShadow}
             />
             <Text style={styles.actionLabelInline}>{(item.votes || 0) + 1}</Text>
           </View>
@@ -604,7 +607,7 @@ const ReelItem = React.memo(function ReelItem({
         {/* Comment Button */}
         <TouchableOpacity style={styles.actionItem} onPress={() => setShowComments(true)}>
           <View style={styles.actionIconRow}>
-            <Ionicons name="chatbubble-outline" size={26} color={GOLD} />
+            <Ionicons name="chatbubble-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
             <Text style={styles.actionLabelInline}>{(item.comment_count || 0) + 1}</Text>
           </View>
         </TouchableOpacity>
@@ -612,24 +615,27 @@ const ReelItem = React.memo(function ReelItem({
         {/* Share Button */}
         <TouchableOpacity style={styles.actionItem} onPress={handleShareVideo}>
           <View style={styles.actionIconRow}>
-            <Ionicons name="share-outline" size={26} color={GOLD} />
+            <Ionicons name="share-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
             <Text style={styles.actionLabelInline}>{(item.shares || 0) + 1}</Text>
           </View>
         </TouchableOpacity>
 
         {/* Save Button */}
         <TouchableOpacity style={styles.actionItem} onPress={handleSave}>
-          <Ionicons 
-            name={item.is_saved ? 'bookmark' : 'bookmark-outline'}
-            size={26}
-            color={item.is_saved ? LIGHT_GOLD : GOLD}
-          />
+          <View style={styles.actionIconRow}>
+            <Ionicons 
+              name={item.is_saved ? 'bookmark' : 'bookmark-outline'}
+              size={26}
+              color={item.is_saved ? LIGHT_GOLD : DARK_GOLD}
+              style={styles.iconShadow}
+            />
+          </View>
         </TouchableOpacity>
 
         {/* Gift Button */}
         <TouchableOpacity style={styles.actionItem} onPress={() => onOpenGiftModal(item.user)}>
           <View style={styles.actionIconRow}>
-            <Ionicons name="gift-outline" size={26} color={GOLD} />
+            <Ionicons name="gift-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
           </View>
         </TouchableOpacity>
 
@@ -1869,12 +1875,12 @@ const styles = StyleSheet.create({
   rightActions: { 
     position: 'absolute', 
     right: 8, 
-    bottom: 40, 
+    top: 220, 
     alignItems: 'center', 
-    gap: 6,
+    gap: 18,
   },
   avatarContainer: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   followBadge: {
     position: 'absolute', 
@@ -1896,7 +1902,8 @@ const styles = StyleSheet.create({
   },
   actionItem: { 
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
+    marginTop: 0,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.9,
@@ -1914,11 +1921,12 @@ const styles = StyleSheet.create({
   actionIconRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: 4,
+  },
+  iconShadow: {
+    textShadowColor: 'rgba(0,0,0,1)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 8,
   },
   likeAnimation: {
     transform: [{ scale: 1.2 }],
@@ -1937,9 +1945,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   actionLabelInline: {
-    color: GOLD,
+    color: DARK_GOLD,
     fontSize: 13,
     fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,1)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   
   // Bottom Info
@@ -2240,7 +2251,7 @@ const styles = StyleSheet.create({
     margin: 20,
     maxHeight: '80%',
     position: 'absolute',
-    top: 80,
+    top: 180,
     left: 0,
     right: 0,
   },

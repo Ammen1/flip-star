@@ -59,7 +59,7 @@ const FAQ_ITEMS = [
   },
   { 
     q: "What are coins and how do I earn them?", 
-    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), or Purchase via telebirr/Airtime." 
+    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), Monthly bonus (200 coins for 30-day active streak), or Purchase via telebirr/Airtime." 
   },
   { 
     q: "What can I do with coins?", 
