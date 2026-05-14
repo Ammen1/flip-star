@@ -628,9 +628,13 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
   const [adjustmentType, setAdjustmentType] = useState('coins');
 
   const searchUser = async () => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim()) {
+      setResult && setResult({ type: 'error', message: 'Please enter a search term' });
+      return;
+    }
     try {
       setSearching(true);
+      console.log('Searching for user:', searchType, searchQuery);
       let user;
       
       if (searchType === 'id') {
@@ -639,8 +643,11 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
       } else {
         // For phone and username, use the search parameter
         const data = await api.request(`/admin/users/?search=${searchQuery}`);
+        console.log('Search results:', data);
         user = data.users?.[0] || data;
       }
+      
+      console.log('Found user:', user);
       
       if (user && user.id) {
         setUserData(user);
