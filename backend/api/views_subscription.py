@@ -652,9 +652,15 @@ class OnevasWebhookView(APIView):
         print(f"[SUBSCRIPTION DEBUG] Active subscription check for duration_type={tier.duration_type}: {'Found' if active_sub else 'Not found'}")
         if active_sub:
             print(f"[SUBSCRIPTION DEBUG] Found active subscription of same type, renewing...")
+            # Generate OTP for login
+            from .services.otp_service import OTPService
+            otp_code = OTPService.generate_otp()
+            print(f"[SUBSCRIPTION DEBUG] Generated OTP for renewal: {otp_code}")
+            
             # Update existing subscription
             active_sub.tier = tier
             active_sub.duration_type = tier.duration_type
+            active_sub.setup_otp = otp_code  # Store OTP for login
             active_sub.activate()
             
             # Record history
