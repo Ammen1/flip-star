@@ -471,7 +471,8 @@ export function AdminManagementPage({ theme }) {
                   <tr style={{ background: theme.bg }}>
                     <th style={headerStyle}>User</th>
                     <th style={headerStyle}>Status</th>
-                    <th style={headerStyle}>Permissions</th>
+                    <th style={headerStyle}>Email</th>
+                    <th style={headerStyle}>Phone</th>
                     <th style={headerStyle}>Actions</th>
                   </tr>
                 </thead>
@@ -547,7 +548,12 @@ export function AdminManagementPage({ theme }) {
                       </td>
                       <td style={cellStyle}>
                         <div style={{ fontSize: 13, color: theme.sub }}>
-                          {user.is_superuser ? 'Full Access' : user.is_staff ? 'Admin Access' : 'No Admin Access'}
+                          {user.roles && user.roles.length > 0 ? user.email || 'N/A' : '-'}
+                        </div>
+                      </td>
+                      <td style={cellStyle}>
+                        <div style={{ fontSize: 13, color: theme.sub }}>
+                          {user.phone_number || '-'}
                         </div>
                       </td>
                       <td style={{ ...cellStyle, width: '200px', verticalAlign: 'middle' }}>
