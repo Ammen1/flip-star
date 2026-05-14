@@ -58,7 +58,8 @@ function OtpInput({ value, onChange }) {
  * Shown when user arrives via Onevas SMS link:
  * ?subscription_tp=true&phone=251XXXXXXXXX&otp=XXXXXX
  *
- * Fields: Username, Phone (pre-filled), OTP (pre-filled / editable), Password
+ * For existing users (renewal): Phone, OTP, Password
+ * For new users (SMS-first): Username, Phone, OTP, Password, Confirm Password
  * Calls POST /api/auth/login-with-subscription-otp/
  */
 export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess, onBackToLogin }) {
@@ -75,30 +76,59 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
   const [focusPhone, setFocusPhone] = useState(false);
   const [focusPwd, setFocusPwd] = useState(false);
   const [focusConfirm, setFocusConfirm] = useState(false);
+  const [hasExistingAccount, setHasExistingAccount] = useState(null);
+  const [checkingAccount, setCheckingAccount] = useState(false);
 
   useEffect(() => {
     if (prefillPhone) setPhone(prefillPhone);
     if (prefillOtp) setOtp(prefillOtp);
   }, [prefillPhone, prefillOtp]);
 
+  // Check if phone number has existing account
+  useEffect(() => {
+    if (phone && phone.length >= 10) {
+      checkExistingAccount();
+    } else {
+      setHasExistingAccount(null);
+    }
+  }, [phone]);
+
+  const checkExistingAccount = async () => {
+    setCheckingAccount(true);
+    try {
+      const res = await api.post('/auth/check-phone-account/', { phone });
+      setHasExistingAccount(res.data.has_account);
+    } catch (e) {
+      console.error('Failed to check account:', e);
+      setHasExistingAccount(false);
+    } finally {
+      setCheckingAccount(false);
+    }
+  };
+
   const handleRegister = async (e) => {
     e?.preventDefault();
     setError("");
 
-    if (!username) { setError("Please enter a username"); return; }
+    if (hasExistingAccount === false) {
+      // New user - require username and confirm password
+      if (!username) { setError("Please enter a username"); return; }
+      if (password !== confirm) { setError("PINs do not match"); return; }
+    }
+    
     if (!phone) { setError("Please enter your phone number"); return; }
     if (otp.length !== 6) { setError("Please enter the 6-digit OTP from your SMS"); return; }
     if (!/^\d{6}$/.test(password)) { setError("PIN must be exactly 6 digits"); return; }
-    if (password !== confirm) { setError("PINs do not match"); return; }
 
     setLoading(true);
     try {
-      const res = await api.post('/auth/login-with-subscription-otp/', {
-        phone,
-        username,
-        otp,
-        password,
-      });
+      const payload = { phone, otp, password };
+      // Only include username for new users
+      if (!hasExistingAccount) {
+        payload.username = username;
+      }
+      
+      const res = await api.post('/auth/login-with-subscription-otp/', payload);
       const data = res.data || res;
       api.setAuthToken(data.token);
       onSuccess({
@@ -144,8 +174,14 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
         <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Complete Registration</div>
-            <div style={{ fontSize: 13, color: "#aaa" }}>Your subscription is confirmed! Set up your account below.</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>
+              {hasExistingAccount === true ? "Welcome Back!" : "Complete Registration"}
+            </div>
+            <div style={{ fontSize: 13, color: "#aaa" }}>
+              {hasExistingAccount === true 
+                ? "Your subscription is renewed! Log in to continue." 
+                : "Your subscription is confirmed! Set up your account below."}
+            </div>
           </div>
 
           {/* Success badge */}
@@ -160,22 +196,24 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
               </div>
             )}
 
-            {/* Username */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Username *</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
-                  placeholder="Choose a unique username"
-                  style={inp(focusUser)}
-                  onFocus={() => setFocusUser(true)}
-                  onBlur={() => setFocusUser(false)}
-                />
+            {/* Username - only for new users */}
+            {hasExistingAccount === false && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Username *</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                    placeholder="Choose a unique username"
+                    style={inp(focusUser)}
+                    onFocus={() => setFocusUser(true)}
+                    onBlur={() => setFocusUser(false)}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Phone */}
             <div style={{ marginBottom: 16 }}>
@@ -223,30 +261,32 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
               </div>
             </div>
 
-            {/* Confirm */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Confirm PIN *</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="••••••"
-                  style={{ ...inp(focusConfirm), paddingRight: 46 }}
-                  onFocus={() => setFocusConfirm(true)}
-                  onBlur={() => setFocusConfirm(false)}
-                />
-                <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
-                  {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
+            {/* Confirm Password - only for new users */}
+            {hasExistingAccount === false && (
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Confirm PIN *</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={confirm}
+                    onChange={e => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="••••••"
+                    style={{ ...inp(focusConfirm), paddingRight: 46 }}
+                    onFocus={() => setFocusConfirm(true)}
+                    onBlur={() => setFocusConfirm(false)}
+                  />
+                  <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                    {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <button type="submit" disabled={loading || otp.length < 6} style={{ width: "auto", padding: "14px 24px", background: loading || otp.length < 6 ? "#3A3A3A" : GOLD, border: "none", borderRadius: 10, color: loading || otp.length < 6 ? "#888" : "#000", fontSize: 15, fontWeight: 800, cursor: loading || otp.length < 6 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
-              {loading ? <><Loader size={18} style={{ animation: "spin 1s linear infinite" }} /> Creating Account…</> : "Create Account & Login 🚀"}
+              {loading ? <><Loader size={18} style={{ animation: "spin 1s linear infinite" }} /> {hasExistingAccount ? "Logging in…" : "Creating Account…"}</> : hasExistingAccount ? "Log In 🚀" : "Create Account & Login 🚀"}
             </button>
           </form>
 
