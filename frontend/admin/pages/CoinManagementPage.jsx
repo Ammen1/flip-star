@@ -274,11 +274,12 @@ export function CoinManagementPage({ theme }) {
   );
 }
 
-// ---------------------------------------------------------------
 // Config Tab
 // ---------------------------------------------------------------
 
 function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loading, error, onRetry }) {
+  const [configSubTab, setConfigSubTab] = useState('rewards');
+
   if (loading) return <LoadingState theme={T} />;
   if (!config) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
 
@@ -296,6 +297,14 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
     });
   };
 
+  const CONFIG_TABS = [
+    { id: 'rewards', label: 'Rewards', icon: TrendingUp },
+    { id: 'costs', label: 'Action Costs', icon: TrendingDown },
+    { id: 'withdrawal', label: 'Withdrawal', icon: ArrowUpFromLine },
+    { id: 'points', label: 'Points System', icon: Coins },
+    { id: 'policies', label: 'Policies', icon: Settings },
+  ];
+
   return (
     <div>
       {result && (
@@ -308,30 +317,69 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 24 }}>
-        {/* Earning Rewards */}
-        <SectionCard theme={T} title="Earning Rewards" icon={<TrendingUp size={20} color="#10B981" />}>
-          <FieldRow theme={T} label="Welcome Bonus" value={config.rewards.welcome_bonus} onChange={(v) => updateField('rewards', 'welcome_bonus', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 1" value={config.rewards.daily_login_day1} onChange={(v) => updateField('rewards', 'daily_login_day1', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 2" value={config.rewards.daily_login_day2} onChange={(v) => updateField('rewards', 'daily_login_day2', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 3" value={config.rewards.daily_login_day3} onChange={(v) => updateField('rewards', 'daily_login_day3', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 4" value={config.rewards.daily_login_day4} onChange={(v) => updateField('rewards', 'daily_login_day4', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 5" value={config.rewards.daily_login_day5} onChange={(v) => updateField('rewards', 'daily_login_day5', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 6" value={config.rewards.daily_login_day6} onChange={(v) => updateField('rewards', 'daily_login_day6', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Login Day 7" value={config.rewards.daily_login_day7} onChange={(v) => updateField('rewards', 'daily_login_day7', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Daily Post Bonus" value={config.rewards.daily_post_bonus} onChange={(v) => updateField('rewards', 'daily_post_bonus', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Campaign Join Reward" value={config.rewards.campaign_join_reward} onChange={(v) => updateField('rewards', 'campaign_join_reward', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Like Received Reward" value={config.rewards.receive_like_reward} onChange={(v) => updateField('rewards', 'receive_like_reward', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Like Daily Cap" value={config.rewards.receive_like_daily_cap} onChange={(v) => updateField('rewards', 'receive_like_daily_cap', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Quality Comment Reward" value={config.rewards.quality_comment_reward} onChange={(v) => updateField('rewards', 'quality_comment_reward', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Quality Comment Daily Cap" value={config.rewards.quality_comment_daily_cap} onChange={(v) => updateField('rewards', 'quality_comment_daily_cap', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Profile Complete Reward" value={config.rewards.profile_complete_reward} onChange={(v) => updateField('rewards', 'profile_complete_reward', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Referral Reward" value={config.rewards.referral_reward} onChange={(v) => updateField('rewards', 'referral_reward', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Campaign Winner Bonus" value={config.rewards.campaign_winner_reward} onChange={(v) => updateField('rewards', 'campaign_winner_reward', parseInt(v) || 0)} />
-        </SectionCard>
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: `1px solid ${T.border}` }}>
+        {CONFIG_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setConfigSubTab(tab.id)}
+            style={{
+              padding: '10px 16px',
+              background: 'none',
+              border: 'none',
+              borderBottom: configSubTab === tab.id ? `2px solid ${T.pri}` : '2px solid transparent',
+              color: configSubTab === tab.id ? T.pri : T.sub,
+              fontSize: 14,
+              fontWeight: configSubTab === tab.id ? 700 : 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <tab.icon size={16} /> {tab.label}
+          </button>
+        ))}
+      </div>
 
-        {/* Action Costs */}
-        <SectionCard theme={T} title="Action Costs" icon={<TrendingDown size={20} color="#EF4444" />}>
+      {/* Tab Content */}
+      {configSubTab === 'rewards' && (
+        <div style={{ maxWidth: 600 }}>
+          <SectionCard theme={T} title="Earning Rewards" icon={<TrendingUp size={20} color="#10B981" />} marginBottom={20}>
+            <FieldRow theme={T} label="Welcome Bonus" value={config.rewards.welcome_bonus} onChange={(v) => updateField('rewards', 'welcome_bonus', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 1" value={config.rewards.daily_login_day1} onChange={(v) => updateField('rewards', 'daily_login_day1', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 2" value={config.rewards.daily_login_day2} onChange={(v) => updateField('rewards', 'daily_login_day2', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 3" value={config.rewards.daily_login_day3} onChange={(v) => updateField('rewards', 'daily_login_day3', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 4" value={config.rewards.daily_login_day4} onChange={(v) => updateField('rewards', 'daily_login_day4', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 5" value={config.rewards.daily_login_day5} onChange={(v) => updateField('rewards', 'daily_login_day5', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 6" value={config.rewards.daily_login_day6} onChange={(v) => updateField('rewards', 'daily_login_day6', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Login Day 7" value={config.rewards.daily_login_day7} onChange={(v) => updateField('rewards', 'daily_login_day7', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Daily Post Bonus" value={config.rewards.daily_post_bonus} onChange={(v) => updateField('rewards', 'daily_post_bonus', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Campaign Join Reward" value={config.rewards.campaign_join_reward} onChange={(v) => updateField('rewards', 'campaign_join_reward', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Like Received Reward" value={config.rewards.receive_like_reward} onChange={(v) => updateField('rewards', 'receive_like_reward', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Like Daily Cap" value={config.rewards.receive_like_daily_cap} onChange={(v) => updateField('rewards', 'receive_like_daily_cap', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Quality Comment Reward" value={config.rewards.quality_comment_reward} onChange={(v) => updateField('rewards', 'quality_comment_reward', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Quality Comment Daily Cap" value={config.rewards.quality_comment_daily_cap} onChange={(v) => updateField('rewards', 'quality_comment_daily_cap', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Profile Complete Reward" value={config.rewards.profile_complete_reward} onChange={(v) => updateField('rewards', 'profile_complete_reward', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Referral Reward" value={config.rewards.referral_reward} onChange={(v) => updateField('rewards', 'referral_reward', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Campaign Winner Bonus" value={config.rewards.campaign_winner_reward} onChange={(v) => updateField('rewards', 'campaign_winner_reward', parseInt(v) || 0)} />
+          </SectionCard>
+
+          <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#F59E0B" />}>
+            <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
+              Points awarded to winners of each campaign type.
+            </div>
+            <FieldRow theme={T} label="Daily Winner Points" value={config.points?.daily_winner_points || 500} onChange={(v) => updateField('points', 'daily_winner_points', parseInt(v) || 500)} />
+            <FieldRow theme={T} label="Weekly Winner Points" value={config.points?.weekly_winner_points || 2000} onChange={(v) => updateField('points', 'weekly_winner_points', parseInt(v) || 2000)} />
+            <FieldRow theme={T} label="Monthly Winner Points" value={config.points?.monthly_winner_points || 10000} onChange={(v) => updateField('points', 'monthly_winner_points', parseInt(v) || 10000)} />
+            <FieldRow theme={T} label="Grand Finalist Points" value={config.points?.grand_finalist_points || 5000} onChange={(v) => updateField('points', 'grand_finalist_points', parseInt(v) || 5000)} />
+            <FieldRow theme={T} label="Grand Winner Points" value={config.points?.grand_winner_points || 50000} onChange={(v) => updateField('points', 'grand_winner_points', parseInt(v) || 50000)} />
+          </SectionCard>
+        </div>
+      )}
+
+      {configSubTab === 'costs' && (
+        <SectionCard theme={T} title="Action Costs" icon={<TrendingDown size={20} color="#EF4444" />} maxWidth={600}>
           <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create} onChange={(v) => updateField('costs', 'post_create', parseInt(v) || 0)} />
           <FieldRow theme={T} label="Like Cost" value={config.costs.like} onChange={(v) => updateField('costs', 'like', parseInt(v) || 0)} />
           <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
@@ -340,9 +388,10 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
           <FieldRow theme={T} label="Boost 2hr Cost" value={config.costs.boost_2hr} onChange={(v) => updateField('costs', 'boost_2hr', parseInt(v) || 0)} />
           <FieldRow theme={T} label="Boost 24hr Cost" value={config.costs.boost_24hr} onChange={(v) => updateField('costs', 'boost_24hr', parseInt(v) || 0)} />
         </SectionCard>
+      )}
 
-        {/* Withdrawal Settings */}
-        <SectionCard theme={T} title="Withdrawal (Coin → Birr)" icon={<ArrowUpFromLine size={20} color="#F59E0B" />}>
+      {configSubTab === 'withdrawal' && (
+        <SectionCard theme={T} title="Withdrawal (Coin → Birr)" icon={<ArrowUpFromLine size={20} color="#F59E0B" />} maxWidth={600}>
           <ToggleField
             label="Enabled"
             checked={config.withdrawal.enabled}
@@ -355,9 +404,10 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
           <FieldRow theme={T} label="Fee Percent" value={config.withdrawal.fee_percent} onChange={(v) => updateField('withdrawal', 'fee_percent', parseFloat(v) || 0)} />
           <FieldRow theme={T} label="Processing Days" value={config.withdrawal.processing_days} onChange={(v) => updateField('withdrawal', 'processing_days', parseInt(v) || 0)} />
         </SectionCard>
+      )}
 
-        {/* Points System */}
-        <SectionCard theme={T} title="Points System (Points → Birr)" icon={<Coins size={20} color="#8B5CF6" />}>
+      {configSubTab === 'points' && (
+        <SectionCard theme={T} title="Points System (Points → Birr)" icon={<Coins size={20} color="#8B5CF6" />} maxWidth={600}>
           <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
             Points are separate from coins. Gifts convert to points. Withdrawals use points only.
           </div>
@@ -366,38 +416,27 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
           <FieldRow theme={T} label="Min Points to Withdraw" value={config.points?.withdrawal_min_points || 100} onChange={(v) => updateField('points', 'withdrawal_min_points', parseInt(v) || 100)} />
           <FieldRow theme={T} label="Max Points per Request" value={config.points?.withdrawal_max_points_per_request || 10000} onChange={(v) => updateField('points', 'withdrawal_max_points_per_request', parseInt(v) || 10000)} />
         </SectionCard>
+      )}
 
-        {/* Campaign Winner Point Rewards */}
-        <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#F59E0B" />}>
-          <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
-            Points awarded to winners of each campaign type.
-          </div>
-          <FieldRow theme={T} label="Daily Winner Points" value={config.points?.daily_winner_points || 500} onChange={(v) => updateField('points', 'daily_winner_points', parseInt(v) || 500)} />
-          <FieldRow theme={T} label="Weekly Winner Points" value={config.points?.weekly_winner_points || 2000} onChange={(v) => updateField('points', 'weekly_winner_points', parseInt(v) || 2000)} />
-          <FieldRow theme={T} label="Monthly Winner Points" value={config.points?.monthly_winner_points || 10000} onChange={(v) => updateField('points', 'monthly_winner_points', parseInt(v) || 10000)} />
-          <FieldRow theme={T} label="Grand Finalist Points" value={config.points?.grand_finalist_points || 5000} onChange={(v) => updateField('points', 'grand_finalist_points', parseInt(v) || 5000)} />
-          <FieldRow theme={T} label="Grand Winner Points" value={config.points?.grand_winner_points || 50000} onChange={(v) => updateField('points', 'grand_winner_points', parseInt(v) || 50000)} />
-        </SectionCard>
+      {configSubTab === 'policies' && (
+        <div style={{ maxWidth: 600 }}>
+          <SectionCard theme={T} title="Gifting Policy" icon={<Gift size={20} color="#8B5CF6" />} marginBottom={20}>
+            <ToggleField label="Earned Coins Giftable" checked={config.gifting.earned_coins_giftable} onChange={(v) => updateField('gifting', 'earned_coins_giftable', v)} theme={T} />
+            <ToggleField label="Purchased Coins Giftable" checked={config.gifting.purchased_coins_giftable} onChange={(v) => updateField('gifting', 'purchased_coins_giftable', v)} theme={T} />
+            <ToggleField label="Earned Coins Withdrawable" checked={config.gifting.earned_coins_withdrawable} onChange={(v) => updateField('gifting', 'earned_coins_withdrawable', v)} theme={T} />
+            <ToggleField label="Purchased Coins Withdrawable" checked={config.gifting.purchased_coins_withdrawable} onChange={(v) => updateField('gifting', 'purchased_coins_withdrawable', v)} theme={T} />
+          </SectionCard>
 
-        {/* Gifting Policy */}
-        <SectionCard theme={T} title="Gifting Policy" icon={<Gift size={20} color="#8B5CF6" />}>
-          <ToggleField label="Earned Coins Giftable" checked={config.gifting.earned_coins_giftable} onChange={(v) => updateField('gifting', 'earned_coins_giftable', v)} theme={T} />
-          <ToggleField label="Purchased Coins Giftable" checked={config.gifting.purchased_coins_giftable} onChange={(v) => updateField('gifting', 'purchased_coins_giftable', v)} theme={T} />
-          <ToggleField label="Earned Coins Withdrawable" checked={config.gifting.earned_coins_withdrawable} onChange={(v) => updateField('gifting', 'earned_coins_withdrawable', v)} theme={T} />
-          <ToggleField label="Purchased Coins Withdrawable" checked={config.gifting.purchased_coins_withdrawable} onChange={(v) => updateField('gifting', 'purchased_coins_withdrawable', v)} theme={T} />
-        </SectionCard>
+          <SectionCard theme={T} title="Balance Thresholds" icon={<Wallet size={20} color="#3B82F6" />} marginBottom={20}>
+            <FieldRow theme={T} label="Min Balance to Post" value={config.thresholds.min_balance_to_post} onChange={(v) => updateField('thresholds', 'min_balance_to_post', parseInt(v) || 0)} />
+            <FieldRow theme={T} label="Min Balance to Join Campaign" value={config.thresholds.min_balance_to_join_campaign} onChange={(v) => updateField('thresholds', 'min_balance_to_join_campaign', parseInt(v) || 0)} />
+          </SectionCard>
 
-        {/* Thresholds */}
-        <SectionCard theme={T} title="Balance Thresholds" icon={<Wallet size={20} color="#3B82F6" />}>
-          <FieldRow theme={T} label="Min Balance to Post" value={config.thresholds.min_balance_to_post} onChange={(v) => updateField('thresholds', 'min_balance_to_post', parseInt(v) || 0)} />
-          <FieldRow theme={T} label="Min Balance to Join Campaign" value={config.thresholds.min_balance_to_join_campaign} onChange={(v) => updateField('thresholds', 'min_balance_to_join_campaign', parseInt(v) || 0)} />
-        </SectionCard>
-
-        {/* Expiry */}
-        <SectionCard theme={T} title="Expiry" icon={<Clock size={20} color="#6B7280" />}>
-          <FieldRow theme={T} label="Earned Coins Expire Days (0 = never)" value={config.expiry.earned_coins_expire_days} onChange={(v) => updateField('expiry', 'earned_coins_expire_days', parseInt(v) || 0)} />
-        </SectionCard>
-      </div>
+          <SectionCard theme={T} title="Expiry" icon={<Clock size={20} color="#6B7280" />}>
+            <FieldRow theme={T} label="Earned Coins Expire Days (0 = never)" value={config.expiry.earned_coins_expire_days} onChange={(v) => updateField('expiry', 'earned_coins_expire_days', parseInt(v) || 0)} />
+          </SectionCard>
+        </div>
+      )}
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
         <button onClick={onSave} disabled={saving} style={btnPrimary(T)}>
@@ -664,11 +703,12 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result }) {
 // Helpers
 // ---------------------------------------------------------------
 
-function SectionCard({ theme: T, title, icon, children }) {
+function SectionCard({ theme: T, title, icon, children, marginBottom, maxWidth }) {
   return (
     <div style={{
       background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
       padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      marginBottom: marginBottom || 0, maxWidth: maxWidth || 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         {icon}
