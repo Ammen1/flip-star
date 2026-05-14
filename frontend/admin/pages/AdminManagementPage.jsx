@@ -1117,9 +1117,9 @@ export function AdminManagementPage({ theme }) {
               </button>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                   Email
                 </label>
                 <input
@@ -1129,10 +1129,10 @@ export function AdminManagementPage({ theme }) {
                   placeholder="user@example.com"
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 12px',
                     border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
-                    fontSize: 14,
+                    borderRadius: 6,
+                    fontSize: 13,
                     outline: 'none',
                     background: theme.bg,
                     color: theme.txt,
@@ -1144,7 +1144,7 @@ export function AdminManagementPage({ theme }) {
               </div>
 
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                   Password
                 </label>
                 <input
@@ -1154,10 +1154,10 @@ export function AdminManagementPage({ theme }) {
                   placeholder="Leave empty to keep current"
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 12px',
                     border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
-                    fontSize: 14,
+                    borderRadius: 6,
+                    fontSize: 13,
                     outline: 'none',
                     background: theme.bg,
                     color: theme.txt,
@@ -1168,42 +1168,37 @@ export function AdminManagementPage({ theme }) {
                 />
               </div>
             </div>
-            
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
-                <label style={{ fontSize: 15, fontWeight: 700, color: theme.txt, margin: 0 }}>
+
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <label style={{ fontSize: 14, fontWeight: 700, color: theme.txt, margin: 0 }}>
                   Assign Roles
                 </label>
-                <div style={{ fontSize: 13, color: theme.sub }}>
+                <div style={{ fontSize: 12, color: theme.sub }}>
                   {selectedUserRoles.length} of {roles.length} selected
                 </div>
               </div>
-              
+
               <div style={{
-                maxHeight: 300,
-                overflow: 'auto',
-                border: `1px solid ${theme.border}`,
-                borderRadius: 12,
-                padding: 20,
-                background: theme.bg,
+                maxHeight: 200,
+                overflowY: 'auto',
               }}>
                 {roles.map((role) => (
-                  <label key={role.id} style={{ 
-                    display: 'flex', 
-                    alignItems: 'flex-start', 
-                    gap: 12, 
-                    fontSize: 13, 
+                  <label key={role.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    fontSize: 13,
                     color: theme.txt,
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    marginBottom: 6,
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    marginBottom: 4,
                     cursor: 'pointer',
                     transition: 'all 0.2s',
-                    background: selectedUserRoles.includes(role.id) ? theme.pri + '15' : theme.card,
-                    border: selectedUserRoles.includes(role.id) ? `1px solid ${theme.pri}` : `1px solid ${theme.border}`,
+                    background: selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent',
                   }}
-                  onMouseEnter={(e) => { e.target.style.borderColor = theme.pri; e.target.style.background = theme.pri + '10'; }}
-                  onMouseLeave={(e) => { e.target.style.borderColor = selectedUserRoles.includes(role.id) ? theme.pri : theme.border; e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '15' : theme.card; }}
+                  onMouseEnter={(e) => { e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '20' : theme.bg; }}
+                  onMouseLeave={(e) => { e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent'; }}
                   >
                     <input
                       type="checkbox"
@@ -1214,11 +1209,10 @@ export function AdminManagementPage({ theme }) {
                           : selectedUserRoles.filter(id => id !== role.id);
                         setSelectedUserRoles(selectedRoles);
                       }}
-                      style={{ marginTop: 2, cursor: 'pointer' }}
+                      style={{ cursor: 'pointer' }}
                     />
-                    <div>
-                      <div style={{ fontWeight: 600, marginBottom: 2 }}>{role.name}</div>
-                      <div style={{ fontSize: 11, color: theme.sub, lineHeight: 1.4 }}>{role.description}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{role.name}</div>
                     </div>
                   </label>
                 ))}
