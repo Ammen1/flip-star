@@ -246,13 +246,13 @@ class OnevasWebhookView(APIView):
             }
             resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, 'A')
             cancel_keyword = stop_keywords.get(tier.duration_type, 'STOP')
-            cancellation_message = f"Dear valued customer, you have successfully unsubscribed from the FLIPSTAR {tier.name} service. To resubscribe at any time, please send {resubscribe_keyword} to {tier.short_code}. To cancel your subscription, please send {cancel_keyword} to {tier.short_code}. We appreciate your business and thank you for choosing FLIPSTAR."
+            cancellation_message = f"You have successfully unsubscribed from the {tier.name} service. To subscribe again, send {resubscribe_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending cancellation SMS to {phone_number}")
             sms_sent = self.send_sms(phone_number, cancellation_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] Cancellation SMS sent: {sms_sent}")
         else:
             print(f"[SUBSCRIPTION DEBUG] WARNING: subscription.tier is None, cannot send SMS with tier info")
-            cancellation_message = f"Dear valued customer, you have successfully unsubscribed from FLIPSTAR service. Thank you."
+            cancellation_message = f"You have successfully unsubscribed from the Flipstar service."
             print(f"[SUBSCRIPTION DEBUG] Sending generic cancellation SMS to {phone_number}")
             sms_sent = self.send_sms(phone_number, cancellation_message, None)
             print(f"[SUBSCRIPTION DEBUG] Cancellation SMS sent: {sms_sent}")
