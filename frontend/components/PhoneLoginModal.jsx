@@ -86,7 +86,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
             position: "relative"
           }}>
             <div style={{ width: "50%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
-            <div style={{ width: "50%", background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
+            <div style={{ width: "50%", backgroundColor: "#000000", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
             <img src="/assets/logo-ethio-and-flip.png" alt="Logo" style={{ height: 90, width: "100%", objectFit: "contain", position: "relative", zIndex: 1 }} />
           </div>
 
