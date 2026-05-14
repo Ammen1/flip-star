@@ -530,7 +530,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
         {/* Co-Branded Logo Header */}
         <div style={{ 
           position: "relative", 
-          height: 120, 
+          height: 90, 
           marginBottom: 24, 
           borderRadius: 12, 
           overflow: "hidden",
@@ -576,7 +576,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
             {/* Gold diagonal line */}
             <line
               x1="20"
-              y1="120"
+              y1="90"
               x2="55"
               y2="0"
               stroke="#D4AF37"

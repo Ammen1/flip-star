@@ -243,7 +243,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
         {/* Co-Branded Logo Header */}
         <div style={{ 
           position: "relative", 
-          height: 120, 
+          height: 90, 
           marginBottom: 24, 
           borderRadius: 12, 
           overflow: "hidden",
@@ -289,7 +289,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
             {/* Gold diagonal line */}
             <line
               x1="20"
-              y1="120"
+              y1="90"
               x2="55"
               y2="0"
               stroke="#D4AF37"

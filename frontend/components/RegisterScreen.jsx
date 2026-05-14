@@ -130,7 +130,7 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
         {/* Co-Branded Logo Header */}
         <div style={{ 
           position: "relative", 
-          height: 120, 
+          height: 90, 
           marginTop: 20, 
           borderRadius: 12, 
           overflow: "hidden",
@@ -176,7 +176,7 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
             {/* Gold diagonal line */}
             <line
               x1="20"
-              y1="120"
+              y1="90"
               x2="55"
               y2="0"
               stroke="#D4AF37"
