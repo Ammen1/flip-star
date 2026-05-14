@@ -553,9 +553,9 @@ def login_with_subscription_otp(request):
     
     print(f"[SUBSCRIPTION LOGIN DEBUG] Login attempt - phone: {phone}, username: {username}, otp: {otp}")
     
-    # Validate inputs
-    if not phone or not username or not otp or not password:
-        return Response({'error': 'phone, username, otp, and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+    # Validate inputs - username is optional for existing users (will be checked after finding subscription)
+    if not phone or not otp or not password:
+        return Response({'error': 'phone, otp, and password are required'}, status=status.HTTP_400_BAD_REQUEST)
     
     if not password.isdigit() or len(password) != 6:
         return Response({'error': 'Password must be exactly 6 digits (numbers only)'}, status=status.HTTP_400_BAD_REQUEST)
@@ -608,6 +608,10 @@ def login_with_subscription_otp(request):
     
     # No user yet - create new account (SMS-first flow)
     print(f"[SUBSCRIPTION LOGIN DEBUG] No user linked, creating new account")
+    
+    # Username is required for new users
+    if not username:
+        return Response({'error': 'Username is required for new accounts'}, status=status.HTTP_400_BAD_REQUEST)
     
     # Check if username already exists
     if User.objects.filter(username=username).exists():
