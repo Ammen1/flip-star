@@ -642,9 +642,40 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
         user = data;
       } else {
         // For phone and username, use the search parameter
-        const data = await api.request(`/admin/users/?search=${searchQuery}`);
-        console.log('Search results:', data);
-        user = data.users?.[0] || data;
+        // Try different phone number formats if searching by phone
+        let searchQueryFormatted = searchQuery;
+        if (searchType === 'phone') {
+          // Try original, with +251, with 251, and without leading 0
+          const variants = [
+            searchQuery,
+            searchQuery.startsWith('0') ? '+251' + searchQuery.substring(1) : searchQuery,
+            searchQuery.startsWith('0') ? '251' + searchQuery.substring(1) : searchQuery,
+            searchQuery.startsWith('+251') ? searchQuery.substring(4) : searchQuery,
+            searchQuery.startsWith('251') ? searchQuery.substring(3) : searchQuery,
+          ];
+          
+          // Try each variant until we find a result
+          for (const variant of variants) {
+            console.log('Trying phone variant:', variant);
+            const data = await api.request(`/admin/users/?search=${variant}`);
+            console.log('Search results for variant:', variant, data);
+            if (data.users && data.users.length > 0) {
+              user = data.users[0];
+              break;
+            }
+          }
+          
+          if (!user) {
+            // If no variant worked, try the original search
+            const data = await api.request(`/admin/users/?search=${searchQuery}`);
+            user = data.users?.[0] || data;
+          }
+        } else {
+          // Username search
+          const data = await api.request(`/admin/users/?search=${searchQuery}`);
+          console.log('Search results:', data);
+          user = data.users?.[0] || data;
+        }
       }
       
       console.log('Found user:', user);
