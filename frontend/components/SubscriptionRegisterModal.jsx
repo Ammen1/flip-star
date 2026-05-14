@@ -127,9 +127,17 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
     <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
       <div style={{ width: "100%", maxWidth: 420 }}>
 
-        {/* Logo */}
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: 24, borderRadius: 12, padding: "10px 12px", background: "linear-gradient(to right, #ffffff, #888888, #000000)" }}>
-          <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 100, height: 50, objectFit: "contain" }} />
+        {/* Logo Header */}
+        <div style={{ 
+          background: "#FFFFFF", 
+          height: 90, 
+          marginBottom: 24, 
+          borderRadius: 12, 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center"
+        }}>
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 380, height: 80, objectFit: "contain" }} />
         </div>
 
         {/* Card */}

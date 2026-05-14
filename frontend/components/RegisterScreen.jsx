@@ -127,6 +127,18 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
         <button onClick={step===0?onBack:()=>setStep(step-1)} style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
           <ChevronLeft size={20} />
         </button>
+        {/* Logo Header */}
+        <div style={{ 
+          background: "#FFFFFF", 
+          height: 90, 
+          marginTop: 20, 
+          borderRadius: 12, 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center"
+        }}>
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 380, height: 80, objectFit: "contain" }} />
+        </div>
         <div style={{ marginTop:14, padding:"0 4px" }}>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontWeight:600, marginBottom:7 }}>STEP {step+1} OF {steps.length}</div>
           <div style={{ display:"flex", gap:4 }}>

@@ -240,13 +240,17 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
     <div style={wrap}>
       <div style={{ width: "100%", maxWidth: 420 }}>
 
-        {/* Logo */}
+        {/* Logo Header */}
         <div style={{ 
-          display: "flex", justifyContent: "center", alignItems: "center", 
-          marginBottom: 8, borderRadius: 12, padding: "10px 12px",
-          background: "linear-gradient(to right, #ffffff, #888888, #000000)"
+          background: "#FFFFFF", 
+          height: 90, 
+          marginBottom: 24, 
+          borderRadius: 12, 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center"
         }}>
-          <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 100, height: 50, objectFit: "contain" }} />
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 380, height: 80, objectFit: "contain" }} />
         </div>
 
         {/* Step indicator */}

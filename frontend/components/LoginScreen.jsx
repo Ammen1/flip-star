@@ -65,10 +65,17 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         <button onClick={onBack} style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
           <ChevronLeft size={20} />
         </button>
-        <div style={{ textAlign:"center", marginTop:20 }}>
-          <div style={{ fontSize:34, marginBottom:6 }}>⭐</div>
-          <div style={{ fontSize:24, fontWeight:900, color:"#fff" }}>Welcome</div>
-          <div style={{ fontSize:13, color:"rgba(255,255,255,0.55)", marginTop:4 }}>Log in to your account</div>
+        {/* Logo Header */}
+        <div style={{ 
+          background: "#FFFFFF", 
+          height: 90, 
+          marginTop: 20, 
+          borderRadius: 12, 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center"
+        }}>
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 380, height: 80, objectFit: "contain" }} />
         </div>
       </div>
       <div style={{ flex:1, background:"#fff", borderRadius:"28px 28px 0 0", marginTop:30, padding:"28px 24px 40px" }}>
