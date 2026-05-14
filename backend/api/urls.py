@@ -195,10 +195,6 @@ from .views_legal import (
     get_pending_acceptances, get_user_acceptances
 )
 from .views_gift import GiftViewSet, PublicGiftViewSet, GiftTransactionViewSet, UserGiftStatsViewSet
-from .views_rbac import (
-    RoleViewSet, PermissionViewSet, RolePermissionViewSet,
-    UserRoleViewSet, AuditLogViewSet
-)
 from .views_wallet import (
     wallet_summary, wallet_transactions, withdrawal_info, request_withdrawal,
     my_withdrawals, cancel_withdrawal, public_wallet_config,
@@ -226,11 +222,6 @@ router.register(r'admin/gifts', GiftViewSet, basename='admin-gift')
 router.register(r'gifts', PublicGiftViewSet, basename='gift')
 router.register(r'gift-transactions', GiftTransactionViewSet, basename='gift-transaction')
 router.register(r'gift-stats', UserGiftStatsViewSet, basename='gift-stats')
-router.register(r'admin/rbac/roles', RoleViewSet, basename='admin-rbac-roles')
-router.register(r'admin/rbac/permissions', PermissionViewSet, basename='admin-rbac-permissions')
-router.register(r'admin/rbac/role-permissions', RolePermissionViewSet, basename='admin-rbac-role-permissions')
-router.register(r'admin/rbac/users', UserRoleViewSet, basename='admin-rbac-users')
-router.register(r'admin/rbac/audit-logs', AuditLogViewSet, basename='admin-rbac-audit-logs')
 
 from .setup_admin_view import setup_admin
 

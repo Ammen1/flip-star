@@ -197,7 +197,7 @@ const OriginalSizeImage = React.memo(({ imageUrl, style }) => {
   }, [imageSize]);
   
   return (
-    <View style={containerStyle}>
+    <View style={containerStyle} pointerEvents="box-none">
       <Image
         source={{ uri: imageUrl }}
         style={{ 
@@ -205,7 +205,7 @@ const OriginalSizeImage = React.memo(({ imageUrl, style }) => {
           height: '100%',
           backgroundColor: '#111',
         }}
-        resizeMode="contain"
+        resizeMode="cover"
         onError={handleImageError}
         onLoad={handleImageLoad}
       />
@@ -1243,47 +1243,53 @@ export default function HomeScreen({ navigation, route }) {
 
         {/* Media */}
         {(post.thumbnail || post.media || post.image) && (
-          <TouchableOpacity onPress={() => goToReel(post.id)} activeOpacity={0.9}>
-            <View style={styles.mediaWrapper}>
-              {post.thumbnail ? (
-                <>
-                  <OriginalSizeImage imageUrl={post.thumbnail} />
-                  {/* Play icon overlay for videos if there's media */}
-                  {post.media && (
+          <View style={styles.mediaWrapper}>
+            {post.thumbnail ? (
+              <>
+                {/* If there's media (video), make it clickable */}
+                {post.media ? (
+                  <TouchableOpacity onPress={() => goToReel(post.id)} activeOpacity={0.9}>
+                    <OriginalSizeImage imageUrl={post.thumbnail} />
+                    {/* Play icon overlay for videos */}
                     <View style={styles.playOverlay}>
                       <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
                     </View>
-                  )}
-                </>
-              ) : post.media ? (
-                <>
-                  {post.image ? (
-                    <OriginalSizeImage imageUrl={post.image} />
-                  ) : (
-                    <View style={[styles.mediaImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.cardBg }]}>
-                      <Ionicons name="videocam" size={64} color={colors.textSecondary} />
-                    </View>
-                  )}
-                  {/* Play icon overlay for videos */}
-                  <View style={styles.playOverlay}>
-                    <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+                  </TouchableOpacity>
+                ) : (
+                  /* Just thumbnail, no video - not clickable */
+                  <OriginalSizeImage imageUrl={post.thumbnail} />
+                )}
+              </>
+            ) : post.media ? (
+              /* Has video media - make it clickable */
+              <TouchableOpacity onPress={() => goToReel(post.id)} activeOpacity={0.9}>
+                {post.image ? (
+                  <OriginalSizeImage imageUrl={post.image} />
+                ) : (
+                  <View style={[styles.mediaImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: colors.cardBg }]}>
+                    <Ionicons name="videocam" size={64} color={colors.textSecondary} />
                   </View>
-                </>
-              ) : post.image ? (
-                <OriginalSizeImage imageUrl={post.image} />
-              ) : (
-                <View style={[styles.mediaImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#2a2a2a' }]}>
-                  <Text style={{ color: '#666', fontSize: 16 }}>No media</Text>
+                )}
+                {/* Play icon overlay for videos */}
+                <View style={styles.playOverlay}>
+                  <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
                 </View>
-              )}
-              
-              {/* View count badge */}
-              <View style={styles.viewBadge}>
-                <Ionicons name="eye" size={12} color="#fff" />
-                <Text style={styles.viewCount}>{(post.view_count || 0).toLocaleString()}</Text>
+              </TouchableOpacity>
+            ) : post.image ? (
+              /* Just image, no video - not clickable */
+              <OriginalSizeImage imageUrl={post.image} />
+            ) : (
+              <View style={[styles.mediaImage, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#2a2a2a' }]}>
+                <Text style={{ color: '#666', fontSize: 16 }}>No media</Text>
               </View>
+            )}
+            
+            {/* View count badge */}
+            <View style={styles.viewBadge}>
+              <Ionicons name="eye" size={12} color="#fff" />
+              <Text style={styles.viewCount}>{(post.view_count || 0).toLocaleString()}</Text>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
 
         {/* Actions */}

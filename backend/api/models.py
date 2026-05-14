@@ -17,8 +17,6 @@ from .models_messaging import Conversation, Message, MessageRead
 from .models_gift import Gift, GiftTransaction, GiftCombo, UserGiftStats
 # Import wallet models
 from .models_wallet import WalletConfig, WithdrawalRequest
-# Import RBAC models
-from .models_rbac import Role
 # Import support models
 from .models_support import SupportRequest
 # Import subscription models
@@ -95,10 +93,6 @@ class UserProfile(models.Model):
     allow_messages = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # RBAC - Role Assignment (Multiple roles supported)
-    roles = models.ManyToManyField(Role, blank=True, related_name='users', help_text='User roles for RBAC')
-    is_staff = models.BooleanField(default=False, help_text='Is this user an internal operator (admin staff)?')
 
     def __str__(self):
         return f"{self.user.username} - Level {self.level}"

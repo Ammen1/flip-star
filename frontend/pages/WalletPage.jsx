@@ -268,11 +268,11 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
           <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 6 }}>
               <span style={{ opacity: 0.85 }}>Min</span>
-              <strong>{config?.withdrawal_min_points?.toLocaleString() || 1000} pts</strong>
+              <strong>{config?.withdrawal_min_points || 100} pts</strong>
             </div>
             <button
               onClick={() => setShowWithdrawModal(true)}
-              disabled={(points.current || 0) < (config?.withdrawal_min_points || 1000)}
+              disabled={(points.current || 0) < (config?.withdrawal_min_points || 100)}
               style={{
                 width: '100%',
                 padding: '6px 8px',
@@ -282,8 +282,8 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
                 border: '1px solid rgba(255,255,255,0.3)',
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: (points.current || 0) >= (config?.withdrawal_min_points || 1000) ? 'pointer' : 'not-allowed',
-                opacity: (points.current || 0) >= (config?.withdrawal_min_points || 1000) ? 1 : 0.5,
+                cursor: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 'pointer' : 'not-allowed',
+                opacity: (points.current || 0) >= (config?.withdrawal_min_points || 100) ? 1 : 0.5,
               }}
             >
               Points → Birr
@@ -338,7 +338,6 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
             withdrawal={withdrawal}
             recentTx={summary?.recent_transactions || []}
             config={config}
-            points={points}
           />
         )}
         {activeTab === 'transactions' && (
@@ -393,7 +392,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
 // Tabs
 // ---------------------------------------------------------------
 
-function OverviewTab({ theme: T, totals, withdrawal, recentTx, config, points }) {
+function OverviewTab({ theme: T, totals, withdrawal, recentTx, config }) {
   return (
     <div>
       {/* Lifetime stats */}
@@ -421,7 +420,7 @@ function OverviewTab({ theme: T, totals, withdrawal, recentTx, config, points })
           <div style={{ flex: 1, fontSize: 13, color: T.sub }}>
             Earn <strong style={{ color: T.txt }}>{withdrawal.min_points?.toLocaleString()}</strong> points
             to unlock withdrawal to Birr. You have <strong style={{ color: T.txt }}>
-              {points.current?.toLocaleString() || 0} points
+              {/* current earned shown in main balance card */}
             </strong>
           </div>
         </div>
@@ -605,7 +604,7 @@ function EmptyState({ theme: T, icon, title, subtitle }) {
 
 function WithdrawModal({ theme: T, balance, points, config, onClose, onSuccess }) {
   const [step, setStep] = useState(1); // 1: amount, 2: payout, 3: confirm
-  const minPoints = config?.withdrawal_min_points || 1000;
+  const minPoints = config?.withdrawal_min_points || 100;
   const [amount, setAmount] = useState(minPoints);
   const [payoutMethod, setPayoutMethod] = useState('telebirr');
   const [payoutAccount, setPayoutAccount] = useState('');
@@ -998,9 +997,7 @@ function pointsToBirr(points, pointsPerBirr) {
 function formatDate(iso) {
   if (!iso) return '';
   const d = new Date(iso);
-  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  return `${dateStr} at ${timeStr}`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function defaultTheme() {

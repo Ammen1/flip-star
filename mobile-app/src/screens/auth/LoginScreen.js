@@ -12,11 +12,13 @@ import config from '../../config';
 import ForgotPasswordPhone from './ForgotPasswordPhone';
 import SubscriptionRegisterModal from './SubscriptionRegisterModal';
 import SubscriptionPlansModal from './SubscriptionPlansModal';
+import Svg, { Line, Path } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 
-const GOLD = '#C8B56A';
-const BG = '#0D0D0D';
-const CARD = '#1A1A1A';
-const BORDER = '#262626';
+const GOLD = '#D4AF37'; // Gold brand color
+const BG = '#000000'; // Black background
+const CARD = '#1A1A1A'; // Dark gray for cards
+const BORDER = '#333333'; // Dark border
 
 const FAQ_ITEMS = [
   { 
@@ -61,7 +63,7 @@ const FAQ_ITEMS = [
   },
   { 
     q: "What are coins and how do I earn them?", 
-    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), or Purchase via telebirr/Airtime." 
+    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), Monthly bonus (200 coins for 30-day active streak), or Purchase via telebirr/Airtime." 
   },
   { 
     q: "What can I do with coins?", 
@@ -162,10 +164,10 @@ const ts = StyleSheet.create({
   cell:           { padding: 6, fontSize: 10, color: '#ccc', lineHeight: 14 },
   headerCell:     { color: GOLD, fontWeight: '700', fontSize: 10 },
   dataCell:       {},
-  infoBox:        { backgroundColor: '#1A1A2E', borderLeftWidth: 3, borderLeftColor: '#3B82F6', padding: 10, borderRadius: 6, marginBottom: 10 },
+  infoBox:        { backgroundColor: '#1A1A2E', borderLeftWidth: 3, borderLeftColor: GOLD, padding: 10, borderRadius: 6, marginBottom: 10 },
   infoText:       { fontSize: 11, color: '#aaa', lineHeight: 16 },
-  formulaBox:     { backgroundColor: '#0D1A2B', borderWidth: 1, borderColor: '#3B82F6', padding: 12, borderRadius: 8, marginBottom: 8 },
-  formulaText:    { fontSize: 11, color: '#60A5FA', fontWeight: '600', textAlign: 'center' },
+  formulaBox:     { backgroundColor: '#0D1A2B', borderWidth: 1, borderColor: GOLD, padding: 12, borderRadius: 8, marginBottom: 8 },
+  formulaText:    { fontSize: 11, color: GOLD, fontWeight: '600', textAlign: 'center' },
 });
 
 // ── FAQ Modal ──────────────────────────────────────────────────────────────
@@ -604,7 +606,7 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
       {modal === 'forgot-phone' && <ForgotPasswordPhone onClose={() => setModal(null)} />}
       {modal === 'faq' && <FaqModal onClose={() => setModal(null)} />}
       {modal === 'terms' && <TermsModal onClose={() => setModal(null)} />}
@@ -627,26 +629,51 @@ export default function LoginScreen({ navigation }) {
       />
 
       <ScrollView style={s.container} contentContainerStyle={[s.scroll, { paddingTop: insets.top + 16 }]} showsVerticalScrollIndicator={false}>
-        {/* Logos */}
-        <View style={s.logosRow}>
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <View style={{ flex: 1, flexDirection: 'row' }}>
-              {Array.from({ length: 40 }, (_, i) => {
-                const v = Math.round(255 * (1 - i / 39));
-                return <View key={i} style={{ flex: 1, backgroundColor: `rgb(${v},${v},${v})` }} />;
-              })}
-            </View>
+        {/* Premium Co-Brand Header with Improved Diagonal */}
+        <View style={s.headerContainer}>
+          {/* LEFT WHITE SECTION */}
+          <View style={s.leftSection}>
+            <Image
+              source={require('../../../assets/images/ethio-logo.png')}
+              style={s.ethioLogo}
+              resizeMode="contain"
+            />
           </View>
-          <Image 
-            source={require('../../../assets/images/ethio-logo.png')} 
-            style={s.ethioLogo}
-            resizeMode="contain"
-          />
-          <Image 
-            source={require('../../../assets/images/flipstar-logo.png')} 
-            style={s.flipstarLogo}
-            resizeMode="contain"
-          />
+
+          {/* RIGHT BLACK SECTION */}
+          <LinearGradient
+            colors={['#0D0D0D', '#1A1A1A']}
+            style={s.rightSection}
+          >
+            <Image
+              source={require('../../../assets/images/flipstar-logo.png')}
+              style={s.flipstarLogo}
+              resizeMode="contain"
+            />
+          </LinearGradient>
+
+          {/* WHITE BACKGROUND AND GOLD DIAGONAL LINE */}
+          <Svg
+            height="100%"
+            width="100"
+            style={s.diagonalContainer}
+          >
+            {/* White path covering left side of diagonal */}
+            <Path
+              d="M 0,0 L 55,0 L 20,90 L 0,90 Z"
+              fill="#FFFFFF"
+            />
+            {/* Gold diagonal line */}
+            <Line
+              x1="20"
+              y1="90"
+              x2="55"
+              y2="0"
+              stroke="#D4AF37"
+              strokeWidth="12.5"
+              strokeLinecap="round"
+            />
+          </Svg>
         </View>
 
         {/* Main Content - Website Style */}
@@ -734,18 +761,44 @@ export default function LoginScreen({ navigation }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   scroll: { padding: 16, paddingBottom: 40 },
-  logosRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 24, 
-    borderRadius: 12, 
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  headerContainer: {
+    height: 90,
+    flexDirection: 'row',
     overflow: 'hidden',
+    borderRadius: 18,
+    marginHorizontal: 0,
+    marginTop: 15,
+    marginBottom: 80,
+    position: 'relative',
   },
-  ethioLogo: { width: 100, height: 50 },
-  flipstarLogo: { width: 100, height: 50 },
+  leftSection: {
+    width: '45%',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    paddingLeft: 10,
+    zIndex: 2,
+  },
+  rightSection: {
+    width: '55%',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingRight: 10,
+  },
+  diagonalContainer: {
+    position: 'absolute',
+    left: '38%',
+    top: 0,
+    bottom: 0,
+    zIndex: 3,
+  },
+  ethioLogo: {
+    width: 130,
+    height: 45,
+  },
+  flipstarLogo: {
+    width: 180,
+    height: 70,
+  },
   mainContent: {
     flex: 1,
   },
@@ -754,14 +807,14 @@ const s = StyleSheet.create({
     marginBottom: 32,
   },
   title: {
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: '900',
-    color: '#F9E08B',
+    color: GOLD,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#aaa',
+    color: '#999',
     textAlign: 'center',
   },
   errorBox: { 
@@ -781,24 +834,25 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   label: { 
-    fontSize: 12, 
+    fontSize: 13, 
     fontWeight: '700', 
-    color: '#F9E08B', 
-    marginBottom: 7, 
-    letterSpacing: 0.5 
+    color: '#999', 
+    marginBottom: 8, 
+    letterSpacing: 0.3 
   },
   inputRow: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     backgroundColor: '#1A1A1A', 
-    borderRadius: 10, 
-    borderWidth: 1.5, 
-    borderColor: '#262626', 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#333', 
     paddingHorizontal: 14, 
-    height: 50 
+    height: 52 
   },
   inputRowFocused: { 
-    borderColor: '#F9E08B' 
+    borderColor: GOLD,
+    backgroundColor: '#1A1A1A',
   },
   inputIcon: { 
     marginRight: 10 
@@ -814,14 +868,14 @@ const s = StyleSheet.create({
     marginTop: -8 
   },
   forgotText: { 
-    color: '#F9E08B', 
-    fontSize: 12, 
+    color: GOLD, 
+    fontSize: 13, 
     fontWeight: '700' 
   },
   loginBtn: { 
-    backgroundColor: '#F9E08B', 
-    borderRadius: 10, 
-    height: 50, 
+    backgroundColor: GOLD, 
+    borderRadius: 12, 
+    height: 52, 
     justifyContent: 'center', 
     alignItems: 'center', 
     marginBottom: 24 
@@ -831,7 +885,7 @@ const s = StyleSheet.create({
   },
   loginBtnText: { 
     color: '#000', 
-    fontSize: 15, 
+    fontSize: 16, 
     fontWeight: '800' 
   },
   registerSection: {
@@ -841,11 +895,11 @@ const s = StyleSheet.create({
   },
   registerText: {
     fontSize: 13,
-    color: '#666',
+    color: '#999',
   },
   registerLink: {
     fontSize: 13,
-    color: '#F9E08B',
+    color: GOLD,
     fontWeight: '700',
   },
   footer: { 
@@ -858,33 +912,33 @@ const s = StyleSheet.create({
     marginTop: 20,
   },
   footerLink: { 
-    color: '#C8B56A', 
+    color: GOLD, 
     fontSize: 15, 
     fontWeight: '800' 
   },
   footerSep: { 
-    color: '#C8B56A', 
+    color: '#666', 
     fontSize: 15,
     fontWeight: '600'
   },
   // Modal styles
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#111', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 24, paddingBottom: 40, maxHeight: '88%' },
+  modalSheet: { backgroundColor: '#1A1A1A', borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 24, paddingBottom: 40, maxHeight: '88%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: 900, color: GOLD },
-  modalDesc: { fontSize: 13, color: GOLD, marginBottom: 16, lineHeight: 20 },
-  input: { backgroundColor: CARD, borderRadius: 10, borderWidth: 1.5, borderColor: BORDER, paddingHorizontal: 14, paddingVertical: 12, color: '#fff', fontSize: 15, marginBottom: 12 },
+  modalDesc: { fontSize: 13, color: '#999', marginBottom: 16, lineHeight: 20 },
+  input: { backgroundColor: '#0D0D0D', borderRadius: 10, borderWidth: 1.5, borderColor: '#333', paddingHorizontal: 14, paddingVertical: 12, color: '#fff', fontSize: 15, marginBottom: 12 },
   modalBtn: { backgroundColor: GOLD, borderRadius: 10, paddingVertical: 13, marginTop: 8, marginBottom: 12 },
   modalBtnText: { color: '#000', fontSize: 15, fontWeight: '800', textAlign: 'center' },
   modalBtnDisabled: { backgroundColor: '#3A3A3A' },
-  modalBtnTextDisabled: { color: '#888' },
+  modalBtnTextDisabled: { color: '#666' },
   modalFooter: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
   modalFooterText: { color: GOLD, fontSize: 13, fontWeight: '600' },
-  termsText: { fontSize: 12, color: GOLD, lineHeight: 20 },
+  termsText: { fontSize: 12, color: '#999', lineHeight: 20 },
   position: { position: 'relative' },
   // FAQ styles
-  faqItem: { marginBottom: 12, borderBottomWidth: 1, borderBottomColor: BORDER, paddingBottom: 12 },
+  faqItem: { marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#333', paddingBottom: 12 },
   faqQ: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
   faqQText: { fontSize: 15, fontWeight: '700', color: '#fff', flex: 1, marginRight: 8 },
-  faqA: { fontSize: 14, color: '#fff', lineHeight: 22, marginTop: 8, paddingLeft: 4 },
+  faqA: { fontSize: 14, color: '#ccc', lineHeight: 22, marginTop: 8, paddingLeft: 4 },
 });

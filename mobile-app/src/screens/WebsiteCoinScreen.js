@@ -42,6 +42,29 @@ export default function WebsiteCoinScreen({ navigation }) {
     loadUserCoins();
   }, []);
 
+  const loadPackages = async () => {
+    try {
+      // Use same endpoint as website
+      const response = await api.request('/wallet/config/');
+      console.log('Wallet config response:', response);
+      // Backend returns { packages: [...] }
+      const rawPkgs = response?.packages || [];
+      const pkgs = (Array.isArray(rawPkgs) ? rawPkgs : []).map(p => ({
+        id: p.id,
+        coins: p.coin_amount,
+        price: parseFloat(p.price_etb),
+        bonus: p.bonus_coins || 0,
+        popular: p.is_featured || false,
+        description: p.name,
+        savings: 0,
+        color: '#3B82F6',
+      }));
+      console.log('Loaded packages:', pkgs);
+      if (pkgs.length > 0) setCoinPackages(pkgs);
+    } catch (e) {
+      console.log('Using fallback packages:', e);
+    }
+  };
   const loadUserCoins = async () => {
     try {
       // Use wallet API to get total coin balance (same as WalletScreen)
@@ -110,10 +133,10 @@ export default function WebsiteCoinScreen({ navigation }) {
           ]
         );
       } else if (paymentMethod === 'telebirr') {
-        // Handle Telebirr payment
+        // Handle telebirr payment
         Alert.alert(
-          'Confirm Telebirr Payment',
-          `You will be redirected to Telebirr to pay ${selectedPackage.price} ETB for ${selectedPackage.coins + selectedPackage.bonus} coins.`,
+          'Confirm telebirr Payment',
+          `You will be redirected to telebirr to pay ${selectedPackage.price} ETB for ${selectedPackage.coins + selectedPackage.bonus} coins.`,
           [
             { text: 'Cancel', style: 'cancel' },
             {
@@ -131,16 +154,16 @@ export default function WebsiteCoinScreen({ navigation }) {
                   });
                   
                   if (response.payment_url) {
-                    Alert.alert('Redirecting', 'Opening Telebirr payment...');
-                    // Open Telebirr app or web
+                    Alert.alert('Redirecting', 'Opening telebirr payment...');
+                    // Open telebirr app or web
                     import('react-native').then(({ Linking }) => {
                       Linking.openURL(response.payment_url).catch(() => {
-                        Alert.alert('Error', 'Could not open Telebirr app. Please try again.');
+                        Alert.alert('Error', 'Could not open telebirr app. Please try again.');
                       });
                     });
                   }
                 } catch (error) {
-                  Alert.alert('Error', 'Telebirr payment failed. Please try again.');
+                  Alert.alert('Error', 'telebirr payment failed. Please try again.');
                 }
               }
             }
@@ -182,71 +205,49 @@ export default function WebsiteCoinScreen({ navigation }) {
   const processAirtimeDirectPayment = async (pkg) => {
     try {
       setLoading(true);
-      
-      // Get user's phone number
+      // Get user's phone number - send as-is like website
       let userPhoneNumber = authUser?.phone_number || authUser?.phone || authUser?.username;
-      
-      // Format phone number for backend (expects 2519XXXXXXXX format)
-      if (userPhoneNumber) {
-        if (userPhoneNumber.startsWith('0')) {
-          userPhoneNumber = '251' + userPhoneNumber.substring(1);
-        } else if (userPhoneNumber.startsWith('+')) {
-          userPhoneNumber = userPhoneNumber.substring(1);
-        }
-      }
-      
       if (!userPhoneNumber) {
         Alert.alert('Error', 'Phone number not found. Please update your profile.');
         return;
       }
 
-      // Get the on-demand subscription tier ID from backend
-      let tierId = null;
-      try {
-        const tiersData = await api.request('/subscriptions/tiers/active/');
-        const ondemandTier = (tiersData || []).find(t => t.duration_type === 'ondemand');
-        tierId = ondemandTier?.id;
-      } catch (e) {
-        console.error('Failed to fetch tiers:', e);
-      }
-
-      if (!tierId) {
-        Alert.alert('Error', 'On-demand plan not found. Please try again later.');
-        return;
-      }
-
-      // Use backend's /charging/on-demand/ endpoint (same as website)
-      // Backend handles Onevas API call and credits coins
-      const response = await api.request('/charging/on-demand/', {
+      // Use same endpoint as website for BOTH airtime and telebirr
+      const response = await api.request('/wallet/telebirr/initiate/', {
         method: 'POST',
         body: JSON.stringify({
-          subscription_tier_id: tierId,
+          package_id: pkg.id,
           phone_number: userPhoneNumber,
         }),
       });
 
-      console.log('Charging response:', response);
+      console.log('Payment initiation response:', response);
 
-      if (response.success) {
-        // Reload balance from wallet API
-        await loadUserCoins();
-        
-        // Show success
-        setPurchasedCoins(pkg.coins + pkg.bonus);
-        setShowSuccessModal(true);
+      if (response.success && response.payment_url) {
         setShowPaymentModal(false);
+        // Open payment URL in browser/app
+        await Linking.openURL(response.payment_url);
         
-        // Play coin sound
-        SoundManager.playCoinSound();
+        // Start polling for balance update after user completes payment
+        Alert.alert(
+          'Complete Payment',
+          'Complete the payment in the opened page. Your coins will be added automatically.',
+          [{
+            text: 'OK',
+            onPress: () => {
+              let pollCount = 0;
+              const pollInterval = setInterval(async () => {
+                pollCount++;
+                await loadUserCoins();
+                if (pollCount >= 12) {
+                  clearInterval(pollInterval);
+                }
+              }, 5000);
+            }
+          }]
+        );
       } else {
-        // Handle specific errors
-        if (response.error === 'insufficient_balance') {
-          Alert.alert('Insufficient Balance', 'Your airtime balance is not enough. Please recharge and try again.');
-        } else if (response.message === 'INTERNAL_ERROR' || response.error === 'charging_failed') {
-          Alert.alert('Service Unavailable', 'The payment service is temporarily unavailable. Please try again in a few minutes.');
-        } else {
-          Alert.alert('Payment Failed', response.message || 'Charging failed. Please try again.');
-        }
+        Alert.alert('Payment Failed', response.error || 'Could not initiate payment. Please try again.');
       }
       
     } catch (error) {
@@ -409,7 +410,7 @@ export default function WebsiteCoinScreen({ navigation }) {
                   onPress={() => handlePackageSelect(pkg, 'telebirr')}
                 >
                   <Ionicons name="card" size={20} color="#fff" />
-                  <Text style={styles.purchaseBtnText}>Buy via Telebirr</Text>
+                  <Text style={styles.purchaseBtnText}>Buy via telebirr</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -451,7 +452,7 @@ export default function WebsiteCoinScreen({ navigation }) {
           <View style={[styles.paymentModal, { backgroundColor: colors.cardBg }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {paymentMethod === 'airtime' ? 'Airtime Payment' : 'Telebirr Payment'}
+                {paymentMethod === 'airtime' ? 'Airtime Payment' : 'telebirr Payment'}
               </Text>
               <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
@@ -487,12 +488,12 @@ export default function WebsiteCoinScreen({ navigation }) {
                 />
               </View>
               <Text style={[styles.paymentMethodTitle, { color: colors.text }]}>
-                {paymentMethod === 'airtime' ? 'Pay with Airtime' : 'Pay with Telebirr'}
+                {paymentMethod === 'airtime' ? 'Pay with Airtime' : 'Pay with telebirr'}
               </Text>
               <Text style={[styles.paymentMethodDesc, { color: colors.textSecondary }]}>
                 {paymentMethod === 'airtime' 
                   ? `${selectedPackage?.price || 0} ETB will be deducted from your airtime balance`
-                  : `You will be redirected to Telebirr to complete the payment`
+                  : `You will be redirected to telebirr to complete the payment`
                 }
               </Text>
             </View>
@@ -509,7 +510,7 @@ export default function WebsiteCoinScreen({ navigation }) {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.confirmPaymentBtnText}>
-                  {paymentMethod === 'airtime' ? 'Confirm Airtime Payment' : 'Proceed to Telebirr'}
+                  {paymentMethod === 'airtime' ? 'Confirm Airtime Payment' : 'Proceed to telebirr'}
                 </Text>
               )}
             </TouchableOpacity>

@@ -115,19 +115,7 @@ export default function SubscriptionScreen({ navigation }) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
-        {/* Benefits */}
-        <View style={[styles.benefitsSection, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <Text style={[styles.sectionLabel, { color: colors.text }]}>Why Premium?</Text>
-          <View style={styles.benefitsGrid}>
-            {BENEFITS.map((benefit, i) => (
-              <View key={i} style={styles.benefitItem}>
-                <Ionicons name={benefit.icon} size={20} color={colors.primary} />
-                <Text style={[styles.benefitText, { color: colors.text }]}>{benefit.text}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
+        
         {/* Current Subscription Status */}
         {currentSub && (
           <View style={[styles.currentSubCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
@@ -140,12 +128,9 @@ export default function SubscriptionScreen({ navigation }) {
                 {currentSub.tier?.name || currentSub.plan_name || currentSub.name || 'Active Plan'}
               </Text>
               <Text style={[styles.currentPlanDesc, { color: colors.textSecondary }]}>
-                {currentSub.tier?.description || currentSub.description || 'Full access to all features'}
+                {currentSub.tier?.description || currentSub.description || ''}
               </Text>
-              <Text style={[styles.currentPlanPrice, { color: colors.primary }]}>
-                {currentSub.tier?.price_etb || currentSub.price_etb || currentSub.price || 0} ETB
-              </Text>
-              <Text style={[styles.currentPlanExpiry, { color: colors.textSecondary }]}>
+                            <Text style={[styles.currentPlanExpiry, { color: colors.textSecondary }]}>
                 Status: {currentSub.status || 'Unknown'}
               </Text>
               {currentSub.end_date && (
@@ -153,26 +138,20 @@ export default function SubscriptionScreen({ navigation }) {
                   Expires: {new Date(currentSub.end_date).toLocaleDateString()}
                 </Text>
               )}
-              <Text style={[styles.debugInfo, { color: colors.textSecondary, fontSize: 10 }]}>
-                Debug: isActive={String(isActive)}, hasData={String(!!currentSub)}
-              </Text>
-            </View>
+                          </View>
           </View>
         )}
 
-        {/* Debug Info - Show if no subscription data */}
+        {/* No Subscription Info */}
         {!currentSub && !loading && (
           <View style={[styles.currentSubCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
             <View style={styles.currentSubHeader}>
               <Ionicons name="information-circle" size={24} color={colors.textSecondary} />
-              <Text style={[styles.currentSubTitle, { color: colors.text }]}>No Active Subscription</Text>
+              <Text style={[styles.currentSubTitle, { color: colors.text }]}>Upgrade</Text>
             </View>
             <View style={styles.currentSubDetails}>
-              <Text style={[styles.currentPlanName, { color: colors.text }]}>
-                You don't have an active subscription
-              </Text>
-              <Text style={[styles.currentPlanDesc, { color: colors.textSecondary }]}>
-                Choose a plan below to subscribe
+              <Text style={[styles.currentPlanName, { color: colors.textSecondary }]}>
+                No current subscription
               </Text>
             </View>
           </View>

@@ -1,6 +1,7 @@
 import traceback
 import random
 import string
+import re
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -201,7 +202,7 @@ def change_password(request):
     if not current_password or not new_password:
         return Response({'error': 'current_password and new_password required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # App uses 6-digit numeric PIN as the password
+# App uses 6-digit numeric PIN as the password
     if len(new_password) != 6 or not new_password.isdigit():
         return Response({'error': 'New password must be exactly 6 digits'}, status=status.HTTP_400_BAD_REQUEST)
 

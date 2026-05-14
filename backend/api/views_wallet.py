@@ -58,6 +58,21 @@ def _serialize_transaction(tx):
             'username': tx.recipient.username,
         }
 
+    # Get post details for gift transactions
+    post_details = None
+    if tx.reel_id and (tx.transaction_type == 'gift_sent' or tx.transaction_type == 'gift_received'):
+        try:
+            reel = tx.reel
+            if reel:
+                post_details = {
+                    'id': reel.id,
+                    'title': reel.title or '',
+                    'description': reel.description or '',
+                    'media_url': reel.media.url if reel.media else None,
+                }
+        except:
+            pass
+
     return {
         'id': tx.id,
         'type': tx.transaction_type,
@@ -68,6 +83,7 @@ def _serialize_transaction(tx):
         'other_user': other_user,
         'recipient_username': tx.recipient.username if tx.recipient_id else None,
         'reel_id': tx.reel_id,
+        'post_details': post_details,
         'payment_method': tx.payment_method or None,
         'payment_reference': tx.payment_reference or None,
         'is_successful': tx.is_successful,
@@ -140,12 +156,12 @@ def wallet_summary(request):
         },
         'withdrawal': {
             'enabled': config.withdrawal_enabled,
-            'min_points': config.withdrawal_min_coins,
-            'points_per_birr': config.coins_per_birr,
+            'min_coins': config.withdrawal_min_coins,
+            'coins_per_birr': config.coins_per_birr,
             'fee_percent': str(config.withdrawal_fee_percent),
             'eligible': (
                 config.withdrawal_enabled
-                and request.user.profile.points >= config.withdrawal_min_coins
+                and balance.earned_balance >= config.withdrawal_min_coins
             ),
             'pending_requests': pending_withdrawals,
         },
@@ -325,11 +341,27 @@ def request_withdrawal(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def my_withdrawals(request):
-    """List current user's withdrawal requests."""
+    """List current user's withdrawal requests with pagination."""
     qs = WithdrawalRequest.objects.filter(user=request.user).order_by('-created_at')
+    
+    try:
+        page = max(int(request.query_params.get('page', 1)), 1)
+        page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
+    except ValueError:
+        page, page_size = 1, 20
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = qs[start:end]
+
     return Response({
-        'count': qs.count(),
-        'results': [_serialize_withdrawal(w) for w in qs[:50]],
+        'count': total,
+        'page': page,
+        'page_size': page_size,
+        'has_next': end < total,
+        'has_prev': page > 1,
+        'results': [_serialize_withdrawal(w) for w in items],
     })
 
 
@@ -385,18 +417,28 @@ def public_wallet_config(request):
     """
     config = WalletConfig.get_config()
 
-    packages = [
-        {
-            'id': p.id,
-            'name': p.name,
-            'price_etb': str(p.price_etb),
-            'coin_amount': p.coin_amount,
-            'bonus_coins': p.bonus_coins,
-            'total_coins': p.get_total_coins(),
-            'is_featured': p.is_featured,
-        }
-        for p in CoinPackage.objects.filter(is_active=True).order_by('sort_order', 'price_etb')
-    ]
+    try:
+        packages = [
+            {
+                'id': p.id,
+                'name': p.name,
+                'price_etb': str(p.price_etb),
+                'coin_amount': p.coin_amount,
+                'bonus_coins': p.bonus_coins,
+                'total_coins': p.get_total_coins(),
+                'is_featured': p.is_featured,
+            }
+            for p in CoinPackage.objects.filter(is_active=True).order_by('sort_order', 'price_etb')
+        ]
+    except Exception:
+        # Table may not exist yet - return default packages
+        packages = [
+            {'id': 1, 'name': 'Starter Pack', 'price_etb': '10.0', 'coin_amount': 100, 'bonus_coins': 0, 'total_coins': 100, 'is_featured': False},
+            {'id': 2, 'name': 'Good Value', 'price_etb': '25.0', 'coin_amount': 250, 'bonus_coins': 25, 'total_coins': 275, 'is_featured': False},
+            {'id': 3, 'name': 'Most Popular', 'price_etb': '50.0', 'coin_amount': 500, 'bonus_coins': 75, 'total_coins': 575, 'is_featured': True},
+            {'id': 4, 'name': 'Best Deal', 'price_etb': '100.0', 'coin_amount': 1000, 'bonus_coins': 200, 'total_coins': 1200, 'is_featured': False},
+            {'id': 5, 'name': 'Premium Package', 'price_etb': '250.0', 'coin_amount': 2500, 'bonus_coins': 625, 'total_coins': 3125, 'is_featured': False},
+        ]
 
     return Response({
         'currency': 'ETB',
@@ -466,10 +508,6 @@ def admin_wallet_config(request):
         'earned_coins_giftable', 'purchased_coins_giftable',
         'earned_coins_withdrawable', 'purchased_coins_withdrawable',
         'earned_coins_expire_days',
-        'coins_to_points_conversion', 'points_per_birr',
-        'withdrawal_min_points', 'withdrawal_max_points_per_request',
-        'daily_winner_points', 'weekly_winner_points', 'monthly_winner_points',
-        'grand_finalist_points', 'grand_winner_points',
     ]
     for field in editable_fields:
         if field in request.data:
@@ -479,17 +517,6 @@ def admin_wallet_config(request):
             elif field.startswith(('earned_coins_', 'purchased_coins_', 'withdrawal_enabled')):
                 if isinstance(value, str):
                     value = value.lower() in ('true', '1', 'yes', 'on')
-            else:
-                # Ensure numeric fields are non-negative
-                if isinstance(value, (int, float)) and value < 0:
-                    value = 0
-                elif isinstance(value, str) and value.strip():
-                    try:
-                        num_value = float(value)
-                        if num_value < 0:
-                            value = 0
-                    except ValueError:
-                        pass
             setattr(config, field, value)
 
     config.updated_by = request.user
@@ -550,17 +577,6 @@ def _serialize_full_config(config):
             'purchased_coins_giftable': config.purchased_coins_giftable,
             'earned_coins_withdrawable': config.earned_coins_withdrawable,
             'purchased_coins_withdrawable': config.purchased_coins_withdrawable,
-        },
-        'points': {
-            'coins_to_points_conversion': config.coins_to_points_conversion,
-            'points_per_birr': config.points_per_birr,
-            'withdrawal_min_points': config.withdrawal_min_points,
-            'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
-            'daily_winner_points': config.daily_winner_points,
-            'weekly_winner_points': config.weekly_winner_points,
-            'monthly_winner_points': config.monthly_winner_points,
-            'grand_finalist_points': config.grand_finalist_points,
-            'grand_winner_points': config.grand_winner_points,
         },
         'expiry': {
             'earned_coins_expire_days': config.earned_coins_expire_days,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  ActivityIndicator, Alert, Modal, TextInput, RefreshControl,
+  ActivityIndicator, Alert, Modal, TextInput, RefreshControl, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -58,10 +58,11 @@ export default function WalletScreen({ navigation }) {
       setConfig(c);
       setPackages(Array.isArray(pkgs) ? pkgs : (pkgs.results || []));
       
-      // Use recent transactions from wallet API response
-      if (s?.recent_transactions && !transactions.length) {
-        setTransactions(s.recent_transactions);
-      } else if (!transactions.length) {
+      // Always load all transactions to match website behavior
+      if (!transactions.length) {
+        loadTransactions();
+      } else if (silent) {
+        // If refreshing silently, still load all transactions to get latest
         loadTransactions();
       }
     } catch (e) { 
@@ -79,16 +80,85 @@ export default function WalletScreen({ navigation }) {
 
   const loadTransactions = async () => {
     try {
-      const data = await api.request('/wallet/transactions/?page_size=50');
-      setTransactions(data.results || []);
-    } catch {}
+      let allTransactions = [];
+      let page = 1;
+      let hasMore = true;
+      let consecutiveEmptyPages = 0;
+      
+      while (hasMore && consecutiveEmptyPages < 3) {
+        try {
+          const data = await api.request(`/wallet/transactions/?page=${page}&page_size=100`);
+          const pageTransactions = data.results || [];
+          
+          if (pageTransactions.length > 0) {
+            allTransactions = [...allTransactions, ...pageTransactions];
+            consecutiveEmptyPages = 0;
+            console.log(`Page ${page}: Loaded ${pageTransactions.length} transactions`);
+          } else {
+            consecutiveEmptyPages++;
+            console.log(`Page ${page}: No transactions found`);
+          }
+          
+          hasMore = data.has_next && pageTransactions.length > 0;
+          page++;
+          
+          // Safety check: don't load more than 50 pages total
+          if (page > 50) {
+            console.log('Reached maximum page limit (50), stopping pagination');
+            break;
+          }
+        } catch (pageError) {
+          console.error(`Error loading page ${page}:`, pageError);
+          consecutiveEmptyPages++;
+          if (consecutiveEmptyPages >= 3) {
+            console.log('Too many consecutive errors, stopping pagination');
+            break;
+          }
+          page++;
+        }
+      }
+      
+      // Sort transactions by date (newest first)
+      allTransactions.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      
+      console.log(`✅ Total loaded: ${allTransactions.length} transactions from ${page - 1} pages`);
+      setTransactions(allTransactions);
+    } catch (e) {
+      console.error('❌ Critical error loading transactions:', e);
+      // Fallback to empty array to prevent UI issues
+      setTransactions([]);
+    }
   };
 
   const loadWithdrawals = async () => {
     try {
-      const data = await api.request('/wallet/withdrawals/');
-      setWithdrawals(data.results || []);
-    } catch {}
+      let allWithdrawals = [];
+      let page = 1;
+      let hasMore = true;
+      
+      while (hasMore) {
+        try {
+          const data = await api.request(`/wallet/withdrawals/?page=${page}&page_size=100`);
+          const pageWithdrawals = data.results || [];
+          
+          if (pageWithdrawals.length > 0) {
+            allWithdrawals = [...allWithdrawals, ...pageWithdrawals];
+            hasMore = data.has_next;
+            page++;
+          } else {
+            hasMore = false;
+          }
+        } catch (e) {
+          console.error(`Error loading withdrawals page ${page}:`, e);
+          hasMore = false;
+        }
+      }
+      
+      setWithdrawals(allWithdrawals);
+    } catch (e) {
+      console.error('Error loading withdrawals:', e);
+      setWithdrawals([]);
+    }
   };
 
   const handleWithdraw = async () => {
@@ -171,27 +241,66 @@ export default function WalletScreen({ navigation }) {
   const renderTxRow = (tx) => {
     const isGift = tx.type === 'gift_sent' || tx.type === 'gift_received';
     const isPointTx = tx.type === 'gift_received';
+    const isPurchase = tx.type === 'purchase' || tx.type === 'coin_purchase';
+    const isBonus = tx.type === 'bonus' || tx.type === 'daily_bonus' || tx.type === 'weekly_bonus' || tx.type === 'monthly_bonus';
+    const isWithdrawal = tx.type === 'withdrawal';
+    
     let primaryLabel = tx.type_display || tx.type;
     if (tx.type === 'gift_sent' && tx.other_user) {
       primaryLabel = `Gift sent to @${tx.other_user.username}`;
     } else if (tx.type === 'gift_received' && tx.other_user) {
       primaryLabel = `Gift from @${tx.other_user.username}`;
+    } else if (isPurchase) {
+      primaryLabel = 'Coin Purchase';
+    } else if (isBonus) {
+      primaryLabel = tx.type_display || 'Bonus Received';
+    } else if (isWithdrawal) {
+      primaryLabel = 'Withdrawal';
     }
-    const iconName = isGift ? 'gift' : (tx.is_credit ? 'arrow-down' : 'arrow-up');
+    
+    // Choose appropriate icon
+    let iconName = 'arrow-down'; // default
+    if (isGift) iconName = 'gift';
+    else if (isPurchase) iconName = 'cart';
+    else if (isBonus) iconName = 'star';
+    else if (isWithdrawal) iconName = 'arrow-up';
+    else iconName = tx.is_credit ? 'arrow-down' : 'arrow-up';
+    
+    // Build post info for gift transactions
+    let postInfo = '';
+    if (isGift && tx.post_details) {
+      const post = tx.post_details;
+      if (post.title) {
+        postInfo = ` • Post: ${post.title}`;
+      } else if (post.description && post.description.length > 30) {
+        postInfo = ` • Post: ${post.description.substring(0, 30)}...`;
+      } else if (post.description) {
+        postInfo = ` • Post: ${post.description}`;
+      }
+    }
+    
+    // Ensure amount is displayed
+    const amount = Math.abs(tx.coins || tx.amount || 0);
+    const currency = isPointTx ? 'points' : (tx.currency || 'coins');
+    
     return (
-      <View key={tx.id} style={styles.txItem}>
+      <View key={tx.id || `${tx.type}-${tx.created_at}`} style={styles.txItem}>
         <View style={[styles.txIcon, { backgroundColor: tx.is_credit ? '#0D2D1A' : '#2D1010' }]}>
           <Ionicons name={iconName} size={16} color={tx.is_credit ? '#10B981' : '#EF4444'} />
         </View>
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Text style={styles.txType}>{primaryLabel}</Text>
-          <Text style={styles.txDate}>{timeAgo(tx.created_at)}{tx.description ? ` • ${tx.description}` : ''}</Text>
+          <Text style={styles.txDate}>
+            {timeAgo(tx.created_at)}
+            {tx.description ? ` • ${tx.description}` : ''}
+            {postInfo}
+          </Text>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <Text style={[styles.txAmount, { color: tx.is_credit ? '#10B981' : '#EF4444' }]}>
-            {tx.is_credit ? '+' : '-'}{Math.abs(tx.coins)}
+            {tx.is_credit ? '+' : '-'}{amount}
           </Text>
-          <Text style={{ fontSize: 10, color: '#666' }}>{isPointTx ? 'points' : 'coins'}</Text>
+          <Text style={{ fontSize: 10, color: '#666' }}>{currency}</Text>
         </View>
       </View>
     );
@@ -315,12 +424,7 @@ export default function WalletScreen({ navigation }) {
             <Text style={[styles.statNumber, { color: colors.text }]}>{points.current || 0}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Points</Text>
           </View>
-          <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
-            <Ionicons name="flash" size={28} color={colors.primary} />
-            <Text style={[styles.statNumber, { color: colors.text }]}>{xp}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>XP</Text>
-          </View>
-          <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
+                    <View style={[styles.statItem, { backgroundColor: colors.cardBg }]}>
             <Ionicons name="trophy" size={28} color={colors.primary} />
             <Text style={[styles.statNumber, { color: colors.text }]}>{level}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Level</Text>
@@ -329,7 +433,7 @@ export default function WalletScreen({ navigation }) {
 
         {/* Action buttons */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowTopUpModal(true)}>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => navigation.navigate('CoinPurchase')}>
             <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
               <Ionicons name="add-circle" size={24} color="#fff" />
               <Text style={styles.actionText}>Buy Coins</Text>
@@ -366,7 +470,17 @@ export default function WalletScreen({ navigation }) {
           {activeTab === 'overview' && (
             <>
               {/* Recent Transactions */}
-              <Text style={styles.sectionTitle}>Recent Transactions</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={styles.sectionTitle}>Recent Transactions</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginRight: 8 }}>
+                    {transactions.length > 0 ? `${transactions.length} total` : ''}
+                  </Text>
+                  <TouchableOpacity onPress={() => loadAll(true)} style={{ padding: 4 }}>
+                    <Ionicons name="refresh" size={16} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
               {transactions.length === 0
                 ? <Text style={styles.emptyText}>No transactions yet</Text>
                 : transactions.slice(0, 5).map(renderTxRow)}
@@ -407,10 +521,28 @@ export default function WalletScreen({ navigation }) {
           {/* Transactions */}
           {activeTab === 'transactions' && (
             <>
-              <Text style={styles.sectionTitle}>All Transactions</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={styles.sectionTitle}>All Transactions</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary, marginRight: 8 }}>
+                    {transactions.length > 0 ? `${transactions.length} loaded` : ''}
+                  </Text>
+                  <TouchableOpacity onPress={() => loadAll(true)} style={{ padding: 4 }}>
+                    <Ionicons name="refresh" size={16} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              </View>
               {transactions.length === 0
                 ? <Text style={styles.emptyText}>No transactions yet</Text>
-                : transactions.map(renderTxRow)}
+                : (
+                  <FlatList
+                    data={transactions}
+                    keyExtractor={(item) => item.id?.toString() || `${item.type}-${item.created_at}`}
+                    renderItem={({ item }) => renderTxRow(item)}
+                    scrollEnabled={false}
+                    nestedScrollEnabled={false}
+                  />
+                )}
               {activeTab === 'transactions' && transactions.length > 0 && (
                 <View style={[styles.monetizeSection, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={styles.monetizeHeader}>
@@ -440,20 +572,28 @@ export default function WalletScreen({ navigation }) {
               <Text style={styles.sectionTitle}>Withdrawals</Text>
               {withdrawals.length === 0
                 ? <Text style={styles.emptyText}>No withdrawals yet</Text>
-                : withdrawals.map(w => (
-                  <View key={w.id} style={styles.txItem}>
-                    <View style={[styles.txIcon, { backgroundColor: '#1A1A2D' }]}>
-                      <Ionicons name="card-outline" size={16} color="#667eea" />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.txType}>{w.coin_amount} coins ? {w.net_birr} ETB</Text>
-                      <Text style={styles.txDate}>{w.status}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: w.status === 'completed' ? '#0D2D1A' : '#2D2010' }]}>
-                      <Text style={{ color: w.status === 'completed' ? '#10B981' : GOLD, fontSize: 11, fontWeight: '700' }}>{w.status}</Text>
-                    </View>
-                  </View>
-                ))}
+                : (
+                  <FlatList
+                    data={withdrawals}
+                    keyExtractor={(item) => item.id?.toString()}
+                    renderItem={({ item: w }) => (
+                      <View key={w.id} style={styles.txItem}>
+                        <View style={[styles.txIcon, { backgroundColor: '#1A1A2D' }]}>
+                          <Ionicons name="card-outline" size={16} color="#667eea" />
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={styles.txType}>{w.coin_amount} coins → {w.net_birr} ETB</Text>
+                          <Text style={styles.txDate}>{w.status}</Text>
+                        </View>
+                        <View style={[styles.statusBadge, { backgroundColor: w.status === 'completed' ? '#0D2D1A' : '#2D2010' }]}>
+                          <Text style={{ color: w.status === 'completed' ? '#10B981' : GOLD, fontSize: 11, fontWeight: '700' }}>{w.status}</Text>
+                        </View>
+                      </View>
+                    )}
+                    scrollEnabled={false}
+                    nestedScrollEnabled={false}
+                  />
+                )}
             </>
           )}
         </View>
@@ -474,7 +614,7 @@ export default function WalletScreen({ navigation }) {
             <TextInput style={styles.input} placeholder="e.g. 500" placeholderTextColor="#666" value={withdrawAmount} onChangeText={setWithdrawAmount} keyboardType="number-pad" />
             <Text style={styles.fieldLabel}>Payout Method</Text>
             <View style={styles.methodRow}>
-              {['telebirr', 'cbe_birr', 'bank'].map(m => (
+              {['telebirr'].map(m => (
                 <TouchableOpacity key={m} style={[styles.methodBtn, withdrawMethod === m && styles.methodBtnActive]} onPress={() => setWithdrawMethod(m)}>
                   <Text style={[styles.methodText, withdrawMethod === m && styles.methodTextActive]}>{m.replace('_', ' ')}</Text>
                 </TouchableOpacity>

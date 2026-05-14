@@ -51,11 +51,10 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-        # Commented out - mention model was never created
-        # migrations.AlterModelOptions(
-        #     name='mention',
-        #     options={'ordering': ['-created_at']},
-        # ),
+        migrations.AlterModelOptions(
+            name='mention',
+            options={'ordering': ['-created_at']},
+        ),
         migrations.RemoveIndex(
             model_name='follow',
             name='api_follow_followe_1822a8_idx',
@@ -84,12 +83,11 @@ class Migration(migrations.Migration):
             name='parent_reply',
             field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='child_replies', to='api.commentreply'),
         ),
-        # Commented out - mention model was never created
-        # migrations.AddField(
-        #     model_name='mention',
-        #     name='is_read',
-        #     field=models.BooleanField(default=False),
-        # ),
+        migrations.AddField(
+            model_name='mention',
+            name='is_read',
+            field=models.BooleanField(default=False),
+        ),
         migrations.AddField(
             model_name='notificationpreference',
             name='comments',
@@ -140,22 +138,21 @@ class Migration(migrations.Migration):
             name='transaction_type',
             field=models.CharField(choices=[('purchase', 'Coin Purchase'), ('welcome_bonus', 'Welcome Bonus'), ('daily_login', 'Daily Login Bonus'), ('spin_reward', 'Daily Spin Reward'), ('post_bonus', 'Daily Post Bonus'), ('campaign_join', 'Campaign Join Reward'), ('campaign_winner', 'Campaign Winner Reward'), ('like_received', 'Like Received'), ('comment_reward', 'Quality Comment Reward'), ('referral', 'Referral Bonus'), ('profile_complete', 'Profile Completion'), ('gift_sent', 'Gift Sent'), ('gift_received', 'Gift Received'), ('boost', 'Post Boost'), ('extra_entry', 'Extra Entry'), ('reward', 'Generic Reward'), ('refund', 'Refund'), ('withdrawal', 'Withdrawal to Birr'), ('admin_adjustment', 'Admin Adjustment')], max_length=20),
         ),
-        # Commented out - mention model was never created
-        # migrations.AlterField(
-        #     model_name='mention',
-        #     name='comment',
-        #     field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='mentions', to='api.comment'),
-        # ),
-        # migrations.AlterField(
-        #     model_name='mention',
-        #     name='mentioned_by',
-        #     field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mentions_sent', to=settings.AUTH_USER_MODEL),
-        # ),
-        # migrations.AlterField(
-        #     model_name='mention',
-        #     name='reply',
-        #     field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='mentions', to='api.commentreply'),
-        # ),
+        migrations.AlterField(
+            model_name='mention',
+            name='comment',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='mentions', to='api.comment'),
+        ),
+        migrations.AlterField(
+            model_name='mention',
+            name='mentioned_by',
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='mentions_sent', to=settings.AUTH_USER_MODEL),
+        ),
+        migrations.AlterField(
+            model_name='mention',
+            name='reply',
+            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='mentions', to='api.commentreply'),
+        ),
         migrations.AlterField(
             model_name='message',
             name='media',
@@ -176,19 +173,18 @@ class Migration(migrations.Migration):
             name='withdrawal_max_points_per_request',
             field=models.PositiveIntegerField(default=10000, help_text='Maximum points that can be withdrawn per request'),
         ),
-        # Commented out - mention model was never created
-        # migrations.AddIndex(
-        #     model_name='mention',
-        #     index=models.Index(fields=['mentioned_user', 'created_at'], name='api_mention_mention_9c561e_idx'),
-        # ),
-        # migrations.AddIndex(
-        #     model_name='mention',
-        #     index=models.Index(fields=['comment'], name='api_mention_comment_3d97da_idx'),
-        # ),
-        # migrations.AddIndex(
-        #     model_name='mention',
-        #     index=models.Index(fields=['reply'], name='api_mention_reply_i_4c754a_idx'),
-        # ),
+        migrations.AddIndex(
+            model_name='mention',
+            index=models.Index(fields=['mentioned_user', 'created_at'], name='api_mention_mention_9c561e_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='mention',
+            index=models.Index(fields=['comment'], name='api_mention_comment_3d97da_idx'),
+        ),
+        migrations.AddIndex(
+            model_name='mention',
+            index=models.Index(fields=['reply'], name='api_mention_reply_i_4c754a_idx'),
+        ),
         migrations.AddField(
             model_name='onevaschargingtransaction',
             name='subscription_tier',

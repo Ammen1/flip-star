@@ -268,19 +268,17 @@ export function CoinManagementPage({ theme }) {
           setForm={setAdjustForm}
           onSubmit={handleBalanceAdjust}
           result={adjustResult}
-          setResult={setAdjustResult}
         />
       )}
     </div>
   );
 }
 
+// ---------------------------------------------------------------
 // Config Tab
 // ---------------------------------------------------------------
 
 function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loading, error, onRetry }) {
-  const [configSubTab, setConfigSubTab] = useState('rewards');
-
   if (loading) return <LoadingState theme={T} />;
   if (!config) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
 
@@ -298,14 +296,6 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
     });
   };
 
-  const CONFIG_TABS = [
-    { id: 'rewards', label: 'Rewards', icon: TrendingUp },
-    { id: 'costs', label: 'Action Costs', icon: TrendingDown },
-    { id: 'withdrawal', label: 'Withdrawal', icon: ArrowUpFromLine },
-    { id: 'points', label: 'Points System', icon: Coins },
-    { id: 'policies', label: 'Policies', icon: Settings },
-  ];
-
   return (
     <div>
       {result && (
@@ -318,69 +308,30 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
         </div>
       )}
 
-      {/* Sub-tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: `1px solid ${T.border}` }}>
-        {CONFIG_TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setConfigSubTab(tab.id)}
-            style={{
-              padding: '10px 16px',
-              background: 'none',
-              border: 'none',
-              borderBottom: configSubTab === tab.id ? `2px solid ${T.pri}` : '2px solid transparent',
-              color: configSubTab === tab.id ? T.pri : T.sub,
-              fontSize: 14,
-              fontWeight: configSubTab === tab.id ? 700 : 500,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-            }}
-          >
-            <tab.icon size={16} /> {tab.label}
-          </button>
-        ))}
-      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 24 }}>
+        {/* Earning Rewards */}
+        <SectionCard theme={T} title="Earning Rewards" icon={<TrendingUp size={20} color="#10B981" />}>
+          <FieldRow theme={T} label="Welcome Bonus" value={config.rewards.welcome_bonus} onChange={(v) => updateField('rewards', 'welcome_bonus', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 1" value={config.rewards.daily_login_day1} onChange={(v) => updateField('rewards', 'daily_login_day1', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 2" value={config.rewards.daily_login_day2} onChange={(v) => updateField('rewards', 'daily_login_day2', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 3" value={config.rewards.daily_login_day3} onChange={(v) => updateField('rewards', 'daily_login_day3', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 4" value={config.rewards.daily_login_day4} onChange={(v) => updateField('rewards', 'daily_login_day4', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 5" value={config.rewards.daily_login_day5} onChange={(v) => updateField('rewards', 'daily_login_day5', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 6" value={config.rewards.daily_login_day6} onChange={(v) => updateField('rewards', 'daily_login_day6', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Login Day 7" value={config.rewards.daily_login_day7} onChange={(v) => updateField('rewards', 'daily_login_day7', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Daily Post Bonus" value={config.rewards.daily_post_bonus} onChange={(v) => updateField('rewards', 'daily_post_bonus', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Campaign Join Reward" value={config.rewards.campaign_join_reward} onChange={(v) => updateField('rewards', 'campaign_join_reward', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Like Received Reward" value={config.rewards.receive_like_reward} onChange={(v) => updateField('rewards', 'receive_like_reward', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Like Daily Cap" value={config.rewards.receive_like_daily_cap} onChange={(v) => updateField('rewards', 'receive_like_daily_cap', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Quality Comment Reward" value={config.rewards.quality_comment_reward} onChange={(v) => updateField('rewards', 'quality_comment_reward', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Quality Comment Daily Cap" value={config.rewards.quality_comment_daily_cap} onChange={(v) => updateField('rewards', 'quality_comment_daily_cap', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Profile Complete Reward" value={config.rewards.profile_complete_reward} onChange={(v) => updateField('rewards', 'profile_complete_reward', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Referral Reward" value={config.rewards.referral_reward} onChange={(v) => updateField('rewards', 'referral_reward', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Campaign Winner Bonus" value={config.rewards.campaign_winner_reward} onChange={(v) => updateField('rewards', 'campaign_winner_reward', parseInt(v) || 0)} />
+        </SectionCard>
 
-      {/* Tab Content */}
-      {configSubTab === 'rewards' && (
-        <div style={{ maxWidth: 600 }}>
-          <SectionCard theme={T} title="Earning Rewards" icon={<TrendingUp size={20} color="#10B981" />} marginBottom={20}>
-            <FieldRow theme={T} label="Welcome Bonus" value={config.rewards.welcome_bonus} onChange={(v) => updateField('rewards', 'welcome_bonus', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 1" value={config.rewards.daily_login_day1} onChange={(v) => updateField('rewards', 'daily_login_day1', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 2" value={config.rewards.daily_login_day2} onChange={(v) => updateField('rewards', 'daily_login_day2', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 3" value={config.rewards.daily_login_day3} onChange={(v) => updateField('rewards', 'daily_login_day3', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 4" value={config.rewards.daily_login_day4} onChange={(v) => updateField('rewards', 'daily_login_day4', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 5" value={config.rewards.daily_login_day5} onChange={(v) => updateField('rewards', 'daily_login_day5', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 6" value={config.rewards.daily_login_day6} onChange={(v) => updateField('rewards', 'daily_login_day6', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Login Day 7" value={config.rewards.daily_login_day7} onChange={(v) => updateField('rewards', 'daily_login_day7', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Daily Post Bonus" value={config.rewards.daily_post_bonus} onChange={(v) => updateField('rewards', 'daily_post_bonus', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Campaign Join Reward" value={config.rewards.campaign_join_reward} onChange={(v) => updateField('rewards', 'campaign_join_reward', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Like Received Reward" value={config.rewards.receive_like_reward} onChange={(v) => updateField('rewards', 'receive_like_reward', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Like Daily Cap" value={config.rewards.receive_like_daily_cap} onChange={(v) => updateField('rewards', 'receive_like_daily_cap', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Quality Comment Reward" value={config.rewards.quality_comment_reward} onChange={(v) => updateField('rewards', 'quality_comment_reward', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Quality Comment Daily Cap" value={config.rewards.quality_comment_daily_cap} onChange={(v) => updateField('rewards', 'quality_comment_daily_cap', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Profile Complete Reward" value={config.rewards.profile_complete_reward} onChange={(v) => updateField('rewards', 'profile_complete_reward', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Referral Reward" value={config.rewards.referral_reward} onChange={(v) => updateField('rewards', 'referral_reward', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Campaign Winner Bonus" value={config.rewards.campaign_winner_reward} onChange={(v) => updateField('rewards', 'campaign_winner_reward', parseInt(v) || 0)} />
-          </SectionCard>
-
-          <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#F59E0B" />}>
-            <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
-              Points awarded to winners of each campaign type.
-            </div>
-            <FieldRow theme={T} label="Daily Winner Points" value={config.points?.daily_winner_points || 500} onChange={(v) => updateField('points', 'daily_winner_points', parseInt(v) || 500)} />
-            <FieldRow theme={T} label="Weekly Winner Points" value={config.points?.weekly_winner_points || 2000} onChange={(v) => updateField('points', 'weekly_winner_points', parseInt(v) || 2000)} />
-            <FieldRow theme={T} label="Monthly Winner Points" value={config.points?.monthly_winner_points || 10000} onChange={(v) => updateField('points', 'monthly_winner_points', parseInt(v) || 10000)} />
-            <FieldRow theme={T} label="Grand Finalist Points" value={config.points?.grand_finalist_points || 5000} onChange={(v) => updateField('points', 'grand_finalist_points', parseInt(v) || 5000)} />
-            <FieldRow theme={T} label="Grand Winner Points" value={config.points?.grand_winner_points || 50000} onChange={(v) => updateField('points', 'grand_winner_points', parseInt(v) || 50000)} />
-          </SectionCard>
-        </div>
-      )}
-
-      {configSubTab === 'costs' && (
-        <SectionCard theme={T} title="Action Costs" icon={<TrendingDown size={20} color="#EF4444" />} maxWidth={600}>
+        {/* Action Costs */}
+        <SectionCard theme={T} title="Action Costs" icon={<TrendingDown size={20} color="#EF4444" />}>
           <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create} onChange={(v) => updateField('costs', 'post_create', parseInt(v) || 0)} />
           <FieldRow theme={T} label="Like Cost" value={config.costs.like} onChange={(v) => updateField('costs', 'like', parseInt(v) || 0)} />
           <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
@@ -389,10 +340,9 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
           <FieldRow theme={T} label="Boost 2hr Cost" value={config.costs.boost_2hr} onChange={(v) => updateField('costs', 'boost_2hr', parseInt(v) || 0)} />
           <FieldRow theme={T} label="Boost 24hr Cost" value={config.costs.boost_24hr} onChange={(v) => updateField('costs', 'boost_24hr', parseInt(v) || 0)} />
         </SectionCard>
-      )}
 
-      {configSubTab === 'withdrawal' && (
-        <SectionCard theme={T} title="Withdrawal (Coin → Birr)" icon={<ArrowUpFromLine size={20} color="#F59E0B" />} maxWidth={600}>
+        {/* Withdrawal Settings */}
+        <SectionCard theme={T} title="Withdrawal (Coin → Birr)" icon={<ArrowUpFromLine size={20} color="#F59E0B" />}>
           <ToggleField
             label="Enabled"
             checked={config.withdrawal.enabled}
@@ -405,10 +355,9 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
           <FieldRow theme={T} label="Fee Percent" value={config.withdrawal.fee_percent} onChange={(v) => updateField('withdrawal', 'fee_percent', parseFloat(v) || 0)} />
           <FieldRow theme={T} label="Processing Days" value={config.withdrawal.processing_days} onChange={(v) => updateField('withdrawal', 'processing_days', parseInt(v) || 0)} />
         </SectionCard>
-      )}
 
-      {configSubTab === 'points' && (
-        <SectionCard theme={T} title="Points System (Points → Birr)" icon={<Coins size={20} color="#8B5CF6" />} maxWidth={600}>
+        {/* Points System */}
+        <SectionCard theme={T} title="Points System (Points → Birr)" icon={<Coins size={20} color="#8B5CF6" />}>
           <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
             Points are separate from coins. Gifts convert to points. Withdrawals use points only.
           </div>
@@ -417,27 +366,38 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
           <FieldRow theme={T} label="Min Points to Withdraw" value={config.points?.withdrawal_min_points || 100} onChange={(v) => updateField('points', 'withdrawal_min_points', parseInt(v) || 100)} />
           <FieldRow theme={T} label="Max Points per Request" value={config.points?.withdrawal_max_points_per_request || 10000} onChange={(v) => updateField('points', 'withdrawal_max_points_per_request', parseInt(v) || 10000)} />
         </SectionCard>
-      )}
 
-      {configSubTab === 'policies' && (
-        <div style={{ maxWidth: 600 }}>
-          <SectionCard theme={T} title="Gifting Policy" icon={<Gift size={20} color="#8B5CF6" />} marginBottom={20}>
-            <ToggleField label="Earned Coins Giftable" checked={config.gifting.earned_coins_giftable} onChange={(v) => updateField('gifting', 'earned_coins_giftable', v)} theme={T} />
-            <ToggleField label="Purchased Coins Giftable" checked={config.gifting.purchased_coins_giftable} onChange={(v) => updateField('gifting', 'purchased_coins_giftable', v)} theme={T} />
-            <ToggleField label="Earned Coins Withdrawable" checked={config.gifting.earned_coins_withdrawable} onChange={(v) => updateField('gifting', 'earned_coins_withdrawable', v)} theme={T} />
-            <ToggleField label="Purchased Coins Withdrawable" checked={config.gifting.purchased_coins_withdrawable} onChange={(v) => updateField('gifting', 'purchased_coins_withdrawable', v)} theme={T} />
-          </SectionCard>
+        {/* Campaign Winner Point Rewards */}
+        <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#F59E0B" />}>
+          <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
+            Points awarded to winners of each campaign type.
+          </div>
+          <FieldRow theme={T} label="Daily Winner Points" value={config.points?.daily_winner_points || 500} onChange={(v) => updateField('points', 'daily_winner_points', parseInt(v) || 500)} />
+          <FieldRow theme={T} label="Weekly Winner Points" value={config.points?.weekly_winner_points || 2000} onChange={(v) => updateField('points', 'weekly_winner_points', parseInt(v) || 2000)} />
+          <FieldRow theme={T} label="Monthly Winner Points" value={config.points?.monthly_winner_points || 10000} onChange={(v) => updateField('points', 'monthly_winner_points', parseInt(v) || 10000)} />
+          <FieldRow theme={T} label="Grand Finalist Points" value={config.points?.grand_finalist_points || 5000} onChange={(v) => updateField('points', 'grand_finalist_points', parseInt(v) || 5000)} />
+          <FieldRow theme={T} label="Grand Winner Points" value={config.points?.grand_winner_points || 50000} onChange={(v) => updateField('points', 'grand_winner_points', parseInt(v) || 50000)} />
+        </SectionCard>
 
-          <SectionCard theme={T} title="Balance Thresholds" icon={<Wallet size={20} color="#3B82F6" />} marginBottom={20}>
-            <FieldRow theme={T} label="Min Balance to Post" value={config.thresholds.min_balance_to_post} onChange={(v) => updateField('thresholds', 'min_balance_to_post', parseInt(v) || 0)} />
-            <FieldRow theme={T} label="Min Balance to Join Campaign" value={config.thresholds.min_balance_to_join_campaign} onChange={(v) => updateField('thresholds', 'min_balance_to_join_campaign', parseInt(v) || 0)} />
-          </SectionCard>
+        {/* Gifting Policy */}
+        <SectionCard theme={T} title="Gifting Policy" icon={<Gift size={20} color="#8B5CF6" />}>
+          <ToggleField label="Earned Coins Giftable" checked={config.gifting.earned_coins_giftable} onChange={(v) => updateField('gifting', 'earned_coins_giftable', v)} theme={T} />
+          <ToggleField label="Purchased Coins Giftable" checked={config.gifting.purchased_coins_giftable} onChange={(v) => updateField('gifting', 'purchased_coins_giftable', v)} theme={T} />
+          <ToggleField label="Earned Coins Withdrawable" checked={config.gifting.earned_coins_withdrawable} onChange={(v) => updateField('gifting', 'earned_coins_withdrawable', v)} theme={T} />
+          <ToggleField label="Purchased Coins Withdrawable" checked={config.gifting.purchased_coins_withdrawable} onChange={(v) => updateField('gifting', 'purchased_coins_withdrawable', v)} theme={T} />
+        </SectionCard>
 
-          <SectionCard theme={T} title="Expiry" icon={<Clock size={20} color="#6B7280" />}>
-            <FieldRow theme={T} label="Earned Coins Expire Days (0 = never)" value={config.expiry.earned_coins_expire_days} onChange={(v) => updateField('expiry', 'earned_coins_expire_days', parseInt(v) || 0)} />
-          </SectionCard>
-        </div>
-      )}
+        {/* Thresholds */}
+        <SectionCard theme={T} title="Balance Thresholds" icon={<Wallet size={20} color="#3B82F6" />}>
+          <FieldRow theme={T} label="Min Balance to Post" value={config.thresholds.min_balance_to_post} onChange={(v) => updateField('thresholds', 'min_balance_to_post', parseInt(v) || 0)} />
+          <FieldRow theme={T} label="Min Balance to Join Campaign" value={config.thresholds.min_balance_to_join_campaign} onChange={(v) => updateField('thresholds', 'min_balance_to_join_campaign', parseInt(v) || 0)} />
+        </SectionCard>
+
+        {/* Expiry */}
+        <SectionCard theme={T} title="Expiry" icon={<Clock size={20} color="#6B7280" />}>
+          <FieldRow theme={T} label="Earned Coins Expire Days (0 = never)" value={config.expiry.earned_coins_expire_days} onChange={(v) => updateField('expiry', 'earned_coins_expire_days', parseInt(v) || 0)} />
+        </SectionCard>
+      </div>
 
       <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
         <button onClick={onSave} disabled={saving} style={btnPrimary(T)}>
@@ -614,8 +574,6 @@ function WithdrawalCard({ w, theme: T, onAction }) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------
 // Balance Adjustment Tab
 // ---------------------------------------------------------------
 
@@ -724,217 +682,77 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
   };
 
   return (
-    <div style={{ maxWidth: 900 }}>
-      {/* User Search Section */}
-      <SectionCard theme={T} title="User Search" icon={<Search size={20} color="#8B5CF6" />} marginBottom={20}>
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-          <select
-            value={searchType}
-            onChange={(e) => setSearchType(e.target.value)}
-            style={{ ...inputStyle(T), width: 150 }}
-          >
-            <option value="id">User ID</option>
-            <option value="phone">Phone Number</option>
-            <option value="username">Username</option>
-          </select>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={searchType === 'id' ? 'Enter user ID' : searchType === 'phone' ? 'Enter phone number' : 'Enter username'}
-            style={{ ...inputStyle(T), flex: 1 }}
-            onKeyPress={(e) => e.key === 'Enter' && searchUser()}
-          />
-          <button onClick={searchUser} disabled={searching} style={btnPrimary(T)}>
-            {searching ? <Loader size={16} className="spin" /> : <Search size={16} />} Search
+    <div style={{ maxWidth: 500 }}>
+      <SectionCard theme={T} title="Manual Balance Adjustment" icon={<User size={20} color="#8B5CF6" />}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
+              User ID
+            </label>
+            <input
+              type="number"
+              value={form.user_id}
+              onChange={(e) => setForm({ ...form, user_id: e.target.value })}
+              placeholder="Enter user ID"
+              style={inputStyle(T)}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
+              Amount (positive to add, negative to deduct)
+            </label>
+            <input
+              type="number"
+              value={form.amount}
+              onChange={(e) => setForm({ ...form, amount: e.target.value })}
+              placeholder="e.g., 100 or -50"
+              style={inputStyle(T)}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
+              Bucket
+            </label>
+            <select
+              value={form.bucket}
+              onChange={(e) => setForm({ ...form, bucket: e.target.value })}
+              style={inputStyle(T)}
+            >
+              <option value="earned">Earned Balance</option>
+              <option value="purchased">Purchased Balance</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
+              Reason
+            </label>
+            <input
+              type="text"
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              placeholder="Reason for adjustment"
+              style={inputStyle(T)}
+            />
+          </div>
+
+          {result && (
+            <div style={{
+              background: result.type === 'success' ? '#D1FAE5' : '#FEE2E2',
+              color: result.type === 'success' ? '#065F46' : '#991B1B',
+              padding: 10, borderRadius: 8, fontSize: 13,
+            }}>
+              {result.message}
+            </div>
+          )}
+
+          <button onClick={onSubmit} style={btnPrimary(T)}>
+            <Save size={16} /> Adjust Balance
           </button>
         </div>
       </SectionCard>
-
-      {userData && (
-        <>
-          {/* User Profile Card */}
-          <SectionCard theme={T} title="User Profile" icon={<User size={20} color="#10B981" />} marginBottom={20}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-              <div>
-                <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>Username</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: T.txt }}>{userData.username}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>Phone</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: T.txt }}>{userData.phone_number || 'N/A'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>Email</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: T.txt }}>{userData.email || 'N/A'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>User ID</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: T.txt }}>#{userData.id}</div>
-              </div>
-            </div>
-
-            {userData.wallet && (
-              <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: T.txt, marginBottom: 12 }}>Current Balances</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-                  <div style={{ background: T.bg, padding: 12, borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Total Coins</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: T.pri }}>{userData.wallet.balance?.total?.toLocaleString() || 0}</div>
-                  </div>
-                  <div style={{ background: T.bg, padding: 12, borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Earned</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#10B981' }}>{userData.wallet.balance?.earned?.toLocaleString() || 0}</div>
-                  </div>
-                  <div style={{ background: T.bg, padding: 12, borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Purchased</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#F59E0B' }}>{userData.wallet.balance?.purchased?.toLocaleString() || 0}</div>
-                  </div>
-                  <div style={{ background: T.bg, padding: 12, borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>Points</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#8B5CF6' }}>{userData.wallet.points?.current?.toLocaleString() || 0}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </SectionCard>
-
-          {/* Adjustment Section */}
-          <SectionCard theme={T} title="Balance Adjustment" icon={<Coins size={20} color="#F59E0B" />} marginBottom={20}>
-            {/* Adjustment Type Tabs */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: `1px solid ${T.border}` }}>
-              {[
-                { id: 'coins', label: 'Coins', icon: Coins },
-                { id: 'points', label: 'Points', icon: Gift },
-              ].map((type) => (
-                <button
-                  key={type.id}
-                  onClick={() => setAdjustmentType(type.id)}
-                  style={{
-                    padding: '8px 16px',
-                    background: 'none',
-                    border: 'none',
-                    borderBottom: adjustmentType === type.id ? `2px solid ${T.pri}` : '2px solid transparent',
-                    color: adjustmentType === type.id ? T.pri : T.sub,
-                    fontSize: 13,
-                    fontWeight: adjustmentType === type.id ? 700 : 500,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  <type.icon size={14} /> {type.label}
-                </button>
-              ))}
-            </div>
-
-            {adjustmentType === 'coins' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-                    Coin Bucket
-                  </label>
-                  <select
-                    value={form.bucket}
-                    onChange={(e) => setForm({ ...form, bucket: e.target.value })}
-                    style={inputStyle(T)}
-                  >
-                    <option value="earned">Earned Balance</option>
-                    <option value="purchased">Purchased Balance</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-                    Amount (positive to add, negative to deduct)
-                  </label>
-                  <input
-                    type="number"
-                    value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="e.g., 100 or -50"
-                    style={inputStyle(T)}
-                  />
-                </div>
-              </div>
-            )}
-
-            {adjustmentType === 'points' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-                    Points Amount (positive to add, negative to deduct)
-                  </label>
-                  <input
-                    type="number"
-                    value={form.amount}
-                    onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                    placeholder="e.g., 100 or -50"
-                    style={inputStyle(T)}
-                  />
-                </div>
-                <div style={{ fontSize: 12, color: T.sub, fontStyle: 'italic' }}>
-                  Points adjustments affect the creator's withdrawable balance.
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-                Reason for Adjustment
-              </label>
-              <input
-                type="text"
-                value={form.reason}
-                onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                placeholder="e.g., Compensation for bug, refund, bonus"
-                style={inputStyle(T)}
-              />
-            </div>
-
-            {result && (
-              <div style={{
-                background: result.type === 'success' ? '#D1FAE5' : '#FEE2E2',
-                color: result.type === 'success' ? '#065F46' : '#991B1B',
-                padding: 10, borderRadius: 8, fontSize: 13,
-              }}>
-                {result.message}
-              </div>
-            )}
-
-            <button onClick={handleAdjust} style={btnPrimary(T)}>
-              <Save size={16} /> {adjustmentType === 'points' ? 'Adjust Points' : 'Adjust Balance'}
-            </button>
-          </SectionCard>
-
-          {/* Transaction History */}
-          <SectionCard theme={T} title="Recent Transactions" icon={<Clock size={20} color="#6B7280" />}>
-            {transactions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 20, color: T.sub, fontSize: 13 }}>
-                No recent transactions
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {transactions.map((tx) => (
-                  <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', background: T.bg, borderRadius: 8 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: tx.is_credit ? '#0D2D1A' : '#2D1010', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {tx.is_credit ? <TrendingUp size={16} color="#10B981" /> : <TrendingDown size={16} color="#EF4444" />}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: T.txt }}>{tx.type_display || tx.type}</div>
-                      <div style={{ fontSize: 11, color: T.sub }}>{formatDate(tx.created_at)}</div>
-                    </div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: tx.is_credit ? '#10B981' : '#EF4444' }}>
-                      {tx.is_credit ? '+' : '-'}{tx.coins?.toLocaleString() || tx.points?.toLocaleString() || 0}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-        </>
-      )}
 
       <div style={{ marginTop: 16, padding: 16, background: '#FEF3C7', borderRadius: 8, fontSize: 12, color: '#92400E' }}>
         <strong>⚠️ Warning:</strong> Manual balance adjustments are logged as admin transactions. Use this feature responsibly and only for legitimate corrections.
@@ -947,12 +765,11 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
 // Helpers
 // ---------------------------------------------------------------
 
-function SectionCard({ theme: T, title, icon, children, marginBottom, maxWidth }) {
+function SectionCard({ theme: T, title, icon, children }) {
   return (
     <div style={{
       background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
       padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      marginBottom: marginBottom || 0, maxWidth: maxWidth || 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         {icon}

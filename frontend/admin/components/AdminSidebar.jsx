@@ -184,25 +184,25 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
 
       {/* User footer */}
       <div style={{
-        padding: '10px 12px',
+        padding: '14px 16px',
         borderTop: `1px solid ${BORDER}`,
         background: '#1A1A1A',
       }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          marginBottom: 8,
+          gap: 10,
+          marginBottom: 10,
         }}>
           <div style={{
-            width: 32,
-            height: 32,
+            width: 36,
+            height: 36,
             borderRadius: '50%',
             background: `linear-gradient(135deg, ${PRIMARY}, ${PRIMARY_DARK})`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: 700,
             color: '#fff',
             flexShrink: 0,
@@ -211,7 +211,7 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: 600,
               color: TEXT,
               overflow: 'hidden',
@@ -221,7 +221,7 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
               {adminUser?.username || 'Admin'}
             </div>
             <div style={{
-              fontSize: 10,
+              fontSize: 11,
               color: SUB,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -236,19 +236,18 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
           onClick={onLogout}
           style={{
             width: '100%',
-            padding: '6px 10px',
-            background: 'transparent',
+            padding: '8px 12px',
+            background: '#FFFFFF',
             border: `1px solid ${BORDER}`,
-            borderRadius: 6,
-            color: SUB,
-            fontSize: 11,
+            borderRadius: 8,
+            color: TEXT,
+            fontSize: 12,
             fontWeight: 600,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 6,
-            transition: 'all 0.2s',
+            gap: 8,
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = '#FEF2F2';
@@ -256,12 +255,12 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
             e.currentTarget.style.color = '#DC2626';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.background = '#FFFFFF';
             e.currentTarget.style.borderColor = BORDER;
-            e.currentTarget.style.color = SUB;
+            e.currentTarget.style.color = TEXT;
           }}
         >
-          <LogOut size={12} />
+          <LogOut size={14} />
           Logout
         </button>
       </div>

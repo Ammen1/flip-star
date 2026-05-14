@@ -17,9 +17,7 @@
       "bundleIdentifier": "com.flipstar.mobile"
     },
     "extra": {
-      "eas": {
-        "projectId": "96483dd9-2162-4525-866e-392ea0a2d509"
-      }
+      "eas": {}
     }
   }
 }

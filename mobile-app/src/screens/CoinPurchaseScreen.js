@@ -63,13 +63,31 @@ export default function CoinPurchaseScreen({ navigation, route }) {
         }, 2000);
       } else {
         setResultSuccess(false);
-        setResultMessage(response.message || 'Purchase failed');
+        // Map error messages to user-friendly text
+        let errorMessage = response.message || response.error || 'Purchase failed';
+        if (errorMessage === 'NO_BALANCE' || response.error === 'charging_failed') {
+          errorMessage = 'Your balance is not enough to complete this purchase';
+        }
+        setResultMessage(errorMessage);
         setShowResultModal(true);
       }
     } catch (error) {
       console.error('airtime coin purchase error:', error);
+      console.error('error.message:', error.message);
+      console.error('error.response:', error.response);
       setResultSuccess(false);
-      setResultMessage('Purchase failed. Please try again.');
+      let errorMessage = 'Purchase failed. Please try again.';
+      
+      // Parse the error message to extract NO_BALANCE
+      if (error.message && error.message.includes('NO_BALANCE')) {
+        errorMessage = 'Your balance is not enough to complete this purchase';
+      } else if (error.message && error.message.includes('charging_failed')) {
+        errorMessage = 'Your balance is not enough to complete this purchase';
+      } else if (error.response && error.response.data && error.response.data.message === 'NO_BALANCE') {
+        errorMessage = 'Your balance is not enough to complete this purchase';
+      }
+      
+      setResultMessage(errorMessage);
       setShowResultModal(true);
     } finally {
       setLoadingAirtime(false);

@@ -382,7 +382,7 @@ export function SubscriptionPage({ user, onBack }) {
                     ? 'Active Plan'
                     : isProcessingThis
                     ? 'Processing…'
-                    : 'Subscribe via SMS'}}
+                    : 'Subscribe via SMS'}
                 </button>
               </div>
             );

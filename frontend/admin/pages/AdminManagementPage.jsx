@@ -1,106 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
-import { Shield, UserPlus, UserMinus, Search, Users, Key, FileText, Settings, Plus, Edit, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Shield, UserPlus, UserMinus, Search } from 'lucide-react';
 import api from '../../api';
 import { AlertModal } from '../components/AlertModal';
 
-export function AdminManagementPage({ theme, adminUser }) {
-  const searchInputRef = useRef(null);
-  const [activeTab, setActiveTab] = useState(() => {
-    // Restore active tab from localStorage
-    const savedTab = localStorage.getItem('adminActiveTab');
-    return savedTab || 'users';
-  });
+export function AdminManagementPage({ theme }) {
   const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [permissions, setPermissions] = useState([]);
-  const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('username-asc');
-  
-  // Save active tab to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem('adminActiveTab', activeTab);
-  }, [activeTab]);
-  
-  // Role CRUD state
-  const [roleModal, setRoleModal] = useState({ isOpen: false, mode: 'create', role: null });
-  const [roleForm, setRoleForm] = useState({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true, selectedPermissions: [] });
-  
-  // User role assignment state
-  const [userRoleModal, setUserRoleModal] = useState({ isOpen: false, userId: null, username: '' });
-  const [selectedUserRoles, setSelectedUserRoles] = useState([]);
-  const [userCredentials, setUserCredentials] = useState({ email: '', password: '' });
-
-  // Advanced user management state
-  const [advancedSelectedUser, setAdvancedSelectedUser] = useState(null);
-  const [advancedModal, setAdvancedModal] = useState({ isOpen: false, type: '' });
-  const [advancedForm, setAdvancedForm] = useState({ email: '', password: '', newPassword: '', reason: '' });
-  const [createUserModal, setCreateUserModal] = useState({ isOpen: false });
-  const [createUserForm, setCreateUserForm] = useState({ username: '', email: '', phone: '', password: '', selectedRoles: [] });
-
-  // User role assignment functions
-  const handleAssignRole = (user, event) => {
-    // Load user's existing roles from the new API format
-    const userRoles = user.roles ? user.roles.map(r => r.id) : [];
-
-    setUserRoleModal({
-      isOpen: true,
-      userId: user.id,
-      username: user.username
-    });
-    setSelectedUserRoles(userRoles);
-    setUserCredentials({ email: user.email || '', password: '' });
-  };
-
-  const handleSaveUserRole = async () => {
-    try {
-      await api.request(`/admin/rbac/users/${userRoleModal.userId}/`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          role_ids: selectedUserRoles,
-          email: userCredentials.email,
-          password: userCredentials.password,
-        })
-      });
-      setSearch('');
-      if (searchInputRef.current) {
-        searchInputRef.current.blur();
-      }
-      loadUsers();
-      setUserRoleModal({ isOpen: false, userId: null, username: '' });
-      setSelectedUserRoles([]);
-      setUserCredentials({ email: '', password: '' });
-    } catch (error) {
-      console.error('Failed to assign roles:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to assign roles', type: 'error' });
-    }
-  };
-
-  const headerStyle = {
-    padding: '16px',
-    textAlign: 'left',
-    fontSize: 13,
-    fontWeight: 700,
-    color: theme.sub,
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    verticalAlign: 'middle',
-  };
-
-  const cellStyle = {
-    padding: '16px',
-    fontSize: 14,
-    verticalAlign: 'middle',
-    textAlign: 'left',
-  };
 
   useEffect(() => {
     loadUsers();
-    loadRoles();
-    loadPermissions();
-    loadAuditLogs();
   }, [search]);
 
   const loadUsers = async () => {
@@ -112,189 +22,6 @@ export function AdminManagementPage({ theme, adminUser }) {
       console.error('Failed to load users:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadRoles = async () => {
-    try {
-      const response = await api.request('/admin/rbac/roles/');
-      setRoles(response.results || response);
-    } catch (error) {
-      console.error('Failed to load roles:', error);
-    }
-  };
-
-  const loadPermissions = async () => {
-    try {
-      const response = await api.request('/admin/rbac/permissions/');
-      setPermissions(response.results || response);
-    } catch (error) {
-      console.error('Failed to load permissions:', error);
-    }
-  };
-
-  const loadAuditLogs = async () => {
-    try {
-      const response = await api.request('/admin/rbac/audit-logs/');
-      setAuditLogs(response.results || response);
-    } catch (error) {
-      console.error('Failed to load audit logs:', error);
-    }
-  };
-
-  // Sorting function
-  const getSortedUsers = () => {
-    const sorted = [...users];
-    switch (sortBy) {
-      case 'username-asc':
-        return sorted.sort((a, b) => a.username.localeCompare(b.username));
-      case 'username-desc':
-        return sorted.sort((a, b) => b.username.localeCompare(a.username));
-      case 'status-admin':
-        return sorted.sort((a, b) => {
-          const aPriority = a.is_superuser ? 3 : a.is_staff ? 2 : 1;
-          const bPriority = b.is_superuser ? 3 : b.is_staff ? 2 : 1;
-          return bPriority - aPriority;
-        });
-      case 'status-regular':
-        return sorted.sort((a, b) => {
-          const aPriority = a.is_superuser ? 3 : a.is_staff ? 2 : 1;
-          const bPriority = b.is_superuser ? 3 : b.is_staff ? 2 : 1;
-          return aPriority - bPriority;
-        });
-      case 'email-asc':
-        return sorted.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
-      case 'email-desc':
-        return sorted.sort((a, b) => (b.email || '').localeCompare(a.email || ''));
-      default:
-        return sorted;
-    }
-  };
-
-  // Role CRUD functions
-  const handleCreateRole = () => {
-    setRoleForm({ id: '', name: '', description: '', type: 'platform_user', surfaces: ['mobile'], is_active: true, selectedPermissions: [] });
-    setRoleModal({ isOpen: true, mode: 'create', role: null });
-  };
-
-  const handleEditRole = async (role) => {
-    // Load role permissions
-    try {
-      const response = await api.request(`/admin/rbac/role-permissions/?role_id=${role.id}`);
-      const rolePermissions = response.results || response;
-      const selectedPermissions = rolePermissions.map(rp => rp.permission_id);
-      
-      setRoleForm({
-        id: role.id,
-        name: role.name,
-        description: role.description,
-        type: role.type,
-        surfaces: role.surfaces || ['mobile'],
-        is_active: role.is_active,
-        selectedPermissions,
-      });
-      setRoleModal({ isOpen: true, mode: 'edit', role });
-    } catch (error) {
-      console.error('Failed to load role permissions:', error);
-      setRoleForm({
-        id: role.id,
-        name: role.name,
-        description: role.description,
-        type: role.type,
-        surfaces: role.surfaces || ['mobile'],
-        is_active: role.is_active,
-        selectedPermissions: [],
-      });
-      setRoleModal({ isOpen: true, mode: 'edit', role });
-    }
-  };
-
-  const handleDeleteRole = (role) => {
-    setAlertModal({
-      isOpen: true,
-      title: 'Delete Role',
-      message: `Are you sure you want to delete the role "${role.name}"? This action cannot be undone.`,
-      type: 'warning',
-      showCancel: true,
-      onConfirm: async () => {
-        try {
-          await api.request(`/admin/rbac/roles/${role.id}/`, { method: 'DELETE' });
-          loadRoles();
-          setAlertModal({ ...alertModal, isOpen: false });
-        } catch (error) {
-          console.error('Failed to delete role:', error);
-          setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to delete role', type: 'error' });
-        }
-      }
-    });
-  };
-
-  const handleSaveRole = async () => {
-    try {
-      if (roleModal.mode === 'create') {
-        // Create role
-        const roleResponse = await api.request('/admin/rbac/roles/', {
-          method: 'POST',
-          body: JSON.stringify({
-            id: roleForm.id,
-            name: roleForm.name,
-            description: roleForm.description,
-            type: roleForm.type,
-            surfaces: roleForm.surfaces,
-            is_active: roleForm.is_active,
-          })
-        });
-        
-        // Create role-permission mappings
-        for (const permissionId of roleForm.selectedPermissions) {
-          await api.request('/admin/rbac/role-permissions/', {
-            method: 'POST',
-            body: JSON.stringify({
-              role_id: roleForm.id,
-              permission_id: permissionId,
-              access_level: 'full',
-            })
-          });
-        }
-      } else {
-        // Update role
-        await api.request(`/admin/rbac/roles/${roleForm.id}/`, {
-          method: 'PUT',
-          body: JSON.stringify({
-            id: roleForm.id,
-            name: roleForm.name,
-            description: roleForm.description,
-            type: roleForm.type,
-            surfaces: roleForm.surfaces,
-            is_active: roleForm.is_active,
-          })
-        });
-        
-        // Delete existing role-permission mappings
-        const existingMappings = await api.request(`/admin/rbac/role-permissions/?role_id=${roleForm.id}`);
-        for (const mapping of existingMappings.results || existingMappings) {
-          await api.request(`/admin/rbac/role-permissions/${mapping.id}/`, {
-            method: 'DELETE'
-          });
-        }
-        
-        // Create new role-permission mappings
-        for (const permissionId of roleForm.selectedPermissions) {
-          await api.request('/admin/rbac/role-permissions/', {
-            method: 'POST',
-            body: JSON.stringify({
-              role_id: roleForm.id,
-              permission_id: permissionId,
-              access_level: 'full',
-            })
-          });
-        }
-      }
-      loadRoles();
-      setRoleModal({ isOpen: false, mode: 'create', role: null });
-    } catch (error) {
-      console.error('Failed to save role:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to save role', type: 'error' });
     }
   };
 
@@ -330,7 +57,7 @@ export function AdminManagementPage({ theme, adminUser }) {
       showCancel: true,
       onConfirm: async () => {
         try {
-          await api.request(`/admin/users/${userId}/`, {
+          await api.request(`/admin/users/${userId}/update/`, {
             method: 'PATCH',
             body: JSON.stringify({ is_superuser: !currentStatus })
           });
@@ -342,122 +69,6 @@ export function AdminManagementPage({ theme, adminUser }) {
         }
       }
     });
-  };
-
-  const handleChangeEmail = async () => {
-    if (!advancedForm.email) {
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Please enter an email address', type: 'error' });
-      return;
-    }
-    try {
-      await api.request(`/admin/rbac/users/${advancedSelectedUser.id}/`, {
-        method: 'PUT',
-        body: JSON.stringify({ email: advancedForm.email })
-      });
-      loadUsers();
-      setAlertModal({ isOpen: true, title: 'Success', message: 'Email updated successfully', type: 'success' });
-    } catch (error) {
-      console.error('Failed to update email:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update email', type: 'error' });
-    }
-  };
-
-  const handleChangePassword = async () => {
-    if (!advancedForm.newPassword) {
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Please enter a new password', type: 'error' });
-      return;
-    }
-    try {
-      await api.request(`/admin/rbac/users/${advancedSelectedUser.id}/`, {
-        method: 'PUT',
-        body: JSON.stringify({ password: advancedForm.newPassword })
-      });
-      setAdvancedForm({ ...advancedForm, newPassword: '' });
-      setAlertModal({ isOpen: true, title: 'Success', message: 'Password updated successfully', type: 'success' });
-    } catch (error) {
-      console.error('Failed to update password:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update password', type: 'error' });
-    }
-  };
-
-  const handleToggleBan = async () => {
-    try {
-      await api.request(`/admin/users/${advancedSelectedUser.id}/`, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_active: !advancedSelectedUser.is_active })
-      });
-      loadUsers();
-      setAdvancedForm({ ...advancedForm, reason: '' });
-      setAlertModal({
-        isOpen: true,
-        title: 'Success',
-        message: `User ${advancedSelectedUser.is_active ? 'banned' : 'unbanned'} successfully`,
-        type: 'success'
-      });
-    } catch (error) {
-      console.error('Failed to toggle ban status:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update user status', type: 'error' });
-    }
-  };
-
-  const handleToggleRole = async (roleId, isChecked) => {
-    try {
-      const currentRoles = advancedSelectedUser.roles?.map(r => r.id) || [];
-      let newRoles;
-      if (isChecked) {
-        newRoles = [...currentRoles, roleId];
-      } else {
-        newRoles = currentRoles.filter(id => id !== roleId);
-      }
-      await api.request(`/admin/rbac/users/${advancedSelectedUser.id}/`, {
-        method: 'PUT',
-        body: JSON.stringify({ role_ids: newRoles })
-      });
-      await loadUsers();
-      // Update the selected user with the new roles from the refreshed users list
-      const updatedUser = users.find(u => u.id === advancedSelectedUser.id);
-      if (updatedUser) {
-        setAdvancedSelectedUser(updatedUser);
-      }
-    } catch (error) {
-      console.error('Failed to update roles:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update roles', type: 'error' });
-    }
-  };
-
-  const handleCreateUser = async () => {
-    if (!createUserForm.username || !createUserForm.email || !createUserForm.password) {
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Please fill in all required fields', type: 'error' });
-      return;
-    }
-    try {
-      // Create user
-      const response = await api.request('/admin/users/', {
-        method: 'POST',
-        body: JSON.stringify({
-          username: createUserForm.username,
-          email: createUserForm.email,
-          password: createUserForm.password,
-          phone_number: createUserForm.phone,
-        })
-      });
-
-      // Assign roles
-      if (createUserForm.selectedRoles.length > 0) {
-        await api.request(`/admin/rbac/users/${response.id}/`, {
-          method: 'PUT',
-          body: JSON.stringify({ role_ids: createUserForm.selectedRoles })
-        });
-      }
-
-      loadUsers();
-      setCreateUserModal({ isOpen: false });
-      setCreateUserForm({ username: '', email: '', phone: '', password: '', selectedRoles: [] });
-      setAlertModal({ isOpen: true, title: 'Success', message: 'User created successfully', type: 'success' });
-    } catch (error) {
-      console.error('Failed to create user:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to create user', type: 'error' });
-    }
   };
 
   return (
@@ -478,57 +89,8 @@ export function AdminManagementPage({ theme, adminUser }) {
           fontSize: 16,
           color: theme.sub,
         }}>
-          Manage roles, permissions, users, and audit logs
+          Manage admin users and permissions
         </p>
-      </div>
-
-      {/* Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: 8,
-        marginBottom: 24,
-        borderBottom: `1px solid ${theme.border}`,
-        paddingBottom: 16,
-      }}>
-        {[
-          { id: 'users', label: 'Users', icon: Users },
-          { id: 'advanced', label: 'Advanced', icon: Shield },
-          { id: 'roles', label: 'Roles', icon: Settings },
-          { id: 'permissions', label: 'Permissions', icon: Key },
-          { id: 'audit', label: 'Audit Log', icon: FileText },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '10px 16px',
-              border: 'none',
-              borderRadius: 8,
-              background: activeTab === tab.id ? theme.pri + '20' : 'transparent',
-              color: activeTab === tab.id ? theme.pri : theme.sub,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              transition: 'all 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (activeTab !== tab.id) {
-                e.target.style.background = theme.bg;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (activeTab !== tab.id) {
-                e.target.style.background = 'transparent';
-              }
-            }}
-          >
-            <tab.icon size={18} />
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Search */}
@@ -545,16 +107,10 @@ export function AdminManagementPage({ theme, adminUser }) {
           color: theme.sub,
         }} />
         <input
-          ref={searchInputRef}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={`Search ${activeTab}...`}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck="false"
-          formNoValidate
+          placeholder="Search users..."
           style={{
             width: '100%',
             padding: '12px 16px 12px 48px',
@@ -562,1575 +118,216 @@ export function AdminManagementPage({ theme, adminUser }) {
             borderRadius: 8,
             fontSize: 14,
             outline: 'none',
-            background: theme.card,
-            color: theme.txt,
           }}
         />
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'users' && (
-        <>
-          {/* Admin Stats */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 24,
-            marginBottom: 32,
-          }}>
-            <div style={{
-              background: theme.card,
-              borderRadius: 12,
-              padding: 24,
-              border: `1px solid ${theme.border}`,
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: theme.sub, marginBottom: 8 }}>
-                Total Admins
-              </div>
-              <div style={{ fontSize: 32, fontWeight: 700, color: theme.pri }}>
-                {users.filter(u => u.is_staff).length}
-              </div>
-            </div>
-            <div style={{
-              background: theme.card,
-              borderRadius: 12,
-              padding: 24,
-              border: `1px solid ${theme.border}`,
-            }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: theme.sub, marginBottom: 8 }}>
-                Superusers
-              </div>
-              <div style={{ fontSize: 32, fontWeight: 700, color: theme.red }}>
-                {users.filter(u => u.is_superuser).length}
-              </div>
-            </div>
-          </div>
-
-          {/* Sorting Controls */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 20,
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-            }}>
-              <div style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: theme.sub,
-              }}>
-                Sort by:
-              </div>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  outline: 'none',
-                  background: theme.card,
-                  color: theme.txt,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              >
-                <option value="username-asc">Username (A-Z)</option>
-                <option value="username-desc">Username (Z-A)</option>
-                <option value="status-admin">Status (Admins First)</option>
-                <option value="status-regular">Status (Regular First)</option>
-                <option value="email-asc">Email (A-Z)</option>
-                <option value="email-desc">Email (Z-A)</option>
-              </select>
-            </div>
-            <div style={{
-              fontSize: 12,
-              color: theme.sub,
-            }}>
-              {users.length} users
-            </div>
-          </div>
-
-          {/* Users List */}
-          {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: theme.sub }}>
-              Loading users...
-            </div>
-          ) : (
-            <div style={{
-              background: theme.card,
-              borderRadius: 12,
-              border: `1px solid ${theme.border}`,
-            }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: theme.bg }}>
-                    <th style={headerStyle}>User</th>
-                    <th style={headerStyle}>Status</th>
-                    <th style={headerStyle}>Email</th>
-                    <th style={headerStyle}>Phone</th>
-                    <th style={headerStyle}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {getSortedUsers().map((user, index) => (
-                    <tr key={user.id} style={{
-                      borderTop: index > 0 ? `1px solid ${theme.border}` : 'none',
-                    }}>
-                      <td style={cellStyle}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <div style={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: '50%',
-                            background: user.is_staff ? theme.pri + '30' : theme.sub + '20',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 18,
-                          }}>
-                            {user.is_staff ? '👑' : '👤'}
-                          </div>
-                          <div>
-                            <div style={{
-                              fontSize: 14,
-                              fontWeight: 600,
-                              color: theme.txt,
-                            }}>
-                              {user.username}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td style={cellStyle}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {user.roles && user.roles.length > 0 ? (
-                            user.roles.map((role) => (
-                              <span key={role.id} style={{
-                                padding: '4px 8px',
-                                borderRadius: 4,
-                                fontSize: 11,
-                                fontWeight: 600,
-                                background: theme.pri + '20',
-                                color: theme.pri,
-                              }}>
-                                {role.name}
-                              </span>
-                            ))
-                          ) : (
-                            <span style={{
-                              padding: '4px 8px',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              background: theme.sub + '20',
-                              color: theme.sub,
-                            }}>
-                              No Roles
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={cellStyle}>
-                        <div style={{ fontSize: 13, color: theme.sub }}>
-                          {user.roles && user.roles.length > 0 ? user.email || 'N/A' : '-'}
-                        </div>
-                      </td>
-                      <td style={cellStyle}>
-                        <div style={{ fontSize: 13, color: theme.sub }}>
-                          {user.phone_number || '-'}
-                        </div>
-                      </td>
-                      <td style={{ ...cellStyle, width: '200px', verticalAlign: 'middle' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-                          <button
-                            onClick={(e) => handleAssignRole(user, e)}
-                            style={{
-                              padding: '6px 12px',
-                              background: theme.purple + '30',
-                              border: `1px solid ${theme.purple}`,
-                              borderRadius: 6,
-                              color: theme.purple,
-                              fontSize: 12,
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              transition: 'all 0.2s',
-                              whiteSpace: 'nowrap',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.target.style.background = theme.purple + '50';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.target.style.background = theme.purple + '30';
-                            }}
-                          >
-                            <Settings size={14} />
-                            Assign Role
-                          </button>
-                          {adminUser?.is_superuser && user.is_staff && (
-                            <button
-                              onClick={() => handleToggleSuperuser(user.id, user.is_superuser)}
-                              style={{
-                                padding: '6px 12px',
-                                background: user.is_superuser ? theme.red + '30' : theme.pri + '30',
-                                border: `1px solid ${user.is_superuser ? theme.red : theme.pri}`,
-                                borderRadius: 6,
-                                color: user.is_superuser ? theme.red : theme.pri,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                transition: 'all 0.2s',
-                                whiteSpace: 'nowrap',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.target.style.background = user.is_superuser ? theme.red + '50' : theme.pri + '50';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.background = user.is_superuser ? theme.red + '30' : theme.pri + '30';
-                              }}
-                            >
-                              <Shield size={14} />
-                              {user.is_superuser ? 'Revoke Super' : 'Make Super'}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
-
-      {activeTab === 'advanced' && (
-        <div>
-          {/* User Selection */}
-          <div style={{
-            background: theme.card,
-            borderRadius: 12,
-            padding: 24,
-            border: `1px solid ${theme.border}`,
-            marginBottom: 24,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
-                User Management
-              </h3>
-              <button
-                onClick={() => setCreateUserModal({ isOpen: true })}
-                style={{
-                  padding: '8px 16px',
-                  background: theme.pri,
-                  border: 'none',
-                  borderRadius: 8,
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-                onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
-                onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
-              >
-                <UserPlus size={16} />
-                Create User
-              </button>
-            </div>
-            <h4 style={{ fontSize: 14, fontWeight: 600, color: theme.sub, margin: 0, marginBottom: 12 }}>
-              Search User to Edit
-            </h4>
-            <select
-              value={advancedSelectedUser?.id || ''}
-              onChange={(e) => {
-                const userId = parseInt(e.target.value);
-                const user = users.find(u => u.id === userId);
-                setAdvancedSelectedUser(user);
-                setAdvancedForm({ email: user?.email || '', password: '', newPassword: '', reason: '' });
-              }}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                border: `1px solid ${theme.border}`,
-                borderRadius: 6,
-                fontSize: 13,
-                outline: 'none',
-                background: theme.bg,
-                color: theme.txt,
-                cursor: 'pointer',
-              }}
-            >
-              <option value="">Search by phone, email, or username...</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.username} ({user.email || 'No email'}) - {user.phone_number || 'No phone'}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* User Actions */}
-          {advancedSelectedUser && (
-            <div style={{
-              background: theme.card,
-              borderRadius: 12,
-              padding: 24,
-              border: `1px solid ${theme.border}`,
-            }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0, marginBottom: 24 }}>
-                User Actions: {advancedSelectedUser.username}
-              </h3>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-                {/* Left Column - Account Actions */}
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
-                    Account Actions
-                  </div>
-
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                      Change Email
-                    </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        type="email"
-                        value={advancedForm.email}
-                        onChange={(e) => setAdvancedForm({ ...advancedForm, email: e.target.value })}
-                        placeholder="New email address"
-                        style={{
-                          flex: 1,
-                          padding: '10px 12px',
-                          border: `1px solid ${theme.border}`,
-                          borderRadius: 6,
-                          fontSize: 13,
-                          outline: 'none',
-                          background: theme.bg,
-                          color: theme.txt,
-                        }}
-                      />
-                      <button
-                        onClick={() => handleChangeEmail()}
-                        style={{
-                          padding: '10px 16px',
-                          background: theme.pri,
-                          border: 'none',
-                          borderRadius: 6,
-                          color: '#fff',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                        }}
-                        onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
-                        onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
-                      >
-                        Update
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                      Change Password
-                    </label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input
-                        type="password"
-                        value={advancedForm.newPassword}
-                        onChange={(e) => setAdvancedForm({ ...advancedForm, newPassword: e.target.value })}
-                        placeholder="New password"
-                        style={{
-                          flex: 1,
-                          padding: '10px 12px',
-                          border: `1px solid ${theme.border}`,
-                          borderRadius: 6,
-                          fontSize: 13,
-                          outline: 'none',
-                          background: theme.bg,
-                          color: theme.txt,
-                        }}
-                      />
-                      <button
-                        onClick={() => handleChangePassword()}
-                        style={{
-                          padding: '10px 16px',
-                          background: theme.pri,
-                          border: 'none',
-                          borderRadius: 6,
-                          color: '#fff',
-                          fontSize: 13,
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                        }}
-                        onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
-                        onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
-                      >
-                        Update
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                      {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
-                    </label>
-                    <textarea
-                      value={advancedForm.reason}
-                      onChange={(e) => setAdvancedForm({ ...advancedForm, reason: e.target.value })}
-                      placeholder="Reason for action..."
-                      rows={2}
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        border: `1px solid ${theme.border}`,
-                        borderRadius: 6,
-                        fontSize: 13,
-                        outline: 'none',
-                        background: theme.bg,
-                        color: theme.txt,
-                        marginBottom: 12,
-                        resize: 'vertical',
-                        fontFamily: 'inherit',
-                      }}
-                    />
-                    <button
-                      onClick={() => handleToggleBan()}
-                      style={{
-                        padding: '10px 16px',
-                        background: advancedSelectedUser.is_active ? theme.red : theme.green,
-                        border: 'none',
-                        borderRadius: 6,
-                        color: '#fff',
-                        fontSize: 13,
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red + '90' : theme.green + '90'; }}
-                      onMouseLeave={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red : theme.green; }}
-                    >
-                      {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Right Column - Roles & Info */}
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
-                    Manage Roles
-                  </div>
-                  <div style={{
-                    maxHeight: 200,
-                    overflowY: 'auto',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 6,
-                    padding: 12,
-                    marginBottom: 16,
-                  }}>
-                    {roles.map((role) => (
-                      <div key={role.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        fontSize: 12,
-                        color: theme.txt,
-                        padding: '6px 8px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                      }} onClick={(e) => {
-                        if (e.target.type !== 'checkbox') {
-                          const checkbox = e.currentTarget.querySelector('input[type="checkbox"]');
-                          if (checkbox) {
-                            checkbox.checked = !checkbox.checked;
-                            handleToggleRole(role.id, checkbox.checked);
-                          }
-                        }
-                      }}>
-                        <input
-                          type="checkbox"
-                          checked={advancedSelectedUser.roles?.some(r => r.id === role.id) || false}
-                          onChange={(e) => handleToggleRole(role.id, e.target.checked)}
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ cursor: 'pointer' }}
-                        />
-                        {role.name}
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 11, color: theme.sub, marginBottom: 24 }}>
-                    {advancedSelectedUser.roles?.length || 0} roles assigned
-                  </div>
-
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
-                    User Information
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Username</div>
-                      <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.username}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Email</div>
-                      <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.email || 'N/A'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Phone</div>
-                      <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.phone_number || 'N/A'}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Status</div>
-                      <div style={{ fontSize: 13, color: advancedSelectedUser.is_active ? theme.green : theme.red }}>
-                        {advancedSelectedUser.is_active ? 'Active' : 'Banned'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Staff</div>
-                      <div style={{ fontSize: 13, color: advancedSelectedUser.is_staff ? theme.pri : theme.sub }}>
-                        {advancedSelectedUser.is_staff ? 'Yes' : 'No'}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Superuser</div>
-                      <div style={{ fontSize: 13, color: advancedSelectedUser.is_superuser ? theme.red : theme.sub }}>
-                        {advancedSelectedUser.is_superuser ? 'Yes' : 'No'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'roles' && (
+      {/* Admin Stats */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: 24,
+        marginBottom: 32,
+      }}>
         <div style={{
           background: theme.card,
           borderRadius: 12,
           padding: 24,
           border: `1px solid ${theme.border}`,
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
-              Roles Management
-            </h3>
-            <button
-              onClick={handleCreateRole}
-              style={{
-                padding: '8px 16px',
-                background: theme.pri,
-                border: 'none',
-                borderRadius: 8,
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <Plus size={16} />
-              Create Role
-            </button>
+          <div style={{ fontSize: 14, fontWeight: 600, color: theme.sub, marginBottom: 8 }}>
+            Total Admins
           </div>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-            {roles.map((role) => (
-              <div key={role.id} style={{
-                background: theme.bg,
-                borderRadius: 8,
-                padding: 16,
-                border: `1px solid ${theme.border}`,
-                position: 'relative',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt }}>
-                    {role.name}
-                  </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button
-                      onClick={() => handleEditRole(role)}
-                      style={{
-                        padding: '4px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderRadius: 4,
-                        color: theme.sub,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                      onMouseEnter={(e) => { e.target.style.color = theme.pri; e.target.style.background = theme.pri + '20'; }}
-                      onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
-                    >
-                      <Edit size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteRole(role)}
-                      style={{
-                        padding: '4px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderRadius: 4,
-                        color: theme.sub,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                      onMouseEnter={(e) => { e.target.style.color = theme.red; e.target.style.background = theme.red + '20'; }}
-                      onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div style={{ fontSize: 12, color: theme.sub, marginBottom: 8 }}>
-                  {role.description}
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{
-                    padding: '2px 8px',
-                    borderRadius: 4,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    background: theme.pri + '20',
-                    color: theme.pri,
-                  }}>
-                    {role.type}
-                  </span>
-                  <span style={{
-                    padding: '2px 8px',
-                    borderRadius: 4,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    background: role.is_active ? '#10B98120' : '#EF444420',
-                    color: role.is_active ? '#10B981' : '#EF4444',
-                  }}>
-                    {role.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div style={{ fontSize: 32, fontWeight: 700, color: theme.pri }}>
+            {users.filter(u => u.is_staff).length}
           </div>
         </div>
-      )}
-
-      {/* Role Modal */}
-      {roleModal.isOpen && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: 20,
+          background: theme.card,
+          borderRadius: 12,
+          padding: 24,
+          border: `1px solid ${theme.border}`,
         }}>
-          <div style={{
-            background: theme.card,
-            borderRadius: 16,
-            padding: 24,
-            width: '100%',
-            maxWidth: 700,
-            maxHeight: '90vh',
-            overflow: 'auto',
-            border: `1px solid ${theme.border}`,
-            margin: 'auto',
-            position: 'relative',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
-                {roleModal.mode === 'create' ? 'Create New Role' : 'Edit Role'}
-              </h3>
-              <button
-                onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: theme.sub,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.target.style.color = theme.txt; e.target.style.background = theme.bg; }}
-                onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
-              >
-                ✕
-              </button>
-            </div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: theme.sub, marginBottom: 8 }}>
+            Superusers
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 700, color: theme.red }}>
+            {users.filter(u => u.is_superuser).length}
+          </div>
+        </div>
+      </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                  Role ID
-                </label>
-                <input
-                  type="text"
-                  value={roleForm.id}
-                  onChange={(e) => setRoleForm({ ...roleForm, id: e.target.value })}
-                  disabled={roleModal.mode === 'edit'}
-                  placeholder="e.g., content_manager"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 6,
-                    fontSize: 13,
-                    outline: 'none',
-                    background: theme.bg,
-                    color: theme.txt,
-                    transition: 'border-color 0.2s',
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                  Role Name
-                </label>
-                <input
-                  type="text"
-                  value={roleForm.name}
-                  onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
-                  placeholder="e.g., Content Manager"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 6,
-                    fontSize: 13,
-                    outline: 'none',
-                    background: theme.bg,
-                    color: theme.txt,
-                    transition: 'border-color 0.2s',
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-                />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                Description
-              </label>
-              <textarea
-                value={roleForm.description}
-                onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
-                placeholder="Role description..."
-                rows={2}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  resize: 'vertical',
-                  transition: 'border-color 0.2s',
-                  fontFamily: 'inherit',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                  Role Type
-                </label>
-                <select
-                  value={roleForm.type}
-                  onChange={(e) => setRoleForm({ ...roleForm, type: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 6,
-                    fontSize: 13,
-                    outline: 'none',
-                    background: theme.bg,
-                    color: theme.txt,
-                    cursor: 'pointer',
-                  }}
-                >
-                  <option value="platform_user">Platform User</option>
-                  <option value="internal_operator">Internal Operator</option>
-                </select>
-              </div>
-
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                  Surfaces
-                </label>
-                <div style={{ display: 'flex', gap: 12, padding: '10px 12px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.txt, cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={roleForm.surfaces.includes('mobile')}
-                      onChange={(e) => {
-                        const surfaces = e.target.checked
-                          ? [...roleForm.surfaces, 'mobile']
-                          : roleForm.surfaces.filter(s => s !== 'mobile');
-                        setRoleForm({ ...roleForm, surfaces });
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    Mobile
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.txt, cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={roleForm.surfaces.includes('web')}
-                      onChange={(e) => {
-                        const surfaces = e.target.checked
-                          ? [...roleForm.surfaces, 'web']
-                          : roleForm.surfaces.filter(s => s !== 'web');
-                        setRoleForm({ ...roleForm, surfaces });
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    Web
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={roleForm.is_active}
-                onChange={(e) => setRoleForm({ ...roleForm, is_active: e.target.checked })}
-                id="role-active"
-                style={{ cursor: 'pointer', width: 16, height: 16 }}
-              />
-              <label htmlFor="role-active" style={{ fontSize: 13, color: theme.txt, cursor: 'pointer' }}>
-                Active Role
-              </label>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <label style={{ fontSize: 14, fontWeight: 700, color: theme.txt, margin: 0 }}>
-                  Assign Permissions
-                </label>
-                <div style={{ fontSize: 12, color: theme.sub }}>
-                  {roleForm.selectedPermissions.length} of {permissions.length} selected
-                </div>
-              </div>
-
-              <div style={{
-                maxHeight: 250,
-                overflowY: 'auto',
-              }}>
-                {Object.entries(
-                  permissions.reduce((acc, perm) => {
-                    if (!acc[perm.domain]) acc[perm.domain] = [];
-                    acc[perm.domain].push(perm);
-                    return acc;
-                  }, {})
-                ).map(([domain, perms]) => (
-                  <div key={domain} style={{ marginBottom: 16 }}>
-                    <div style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: theme.pri,
-                      marginBottom: 8,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                    }}>
-                      {domain}
+      {/* Users List */}
+      {loading ? (
+        <div style={{ padding: 40, textAlign: 'center', color: theme.sub }}>
+          Loading users...
+        </div>
+      ) : (
+        <div style={{
+          background: theme.card,
+          borderRadius: 12,
+          border: `1px solid ${theme.border}`,
+          overflow: 'hidden',
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: theme.bg }}>
+                <th style={headerStyle}>User</th>
+                <th style={headerStyle}>Email</th>
+                <th style={headerStyle}>Status</th>
+                <th style={headerStyle}>Permissions</th>
+                <th style={headerStyle}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user, index) => (
+                <tr key={user.id} style={{
+                  borderTop: index > 0 ? `1px solid ${theme.border}` : 'none',
+                }}>
+                  <td style={cellStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: '50%',
+                        background: user.is_staff ? theme.pri + '30' : theme.sub + '20',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 18,
+                      }}>
+                        {user.is_staff ? '👑' : '👤'}
+                      </div>
+                      <div>
+                        <div style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: theme.txt,
+                        }}>
+                          {user.username}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {perms.map((perm) => (
-                        <label key={perm.id} style={{
+                  </td>
+                  <td style={cellStyle}>
+                    <div style={{ fontSize: 13, color: theme.txt }}>
+                      {user.email}
+                    </div>
+                  </td>
+                  <td style={cellStyle}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {user.is_staff && (
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: theme.pri + '20',
+                          color: theme.pri,
+                        }}>
+                          Admin
+                        </span>
+                      )}
+                      {user.is_superuser && (
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: theme.red + '20',
+                          color: theme.red,
+                        }}>
+                          Superuser
+                        </span>
+                      )}
+                      {!user.is_staff && !user.is_superuser && (
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: 4,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: theme.sub + '20',
+                          color: theme.sub,
+                        }}>
+                          Regular User
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={cellStyle}>
+                    <div style={{ fontSize: 13, color: theme.sub }}>
+                      {user.is_superuser ? 'Full Access' : user.is_staff ? 'Admin Access' : 'No Admin Access'}
+                    </div>
+                  </td>
+                  <td style={cellStyle}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => handleToggleAdmin(user.id, user.is_staff)}
+                        style={{
+                          padding: '6px 12px',
+                          background: user.is_staff ? theme.orange + '15' : theme.pri + '15',
+                          border: 'none',
+                          borderRadius: 6,
+                          color: user.is_staff ? theme.orange : theme.pri,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 8,
-                          fontSize: 12,
-                          color: theme.txt,
-                          padding: '6px 8px',
-                          borderRadius: 4,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          background: roleForm.selectedPermissions.includes(perm.id) ? theme.pri + '15' : 'transparent',
+                          gap: 4,
                         }}
-                        onMouseEnter={(e) => { e.target.style.background = roleForm.selectedPermissions.includes(perm.id) ? theme.pri + '20' : theme.bg; }}
-                        onMouseLeave={(e) => { e.target.style.background = roleForm.selectedPermissions.includes(perm.id) ? theme.pri + '15' : 'transparent'; }}
+                      >
+                        {user.is_staff ? <UserMinus size={14} /> : <UserPlus size={14} />}
+                        {user.is_staff ? 'Revoke Admin' : 'Make Admin'}
+                      </button>
+                      {user.is_staff && (
+                        <button
+                          onClick={() => handleToggleSuperuser(user.id, user.is_superuser)}
+                          style={{
+                            padding: '6px 12px',
+                            background: user.is_superuser ? theme.red + '15' : theme.purple + '15',
+                            border: 'none',
+                            borderRadius: 6,
+                            color: user.is_superuser ? theme.red : theme.purple,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={roleForm.selectedPermissions.includes(perm.id)}
-                            onChange={(e) => {
-                              const selectedPermissions = e.target.checked
-                                ? [...roleForm.selectedPermissions, perm.id]
-                                : roleForm.selectedPermissions.filter(id => id !== perm.id);
-                              setRoleForm({ ...roleForm, selectedPermissions });
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          />
-                          <div style={{ fontWeight: 500 }}>{perm.name}</div>
-                        </label>
-                      ))}
+                          <Shield size={14} />
+                          {user.is_superuser ? 'Revoke Super' : 'Make Super'}
+                        </button>
+                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
-              <button
-                onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
-                style={{
-                  padding: '10px 20px',
-                  background: 'transparent',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  color: theme.txt,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.target.style.background = theme.bg; }}
-                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveRole}
-                style={{
-                  padding: '10px 20px',
-                  background: theme.pri,
-                  border: 'none',
-                  borderRadius: 6,
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: `0 4px 6px -1px ${theme.pri}40`,
-                }}
-                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
-                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
-              >
-                {roleModal.mode === 'create' ? 'Create Role' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* User Role Assignment Modal */}
-      {userRoleModal.isOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: 20,
-        }}>
-          <div style={{
-            background: theme.card,
-            borderRadius: 16,
-            padding: 32,
-            width: '100%',
-            maxWidth: 700,
-            maxHeight: '90vh',
-            overflow: 'auto',
-            border: `1px solid ${theme.border}`,
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${theme.border}` }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: theme.txt, margin: 0 }}>
-                Manage {userRoleModal.username}
-              </h3>
-              <button
-                onClick={() => {
-                  setUserRoleModal({ isOpen: false, userId: null, username: '' });
-                  setSelectedUserRoles([]);
-                  setUserCredentials({ email: '', password: '' });
-                }}
-                style={{
-                  padding: '8px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 8,
-                  color: theme.sub,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.target.style.color = theme.txt; e.target.style.background = theme.bg; }}
-                onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={userCredentials.email}
-                  onChange={(e) => setUserCredentials({ ...userCredentials, email: e.target.value })}
-                  placeholder="user@example.com"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 6,
-                    fontSize: 13,
-                    outline: 'none',
-                    background: theme.bg,
-                    color: theme.txt,
-                    transition: 'border-color 0.2s',
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={userCredentials.password}
-                  onChange={(e) => setUserCredentials({ ...userCredentials, password: e.target.value })}
-                  placeholder="Leave empty to keep current"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 6,
-                    fontSize: 13,
-                    outline: 'none',
-                    background: theme.bg,
-                    color: theme.txt,
-                    transition: 'border-color 0.2s',
-                  }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-                />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <label style={{ fontSize: 14, fontWeight: 700, color: theme.txt, margin: 0 }}>
-                  Assign Roles
-                </label>
-                <div style={{ fontSize: 12, color: theme.sub }}>
-                  {selectedUserRoles.length} of {roles.length} selected
-                </div>
-              </div>
-
-              <div style={{
-                maxHeight: 200,
-                overflowY: 'auto',
-              }}>
-                {roles.map((role) => (
-                  <label key={role.id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    fontSize: 13,
-                    color: theme.txt,
-                    padding: '8px 10px',
-                    borderRadius: 6,
-                    marginBottom: 4,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    background: selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent',
-                  }}
-                  onMouseEnter={(e) => { e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '20' : theme.bg; }}
-                  onMouseLeave={(e) => { e.target.style.background = selectedUserRoles.includes(role.id) ? theme.pri + '15' : 'transparent'; }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedUserRoles.includes(role.id)}
-                      onChange={(e) => {
-                        const selectedRoles = e.target.checked
-                          ? [...selectedUserRoles, role.id]
-                          : selectedUserRoles.filter(id => id !== role.id);
-                        setSelectedUserRoles(selectedRoles);
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{role.name}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
-              <button
-                onClick={() => {
-                  setUserRoleModal({ isOpen: false, userId: null, username: '' });
-                  setSelectedUserRoles([]);
-                  setUserCredentials({ email: '', password: '' });
-                }}
-                style={{
-                  padding: '12px 24px',
-                  background: 'transparent',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  color: theme.txt,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.target.style.background = theme.bg; }}
-                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveUserRole}
-                style={{
-                  padding: '12px 24px',
-                  background: theme.pri,
-                  border: 'none',
-                  borderRadius: 8,
-                  color: '#fff',
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: `0 4px 6px -1px ${theme.pri}40`,
-                }}
-                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
-                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Alert Modal */}
-      {alertModal.isOpen && (
-        <AlertModal
-          isOpen={alertModal.isOpen}
-          title={alertModal.title}
-          message={alertModal.message}
-          type={alertModal.type}
-          showCancel={alertModal.showCancel}
-          onConfirm={alertModal.onConfirm}
-          onClose={() => setAlertModal({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null })}
-        />
-      )}
-
-      {activeTab === 'permissions' && (
-        <div style={{
-          background: theme.card,
-          borderRadius: 12,
-          padding: 24,
-          border: `1px solid ${theme.border}`,
-        }}>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
-            Permissions Management
-          </h3>
-          <p style={{ fontSize: 14, color: theme.sub, marginBottom: 24 }}>
-            View all system permissions grouped by domain. Permissions are managed through the Roles tab.
-          </p>
-          
-          {/* Group permissions by domain */}
-          {Object.entries(
-            permissions.reduce((acc, perm) => {
-              if (!acc[perm.domain]) acc[perm.domain] = [];
-              acc[perm.domain].push(perm);
-              return acc;
-            }, {})
-          ).map(([domain, perms]) => (
-            <div key={domain} style={{ marginBottom: 24 }}>
-              <h4 style={{ fontSize: 14, fontWeight: 600, color: theme.pri, marginBottom: 12, margin: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                {domain}
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-                {perms.map((perm) => (
-                  <div key={perm.id} style={{
-                    background: theme.bg,
-                    borderRadius: 8,
-                    padding: 12,
-                    border: `1px solid ${theme.border}`,
-                  }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt, marginBottom: 4 }}>
-                      {perm.name}
-                    </div>
-                    <div style={{ fontSize: 11, color: theme.sub }}>
-                      {perm.description}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {activeTab === 'audit' && (
-        <div style={{
-          background: theme.card,
-          borderRadius: 12,
-          padding: 24,
-          border: `1px solid ${theme.border}`,
-        }}>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16, margin: 0 }}>
-            Audit Log
-          </h3>
-          <p style={{ fontSize: 14, color: theme.sub, marginBottom: 24 }}>
-            Track all admin actions and system changes
-          </p>
-          
-          <div style={{
-            background: theme.bg,
-            borderRadius: 8,
-            border: `1px solid ${theme.border}`,
-            overflow: 'hidden',
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: theme.bg }}>
-                  <th style={headerStyle}>Timestamp</th>
-                  <th style={headerStyle}>Action</th>
-                  <th style={headerStyle}>Actor</th>
-                  <th style={headerStyle}>Target</th>
-                  <th style={headerStyle}>IP Address</th>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {auditLogs.slice(0, 50).map((log) => (
-                  <tr key={log.id} style={{
-                    borderTop: `1px solid ${theme.border}`,
-                  }}>
-                    <td style={cellStyle}>
-                      <div style={{ fontSize: 12, color: theme.sub }}>
-                        {new Date(log.timestamp).toLocaleString()}
-                      </div>
-                    </td>
-                    <td style={cellStyle}>
-                      <span style={{
-                        padding: '4px 8px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 600,
-                        background: theme.pri + '20',
-                        color: theme.pri,
-                      }}>
-                        {log.action}
-                      </span>
-                    </td>
-                    <td style={cellStyle}>
-                      <div style={{ fontSize: 13, color: theme.txt }}>
-                        {log.actor_username || 'System'}
-                      </div>
-                    </td>
-                    <td style={cellStyle}>
-                      <div style={{ fontSize: 13, color: theme.sub }}>
-                        {log.target_name || 'N/A'}
-                      </div>
-                    </td>
-                    <td style={cellStyle}>
-                      <div style={{ fontSize: 12, color: theme.sub }}>
-                        {log.ip_address || 'N/A'}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {auditLogs.length === 0 && (
-              <div style={{ padding: 40, textAlign: 'center', color: theme.sub }}>
-                No audit logs found
-              </div>
-            )}
-          </div>
-          {auditLogs.length > 50 && (
-            <div style={{ marginTop: 16, fontSize: 13, color: theme.sub, textAlign: 'center' }}>
-              Showing first 50 entries. Use the API to view more.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Create User Modal */}
-      {createUserModal.isOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: 20,
-        }}>
-          <div style={{
-            background: theme.card,
-            borderRadius: 16,
-            padding: 24,
-            width: '100%',
-            maxWidth: 500,
-            maxHeight: '90vh',
-            overflow: 'auto',
-            border: `1px solid ${theme.border}`,
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
-                Create New User
-              </h3>
-              <button
-                onClick={() => setCreateUserModal({ isOpen: false })}
-                style={{
-                  padding: '6px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: theme.sub,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.target.style.color = theme.txt; e.target.style.background = theme.bg; }}
-                onMouseLeave={(e) => { e.target.style.color = theme.sub; e.target.style.background = 'transparent'; }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                Username *
-              </label>
-              <input
-                type="text"
-                value={createUserForm.username}
-                onChange={(e) => setCreateUserForm({ ...createUserForm, username: e.target.value })}
-                placeholder="Enter username"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  transition: 'border-color 0.2s',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                Email *
-              </label>
-              <input
-                type="email"
-                value={createUserForm.email}
-                onChange={(e) => setCreateUserForm({ ...createUserForm, email: e.target.value })}
-                placeholder="Enter email address"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  transition: 'border-color 0.2s',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                Phone Number
-              </label>
-              <input
-                type="tel"
-                value={createUserForm.phone}
-                onChange={(e) => setCreateUserForm({ ...createUserForm, phone: e.target.value })}
-                placeholder="Enter phone number"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  transition: 'border-color 0.2s',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                Password *
-              </label>
-              <input
-                type="password"
-                value={createUserForm.password}
-                onChange={(e) => setCreateUserForm({ ...createUserForm, password: e.target.value })}
-                placeholder="Enter password"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  outline: 'none',
-                  background: theme.bg,
-                  color: theme.txt,
-                  transition: 'border-color 0.2s',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                onBlur={(e) => { e.target.style.borderColor = theme.border; }}
-              />
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
-                Assign Roles
-              </label>
-              <div style={{ maxHeight: 150, overflowY: 'auto', border: `1px solid ${theme.border}`, borderRadius: 6, padding: 8 }}>
-                {roles.map((role) => (
-                  <label key={role.id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: 12,
-                    color: theme.txt,
-                    padding: '6px 8px',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={createUserForm.selectedRoles.includes(role.id)}
-                      onChange={(e) => {
-                        const selectedRoles = e.target.checked
-                          ? [...createUserForm.selectedRoles, role.id]
-                          : createUserForm.selectedRoles.filter(id => id !== role.id);
-                        setCreateUserForm({ ...createUserForm, selectedRoles });
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    {role.name}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
-              <button
-                onClick={() => setCreateUserModal({ isOpen: false })}
-                style={{
-                  padding: '10px 20px',
-                  background: 'transparent',
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 6,
-                  color: theme.txt,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.target.style.background = theme.bg; }}
-                onMouseLeave={(e) => { e.target.style.background = 'transparent'; }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateUser}
-                style={{
-                  padding: '10px 20px',
-                  background: theme.pri,
-                  border: 'none',
-                  borderRadius: 6,
-                  color: '#fff',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  boxShadow: `0 4px 6px -1px ${theme.pri}40`,
-                }}
-                onMouseEnter={(e) => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
-                onMouseLeave={(e) => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
-              >
-                Create User
-              </button>
-            </div>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
 }
+
+const headerStyle = {
+  padding: '16px',
+  textAlign: 'left',
+  fontSize: 13,
+  fontWeight: 700,
+  color: '#78716C',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+};
+
+const cellStyle = {
+  padding: '16px',
+  fontSize: 14,
+};
+
 
 
 

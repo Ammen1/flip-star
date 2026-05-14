@@ -190,27 +190,27 @@ export function GiftManagementPage({ theme }) {
   }
 
   return (
-    <div style={{ padding: '24px 32px', background: theme.bg, minHeight: '100vh' }}>
+    <div>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '24px',
+        marginBottom: '32px',
       }}>
         <div>
           <h1 style={{
-            fontSize: '28px',
+            fontSize: '32px',
             fontWeight: '700',
-            color: theme.txt,
+            color: theme.text,
             marginBottom: '8px',
             display: 'flex',
             alignItems: 'center',
             gap: '12px',
           }}>
-            <GiftIcon size={28} />
+            <GiftIcon size={32} />
             Gift Management
           </h1>
-          <p style={{ color: theme.sub, fontSize: '13px' }}>
+          <p style={{ color: theme.sub, fontSize: '14px' }}>
             Configure virtual gifts with coin values and gamification settings
           </p>
         </div>
@@ -238,58 +238,39 @@ export function GiftManagementPage({ theme }) {
       {/* Gift Grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: '16px',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        gap: '20px',
       }}>
         {gifts.map((gift) => (
           <div key={gift.id} style={{
-            background: theme.card,
+            background: '#ffffff',
             borderRadius: '12px',
-            padding: '16px',
-            border: `1px solid ${theme.border}`,
+            padding: '20px',
+            border: '1px solid #E7E5E4',
             position: 'relative',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-            transition: 'all 0.2s ease',
-            cursor: 'pointer',
-          }} onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-          }} onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
           }}>
             <div style={{
               position: 'absolute',
               top: '12px',
               right: '12px',
               display: 'flex',
-              gap: '6px',
-              zIndex: 2,
+              gap: '8px',
             }}>
               <button
-                onClick={(e) => { e.stopPropagation(); handleEdit(gift); }}
+                onClick={() => handleEdit(gift)}
                 style={{
                   background: theme.bg,
                   border: `1px solid ${theme.border}`,
                   borderRadius: '6px',
                   padding: '6px',
                   cursor: 'pointer',
-                  color: theme.txt,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = theme.border;
-                  e.currentTarget.style.borderColor = theme.pri;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = theme.bg;
-                  e.currentTarget.style.borderColor = theme.border;
+                  color: theme.text,
                 }}
               >
-                <Edit2 size={14} />
+                <Edit2 size={16} />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDelete(gift.id); }}
+                onClick={() => handleDelete(gift.id)}
                 style={{
                   background: theme.bg,
                   border: `1px solid ${theme.border}`,
@@ -297,32 +278,22 @@ export function GiftManagementPage({ theme }) {
                   padding: '6px',
                   cursor: 'pointer',
                   color: theme.red,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = theme.red + '10';
-                  e.currentTarget.style.borderColor = theme.red;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = theme.bg;
-                  e.currentTarget.style.borderColor = theme.border;
                 }}
               >
-                <Trash2 size={14} />
+                <Trash2 size={16} />
               </button>
             </div>
 
             <div style={{
-              width: '70px',
-              height: '70px',
+              width: '80px',
+              height: '80px',
               borderRadius: '12px',
               overflow: 'hidden',
-              marginBottom: '12px',
+              marginBottom: '16px',
               background: theme.bg,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              border: `1px solid ${theme.border}`,
             }}>
               {gift.image_url ? (
                 <img
@@ -331,7 +302,7 @@ export function GiftManagementPage({ theme }) {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <GiftIcon size={28} color={theme.sub} />
+                <GiftIcon size={32} color={theme.sub} />
               )}
             </div>
 
@@ -341,13 +312,12 @@ export function GiftManagementPage({ theme }) {
               gap: '8px',
               marginBottom: '8px',
             }}>
-              <span style={{ fontSize: '20px' }}>{getCategoryIcon(gift.category)}</span>
+              <span style={{ fontSize: '24px' }}>{getCategoryIcon(gift.category)}</span>
               <h3 style={{
-                fontSize: '15px',
-                fontWeight: '700',
-                color: theme.txt,
+                fontSize: '18px',
+                fontWeight: '600',
+                color: theme.text,
                 margin: 0,
-                lineHeight: 1.2,
               }}>
                 {gift.name}
               </h3>
@@ -358,82 +328,65 @@ export function GiftManagementPage({ theme }) {
               alignItems: 'center',
               gap: '6px',
               marginBottom: '8px',
-              padding: '8px',
-              background: theme.bg,
-              borderRadius: '6px',
-              border: `1px solid ${theme.border}`,
             }}>
-              <Coins size={14} color={theme.pri} />
+              <Coins size={16} color={theme.pri} />
               <span style={{
-                fontSize: '15px',
-                fontWeight: '700',
+                fontSize: '16px',
+                fontWeight: '600',
                 color: theme.pri,
               }}>
                 {gift.coin_value}
               </span>
-              <span style={{ fontSize: '11px', color: theme.sub, fontWeight: '500' }}>coins</span>
+              <span style={{ fontSize: '12px', color: theme.sub }}>coins</span>
             </div>
 
             <div style={{
               display: 'flex',
-              gap: '6px',
+              gap: '8px',
               flexWrap: 'wrap',
-              marginBottom: '8px',
+              marginBottom: '12px',
             }}>
               <span style={{
-                fontSize: '10px',
+                fontSize: '12px',
                 padding: '4px 8px',
-                borderRadius: '12px',
-                background: getRarityColor(gift.rarity) + '15',
+                borderRadius: '4px',
+                background: theme.bg,
                 color: getRarityColor(gift.rarity),
-                fontWeight: '600',
-                textTransform: 'capitalize',
-                border: `1px solid ${getRarityColor(gift.rarity)}30`,
+                fontWeight: '500',
               }}>
                 {gift.rarity}
               </span>
               <span style={{
-                fontSize: '10px',
+                fontSize: '12px',
                 padding: '4px 8px',
-                borderRadius: '12px',
+                borderRadius: '4px',
                 background: theme.bg,
                 color: theme.sub,
-                fontWeight: '600',
-                textTransform: 'capitalize',
-                border: `1px solid ${theme.border}`,
               }}>
                 {gift.category}
               </span>
             </div>
 
-            {gift.description && (
-              <div style={{
-                fontSize: '11px',
-                color: theme.sub,
-                marginBottom: '8px',
-                lineHeight: 1.4,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }}>
-                {gift.description}
-              </div>
-            )}
+            <div style={{
+              fontSize: '12px',
+              color: theme.sub,
+              marginBottom: '8px',
+            }}>
+              {gift.description || 'No description'}
+            </div>
 
             <div style={{
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
-              fontSize: '11px',
+              fontSize: '12px',
               color: theme.sub,
-              fontWeight: '500',
             }}>
-              <Sparkles size={12} color={theme.purple} />
+              <Sparkles size={12} />
               <span>+{gift.xp_reward} XP</span>
               {gift.animation_type && (
                 <>
-                  <Zap size={12} color={theme.yellow} style={{ marginLeft: '8px' }} />
+                  <Zap size={12} style={{ marginLeft: '8px' }} />
                   <span>{gift.animation_type}</span>
                 </>
               )}
@@ -446,20 +399,16 @@ export function GiftManagementPage({ theme }) {
                 left: '0',
                 right: '0',
                 bottom: '0',
-                background: 'rgba(0,0,0,0.6)',
+                background: 'rgba(0,0,0,0.5)',
                 borderRadius: '12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backdropFilter: 'blur(4px)',
               }}>
                 <span style={{
                   color: '#fff',
                   fontSize: '14px',
-                  fontWeight: '700',
-                  padding: '8px 16px',
-                  background: 'rgba(0,0,0,0.8)',
-                  borderRadius: '6px',
+                  fontWeight: '600',
                 }}>
                   Inactive
                 </span>
@@ -473,40 +422,33 @@ export function GiftManagementPage({ theme }) {
       {showModal && (
         <div style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
+          inset: 0,
+          background: 'rgba(0,0,0,0.5)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 10000,
           padding: 20,
         }} onClick={() => closeModal()}>
           <div style={{
-            background: theme.card,
+            background: '#ffffff',
             borderRadius: 16,
-            padding: 32,
+            padding: 24,
             width: '100%',
-            maxWidth: 600,
+            maxWidth: 500,
             maxHeight: '90vh',
             overflowY: 'auto',
-            border: `1px solid ${theme.border}`,
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           }} onClick={(e) => e.stopPropagation()}>
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: 24,
-              paddingBottom: 16,
-              borderBottom: `1px solid ${theme.border}`,
+              marginBottom: '24px',
             }}>
               <h2 style={{
-                fontSize: 24,
-                fontWeight: 700,
-                color: theme.txt,
+                fontSize: '24px',
+                fontWeight: '700',
+                color: theme.text,
                 margin: 0,
               }}>
                 {editingGift ? 'Edit Gift' : 'Add New Gift'}
@@ -514,21 +456,10 @@ export function GiftManagementPage({ theme }) {
               <button
                 onClick={closeModal}
                 style={{
-                  background: 'transparent',
+                  background: 'none',
                   border: 'none',
                   cursor: 'pointer',
                   color: theme.sub,
-                  padding: 8,
-                  borderRadius: 8,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = theme.bg;
-                  e.currentTarget.style.color = theme.txt;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = theme.sub;
                 }}
               >
                 <X size={24} />
@@ -536,13 +467,13 @@ export function GiftManagementPage({ theme }) {
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: '20px' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: theme.txt,
-                  marginBottom: 8,
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: theme.text,
+                  marginBottom: '8px',
                 }}>
                   Gift Name *
                 </label>
@@ -554,27 +485,23 @@ export function GiftManagementPage({ theme }) {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    borderRadius: 8,
+                    borderRadius: '8px',
                     border: `1px solid ${theme.border}`,
                     background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 14,
-                    outline: 'none',
-                    transition: 'border-color 0.2s',
+                    color: theme.text,
+                    fontSize: '14px',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   placeholder="e.g., Rose, Diamond Heart"
                 />
               </div>
 
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: '20px' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: theme.txt,
-                  marginBottom: 8,
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: theme.text,
+                  marginBottom: '8px',
                 }}>
                   Description
                 </label>
@@ -585,30 +512,25 @@ export function GiftManagementPage({ theme }) {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    borderRadius: 8,
+                    borderRadius: '8px',
                     border: `1px solid ${theme.border}`,
                     background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 14,
-                    outline: 'none',
+                    color: theme.text,
+                    fontSize: '14px',
                     resize: 'vertical',
-                    transition: 'border-color 0.2s',
-                    fontFamily: 'inherit',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   placeholder="Gift description"
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: theme.txt,
-                    marginBottom: 8,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: theme.text,
+                    marginBottom: '8px',
                   }}>
                     Coin Value *
                   </label>
@@ -621,26 +543,22 @@ export function GiftManagementPage({ theme }) {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      borderRadius: 8,
+                      borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
                       background: theme.bg,
-                      color: theme.txt,
-                      fontSize: 14,
-                      outline: 'none',
-                      transition: 'border-color 0.2s',
+                      color: theme.text,
+                      fontSize: '14px',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                    onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   />
                 </div>
 
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: theme.txt,
-                    marginBottom: 8,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: theme.text,
+                    marginBottom: '8px',
                   }}>
                     XP Reward
                   </label>
@@ -652,28 +570,24 @@ export function GiftManagementPage({ theme }) {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      borderRadius: 8,
+                      borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
                       background: theme.bg,
-                      color: theme.txt,
-                      fontSize: 14,
-                      outline: 'none',
-                      transition: 'border-color 0.2s',
+                      color: theme.text,
+                      fontSize: '14px',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                    onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: theme.txt,
-                    marginBottom: 8,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: theme.text,
+                    marginBottom: '8px',
                   }}>
                     Rarity
                   </label>
@@ -683,17 +597,12 @@ export function GiftManagementPage({ theme }) {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      borderRadius: 8,
+                      borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
                       background: theme.bg,
-                      color: theme.txt,
-                      fontSize: 14,
-                      outline: 'none',
-                      cursor: 'pointer',
-                      transition: 'border-color 0.2s',
+                      color: theme.text,
+                      fontSize: '14px',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                    onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   >
                     <option value="common">Common</option>
                     <option value="rare">Rare</option>
@@ -705,10 +614,10 @@ export function GiftManagementPage({ theme }) {
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: theme.txt,
-                    marginBottom: 8,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: theme.text,
+                    marginBottom: '8px',
                   }}>
                     Category
                   </label>
@@ -718,17 +627,12 @@ export function GiftManagementPage({ theme }) {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      borderRadius: 8,
+                      borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
                       background: theme.bg,
-                      color: theme.txt,
-                      fontSize: 14,
-                      outline: 'none',
-                      cursor: 'pointer',
-                      transition: 'border-color 0.2s',
+                      color: theme.text,
+                      fontSize: '14px',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                    onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   >
                     <option value="special">Special</option>
                     <option value="flowers">Flowers</option>
@@ -740,14 +644,14 @@ export function GiftManagementPage({ theme }) {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: theme.txt,
-                    marginBottom: 8,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: theme.text,
+                    marginBottom: '8px',
                   }}>
                     Sort Order
                   </label>
@@ -758,26 +662,22 @@ export function GiftManagementPage({ theme }) {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      borderRadius: 8,
+                      borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
                       background: theme.bg,
-                      color: theme.txt,
-                      fontSize: 14,
-                      outline: 'none',
-                      transition: 'border-color 0.2s',
+                      color: theme.text,
+                      fontSize: '14px',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                    onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   />
                 </div>
 
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: theme.txt,
-                    marginBottom: 8,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: theme.text,
+                    marginBottom: '8px',
                   }}>
                     Animation Duration (s)
                   </label>
@@ -789,27 +689,23 @@ export function GiftManagementPage({ theme }) {
                     style={{
                       width: '100%',
                       padding: '12px',
-                      borderRadius: 8,
+                      borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
                       background: theme.bg,
-                      color: theme.txt,
-                      fontSize: 14,
-                      outline: 'none',
-                      transition: 'border-color 0.2s',
+                      color: theme.text,
+                      fontSize: '14px',
                     }}
-                    onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                    onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   />
                 </div>
               </div>
 
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: '20px' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: theme.txt,
-                  marginBottom: 8,
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: theme.text,
+                  marginBottom: '8px',
                 }}>
                   Animation Type
                 </label>
@@ -820,42 +716,34 @@ export function GiftManagementPage({ theme }) {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    borderRadius: 8,
+                    borderRadius: '8px',
                     border: `1px solid ${theme.border}`,
                     background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 14,
-                    outline: 'none',
-                    transition: 'border-color 0.2s',
+                    color: theme.text,
+                    fontSize: '14px',
                   }}
-                  onFocus={(e) => { e.target.style.borderColor = theme.pri; }}
-                  onBlur={(e) => { e.target.style.borderColor = theme.border; }}
                   placeholder="e.g., particle, bounce, pulse"
                 />
               </div>
 
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: '20px' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: theme.txt,
-                  marginBottom: 8,
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: theme.text,
+                  marginBottom: '8px',
                 }}>
                   Gift Image *
                 </label>
                 <div style={{
                   border: `2px dashed ${theme.border}`,
-                  borderRadius: 12,
-                  padding: 32,
+                  borderRadius: '8px',
+                  padding: '24px',
                   textAlign: 'center',
                   cursor: 'pointer',
                   position: 'relative',
-                  transition: 'all 0.2s',
-                  background: theme.bg,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = theme.pri; e.currentTarget.style.background = theme.pri + '05'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.background = theme.bg; }}>
+                }}>
                   <input
                     type="file"
                     accept="image/*"
@@ -874,44 +762,37 @@ export function GiftManagementPage({ theme }) {
                     <img
                       src={previewImage}
                       alt="Preview"
-                      style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: 8 }}
+                      style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px' }}
                     />
                   ) : (
                     <div>
-                      <Upload size={40} color={theme.sub} style={{ marginBottom: 12 }} />
-                      <div style={{ color: theme.txt, fontSize: 14, fontWeight: 500 }}>
+                      <Upload size={32} color={theme.sub} style={{ marginBottom: '8px' }} />
+                      <div style={{ color: theme.sub, fontSize: '14px' }}>
                         Click to upload gift image
-                      </div>
-                      <div style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
-                        PNG, JPG up to 5MB
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: '20px' }}>
                 <label style={{
                   display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: theme.txt,
-                  marginBottom: 8,
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: theme.text,
+                  marginBottom: '8px',
                 }}>
                   Animated Image (Optional)
                 </label>
                 <div style={{
                   border: `2px dashed ${theme.border}`,
-                  borderRadius: 12,
-                  padding: 32,
+                  borderRadius: '8px',
+                  padding: '24px',
                   textAlign: 'center',
                   cursor: 'pointer',
                   position: 'relative',
-                  transition: 'all 0.2s',
-                  background: theme.bg,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = theme.pri; e.currentTarget.style.background = theme.pri + '05'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.border; e.currentTarget.style.background = theme.bg; }}>
+                }}>
                   <input
                     type="file"
                     accept="image/*"
@@ -930,47 +811,37 @@ export function GiftManagementPage({ theme }) {
                     <img
                       src={previewAnimatedImage}
                       alt="Animated Preview"
-                      style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: 8 }}
+                      style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px' }}
                     />
                   ) : (
                     <div>
-                      <Upload size={40} color={theme.sub} style={{ marginBottom: 12 }} />
-                      <div style={{ color: theme.txt, fontSize: 14, fontWeight: 500 }}>
+                      <Upload size={32} color={theme.sub} style={{ marginBottom: '8px' }} />
+                      <div style={{ color: theme.sub, fontSize: '14px' }}>
                         Click to upload animated version
-                      </div>
-                      <div style={{ color: theme.sub, fontSize: 12, marginTop: 4 }}>
-                        GIF, PNG up to 5MB
                       </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: '24px' }}>
                 <label style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 12,
+                  gap: '8px',
                   cursor: 'pointer',
-                  padding: '12px',
-                  background: theme.bg,
-                  borderRadius: 8,
-                  border: `1px solid ${theme.border}`,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = theme.pri; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = theme.border; }}>
+                }}>
                   <input
                     type="checkbox"
                     checked={formData.is_active}
                     onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                     style={{
-                      width: 20,
-                      height: 20,
+                      width: '18px',
+                      height: '18px',
                       cursor: 'pointer',
                     }}
                   />
-                  <span style={{ fontSize: 14, color: theme.txt, fontWeight: 500 }}>
+                  <span style={{ fontSize: '14px', color: theme.text }}>
                     Active (available for users)
                   </span>
                 </label>
@@ -978,27 +849,22 @@ export function GiftManagementPage({ theme }) {
 
               <div style={{
                 display: 'flex',
-                gap: 12,
+                gap: '12px',
                 justifyContent: 'flex-end',
-                paddingTop: 16,
-                borderTop: `1px solid ${theme.border}`,
               }}>
                 <button
                   type="button"
                   onClick={closeModal}
                   style={{
-                    background: 'transparent',
-                    color: theme.txt,
+                    background: theme.bg,
+                    color: theme.text,
                     border: `1px solid ${theme.border}`,
                     padding: '12px 24px',
-                    borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: 600,
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = theme.bg; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   Cancel
                 </button>
@@ -1009,15 +875,11 @@ export function GiftManagementPage({ theme }) {
                     color: '#fff',
                     border: 'none',
                     padding: '12px 24px',
-                    borderRadius: 8,
-                    fontSize: 14,
-                    fontWeight: 600,
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    boxShadow: `0 4px 6px -1px ${theme.pri}40`,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 8px -1px ${theme.pri}50`; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 4px 6px -1px ${theme.pri}40`; }}
                 >
                   {editingGift ? 'Update Gift' : 'Create Gift'}
                 </button>

@@ -59,7 +59,7 @@ const FAQ_ITEMS = [
   },
   { 
     q: "What are coins and how do I earn them?", 
-    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), or Purchase via telebirr/Airtime." 
+    a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), Monthly bonus (200 coins for 30-day active streak), or Purchase via telebirr/Airtime." 
   },
   { 
     q: "What can I do with coins?", 
@@ -383,8 +383,8 @@ export default function SettingsScreen({ navigation }) {
       Alert.alert('Error', 'Passwords do not match');
       return;
     }
-    if (password.new.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+    if (!/^\d{6}$/.test(password.new)) {
+      Alert.alert('Error', 'PIN must be exactly 6 digits');
       return;
     }
     
@@ -409,27 +409,7 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  const handleDeleteAccount = () => {
-    Alert.alert('Delete Account', 'This action is permanent and cannot be undone. All your data will be deleted.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {
-        Alert.alert('Final Confirmation', 'Are you absolutely sure you want to delete your account? This cannot be undone.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: async () => {
-            try {
-              await api.request('/auth/delete-account/', { method: 'POST' });
-              Alert.alert('Account Deleted', 'Your account is being deleted', [
-                { text: 'OK', onPress: logout }
-              ]);
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete account');
-            }
-          }},
-        ]);
-      }},
-    ]);
-  };
-
+  
   
   const handleUnblockUser = async (userId, username) => {
     try {
@@ -548,12 +528,6 @@ export default function SettingsScreen({ navigation }) {
           )}
         </SectionCard>
 
-        {/* Danger Zone */}
-        <SectionLabel colors={colors}>{t('dangerZone')}</SectionLabel>
-        <SectionCard colors={colors}>
-          <SettingRow icon="trash-outline" label={t('deleteAccount')} danger onPress={handleDeleteAccount} colors={colors} />
-        </SectionCard>
-
         {/* Logout */}
         <TouchableOpacity style={[styles.logoutButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={logout}>
           <Ionicons name="log-out-outline" size={20} color={colors.error} />
@@ -612,7 +586,9 @@ export default function SettingsScreen({ navigation }) {
                 placeholder="Enter current 6-digit password"
                 placeholderTextColor={colors.textSecondary}
                 value={password.current}
-                onChangeText={text => setPassword(prev => ({ ...prev, current: text }))}
+                onChangeText={text => setPassword(prev => ({ ...prev, current: text.replace(/\D/g, '').slice(0, 6) }))}
+                keyboardType="number-pad"
+                maxLength={6}
               />
               <TouchableOpacity 
                 onPress={() => setShowPasswords(prev => ({ ...prev, current: !prev.current }))}
@@ -635,7 +611,9 @@ export default function SettingsScreen({ navigation }) {
                 placeholder="Enter new 6-digit password"
                 placeholderTextColor={colors.textSecondary}
                 value={password.new}
-                onChangeText={text => setPassword(prev => ({ ...prev, new: text }))}
+                onChangeText={text => setPassword(prev => ({ ...prev, new: text.replace(/\D/g, '').slice(0, 6) }))}
+                keyboardType="number-pad"
+                maxLength={6}
               />
               <TouchableOpacity 
                 onPress={() => setShowPasswords(prev => ({ ...prev, new: !prev.new }))}
@@ -658,7 +636,9 @@ export default function SettingsScreen({ navigation }) {
                 placeholder="Confirm new 6-digit password"
                 placeholderTextColor={colors.textSecondary}
                 value={password.confirm}
-                onChangeText={text => setPassword(prev => ({ ...prev, confirm: text }))}
+                onChangeText={text => setPassword(prev => ({ ...prev, confirm: text.replace(/\D/g, '').slice(0, 6) }))}
+                keyboardType="number-pad"
+                maxLength={6}
               />
               <TouchableOpacity 
                 onPress={() => setShowPasswords(prev => ({ ...prev, confirm: !prev.confirm }))}
