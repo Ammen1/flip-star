@@ -592,7 +592,7 @@ export function AdminManagementPage({ theme, adminUser }) {
                         </div>
                       </td>
                       <td style={cellStyle}>
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {user.roles && user.roles.length > 0 ? (
                             user.roles.map((role) => (
                               <span key={role.id} style={{
