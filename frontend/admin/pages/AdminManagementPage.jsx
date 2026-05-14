@@ -841,9 +841,9 @@ export function AdminManagementPage({ theme }) {
           <div style={{
             background: theme.card,
             borderRadius: 16,
-            padding: 32,
+            padding: 24,
             width: '100%',
-            maxWidth: 900,
+            maxWidth: 700,
             maxHeight: '90vh',
             overflow: 'auto',
             border: `1px solid ${theme.border}`,
@@ -851,17 +851,17 @@ export function AdminManagementPage({ theme }) {
             position: 'relative',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${theme.border}` }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, color: theme.txt, margin: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>
                 {roleModal.mode === 'create' ? 'Create New Role' : 'Edit Role'}
               </h3>
               <button
                 onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
                 style={{
-                  padding: '8px',
+                  padding: '6px',
                   background: 'transparent',
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 6,
                   color: theme.sub,
                   cursor: 'pointer',
                   display: 'flex',
@@ -874,10 +874,10 @@ export function AdminManagementPage({ theme }) {
                 ✕
               </button>
             </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                   Role ID
                 </label>
                 <input
@@ -888,10 +888,10 @@ export function AdminManagementPage({ theme }) {
                   placeholder="e.g., content_manager"
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 12px',
                     border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
-                    fontSize: 14,
+                    borderRadius: 6,
+                    fontSize: 13,
                     outline: 'none',
                     background: theme.bg,
                     color: theme.txt,
@@ -903,7 +903,7 @@ export function AdminManagementPage({ theme }) {
               </div>
 
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                   Role Name
                 </label>
                 <input
@@ -913,10 +913,10 @@ export function AdminManagementPage({ theme }) {
                   placeholder="e.g., Content Manager"
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 12px',
                     border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
-                    fontSize: 14,
+                    borderRadius: 6,
+                    fontSize: 13,
                     outline: 'none',
                     background: theme.bg,
                     color: theme.txt,
@@ -928,21 +928,21 @@ export function AdminManagementPage({ theme }) {
               </div>
             </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                 Description
               </label>
               <textarea
                 value={roleForm.description}
                 onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
                 placeholder="Role description..."
-                rows={3}
+                rows={2}
                 style={{
                   width: '100%',
-                  padding: '12px 16px',
+                  padding: '10px 12px',
                   border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
-                  fontSize: 14,
+                  borderRadius: 6,
+                  fontSize: 13,
                   outline: 'none',
                   background: theme.bg,
                   color: theme.txt,
@@ -955,9 +955,9 @@ export function AdminManagementPage({ theme }) {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                   Role Type
                 </label>
                 <select
@@ -965,10 +965,10 @@ export function AdminManagementPage({ theme }) {
                   onChange={(e) => setRoleForm({ ...roleForm, type: e.target.value })}
                   style={{
                     width: '100%',
-                    padding: '12px 16px',
+                    padding: '10px 12px',
                     border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
-                    fontSize: 14,
+                    borderRadius: 6,
+                    fontSize: 13,
                     outline: 'none',
                     background: theme.bg,
                     color: theme.txt,
@@ -981,16 +981,16 @@ export function AdminManagementPage({ theme }) {
               </div>
 
               <div>
-                <label style={{ fontSize: 13, fontWeight: 600, color: theme.sub, marginBottom: 8, display: 'block' }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
                   Surfaces
                 </label>
-                <div style={{ display: 'flex', gap: 16, padding: '12px 16px', border: `1px solid ${theme.border}`, borderRadius: 8, background: theme.bg }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', gap: 12, padding: '10px 12px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.txt, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={roleForm.surfaces.includes('mobile')}
                       onChange={(e) => {
-                        const surfaces = e.target.checked 
+                        const surfaces = e.target.checked
                           ? [...roleForm.surfaces, 'mobile']
                           : roleForm.surfaces.filter(s => s !== 'mobile');
                         setRoleForm({ ...roleForm, surfaces });
@@ -999,12 +999,12 @@ export function AdminManagementPage({ theme }) {
                     />
                     Mobile
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: theme.txt, cursor: 'pointer' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: theme.txt, cursor: 'pointer' }}>
                     <input
                       type="checkbox"
                       checked={roleForm.surfaces.includes('web')}
                       onChange={(e) => {
-                        const surfaces = e.target.checked 
+                        const surfaces = e.target.checked
                           ? [...roleForm.surfaces, 'web']
                           : roleForm.surfaces.filter(s => s !== 'web');
                         setRoleForm({ ...roleForm, surfaces });
@@ -1017,36 +1017,32 @@ export function AdminManagementPage({ theme }) {
               </div>
             </div>
 
-            <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, padding: '16px', background: theme.bg, borderRadius: 8, border: `1px solid ${theme.border}` }}>
+            <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
                 type="checkbox"
                 checked={roleForm.is_active}
                 onChange={(e) => setRoleForm({ ...roleForm, is_active: e.target.checked })}
                 id="role-active"
-                style={{ cursor: 'pointer', width: 18, height: 18 }}
+                style={{ cursor: 'pointer', width: 16, height: 16 }}
               />
-              <label htmlFor="role-active" style={{ fontSize: 14, color: theme.txt, cursor: 'pointer' }}>
+              <label htmlFor="role-active" style={{ fontSize: 13, color: theme.txt, cursor: 'pointer' }}>
                 Active Role
               </label>
             </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
-                <label style={{ fontSize: 15, fontWeight: 700, color: theme.txt, margin: 0 }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <label style={{ fontSize: 14, fontWeight: 700, color: theme.txt, margin: 0 }}>
                   Assign Permissions
                 </label>
-                <div style={{ fontSize: 13, color: theme.sub }}>
+                <div style={{ fontSize: 12, color: theme.sub }}>
                   {roleForm.selectedPermissions.length} of {permissions.length} selected
                 </div>
               </div>
-              
+
               <div style={{
-                maxHeight: 400,
-                overflow: 'auto',
-                border: `1px solid ${theme.border}`,
-                borderRadius: 12,
-                padding: 20,
-                background: theme.bg,
+                maxHeight: 250,
+                overflowY: 'auto',
               }}>
                 {Object.entries(
                   permissions.reduce((acc, perm) => {
@@ -1055,38 +1051,33 @@ export function AdminManagementPage({ theme }) {
                     return acc;
                   }, {})
                 ).map(([domain, perms]) => (
-                  <div key={domain} style={{ marginBottom: 24 }}>
-                    <div style={{ 
-                      fontSize: 12, 
-                      fontWeight: 700, 
-                      color: theme.pri, 
-                      marginBottom: 12, 
-                      textTransform: 'uppercase', 
-                      letterSpacing: '1px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
+                  <div key={domain} style={{ marginBottom: 16 }}>
+                    <div style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: theme.pri,
+                      marginBottom: 8,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
                     }}>
-                      <div style={{ width: 4, height: 4, background: theme.pri, borderRadius: '50%' }} />
                       {domain}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {perms.map((perm) => (
-                        <label key={perm.id} style={{ 
-                          display: 'flex', 
-                          alignItems: 'flex-start', 
-                          gap: 10, 
-                          fontSize: 13, 
+                        <label key={perm.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          fontSize: 12,
                           color: theme.txt,
-                          padding: '10px 12px',
-                          borderRadius: 8,
-                          background: theme.card,
-                          border: `1px solid ${theme.border}`,
+                          padding: '6px 8px',
+                          borderRadius: 4,
                           cursor: 'pointer',
                           transition: 'all 0.2s',
+                          background: roleForm.selectedPermissions.includes(perm.id) ? theme.pri + '15' : 'transparent',
                         }}
-                        onMouseEnter={(e) => { e.target.style.borderColor = theme.pri; e.target.style.background = theme.pri + '10'; }}
-                        onMouseLeave={(e) => { e.target.style.borderColor = theme.border; e.target.style.background = theme.card; }}
+                        onMouseEnter={(e) => { e.target.style.background = roleForm.selectedPermissions.includes(perm.id) ? theme.pri + '20' : theme.bg; }}
+                        onMouseLeave={(e) => { e.target.style.background = roleForm.selectedPermissions.includes(perm.id) ? theme.pri + '15' : 'transparent'; }}
                         >
                           <input
                             type="checkbox"
@@ -1097,12 +1088,9 @@ export function AdminManagementPage({ theme }) {
                                 : roleForm.selectedPermissions.filter(id => id !== perm.id);
                               setRoleForm({ ...roleForm, selectedPermissions });
                             }}
-                            style={{ marginTop: 2, cursor: 'pointer' }}
+                            style={{ cursor: 'pointer' }}
                           />
-                          <div>
-                            <div style={{ fontWeight: 600, marginBottom: 2 }}>{perm.name}</div>
-                            <div style={{ fontSize: 11, color: theme.sub, lineHeight: 1.4 }}>{perm.description}</div>
-                          </div>
+                          <div style={{ fontWeight: 500 }}>{perm.name}</div>
                         </label>
                       ))}
                     </div>
@@ -1115,12 +1103,12 @@ export function AdminManagementPage({ theme }) {
               <button
                 onClick={() => setRoleModal({ isOpen: false, mode: 'create', role: null })}
                 style={{
-                  padding: '12px 24px',
+                  padding: '10px 20px',
                   background: 'transparent',
                   border: `1px solid ${theme.border}`,
-                  borderRadius: 8,
+                  borderRadius: 6,
                   color: theme.txt,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -1133,12 +1121,12 @@ export function AdminManagementPage({ theme }) {
               <button
                 onClick={handleSaveRole}
                 style={{
-                  padding: '12px 24px',
+                  padding: '10px 20px',
                   background: theme.pri,
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 6,
                   color: '#fff',
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
