@@ -631,29 +631,39 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
     if (!searchQuery.trim()) return;
     try {
       setSearching(true);
-      let endpoint;
+      let user;
+      
       if (searchType === 'id') {
-        endpoint = `/admin/users/${searchQuery}/`;
-      } else if (searchType === 'phone') {
-        endpoint = `/admin/users/?phone_number=${searchQuery}`;
-      } else if (searchType === 'username') {
-        endpoint = `/admin/users/?username=${searchQuery}`;
+        const data = await api.request(`/admin/users/${searchQuery}/`);
+        user = data;
+      } else {
+        // For phone and username, use the search parameter
+        const data = await api.request(`/admin/users/?search=${searchQuery}`);
+        user = data.users?.[0] || data;
       }
       
-      const data = await api.request(endpoint);
-      const user = Array.isArray(data) ? data[0] : data;
-      
-      if (user) {
+      if (user && user.id) {
         setUserData(user);
         setForm({ ...form, user_id: user.id });
         
-        // Load user's wallet data
-        const walletData = await api.request(`/wallet/?user_id=${user.id}`);
-        setUserData(prev => ({ ...prev, wallet: walletData }));
+        // Load user's wallet data using admin endpoint
+        try {
+          const walletData = await api.request(`/admin/wallet/user/${user.id}/`);
+          setUserData(prev => ({ ...prev, wallet: walletData }));
+        } catch (walletErr) {
+          console.error('Wallet data load failed:', walletErr);
+          // Set empty wallet if endpoint doesn't exist
+          setUserData(prev => ({ ...prev, wallet: { balance: { total: 0, earned: 0, purchased: 0 }, points: { current: 0 } } }));
+        }
         
-        // Load recent transactions
-        const txData = await api.request(`/wallet/transactions/?user_id=${user.id}&page_size=10`);
-        setTransactions(txData.results || []);
+        // Load recent transactions using admin endpoint
+        try {
+          const txData = await api.request(`/admin/wallet/transactions/?user_id=${user.id}&page_size=10`);
+          setTransactions(txData.results || []);
+        } catch (txErr) {
+          console.error('Transaction history load failed:', txErr);
+          setTransactions([]);
+        }
       } else {
         setResult && setResult({ type: 'error', message: 'User not found' });
       }

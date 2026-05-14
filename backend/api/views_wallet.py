@@ -682,6 +682,58 @@ def admin_withdrawal_action(request, withdrawal_id):
     })
 
 
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_user_wallet(request, user_id):
+    """Get user wallet data (admin only)."""
+    try:
+        user = User.objects.get(id=user_id)
+        balance = _get_or_create_balance(user)
+        
+        return Response({
+            'balance': {
+                'total': balance.total_coins,
+                'earned': balance.earned_balance,
+                'purchased': balance.purchased_balance,
+            },
+            'points': {
+                'current': balance.points,
+            }
+        })
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_user_transactions(request):
+    """Get user transaction history (admin only)."""
+    user_id = request.query_params.get('user_id')
+    if not user_id:
+        return Response({'error': 'user_id parameter required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user = User.objects.get(id=user_id)
+        page_size = int(request.query_params.get('page_size', 20))
+        
+        transactions = CoinTransaction.objects.filter(user=user).order_by('-created_at')[:page_size]
+        
+        data = [{
+            'id': tx.id,
+            'transaction_type': tx.transaction_type,
+            'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
+            'coins': tx.coins,
+            'points': tx.points,
+            'is_credit': tx.coins > 0 or tx.points > 0,
+            'created_at': tx.created_at,
+            'description': tx.description,
+        } for tx in transactions]
+        
+        return Response({'results': data})
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def admin_adjust_balance(request):
