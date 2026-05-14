@@ -708,6 +708,7 @@ class OnevasWebhookView(APIView):
         else:
             print(f"[SUBSCRIPTION DEBUG] No active subscription found, creating new subscription")
             # Generate OTP for login
+            from .services.otp_service import OTPService
             otp_code = OTPService.generate_otp()
             print(f"[SUBSCRIPTION DEBUG] Generated OTP for new subscription: {otp_code}")
             
