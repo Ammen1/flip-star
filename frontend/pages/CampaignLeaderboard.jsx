@@ -45,7 +45,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
       {/* Header */}
       <div style={{
         background: T.card, borderBottom: `1px solid ${T.border}`,
-        padding: '16px 24px', position: 'sticky', top: 0, zIndex: 100,
+        padding: '16px 24px',
       }}>
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
           <button
