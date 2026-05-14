@@ -79,8 +79,8 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
 class UserRoleSerializer(serializers.ModelSerializer):
     """Serializer for User with Role information"""
-    username = serializers.CharField(source='username', read_only=True)
-    email = serializers.CharField(source='email', read_only=True)
+    username = serializers.CharField(read_only=True)
+    email = serializers.CharField(read_only=True)
     roles = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(read_only=True)
     is_superuser = serializers.BooleanField(read_only=True)
