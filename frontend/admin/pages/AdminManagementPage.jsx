@@ -905,164 +905,154 @@ export function AdminManagementPage({ theme, adminUser }) {
                 User Actions: {advancedSelectedUser.username}
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-                {/* Change Email */}
-                <div style={{
-                  background: theme.bg,
-                  borderRadius: 8,
-                  padding: 16,
-                  border: `1px solid ${theme.border}`,
-                }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
-                    Change Email
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                {/* Left Column - Account Actions */}
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                    Account Actions
                   </div>
-                  <input
-                    type="email"
-                    value={advancedForm.email}
-                    onChange={(e) => setAdvancedForm({ ...advancedForm, email: e.target.value })}
-                    placeholder="New email address"
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      border: `1px solid ${theme.border}`,
-                      borderRadius: 6,
-                      fontSize: 13,
-                      outline: 'none',
-                      background: theme.card,
-                      color: theme.txt,
-                      marginBottom: 12,
-                    }}
-                  />
-                  <button
-                    onClick={() => handleChangeEmail()}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      background: theme.pri,
-                      border: 'none',
-                      borderRadius: 6,
-                      color: '#fff',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
-                    onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
-                  >
-                    Update Email
-                  </button>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                      Change Email
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="email"
+                        value={advancedForm.email}
+                        onChange={(e) => setAdvancedForm({ ...advancedForm, email: e.target.value })}
+                        placeholder="New email address"
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          border: `1px solid ${theme.border}`,
+                          borderRadius: 6,
+                          fontSize: 13,
+                          outline: 'none',
+                          background: theme.bg,
+                          color: theme.txt,
+                        }}
+                      />
+                      <button
+                        onClick={() => handleChangeEmail()}
+                        style={{
+                          padding: '10px 16px',
+                          background: theme.pri,
+                          border: 'none',
+                          borderRadius: 6,
+                          color: '#fff',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
+                        onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
+                      >
+                        Update
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                      Change Password
+                    </label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="password"
+                        value={advancedForm.newPassword}
+                        onChange={(e) => setAdvancedForm({ ...advancedForm, newPassword: e.target.value })}
+                        placeholder="New password"
+                        style={{
+                          flex: 1,
+                          padding: '10px 12px',
+                          border: `1px solid ${theme.border}`,
+                          borderRadius: 6,
+                          fontSize: 13,
+                          outline: 'none',
+                          background: theme.bg,
+                          color: theme.txt,
+                        }}
+                      />
+                      <button
+                        onClick={() => handleChangePassword()}
+                        style={{
+                          padding: '10px 16px',
+                          background: theme.pri,
+                          border: 'none',
+                          borderRadius: 6,
+                          color: '#fff',
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
+                        onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
+                      >
+                        Update
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: theme.sub, marginBottom: 6, display: 'block' }}>
+                      {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
+                    </label>
+                    <textarea
+                      value={advancedForm.reason}
+                      onChange={(e) => setAdvancedForm({ ...advancedForm, reason: e.target.value })}
+                      placeholder="Reason for action..."
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        border: `1px solid ${theme.border}`,
+                        borderRadius: 6,
+                        fontSize: 13,
+                        outline: 'none',
+                        background: theme.bg,
+                        color: theme.txt,
+                        marginBottom: 12,
+                        resize: 'vertical',
+                        fontFamily: 'inherit',
+                      }}
+                    />
+                    <button
+                      onClick={() => handleToggleBan()}
+                      style={{
+                        padding: '10px 16px',
+                        background: advancedSelectedUser.is_active ? theme.red : theme.green,
+                        border: 'none',
+                        borderRadius: 6,
+                        color: '#fff',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red + '90' : theme.green + '90'; }}
+                      onMouseLeave={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red : theme.green; }}
+                    >
+                      {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Change Password */}
-                <div style={{
-                  background: theme.bg,
-                  borderRadius: 8,
-                  padding: 16,
-                  border: `1px solid ${theme.border}`,
-                }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
-                    Change Password
-                  </div>
-                  <input
-                    type="password"
-                    value={advancedForm.newPassword}
-                    onChange={(e) => setAdvancedForm({ ...advancedForm, newPassword: e.target.value })}
-                    placeholder="New password"
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      border: `1px solid ${theme.border}`,
-                      borderRadius: 6,
-                      fontSize: 13,
-                      outline: 'none',
-                      background: theme.card,
-                      color: theme.txt,
-                      marginBottom: 12,
-                    }}
-                  />
-                  <button
-                    onClick={() => handleChangePassword()}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      background: theme.pri,
-                      border: 'none',
-                      borderRadius: 6,
-                      color: '#fff',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
-                    onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
-                  >
-                    Update Password
-                  </button>
-                </div>
-
-                {/* Ban User */}
-                <div style={{
-                  background: theme.bg,
-                  borderRadius: 8,
-                  padding: 16,
-                  border: `1px solid ${theme.border}`,
-                }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
-                    {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
-                  </div>
-                  <textarea
-                    value={advancedForm.reason}
-                    onChange={(e) => setAdvancedForm({ ...advancedForm, reason: e.target.value })}
-                    placeholder="Reason for action..."
-                    rows={2}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      border: `1px solid ${theme.border}`,
-                      borderRadius: 6,
-                      fontSize: 13,
-                      outline: 'none',
-                      background: theme.card,
-                      color: theme.txt,
-                      marginBottom: 12,
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                  <button
-                    onClick={() => handleToggleBan()}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      background: advancedSelectedUser.is_active ? theme.red : theme.green,
-                      border: 'none',
-                      borderRadius: 6,
-                      color: '#fff',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red + '90' : theme.green + '90'; }}
-                    onMouseLeave={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red : theme.green; }}
-                  >
-                    {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
-                  </button>
-                </div>
-
-                {/* Manage Roles */}
-                <div style={{
-                  background: theme.bg,
-                  borderRadius: 8,
-                  padding: 16,
-                  border: `1px solid ${theme.border}`,
-                }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                {/* Right Column - Roles & Info */}
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
                     Manage Roles
                   </div>
-                  <div style={{ marginBottom: 12, maxHeight: 150, overflowY: 'auto' }}>
+                  <div style={{
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                    border: `1px solid ${theme.border}`,
+                    borderRadius: 6,
+                    padding: 12,
+                    marginBottom: 16,
+                  }}>
                     {roles.map((role) => (
                       <div key={role.id} style={{
                         display: 'flex',
@@ -1093,52 +1083,43 @@ export function AdminManagementPage({ theme, adminUser }) {
                       </div>
                     ))}
                   </div>
-                  <div style={{ fontSize: 11, color: theme.sub }}>
+                  <div style={{ fontSize: 11, color: theme.sub, marginBottom: 24 }}>
                     {advancedSelectedUser.roles?.length || 0} roles assigned
                   </div>
-                </div>
-              </div>
 
-              {/* User Info */}
-              <div style={{
-                marginTop: 24,
-                padding: 16,
-                background: theme.bg,
-                borderRadius: 8,
-                border: `1px solid ${theme.border}`,
-              }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
-                  User Information
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Username</div>
-                    <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.username}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                    User Information
                   </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Email</div>
-                    <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.email || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Phone</div>
-                    <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.phone_number || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Status</div>
-                    <div style={{ fontSize: 13, color: advancedSelectedUser.is_active ? theme.green : theme.red }}>
-                      {advancedSelectedUser.is_active ? 'Active' : 'Banned'}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Username</div>
+                      <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.username}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Staff</div>
-                    <div style={{ fontSize: 13, color: advancedSelectedUser.is_staff ? theme.pri : theme.sub }}>
-                      {advancedSelectedUser.is_staff ? 'Yes' : 'No'}
+                    <div>
+                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Email</div>
+                      <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.email || 'N/A'}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Superuser</div>
-                    <div style={{ fontSize: 13, color: advancedSelectedUser.is_superuser ? theme.red : theme.sub }}>
-                      {advancedSelectedUser.is_superuser ? 'Yes' : 'No'}
+                    <div>
+                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Phone</div>
+                      <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.phone_number || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Status</div>
+                      <div style={{ fontSize: 13, color: advancedSelectedUser.is_active ? theme.green : theme.red }}>
+                        {advancedSelectedUser.is_active ? 'Active' : 'Banned'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Staff</div>
+                      <div style={{ fontSize: 13, color: advancedSelectedUser.is_staff ? theme.pri : theme.sub }}>
+                        {advancedSelectedUser.is_staff ? 'Yes' : 'No'}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Superuser</div>
+                      <div style={{ fontSize: 13, color: advancedSelectedUser.is_superuser ? theme.red : theme.sub }}>
+                        {advancedSelectedUser.is_superuser ? 'Yes' : 'No'}
+                      </div>
                     </div>
                   </div>
                 </div>
