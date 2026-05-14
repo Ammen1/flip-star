@@ -561,7 +561,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           </div>
 
           {/* Gold Diagonal Line SVG Overlay */}
-          <svg 
+          {/* <svg 
             height="100%" 
             width="100" 
             style={{ 
@@ -573,7 +573,6 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
             }}
             preserveAspectRatio="none"
           >
-            {/* Gold diagonal line */}
             <line
               x1="30"
               y1="90"
@@ -583,7 +582,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
               strokeWidth="16"
               strokeLinecap="round"
             />
-          </svg>
+          </svg> */}
         </div>
 
         {/* Card */}

@@ -161,7 +161,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
           </div>
 
             {/* Gold Diagonal Line SVG Overlay */}
-            <svg 
+            {/* <svg 
               height="100%" 
               width="100" 
               style={{ 
@@ -173,7 +173,6 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
               }}
               preserveAspectRatio="none"
             >
-              {/* Gold diagonal line */}
               <line
                 x1="30"
                 y1="90"
@@ -183,7 +182,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
                 strokeWidth="16"
                 strokeLinecap="round"
               />
-            </svg>
+            </svg> */}
         </div>
 
         {/* Card */}

@@ -161,7 +161,7 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
           </div>
 
           {/* Gold Diagonal Line SVG Overlay */}
-          <svg 
+          {/* <svg 
             height="100%" 
             width="100" 
             style={{ 
@@ -173,7 +173,6 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
             }}
             preserveAspectRatio="none"
           >
-            {/* Gold diagonal line */}
             <line
               x1="30"
               y1="90"
@@ -183,7 +182,7 @@ export function RegisterScreen({ onSuccess, onLogin, onBack }) {
               strokeWidth="16"
               strokeLinecap="round"
             />
-          </svg>
+          </svg> */}
         </div>
         <div style={{ marginTop:14, padding:"0 4px" }}>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.5)", fontWeight:600, marginBottom:7 }}>STEP {step+1} OF {steps.length}</div>
