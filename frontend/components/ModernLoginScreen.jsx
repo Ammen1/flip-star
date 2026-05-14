@@ -537,10 +537,10 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           overflow: "hidden"
         }}>
           <div style={{ width: "50%", backgroundColor: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "flex-start", paddingLeft: 16 }}>
-            <img src="/assets/ethio-logo.png" alt="Ethio Logo" style={{ height: 45, width: 130, objectFit: "contain" }} />
+            <img src="/static/images/ethio-logo.png" alt="Ethio Logo" style={{ height: 45, width: 130, objectFit: "contain" }} />
           </div>
           <div style={{ width: "50%", background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 16 }}>
-            <img src="/assets/flipstar-logo.png" alt="FlipStar Logo" style={{ height: 70, width: 180, objectFit: "contain" }} />
+            <img src="/static/images/flipstar-logo.png" alt="FlipStar Logo" style={{ height: 70, width: 180, objectFit: "contain" }} />
           </div>
         </div>
 
