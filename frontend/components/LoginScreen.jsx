@@ -68,7 +68,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         {/* Co-Branded Logo Header */}
         <div style={{ 
           position: "relative", 
-          height: 90, 
+          height: 120, 
           marginTop: 20, 
           borderRadius: 12, 
           overflow: "hidden",
@@ -84,7 +84,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
             position: "relative",
             zIndex: 2
           }}>
-            <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 80, height: 50, objectFit: "contain" }} />
+            <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 120, height: 70, objectFit: "contain" }} />
           </div>
 
           {/* Right Dark Section - FlipStar Logo */}
@@ -95,7 +95,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
             alignItems: "center", 
             justifyContent: "center"
           }}>
-            <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 80, height: 50, objectFit: "contain" }} />
+            <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 120, height: 70, objectFit: "contain" }} />
           </div>
 
           {/* Gold Diagonal Line SVG Overlay */}
@@ -111,15 +111,10 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
             }}
             preserveAspectRatio="none"
           >
-            {/* White path covering left side of diagonal */}
-            <path
-              d="M 0,0 L 50,0 L 20,90 L 0,90 Z"
-              fill="#FFFFFF"
-            />
             {/* Gold diagonal line */}
             <line
               x1="20"
-              y1="90"
+              y1="120"
               x2="55"
               y2="0"
               stroke="#D4AF37"
