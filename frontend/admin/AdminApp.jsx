@@ -191,7 +191,7 @@ export function AdminApp() {
       case 'notifications':
         return <NotificationsPage theme={T} />;
       case 'admins':
-        return <AdminManagementPage theme={T} />;
+        return <AdminManagementPage theme={T} adminUser={adminUser} />;
       case 'master-campaigns':
         return <MasterCampaignManagementPage theme={T} />;
       case 'campaigns':

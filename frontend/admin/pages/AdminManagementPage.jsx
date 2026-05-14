@@ -3,7 +3,7 @@ import { Shield, UserPlus, UserMinus, Search, Users, Key, FileText, Settings, Pl
 import api from '../../api';
 import { AlertModal } from '../components/AlertModal';
 
-export function AdminManagementPage({ theme }) {
+export function AdminManagementPage({ theme, adminUser }) {
   const searchInputRef = useRef(null);
   const [activeTab, setActiveTab] = useState(() => {
     // Restore active tab from localStorage
@@ -670,7 +670,7 @@ export function AdminManagementPage({ theme }) {
                             <Settings size={14} />
                             Assign Role
                           </button>
-                          {user.is_staff && (
+                          {adminUser?.is_superuser && user.is_staff && (
                             <button
                               onClick={() => handleToggleSuperuser(user.id, user.is_superuser)}
                               style={{
