@@ -138,6 +138,7 @@ def admin_users_list(request):
         'following_count': user.following_count,
         'level': user.profile.level if hasattr(user, 'profile') else 1,
         'xp': user.profile.xp if hasattr(user, 'profile') else 0,
+        'phone_number': user.profile.phone_number if hasattr(user, 'profile') else None,
         'subscription': Subscription.objects.filter(user=user).first().plan if Subscription.objects.filter(user=user).exists() else 'free'
     } for user in users_page]
     
