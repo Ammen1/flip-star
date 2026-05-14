@@ -190,7 +190,7 @@ export function GiftManagementPage({ theme }) {
   }
 
   return (
-    <div>
+    <div style={{ padding: '24px 32px', background: theme.bg, minHeight: '100vh' }}>
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
