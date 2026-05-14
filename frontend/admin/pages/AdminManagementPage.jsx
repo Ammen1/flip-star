@@ -1087,10 +1087,6 @@ export function AdminManagementPage({ theme }) {
             maxHeight: '90vh',
             overflow: 'auto',
             border: `1px solid ${theme.border}`,
-            position: 'fixed',
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
             boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${theme.border}` }}>
