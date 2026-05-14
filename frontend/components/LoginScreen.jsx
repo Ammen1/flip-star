@@ -71,31 +71,40 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
           height: 90, 
           marginTop: 20, 
           borderRadius: 12, 
-          overflow: "hidden",
-          display: "flex"
+          overflow: "hidden"
         }}>
           {/* Left White Section - Ethio Logo */}
           <div style={{ 
-            flex: 1, 
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: "50%",
             background: "#FFFFFF", 
             display: "flex", 
             alignItems: "center", 
             justifyContent: "center",
-            position: "relative",
-            zIndex: 2
+            clipPath: "polygon(0 0, 65% 0, 30% 100%, 0 100%)",
+            zIndex: 1
           }}>
-            <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 120, height: 70, objectFit: "contain" }} />
+            <img src="/static/images/ethio-logo.png" alt="Ethio Telecom" style={{ width: 120, height: 70, objectFit: "contain", position: "absolute", left: 20, top: 10 }} />
           </div>
 
           {/* Right Dark Section - FlipStar Logo */}
           <div style={{ 
-            flex: 1, 
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            right: 0,
             background: "linear-gradient(to bottom, #0D0D0D, #1A1A1A)", 
             display: "flex", 
             alignItems: "center", 
-            justifyContent: "center"
+            justifyContent: "center",
+            clipPath: "polygon(65% 0, 100% 0, 100% 100%, 30% 100%)",
+            zIndex: 0
           }}>
-            <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 120, height: 70, objectFit: "contain" }} />
+            <img src="/static/images/flipstar-logo.png" alt="FlipStar" style={{ width: 120, height: 70, objectFit: "contain", position: "absolute", right: 20, top: 10 }} />
           </div>
 
           {/* Gold Diagonal Line SVG Overlay */}
@@ -107,7 +116,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
               left: "50%", 
               transform: "translateX(-50%)", 
               top: 0,
-              zIndex: 3 
+              zIndex: 2 
             }}
             preserveAspectRatio="none"
           >
