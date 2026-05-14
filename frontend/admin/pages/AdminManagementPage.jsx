@@ -592,32 +592,21 @@ export function AdminManagementPage({ theme, adminUser }) {
                         </div>
                       </td>
                       <td style={cellStyle}>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          {user.is_staff && (
-                            <span style={{
-                              padding: '4px 8px',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              background: theme.pri + '20',
-                              color: theme.pri,
-                            }}>
-                              Admin
-                            </span>
-                          )}
-                          {user.is_superuser && (
-                            <span style={{
-                              padding: '4px 8px',
-                              borderRadius: 4,
-                              fontSize: 11,
-                              fontWeight: 600,
-                              background: theme.red + '20',
-                              color: theme.red,
-                            }}>
-                              Superuser
-                            </span>
-                          )}
-                          {!user.is_staff && !user.is_superuser && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {user.roles && user.roles.length > 0 ? (
+                            user.roles.map((role) => (
+                              <span key={role.id} style={{
+                                padding: '4px 8px',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                fontWeight: 600,
+                                background: theme.pri + '20',
+                                color: theme.pri,
+                              }}>
+                                {role.name}
+                              </span>
+                            ))
+                          ) : (
                             <span style={{
                               padding: '4px 8px',
                               borderRadius: 4,
@@ -626,7 +615,7 @@ export function AdminManagementPage({ theme, adminUser }) {
                               background: theme.sub + '20',
                               color: theme.sub,
                             }}>
-                              Regular User
+                              No Roles
                             </span>
                           )}
                         </div>
