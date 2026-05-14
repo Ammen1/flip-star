@@ -550,16 +550,15 @@ export function AdminManagementPage({ theme }) {
               background: theme.card,
               borderRadius: 12,
               border: `1px solid ${theme.border}`,
-              overflowX: 'auto',
             }}>
-              <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: theme.bg }}>
-                    <th style={{ ...headerStyle, width: '25%' }}>User</th>
-                    <th style={{ ...headerStyle, width: '20%' }}>Status</th>
-                    <th style={{ ...headerStyle, width: '25%' }}>Email</th>
-                    <th style={{ ...headerStyle, width: '20%' }}>Phone</th>
-                    <th style={{ ...headerStyle, width: '10%' }}>Actions</th>
+                    <th style={headerStyle}>User</th>
+                    <th style={headerStyle}>Status</th>
+                    <th style={headerStyle}>Email</th>
+                    <th style={headerStyle}>Phone</th>
+                    <th style={headerStyle}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
