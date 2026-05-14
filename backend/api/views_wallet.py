@@ -479,6 +479,17 @@ def admin_wallet_config(request):
             elif field.startswith(('earned_coins_', 'purchased_coins_', 'withdrawal_enabled')):
                 if isinstance(value, str):
                     value = value.lower() in ('true', '1', 'yes', 'on')
+            else:
+                # Ensure numeric fields are non-negative
+                if isinstance(value, (int, float)) and value < 0:
+                    value = 0
+                elif isinstance(value, str) and value.strip():
+                    try:
+                        num_value = float(value)
+                        if num_value < 0:
+                            value = 0
+                    except ValueError:
+                        pass
             setattr(config, field, value)
 
     config.updated_by = request.user
