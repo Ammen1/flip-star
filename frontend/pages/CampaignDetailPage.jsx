@@ -175,7 +175,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
     );
   }
 
-  const BRAND = '#F9E08B';
+  const BRAND = '#8fc441';
   const toggleSection = (k) => setOpenSections(s => ({ ...s, [k]: !s[k] }));
 
   const Accordion = ({ id, icon: Icon, title, subtitle, children, defaultColor }) => {
@@ -816,7 +816,7 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
               fontSize: 16,
               fontWeight: 700,
               color: '#fff',
-              border: '2px solid #F9E08B',
+              border: '2px solid #8fc441',
               boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
             }}>
               {entry.user.username[0].toUpperCase()}

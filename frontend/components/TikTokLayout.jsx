@@ -1450,7 +1450,7 @@ export const TikTokLayout = memo(function TikTokLayout({
         .right-sidebar-container::-webkit-scrollbar { display: none; }
         .feed-action-icon > div > button { filter: drop-shadow(0 1px 8px rgba(0,0,0,0.95)) drop-shadow(0 0 3px rgba(0,0,0,0.8)); }
         .feed-action-icon > div > div:first-child { filter: drop-shadow(0 1px 8px rgba(0,0,0,0.95)) drop-shadow(0 0 3px rgba(0,0,0,0.8)); }
-        .feed-action-label { text-shadow: 0 1px 5px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.8) !important; color: #F9E08B !important; }
+        .feed-action-label { text-shadow: 0 1px 5px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.8) !important; color: #8fc441 !important; }
         .feed-top-icon { filter: drop-shadow(0 1px 6px rgba(0,0,0,0.95)) drop-shadow(0 0 2px rgba(0,0,0,0.8)); }
       `}</style>
       <div
@@ -1722,7 +1722,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           position: 'relative',
                         }}
                       >
-                        <Bell size={26} color="#F9E08B" strokeWidth={2} className="feed-top-icon" />
+                        <Bell size={26} color="#8fc441" strokeWidth={2} className="feed-top-icon" />
                         {unreadNotifCount > 0 && (
                           <div style={{
                             position: 'absolute', top: 0, right: 0,
@@ -1749,7 +1749,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                             filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
                           }}
                         >
-                          <MoreVertical size={26} color="#F9E08B" strokeWidth={2.5} />
+                          <MoreVertical size={26} color="#8fc441" strokeWidth={2.5} />
                         </button>
 
                         {/* Mobile 3-Dots Dropdown Menu - Top right like desktop */}
@@ -1798,7 +1798,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                                   color: T.txt,
                                 }}
                               >
-                                <ShareIconFilled size={18} color="#F9E08B" /> Share
+                                <ShareIconFilled size={18} color="#8fc441" /> Share
                               </button>
                               <button
                                 onClick={() => handleNotInterested(video.id)}
@@ -1878,9 +1878,9 @@ export const TikTokLayout = memo(function TikTokLayout({
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '8px 16px 16px' }}>
                           {[
                             { icon: Link, label: 'Copy Link', color: T.pri, action: () => { setLongPressMenu(null); handleShare(video.id); } },
-                            { icon: Bookmark, label: 'Save', color: '#F9E08B', action: () => handleSaveToFavorites(video.id) },
+                            { icon: Bookmark, label: 'Save', color: '#8fc441', action: () => handleSaveToFavorites(video.id) },
                             { icon: Download, label: 'Download', color: '#10B981', action: () => handleDownload(video) },
-                            { icon: ShareIconFilled, label: 'Share', color: '#F9E08B', action: () => { setLongPressMenu(null); handleShare(video.id); } },
+                            { icon: ShareIconFilled, label: 'Share', color: '#8fc441', action: () => { setLongPressMenu(null); handleShare(video.id); } },
                           ].map((item, idx) => (
                             <button
                               key={idx}
@@ -2082,7 +2082,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                             alignItems: 'center',
                             justifyContent: 'center',
                             flexDirection: 'column',
-                            color: '#F9E08B',
+                            color: '#8fc441',
                           }}
                         >
                           <span style={{ fontSize: 48, marginBottom: 10 }}>🎬</span>
@@ -2224,7 +2224,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                             alignItems: 'center',
                             justifyContent: 'center',
                             flexDirection: 'column',
-                            color: '#F9E08B',
+                            color: '#8fc441',
                           }}
                         >
                           <span style={{ fontSize: 48, marginBottom: 10 }}>📷</span>
@@ -2267,7 +2267,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           justifyContent: 'center',
                           cursor: 'pointer',
                           padding: 6,
-                          color: '#F9E08B',
+                          color: '#8fc441',
                           filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))',
                         }}
                       >
@@ -2602,9 +2602,9 @@ export const TikTokLayout = memo(function TikTokLayout({
                         }}
                       >
                         {audioEnabled ? (
-                          <Volume2 size={32} color="#F9E08B" strokeWidth={2} />
+                          <Volume2 size={32} color="#8fc441" strokeWidth={2} />
                         ) : (
-                          <VolumeX size={32} color="#F9E08B" strokeWidth={2} />
+                          <VolumeX size={32} color="#8fc441" strokeWidth={2} />
                         )}
                       </button>
                       <div
@@ -2612,7 +2612,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                         style={{
                           fontSize: 12,
                           fontWeight: 700,
-                          color: '#F9E08B',
+                          color: '#8fc441',
                           textAlign: 'center',
                         }}
                       >
@@ -2646,14 +2646,14 @@ export const TikTokLayout = memo(function TikTokLayout({
                           padding: 0,
                         }}
                       >
-                        <MessageCircle size={32} color="#F9E08B" fill="#F9E08B" />
+                        <MessageCircle size={32} color="#8fc441" fill="#8fc441" />
                       </button>
                       <div
                         className="feed-action-label"
                         style={{
                           fontSize: 12,
                           fontWeight: 700,
-                          color: '#F9E08B',
+                          color: '#8fc441',
                           textAlign: 'center',
                         }}
                       >
@@ -2679,14 +2679,14 @@ export const TikTokLayout = memo(function TikTokLayout({
                           padding: 0,
                         }}
                       >
-                        <ShareIconFilled size={32} color="#F9E08B" />
+                        <ShareIconFilled size={32} color="#8fc441" />
                       </button>
                       <div
                         className="feed-action-label"
                         style={{
                           fontSize: 12,
                           fontWeight: 700,
-                          color: '#F9E08B',
+                          color: '#8fc441',
                           textAlign: 'center',
                         }}
                       >

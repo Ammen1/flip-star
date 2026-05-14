@@ -3,13 +3,13 @@ import { Phone, Lock, Eye, EyeOff, Loader, X, ChevronLeft } from "lucide-react";
 import api from "../api";
 import { ForgotPasswordPhone } from "./ForgotPasswordPhone";
 
-const GOLD = "linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)";
+const GOLD = "linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)";
 
 const inp = (focused) => ({
   width: "100%",
   padding: "13px 16px 13px 46px",
   background: "#1A1A1A",
-  border: `1.5px solid ${focused ? "#F9E08B" : "#262626"}`,
+  border: `1.5px solid ${focused ? "#8fc441" : "#262626"}`,
   borderRadius: 10,
   fontSize: 15,
   color: "#fff",
@@ -89,9 +89,9 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
           </div>
 
           {/* Card */}
-          <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
+          <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #8fc44130" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Welcome</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: "#8fc441", marginBottom: 4 }}>Welcome</div>
               <div style={{ fontSize: 13, color: "#aaa" }}>Log in to continue to FlipStar</div>
             </div>
 
@@ -104,9 +104,9 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* Phone */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Phone Number</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Phone Number</label>
                 <div style={{ position: "relative" }}>
-                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Phone size={17} /></div>
+                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Phone size={17} /></div>
                   <input
                     type="tel"
                     value={phone}
@@ -122,9 +122,9 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* PIN */}
               <div style={{ marginBottom: 8 }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>PIN</label>
                 <div style={{ position: "relative" }}>
-                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Lock size={17} /></div>
                   <input
                     type={showPassword ? "text" : "password"}
                     inputMode="numeric"
@@ -137,7 +137,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
                     onBlur={() => setFocusPwd(false)}
                     autoComplete="current-password"
                   />
-                  <button type="button" onClick={() => setShowPassword(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                  <button type="button" onClick={() => setShowPassword(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
                     {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
                 </div>
@@ -150,7 +150,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
 
               {/* Forgot PIN */}
               <div style={{ textAlign: "center", marginBottom: 16 }}>
-                <button type="button" onClick={() => setShowForgot(true)} style={{ background: "none", border: "none", color: "#F9E08B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                <button type="button" onClick={() => setShowForgot(true)} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   Forgot PIN?
                 </button>
               </div>
@@ -159,7 +159,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
             {/* Sign up */}
             <div style={{ textAlign: "center", fontSize: 13, color: "#666" }}>
               Don't have an account?{" "}
-              <button type="button" onClick={onSignUp} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+              <button type="button" onClick={onSignUp} style={{ background: "none", border: "none", color: "#8fc441", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
                 Subscribe
               </button>
             </div>

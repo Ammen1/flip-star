@@ -17,11 +17,11 @@ import SoundManager from '../utils/SoundUtils';
 const MEDIA_BASE = config.API_BASE_URL.replace('/api', '');
 
 const { width, height } = Dimensions.get('window');
-const GOLD = '#C8B56A';
-const DARK_GOLD = '#DAA520';
+const GOLD = '#8fc441';
+const DARK_GOLD = '#6ba835';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
-const LIGHT_GOLD = '#F9E08B';
+const LIGHT_GOLD = '#b5dd8f';
 const BORDER = '#262626';
 
 // Helper to shuffle array for randomized feed

@@ -2,13 +2,13 @@ import { useState, useRef, useEffect } from "react";
 import { Phone, Lock, User, Eye, EyeOff, Loader, ChevronLeft } from "lucide-react";
 import api from "../api";
 
-const GOLD = "linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)";
+const GOLD = "linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)";
 
 const inp = (focused) => ({
   width: "100%",
   padding: "13px 16px 13px 46px",
   background: "#1A1A1A",
-  border: `1.5px solid ${focused ? "#F9E08B" : "#262626"}`,
+  border: `1.5px solid ${focused ? "#8fc441" : "#262626"}`,
   borderRadius: 10,
   fontSize: 15,
   color: "#fff",
@@ -45,8 +45,8 @@ function OtpInput({ value, onChange }) {
             width: 46, height: 54, borderRadius: 10, textAlign: "center",
             fontSize: 22, fontWeight: 800, color: "#fff",
             background: "#1A1A1A",
-            border: `2px solid ${d.trim() ? "#F9E08B" : "#262626"}`,
-            outline: "none", caretColor: "#F9E08B",
+            border: `2px solid ${d.trim() ? "#8fc441" : "#262626"}`,
+            outline: "none", caretColor: "#8fc441",
           }}
         />
       ))}
@@ -141,10 +141,10 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
         </div>
 
         {/* Card */}
-        <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
+        <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #8fc44130" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Complete Registration</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441", marginBottom: 4 }}>Complete Registration</div>
             <div style={{ fontSize: 13, color: "#aaa" }}>Your subscription is confirmed! Set up your account below.</div>
           </div>
 
@@ -162,9 +162,9 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
             {/* Username */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Username *</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Username *</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><User size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><User size={17} /></div>
                 <input
                   type="text"
                   value={username}
@@ -179,9 +179,9 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
             {/* Phone */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Phone Number *</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Phone Number *</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Phone size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Phone size={17} /></div>
                 <input
                   type="tel"
                   value={phone}
@@ -196,16 +196,16 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
             {/* OTP */}
             <div style={{ marginBottom: 8 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 4, letterSpacing: 0.5 }}>OTP from SMS *</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 4, letterSpacing: 0.5 }}>OTP from SMS *</label>
               <div style={{ fontSize: 12, color: "#aaa", marginBottom: 4 }}>Enter the 6-digit code you received via SMS</div>
               <OtpInput value={otp} onChange={setOtp} />
             </div>
 
             {/* Password */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>PIN *</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>PIN *</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Lock size={17} /></div>
                 <input
                   type={showPwd ? "text" : "password"}
                   inputMode="numeric"
@@ -217,7 +217,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
                   onFocus={() => setFocusPwd(true)}
                   onBlur={() => setFocusPwd(false)}
                 />
-                <button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                <button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
                   {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
@@ -225,9 +225,9 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
             {/* Confirm */}
             <div style={{ marginBottom: 24 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>Confirm PIN *</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Confirm PIN *</label>
               <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}><Lock size={17} /></div>
+                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Lock size={17} /></div>
                 <input
                   type={showConfirm ? "text" : "password"}
                   inputMode="numeric"
@@ -239,7 +239,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
                   onFocus={() => setFocusConfirm(true)}
                   onBlur={() => setFocusConfirm(false)}
                 />
-                <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
                   {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </div>
@@ -252,7 +252,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
           <div style={{ textAlign: "center", fontSize: 13, color: "#666" }}>
             Already have an account?{" "}
-            <button onClick={onBackToLogin} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Log in</button>
+            <button onClick={onBackToLogin} style={{ background: "none", border: "none", color: "#8fc441", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Log in</button>
           </div>
         </div>
       </div>

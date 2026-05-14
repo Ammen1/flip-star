@@ -169,12 +169,12 @@ export function AppShell({
         }
         .appshell-main::-webkit-scrollbar { display: none; }
         .appshell-main { -ms-overflow-style: none; scrollbar-width: none; }
-        .mob-nav-btn svg { color: #F9E08B !important; }
-        .mob-nav-btn span { color: #F9E08B !important; }
-        .mob-nav-gold svg { color: #F9E08B !important; filter: drop-shadow(0 0 6px #F9E08B); }
-        .mob-nav-gold span { color: #F9E08B !important; text-shadow: 0 0 8px #F9E08B; }
-        .mob-nav-btn:hover svg { filter: drop-shadow(0 0 8px #F9E08B); transform: scale(1.15); transition: all 0.2s; }
-        .mob-nav-btn:hover span { text-shadow: 0 0 8px #F9E08B; transition: all 0.2s; }
+        .mob-nav-btn svg { color: #8fc441 !important; }
+        .mob-nav-btn span { color: #8fc441 !important; }
+        .mob-nav-gold svg { color: #8fc441 !important; filter: drop-shadow(0 0 6px #8fc441); }
+        .mob-nav-gold span { color: #8fc441 !important; text-shadow: 0 0 8px #8fc441; }
+        .mob-nav-btn:hover svg { filter: drop-shadow(0 0 8px #8fc441); transform: scale(1.15); transition: all 0.2s; }
+        .mob-nav-btn:hover span { text-shadow: 0 0 8px #8fc441; transition: all 0.2s; }
         .mob-nav-btn { transition: all 0.2s; }
       `}</style>
       {/* 1. Desktop Sidebar */}
@@ -281,7 +281,7 @@ export function AppShell({
                     )}
                   </div>
                   <span style={isActive ? {
-                    background: 'linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)',
+                    background: 'linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)',
                     WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                     backgroundClip: 'text',
                   } : {}}>{item.label}</span>
@@ -452,8 +452,8 @@ export function AppShell({
                     width: 54,
                     height: 54,
                     borderRadius: '50%',
-                    background: 'linear-gradient(145deg, #F9E08B 0%, #D4A017 100%)',
-                    boxShadow: '0 4px 18px rgba(249,224,139,0.5), 0 2px 6px rgba(0,0,0,0.3)',
+                    background: 'linear-gradient(145deg, #8fc441 0%, #6ba835 100%)',
+                    boxShadow: '0 4px 18px rgba(143,196,65,0.5), 0 2px 6px rgba(0,0,0,0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -471,7 +471,7 @@ export function AppShell({
                     <Icon
                       size={24}
                       strokeWidth={1.8}
-                      color='#F9E08B'
+                      color='#8fc441'
                       fill='none'
                     />
                     {badgeCount > 0 && (

@@ -175,7 +175,7 @@ export function SubscriptionPage({ user, onBack }) {
   const M_BG     = '#0B0B0C';
   const M_CARD   = '#161616';
   const M_BORDER = '#242424';
-  const GOLD     = '#C8B56A';
+  const GOLD     = '#8fc441';
   const PLAN_COLORS = { daily: '#F59E0B', weekly: '#8B5CF6', monthly: GOLD };
   const PLAN_ICON   = { daily: Zap,       weekly: Star,      monthly: Trophy };
   const BENEFITS = [
@@ -234,12 +234,12 @@ export function SubscriptionPage({ user, onBack }) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px' }}>
           <div style={{
             width: 80, height: 80, borderRadius: 40,
-            background: GOLD + '18',
-            border: `1.5px solid ${GOLD}40`,
+            background: '#8fc44118',
+            border: `1.5px solid #8fc44140`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             marginBottom: 16,
           }}>
-            <Trophy size={36} color={GOLD} />
+            <Trophy size={36} color="#8fc441" />
           </div>
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 6 }}>FlipStar Premium</div>
           <div style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>Unlock the full experience</div>
@@ -271,7 +271,7 @@ export function SubscriptionPage({ user, onBack }) {
                 padding: '7px 12px',
                 border: `1px solid ${M_BORDER}`,
               }}>
-                <BIcon size={16} color={GOLD} />
+                <BIcon size={16} color="#8fc441" />
                 <span style={{ fontSize: 12, color: '#ccc', fontWeight: 500 }}>{b.text}</span>
               </div>
             );
@@ -396,9 +396,9 @@ export function SubscriptionPage({ user, onBack }) {
           background: M_CARD, borderRadius: 14, padding: 14,
           border: `1px solid ${M_BORDER}`,
         }}>
-          <Info size={18} color={GOLD} style={{ flexShrink: 0, marginTop: 1 }} />
+          <Info size={18} color="#8fc441" style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ flex: 1, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
-            Send SMS to <span style={{ color: GOLD, fontWeight: 700 }}>9286</span> with code{' '}
+            Send SMS to <span style={{ color: "#8fc441", fontWeight: 700 }}>9286</span> with code{' '}
             <span style={{ color: '#fff' }}>OK1</span> (Daily),{' '}
             <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
             <span style={{ color: '#fff' }}>OK3</span> (Monthly) via Ethio Telecom.

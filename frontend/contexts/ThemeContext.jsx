@@ -7,8 +7,8 @@ export const PRESET_THEMES = {
     emoji: '⭐',
     category: 'Premium',
     gradient: true,
-    light: { pri: 'linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)', priFallback: '#E2B355', bg: '#FAFAFA', txt: '#1A1A1A', sub: '#78716C', border: '#E5E5E5', cardBg: '#FFF' },
-    dark: { pri: 'linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)', priFallback: '#E2B355', bg: '#0D0D0D', txt: '#FFFFFF', sub: '#C2994B', border: '#262626', cardBg: '#1A1A1A' },
+    light: { pri: 'linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)', priFallback: '#8fc441', bg: '#FAFAFA', txt: '#1A1A1A', sub: '#78716C', border: '#E5E5E5', cardBg: '#FFF' },
+    dark: { pri: 'linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)', priFallback: '#8fc441', bg: '#0D0D0D', txt: '#FFFFFF', sub: '#b5dd8f', border: '#262626', cardBg: '#1A1A1A' },
   },
   chrome: {
     name: 'Chrome Steel',

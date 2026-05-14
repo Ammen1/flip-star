@@ -15,7 +15,7 @@ import SubscriptionPlansModal from './SubscriptionPlansModal';
 import Svg, { Line, Path } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const GOLD = '#D4AF37'; // Gold brand color
+const GOLD = '#8fc441'; // Green brand color
 const BG = '#000000'; // Black background
 const CARD = '#1A1A1A'; // Dark gray for cards
 const BORDER = '#333333'; // Dark border
@@ -23,7 +23,7 @@ const BORDER = '#333333'; // Dark border
 const FAQ_ITEMS = [
   { 
     q: "What is FlipStar?", 
-    a: "FlipStar is a premium, subscription-based gamified social media platform by Ethio Telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr." 
+    a: "FlipStar is a premium, subscription-based gamified social media platform by Ethio telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr." 
   },
   { 
     q: "Who can use FlipStar?", 
@@ -67,7 +67,7 @@ const FAQ_ITEMS = [
   },
   { 
     q: "What can I do with coins?", 
-    a: "Gift creators, boost your content visibility, unlock extended video uploads (up to 90-120 seconds), level up, and unlock premium features." 
+    a: "Gift creators, boost your content visibility, unlock extended video uploads (up to 90-120 seconds), and unlock premium features." 
   },
   { 
     q: "Can I cash out my coins?", 
@@ -211,12 +211,12 @@ function TermsModal({ onClose }) {
           <ScrollView showsVerticalScrollIndicator={false} style={{ padding: 4 }}>
 
             {/* Preamble */}
-            <Text style={ts.para}>Please read these Terms and Conditions ("Terms") carefully before using the FlipStar service ("FlipStar", "the Service") provided by Ethio Telecom and SkykinTechnologies PLC ("the Providers"). These Terms apply to all visitors, users, and others who access or use the Service via the FlipStar mobile application (Android and iOS) or web portal at https://flipstar.et.</Text>
+            <Text style={ts.para}>Please read these Terms and Conditions ("Terms") carefully before using the FlipStar service ("FlipStar", "the Service") provided by Ethio telecom and SkykinTechnologies PLC ("the Providers"). These Terms apply to all visitors, users, and others who access or use the Service via the FlipStar mobile application (Android and iOS) or web portal at https://flipstar.et.</Text>
             <Text style={ts.para}>By subscribing, downloading, installing, or otherwise accessing FlipStar, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not agree, do not use the Service.</Text>
 
             {/* 1 */}
             <Text style={ts.sectionTitle}>1. Introduction</Text>
-            <Text style={ts.para}>FlipStar is a premium, subscription-based gamified social media platform by Ethio Telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr.</Text>
+            <Text style={ts.para}>FlipStar is a premium, subscription-based gamified social media platform by Ethio telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr.</Text>
             <Text style={ts.para}>FlipStar is accessible via:</Text>
             <Text style={ts.bullet}>• Web Portal: https://flipstar.et</Text>
             <Text style={ts.bullet}>• Android App: Available on Google Play Store (search: FlipStar)</Text>
@@ -224,7 +224,7 @@ function TermsModal({ onClose }) {
 
             {/* 2 */}
             <Text style={ts.sectionTitle}>2. Service Overview</Text>
-            <Text style={ts.bullet}>• FlipStar is available to all active Ethio Telecom prepaid, postpaid, and hybrid mobile customers with a smartphone (Android, iOS) or web browser.</Text>
+            <Text style={ts.bullet}>• FlipStar is available to all active Ethio telecom prepaid, postpaid, and hybrid mobile customers with a smartphone (Android, iOS) or web browser.</Text>
             <Text style={ts.bullet}>• The Service allows users to upload short-form videos (15–120 seconds depending on user tier) and photos, interact with content, participate in daily, weekly, monthly, and grand prize competitions, and earn and spend digital coins.</Text>
             <Text style={ts.bullet}>• To subscribe via SMS: Send 'OK1' (Daily), 'OK2' (Weekly), or 'OK3' (Monthly) to the FlipStar shortcode. To unsubscribe: send 'STOP', 'STOP1', 'STOP2', or 'STOP3' to the same shortcode.</Text>
             <Text style={ts.bullet}>• To subscribe via app or web: Download the FlipStar app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, then enter the confirmation code sent to your number.</Text>
@@ -255,7 +255,7 @@ function TermsModal({ onClose }) {
               <Text style={ts.infoText}>ⓘ SMS Keyword Note: All subscription and unsubscription keywords are case-insensitive (e.g. 'ok1' and 'OK1' are treated identically).</Text>
             </View>
             <Text style={ts.subSectionTitle}>3.3 Eligibility</Text>
-            <Text style={ts.bullet}>• All active prepaid, postpaid, and hybrid Ethio Telecom mobile customers are eligible to subscribe.</Text>
+            <Text style={ts.bullet}>• All active prepaid, postpaid, and hybrid Ethio telecom mobile customers are eligible to subscribe.</Text>
             <Text style={ts.bullet}>• The subscriber's service number must be in 'Active' status at the time of subscription.</Text>
             <Text style={ts.bullet}>• After any applicable free trial period, the subscriber must have sufficient balance to continue service.</Text>
             <Text style={ts.subSectionTitle}>3.4 Free Trial</Text>
@@ -266,7 +266,7 @@ function TermsModal({ onClose }) {
             <Text style={ts.bullet}>• Postpaid customers: Subscription fees are added to the monthly bill.</Text>
             <Text style={ts.bullet}>• Hybrid customers: Fees are charged from the default account.</Text>
             <Text style={ts.bullet}>• A maximum of one subscription charge per 24-hour cycle applies.</Text>
-            <Text style={ts.bullet}>• Failed billing attempts will be retried automatically per Ethio Telecom Main Account (MA) time standards, or if the customer recharges their balance within the same day.</Text>
+            <Text style={ts.bullet}>• Failed billing attempts will be retried automatically per Ethio telecom Main Account (MA) time standards, or if the customer recharges their balance within the same day.</Text>
             <Text style={ts.bullet}>• The service will be activated automatically after a successful subscription or payment.</Text>
             <Text style={ts.subSectionTitle}>3.6 Auto-Renewal</Text>
             <Text style={ts.bullet}>• FlipStar subscriptions auto-renew at the end of each billing cycle if the subscriber has sufficient balance.</Text>
@@ -284,7 +284,7 @@ function TermsModal({ onClose }) {
 
             {/* 4 */}
             <Text style={ts.sectionTitle}>4. Accounts</Text>
-            <Text style={ts.bullet}>• Once you subscribe via SMS or complete registration via the app or web portal, FlipStar will automatically create an account using your Ethio Telecom mobile number as your unique account identifier.</Text>
+            <Text style={ts.bullet}>• Once you subscribe via SMS or complete registration via the app or web portal, FlipStar will automatically create an account using your Ethio telecom mobile number as your unique account identifier.</Text>
             <Text style={ts.bullet}>• By accessing the service, you agree to be solely responsible for all activities that occur under your account and mobile number.</Text>
             <Text style={ts.bullet}>• You agree to provide true, current, and complete information during registration and at all times during your use of the service.</Text>
             <Text style={ts.bullet}>• Only one active account per mobile number is permitted.</Text>
@@ -308,23 +308,7 @@ function TermsModal({ onClose }) {
                 ['Minimum cash-out threshold', '1,000 Points (equivalent to 80 ETB net after commission) required to trigger a telebirr payout.'],
               ]}
             />
-            <Text style={ts.subSectionTitle}>5.2 XP Earning Schedule</Text>
-            <Text style={ts.para}>FlipStar awards Experience Points (XP) to users for platform engagement. XP is separate from competition Engagement Score and reflects overall platform activity. XP is also used in the Engagement Score formula for competition ranking.</Text>
-            <TermsTable
-              headers={['Engagement Action', 'XP Awarded', 'Who Earns', 'Notes']}
-              flex={[1.5, 0.8, 0.8, 2]}
-              rows={[
-                ['Like a Flip', '1 XP', 'Flip creator', 'Awarded to the creator of the content that received the Like.'],
-                ['Comment on a Flip', '2 XP', 'Flip creator', 'Awarded to the creator upon each new comment received.'],
-                ['Share a Flip', '5 XP', 'Flip creator', 'Awarded to the creator when their content is shared externally or internally.'],
-                ['Send a Gift (any type)', '10 XP', 'Flip creator', 'Awarded per gift transaction regardless of the gift\'s coin value. Additional Points (equal to Coin value) are also credited separately to the creator\'s Points balance.'],
-                ['Upload a Flip (processed)', '5 XP', 'Uploader', 'Awarded after successful media processing. Not awarded on processing failure.'],
-                ['Daily login', '1 XP', 'Logged-in user', 'Awarded once per calendar day on app open.'],
-                ['Weekly loyalty bonus', '10 XP', 'Logged-in user', 'Awarded alongside the 50-Coin weekly loyalty bonus for 7 consecutive daily logins.'],
-                ['Monthly loyalty bonus', '50 XP', 'Logged-in user', 'Awarded alongside the 150-Coin monthly loyalty bonus for a full calendar month of daily logins.'],
-              ]}
-            />
-            <Text style={ts.subSectionTitle}>5.3 Gift Types and Point Values</Text>
+                        <Text style={ts.subSectionTitle}>5.2 Gift Types and Point Values</Text>
             <TermsTable
               headers={['Gift Name', 'Cost per Unit (Coins)', 'Min Gift (per transaction)', 'Max Gift (per transaction)', 'Points to Creator', 'Max per Day (same creator)']}
               flex={[1, 1.2, 1.2, 1.2, 1, 1.2]}
@@ -400,7 +384,7 @@ function TermsModal({ onClose }) {
             <View style={ts.formulaBox}>
               <Text style={ts.formulaText}>Score = (Likes × 1) + (Comments × 2) + (Shares × 5) + (Gift/Vote Points × 10)</Text>
             </View>
-            <Text style={ts.para}>The multipliers above are identical to the XP values defined in Section 5.2. The user with the highest Engagement Score at the end of each competition period is declared the winner for that tier.</Text>
+            <Text style={ts.para}>The user with the highest Engagement Score at the end of each competition period is declared the winner for that tier.</Text>
             <Text style={ts.subSectionTitle}>7.2 Competition Tiers and Prize Structure</Text>
             <TermsTable
               headers={['Competition Tier', 'Winner Count', 'Prize', 'Prize Delivery']}
@@ -728,7 +712,7 @@ export default function LoginScreen({ navigation }) {
               y1="90"
               x2="55"
               y2="0"
-              stroke="#D4AF37"
+              stroke="#8fc441"
               strokeWidth="12.5"
               strokeLinecap="round"
             />
@@ -829,6 +813,8 @@ const s = StyleSheet.create({
     marginTop: 15,
     marginBottom: 80,
     position: 'relative',
+    borderWidth: 0.5,
+    borderColor: '#8fc441',
   },
   leftSection: {
     width: '45%',
@@ -860,6 +846,8 @@ const s = StyleSheet.create({
   },
   mainContent: {
     flex: 1,
+    margin: 16,
+    padding: 20,
   },
   header: {
     alignItems: 'center',

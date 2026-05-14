@@ -12,7 +12,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
 
-const GOLD = '#C8B56A';
+const GOLD = '#8fc441';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';

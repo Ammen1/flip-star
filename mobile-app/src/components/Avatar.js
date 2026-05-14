@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Image } from 'react-native';
 import config from '../config';
 
-const GOLD = '#C8B56A';
+const GOLD = '#8fc441';
 
 const Avatar = React.memo(({ uri, size = 36, name = '' }) => {
   const [err, setErr] = useState(false);

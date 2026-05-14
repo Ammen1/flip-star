@@ -4,13 +4,13 @@ import api from "../api";
 import { useTheme } from "../contexts/ThemeContext";
 
 // ── helpers ────────────────────────────────────────────────────────────────
-const GOLD = "linear-gradient(to bottom, #D4AF37 0%, #F9E08B 50%, #B8860B 100%)";
+const GOLD = "linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)";
 
 const inputStyle = (T, focused) => ({
   width: "100%",
   padding: "13px 16px 13px 46px",
   background: T.cardBg || "#1A1A1A",
-  border: `1.5px solid ${focused ? "#F9E08B" : T.border || "#262626"}`,
+  border: `1.5px solid ${focused ? "#8fc441" : T.border || "#262626"}`,
   borderRadius: 10,
   fontSize: 15,
   color: T.txt || "#fff",
@@ -21,7 +21,7 @@ const inputStyle = (T, focused) => ({
 
 function IconWrap({ children }) {
   return (
-    <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#F9E08B", display: "flex" }}>
+    <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}>
       {children}
     </div>
   );
@@ -30,7 +30,7 @@ function IconWrap({ children }) {
 function Field({ label, icon, children }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#F9E08B", marginBottom: 7, letterSpacing: 0.5 }}>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>
         {label}
       </label>
       <div style={{ position: "relative" }}>
@@ -76,7 +76,7 @@ function StepDot({ active, done }) {
     <div style={{
       width: done ? 22 : active ? 22 : 10, height: done ? 22 : active ? 22 : 10,
       borderRadius: "50%",
-      background: done ? "#F9E08B" : active ? GOLD : "#262626",
+      background: done ? "#8fc441" : active ? GOLD : "#262626",
       display: "flex", alignItems: "center", justifyContent: "center",
       transition: "all 0.3s",
       fontSize: 11, color: "#000", fontWeight: 700,
@@ -115,8 +115,8 @@ function OtpInput({ value, onChange }) {
             width: 46, height: 54, borderRadius: 10, textAlign: "center",
             fontSize: 22, fontWeight: 800, color: "#fff",
             background: "#1A1A1A",
-            border: `2px solid ${d.trim() ? "#F9E08B" : "#262626"}`,
-            outline: "none", caretColor: "#F9E08B",
+            border: `2px solid ${d.trim() ? "#8fc441" : "#262626"}`,
+            outline: "none", caretColor: "#8fc441",
           }}
         />
       ))}
@@ -256,20 +256,20 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
         {/* Step indicator */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 28 }}>
           <StepDot active={step === 1} done={step > 1} />
-          <div style={{ width: 48, height: 2, background: step > 1 ? "#F9E08B" : "#262626", borderRadius: 1, transition: "background 0.3s" }} />
+          <div style={{ width: 48, height: 2, background: step > 1 ? "#8fc441" : "#262626", borderRadius: 1, transition: "background 0.3s" }} />
           <StepDot active={step === 2} done={false} />
         </div>
 
         {/* Card */}
-        <div style={{ background: T.cardBg || "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #F9E08B30" }}>
+        <div style={{ background: T.cardBg || "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #8fc44130" }}>
 
           {/* ── STEP 1: Phone ── */}
           {step === 1 && (
             <>
               <div style={{ textAlign: "center", marginBottom: 24 }}>
                 <div style={{ fontSize: 36, marginBottom: 8 }}>📱</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Create Account</div>
-                <div style={{ fontSize: 13, color: "#F9E08B" }}>Fill in your details to get started</div>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441", marginBottom: 4 }}>Create Account</div>
+                <div style={{ fontSize: 13, color: "#8fc441" }}>Fill in your details to get started</div>
               </div>
               <ErrorBox msg={error} />
               <Field label="Username *" icon={<User size={17} />}>
@@ -302,7 +302,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
                   onFocus={() => setFocusedPwd(true)} onBlur={() => setFocusedPwd(false)}
                 />
                 <button type="button" onClick={() => setShowPwd(v => !v)}
-                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
                   {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </Field>
@@ -315,7 +315,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
                   onFocus={() => setFocusedConfirm(true)} onBlur={() => setFocusedConfirm(false)}
                 />
                 <button type="button" onClick={() => setShowConfirm(v => !v)}
-                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#F9E08B" }}>
+                  style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
                   {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
                 </button>
               </Field>
@@ -328,8 +328,8 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
             <>
               <div style={{ textAlign: "center", marginBottom: 16 }}>
                 <div style={{ fontSize: 36, marginBottom: 8 }}>🔐</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: "#F9E08B", marginBottom: 4 }}>Verify Code</div>
-                <div style={{ fontSize: 13, color: "#F9E08B" }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441", marginBottom: 4 }}>Verify Code</div>
+                <div style={{ fontSize: 13, color: "#8fc441" }}>
                   Code sent to <strong style={{ color: "#fff" }}>{verifiedPhone}</strong>
                 </div>
               </div>
@@ -346,13 +346,13 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
               <GoldBtn loading={loading} onClick={handleVerifyAndRegister} disabled={otp.length < 6}>Verify & Register 🚀</GoldBtn>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <button onClick={() => { setStep(1); setOtp(""); setError(""); setDevCode(""); }}
-                  style={{ background: "none", border: "none", color: "#F9E08B", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                  style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                   <ChevronLeft size={14} /> Go back
                 </button>
                 {resendTimer > 0 ? (
                   <span style={{ color: "#666", fontSize: 12 }}>Resend in {resendTimer}s</span>
                 ) : (
-                  <button onClick={handleSendOtp} style={{ background: "none", border: "none", color: "#F9E08B", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                  <button onClick={handleSendOtp} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
                     Resend OTP
                   </button>
                 )}
@@ -363,7 +363,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
           {/* Footer */}
           <div style={{ textAlign: "center", fontSize: 13, color: "#666", marginTop: 4 }}>
             Already have an account?{" "}
-            <button onClick={onLogin} style={{ background: "none", border: "none", color: "#F9E08B", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+            <button onClick={onLogin} style={{ background: "none", border: "none", color: "#8fc441", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
               Log in
             </button>
           </div>

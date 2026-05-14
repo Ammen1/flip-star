@@ -4,7 +4,7 @@ import api from '../api';
 import config from '../config.js';
 import { useTheme } from '../contexts/ThemeContext';
 
-const BRAND = '#F9E08B';
+const BRAND = '#8fc441';
 
 const mediaUrl = (url) => {
   if (!url) return null;

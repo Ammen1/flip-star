@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
 
-const GOLD = '#C8B56A';
+const GOLD = '#8fc441';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
@@ -416,12 +416,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>ENTRIES</Text>
             <Text style={[styles.statValue, { color: colors.primary }]}>{campaign.total_entries || 0}</Text>
           </View>
-          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-            <Ionicons name='flame' size={11} color={colors.error} />
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>VOTES</Text>
-            <Text style={[styles.statValue, { color: colors.error }]}>{campaign.total_votes || 0}</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                    <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
             <Ionicons name='trophy' size={11} color={colors.primary} />
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>WINNERS</Text>
             <Text style={[styles.statValue, { color: colors.primary }]}>{campaign.winner_count || 1}</Text>
@@ -443,9 +438,6 @@ export default function CampaignDetailScreen({ route, navigation }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.userEntryTitle, { color: colors.text }]}>Your Entry is Live 🎉</Text>
-              <Text style={[styles.userEntryStats, { color: colors.textSecondary }]}>
-                {userEntry.total_score ?? userEntry.score ?? 0} pts · {userEntry.vote_count || 0} votes · Rank #{userEntry.rank || '—'}
-              </Text>
             </View>
           </View>
         )}
@@ -560,13 +552,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
                     <Text style={[styles.reqValue, { color: '#F97316' }]}>Level {campaign.min_level}</Text>
                   </View>
                 )}
-                {campaign.min_votes_per_reel > 0 && (
-                  <View style={styles.reqRow}>
-                    <Text style={styles.reqLabel}>Min votes/reel</Text>
-                    <Text style={[styles.reqValue, { color: '#EF4444' }]}>{campaign.min_votes_per_reel}+</Text>
-                  </View>
-                )}
-              </Accordion>
+                              </Accordion>
             )}
 
             {/* Timeline Accordion */}
@@ -610,7 +596,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
               onToggle={() => toggleSection('scoring')}
             >
               <Text style={styles.scoringText}>
-                Your total score is calculated from <Text style={{ fontWeight: '700', color: '#fff' }}>likes, comments, shares, votes, and gifts</Text> on your entry during the campaign period.
+                Your total score is calculated from <Text style={{ fontWeight: '700', color: '#fff' }}>likes, comments, shares, and gifts</Text> on your entry during the campaign period.
               </Text>
               <View style={styles.scoringGrid}>
                 <View style={styles.scoringItem}>
@@ -625,11 +611,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
                   <Ionicons name='share-social' size={14} color='#8B5CF6' />
                   <Text style={styles.scoringLabel}>Shares</Text>
                 </View>
-                <View style={styles.scoringItem}>
-                  <Ionicons name='trophy' size={14} color={GOLD} />
-                  <Text style={styles.scoringLabel}>Votes</Text>
-                </View>
-                <View style={styles.scoringItem}>
+                                <View style={styles.scoringItem}>
                   <Ionicons name='gift' size={14} color='#F59E0B' />
                   <Text style={styles.scoringLabel}>Gifts</Text>
                 </View>
@@ -661,7 +643,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
                 </View>
                 <Text style={styles.lbPodiumName} numberOfLines={1}>{e.username || '—'}</Text>
                 <Text style={[styles.lbPodiumScore, { color, fontSize: isFirst ? 22 : 16 }]}>{score}</Text>
-                <Text style={styles.lbPodiumPts}>pts{isFirst ? ' · Champion' : ''}</Text>
+                <Text style={styles.lbPodiumPts}>score{isFirst ? ' · Champion' : ''}</Text>
               </View>
             );
           };
@@ -687,7 +669,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[styles.lbRowScore, rank <= 3 && { color: color || GOLD }]}>{score}</Text>
-                  <Text style={styles.lbRowPts}>points</Text>
+                  <Text style={styles.lbRowPts}>score</Text>
                 </View>
               </View>
             );
@@ -1051,7 +1033,7 @@ const EntryCard = ({ entry, canVote, onVote }) => {
             <View style={styles.pointsBadge}>
               <Ionicons name='trophy' size={15} color='#000' />
               <Text style={styles.pointsNum}>{entry.total_score ?? entry.score}</Text>
-              <Text style={styles.pointsLabel}>pts</Text>
+              <Text style={styles.pointsLabel}>score</Text>
             </View>
           ) : (
             <View style={[styles.pointsBadge, { backgroundColor: '#2a2a2a' }]}>

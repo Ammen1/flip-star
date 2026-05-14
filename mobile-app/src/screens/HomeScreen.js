@@ -17,7 +17,7 @@ import UserSuggestions from '../components/UserSuggestions';
 import HorizontalUserSuggestions from '../components/HorizontalUserSuggestions';
 
 const { width, height } = Dimensions.get('window');
-const GOLD = '#C8B56A';
+const GOLD = '#8fc441';
 const LIGHT_GOLD = '#F9E08B';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
@@ -1206,7 +1206,7 @@ export default function HomeScreen({ navigation, route }) {
             <Avatar uri={post.user?.profile_photo} size={36} name={post.user?.username || post.user?.full_name || 'User'} />
             <View style={{ marginLeft: 10, flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={[styles.username, { color: colors.text }]}>{post.user?.username || post.user?.full_name || 'User'}</Text>
+                <Text style={[styles.username, { color: '#8fc441' }]}>{post.user?.username || post.user?.full_name || 'User'}</Text>
               </View>
               {post.created_at ? (
                 <Text style={[styles.timeAgo, { color: colors.textSecondary }]}>{timeAgo(post.created_at)}</Text>
@@ -2040,7 +2040,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   searchHashtagText: {
-    color: '#000',
+    color: '#8fc441',
     fontSize: 14,
   },
   searchPostItem: {
@@ -2168,7 +2168,7 @@ const styles = StyleSheet.create({
   },
   captionUsername: {
     fontWeight: '700',
-    color: LIGHT_GOLD,
+    color: '#8fc441',
   },
   captionMore: {
     color: '#666',
@@ -2283,11 +2283,11 @@ const styles = StyleSheet.create({
   },
   commentUsername: {
     fontWeight: '700',
-    color: LIGHT_GOLD,
+    color: '#8fc441',
   },
   commentsLink: {
     fontSize: 12,
-    color: LIGHT_GOLD,
+    color: '#fff',
     paddingHorizontal: 12,
     paddingBottom: 8,
     fontWeight: '600',
@@ -2296,7 +2296,7 @@ const styles = StyleSheet.create({
   // Hashtags
   hashtags: { 
     fontSize: 13, 
-    color: LIGHT_GOLD, 
+    color: '#8fc441', 
     paddingHorizontal: 12, 
     paddingBottom: 12, 
     fontWeight: '600', 

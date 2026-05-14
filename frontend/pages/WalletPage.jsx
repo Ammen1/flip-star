@@ -191,9 +191,9 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
         <div style={{
           padding: 18,
           borderRadius: 16,
-          background: 'linear-gradient(135deg, #D4AF37 0%, #C8A84B 100%)',
+          background: 'linear-gradient(135deg, #8fc441 0%, #6ba835 100%)',
           color: '#1A1A1A',
-          boxShadow: '0 6px 20px rgba(212,175,55,0.25)',
+          boxShadow: '0 6px 20px rgba(143,196,65,0.25)',
           display: 'flex',
           flexDirection: 'column',
           minHeight: 180,

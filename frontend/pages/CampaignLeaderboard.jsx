@@ -251,7 +251,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                             <span style={{ fontSize: 12, color: T.sub }}>{entry.shares_count || 0}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <Gift size={11} color="#C8B56A" />
+                            <Gift size={11} color="#8fc441" />
                             <span style={{ fontSize: 12, color: T.sub }}>{entry.gifts_count || 0}</span>
                           </div>
                           {entry.post_count > 0 && (
