@@ -33,6 +33,11 @@ export function AdminManagementPage({ theme, adminUser }) {
   const [selectedUserRoles, setSelectedUserRoles] = useState([]);
   const [userCredentials, setUserCredentials] = useState({ email: '', password: '' });
 
+  // Advanced user management state
+  const [advancedSelectedUser, setAdvancedSelectedUser] = useState(null);
+  const [advancedModal, setAdvancedModal] = useState({ isOpen: false, type: '' });
+  const [advancedForm, setAdvancedForm] = useState({ email: '', password: '', newPassword: '', reason: '' });
+
   // User role assignment functions
   const handleAssignRole = (user, event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -328,7 +333,7 @@ export function AdminManagementPage({ theme, adminUser }) {
       showCancel: true,
       onConfirm: async () => {
         try {
-          await api.request(`/admin/users/${userId}/update/`, {
+          await api.request(`/admin/users/${userId}/`, {
             method: 'PATCH',
             body: JSON.stringify({ is_superuser: !currentStatus })
           });
@@ -340,6 +345,82 @@ export function AdminManagementPage({ theme, adminUser }) {
         }
       }
     });
+  };
+
+  const handleChangeEmail = async () => {
+    if (!advancedForm.email) {
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Please enter an email address', type: 'error' });
+      return;
+    }
+    try {
+      await api.request(`/admin/rbac/users/${advancedSelectedUser.id}/`, {
+        method: 'PUT',
+        body: JSON.stringify({ email: advancedForm.email })
+      });
+      loadUsers();
+      setAlertModal({ isOpen: true, title: 'Success', message: 'Email updated successfully', type: 'success' });
+    } catch (error) {
+      console.error('Failed to update email:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update email', type: 'error' });
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!advancedForm.newPassword) {
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Please enter a new password', type: 'error' });
+      return;
+    }
+    try {
+      await api.request(`/admin/rbac/users/${advancedSelectedUser.id}/`, {
+        method: 'PUT',
+        body: JSON.stringify({ password: advancedForm.newPassword })
+      });
+      setAdvancedForm({ ...advancedForm, newPassword: '' });
+      setAlertModal({ isOpen: true, title: 'Success', message: 'Password updated successfully', type: 'success' });
+    } catch (error) {
+      console.error('Failed to update password:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update password', type: 'error' });
+    }
+  };
+
+  const handleToggleBan = async () => {
+    try {
+      await api.request(`/admin/users/${advancedSelectedUser.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: !advancedSelectedUser.is_active })
+      });
+      loadUsers();
+      setAdvancedForm({ ...advancedForm, reason: '' });
+      setAlertModal({
+        isOpen: true,
+        title: 'Success',
+        message: `User ${advancedSelectedUser.is_active ? 'banned' : 'unbanned'} successfully`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Failed to toggle ban status:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update user status', type: 'error' });
+    }
+  };
+
+  const handleToggleRole = async (roleId, isChecked) => {
+    try {
+      const currentRoles = advancedSelectedUser.roles?.map(r => r.id) || [];
+      let newRoles;
+      if (isChecked) {
+        newRoles = [...currentRoles, roleId];
+      } else {
+        newRoles = currentRoles.filter(id => id !== roleId);
+      }
+      await api.request(`/admin/rbac/users/${advancedSelectedUser.id}/`, {
+        method: 'PUT',
+        body: JSON.stringify({ role_ids: newRoles })
+      });
+      loadUsers();
+    } catch (error) {
+      console.error('Failed to update roles:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Failed to update roles', type: 'error' });
+    }
   };
 
   return (
@@ -374,6 +455,7 @@ export function AdminManagementPage({ theme, adminUser }) {
       }}>
         {[
           { id: 'users', label: 'Users', icon: Users },
+          { id: 'advanced', label: 'Advanced', icon: Shield },
           { id: 'roles', label: 'Roles', icon: Settings },
           { id: 'permissions', label: 'Permissions', icon: Key },
           { id: 'audit', label: 'Audit Log', icon: FileText },
@@ -697,6 +779,296 @@ export function AdminManagementPage({ theme, adminUser }) {
             </div>
           )}
         </>
+      )}
+
+      {activeTab === 'advanced' && (
+        <div>
+          {/* User Selection */}
+          <div style={{
+            background: theme.card,
+            borderRadius: 12,
+            padding: 24,
+            border: `1px solid ${theme.border}`,
+            marginBottom: 24,
+          }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0, marginBottom: 16 }}>
+              Select User
+            </h3>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <select
+                value={advancedSelectedUser?.id || ''}
+                onChange={(e) => {
+                  const userId = parseInt(e.target.value);
+                  const user = users.find(u => u.id === userId);
+                  setAdvancedSelectedUser(user);
+                  setAdvancedForm({ email: user?.email || '', password: '', newPassword: '', reason: '' });
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 12px',
+                  border: `1px solid ${theme.border}`,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  outline: 'none',
+                  background: theme.bg,
+                  color: theme.txt,
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="">Select a user...</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.username} ({user.email || 'No email'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* User Actions */}
+          {advancedSelectedUser && (
+            <div style={{
+              background: theme.card,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`,
+            }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0, marginBottom: 24 }}>
+                User Actions: {advancedSelectedUser.username}
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                {/* Change Email */}
+                <div style={{
+                  background: theme.bg,
+                  borderRadius: 8,
+                  padding: 16,
+                  border: `1px solid ${theme.border}`,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                    Change Email
+                  </div>
+                  <input
+                    type="email"
+                    value={advancedForm.email}
+                    onChange={(e) => setAdvancedForm({ ...advancedForm, email: e.target.value })}
+                    placeholder="New email address"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 6,
+                      fontSize: 13,
+                      outline: 'none',
+                      background: theme.card,
+                      color: theme.txt,
+                      marginBottom: 12,
+                    }}
+                  />
+                  <button
+                    onClick={() => handleChangeEmail()}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: theme.pri,
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
+                    onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
+                  >
+                    Update Email
+                  </button>
+                </div>
+
+                {/* Change Password */}
+                <div style={{
+                  background: theme.bg,
+                  borderRadius: 8,
+                  padding: 16,
+                  border: `1px solid ${theme.border}`,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                    Change Password
+                  </div>
+                  <input
+                    type="password"
+                    value={advancedForm.newPassword}
+                    onChange={(e) => setAdvancedForm({ ...advancedForm, newPassword: e.target.value })}
+                    placeholder="New password"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 6,
+                      fontSize: 13,
+                      outline: 'none',
+                      background: theme.card,
+                      color: theme.txt,
+                      marginBottom: 12,
+                    }}
+                  />
+                  <button
+                    onClick={() => handleChangePassword()}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: theme.pri,
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.target.style.background = theme.pri + '90'; }}
+                    onMouseLeave={(e) => { e.target.style.background = theme.pri; }}
+                  >
+                    Update Password
+                  </button>
+                </div>
+
+                {/* Ban User */}
+                <div style={{
+                  background: theme.bg,
+                  borderRadius: 8,
+                  padding: 16,
+                  border: `1px solid ${theme.border}`,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                    {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
+                  </div>
+                  <textarea
+                    value={advancedForm.reason}
+                    onChange={(e) => setAdvancedForm({ ...advancedForm, reason: e.target.value })}
+                    placeholder="Reason for action..."
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 6,
+                      fontSize: 13,
+                      outline: 'none',
+                      background: theme.card,
+                      color: theme.txt,
+                      marginBottom: 12,
+                      resize: 'vertical',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                  <button
+                    onClick={() => handleToggleBan()}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: advancedSelectedUser.is_active ? theme.red : theme.green,
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red + '90' : theme.green + '90'; }}
+                    onMouseLeave={(e) => { e.target.style.background = advancedSelectedUser.is_active ? theme.red : theme.green; }}
+                  >
+                    {advancedSelectedUser.is_active ? 'Ban User' : 'Unban User'}
+                  </button>
+                </div>
+
+                {/* Manage Roles */}
+                <div style={{
+                  background: theme.bg,
+                  borderRadius: 8,
+                  padding: 16,
+                  border: `1px solid ${theme.border}`,
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                    Manage Roles
+                  </div>
+                  <div style={{ marginBottom: 12, maxHeight: 150, overflowY: 'auto' }}>
+                    {roles.map((role) => (
+                      <label key={role.id} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontSize: 12,
+                        color: theme.txt,
+                        padding: '6px 8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}>
+                        <input
+                          type="checkbox"
+                          checked={advancedSelectedUser.roles?.some(r => r.id === role.id) || false}
+                          onChange={(e) => handleToggleRole(role.id, e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        {role.name}
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 11, color: theme.sub }}>
+                    {advancedSelectedUser.roles?.length || 0} roles assigned
+                  </div>
+                </div>
+              </div>
+
+              {/* User Info */}
+              <div style={{
+                marginTop: 24,
+                padding: 16,
+                background: theme.bg,
+                borderRadius: 8,
+                border: `1px solid ${theme.border}`,
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 12 }}>
+                  User Information
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Username</div>
+                    <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.username}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Email</div>
+                    <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.email || 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Phone</div>
+                    <div style={{ fontSize: 13, color: theme.txt }}>{advancedSelectedUser.phone_number || 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Status</div>
+                    <div style={{ fontSize: 13, color: advancedSelectedUser.is_active ? theme.green : theme.red }}>
+                      {advancedSelectedUser.is_active ? 'Active' : 'Banned'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Staff</div>
+                    <div style={{ fontSize: 13, color: advancedSelectedUser.is_staff ? theme.pri : theme.sub }}>
+                      {advancedSelectedUser.is_staff ? 'Yes' : 'No'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginBottom: 4 }}>Superuser</div>
+                    <div style={{ fontSize: 13, color: advancedSelectedUser.is_superuser ? theme.red : theme.sub }}>
+                      {advancedSelectedUser.is_superuser ? 'Yes' : 'No'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {activeTab === 'roles' && (
