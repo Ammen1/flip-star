@@ -95,8 +95,11 @@ export function CoinManagementPage({ theme }) {
         cost_comment: config.costs.comment,
         cost_join_campaign: config.costs.join_campaign,
         cost_extra_campaign_entry: config.costs.extra_campaign_entry,
+        cost_boost_1hr: config.costs.boost_1hr,
         cost_boost_2hr: config.costs.boost_2hr,
         cost_boost_24hr: config.costs.boost_24hr,
+        cost_trending_1hr: config.costs.trending_1hr,
+        cost_trending_24hr: config.costs.trending_24hr,
         withdrawal_enabled: config.withdrawal.enabled,
         withdrawal_min_coins: config.withdrawal.min_coins,
         withdrawal_max_coins_per_request: config.withdrawal.max_coins_per_request,
@@ -439,8 +442,11 @@ function ActionCostsSubTab({ theme: T, config, updateField }) {
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Join Campaign Cost" value={config.costs.join_campaign} onChange={(v) => updateField('costs', 'join_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Extra Entry Cost" value={config.costs.extra_campaign_entry} onChange={(v) => updateField('costs', 'extra_campaign_entry', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Boost 1hr Cost" value={config.costs.boost_1hr} onChange={(v) => updateField('costs', 'boost_1hr', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Boost 2hr Cost" value={config.costs.boost_2hr} onChange={(v) => updateField('costs', 'boost_2hr', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Boost 24hr Cost" value={config.costs.boost_24hr} onChange={(v) => updateField('costs', 'boost_24hr', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Trending 1hr Cost" value={config.costs.trending_1hr} onChange={(v) => updateField('costs', 'trending_1hr', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Trending 24hr Cost" value={config.costs.trending_24hr} onChange={(v) => updateField('costs', 'trending_24hr', parseInt(v) || 0)} />
       </SectionCard>
     </div>
   );

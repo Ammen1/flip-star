@@ -44,8 +44,11 @@ class WalletConfig(models.Model):
     cost_comment = models.PositiveIntegerField(default=0)
     cost_join_campaign = models.PositiveIntegerField(default=50)
     cost_extra_campaign_entry = models.PositiveIntegerField(default=100)
+    cost_boost_1hr = models.PositiveIntegerField(default=100, help_text='Cost to boost post for 1 hour')
     cost_boost_2hr = models.PositiveIntegerField(default=200)
     cost_boost_24hr = models.PositiveIntegerField(default=800)
+    cost_trending_1hr = models.PositiveIntegerField(default=150, help_text='Cost to make post trending for 1 hour')
+    cost_trending_24hr = models.PositiveIntegerField(default=1200, help_text='Cost to make post trending for 24 hours')
 
     # ============ MINIMUM BALANCE THRESHOLDS ============
     min_balance_to_post = models.PositiveIntegerField(default=0)
