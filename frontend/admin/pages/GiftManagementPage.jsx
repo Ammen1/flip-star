@@ -1,14 +1,24 @@
 import { useState, useEffect } from 'react';
-import { Upload, X, Plus, Edit2, Trash2, Gift as GiftIcon, Coins, Sparkles, Zap } from 'lucide-react';
+import { Upload, X, Plus, Edit2, Trash2, Gift as GiftIcon, Coins, Sparkles, Zap, Shield, Save } from 'lucide-react';
 import api from '../../api';
 
 export function GiftManagementPage({ theme }) {
+  const [activeTab, setActiveTab] = useState('gifts'); // 'gifts' or 'restrictions'
   const [gifts, setGifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingGift, setEditingGift] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [previewAnimatedImage, setPreviewAnimatedImage] = useState(null);
+  
+  // Gift restrictions state
+  const [restrictions, setRestrictions] = useState({
+    min_points_per_transaction: 10,
+    max_points_per_transaction: 5000,
+    max_points_to_recipient_per_day: 5000,
+    max_total_points_sent_per_day: 10000,
+  });
+  const [savingRestrictions, setSavingRestrictions] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -28,7 +38,40 @@ export function GiftManagementPage({ theme }) {
 
   useEffect(() => {
     loadGifts();
+    loadRestrictions();
   }, []);
+
+  const loadRestrictions = async () => {
+    try {
+      const response = await api.request('/admin/wallet/config/');
+      if (response.config && response.config.gifting && response.config.gifting.restrictions) {
+        setRestrictions(response.config.gifting.restrictions);
+      }
+    } catch (error) {
+      console.error('Error loading restrictions:', error);
+    }
+  };
+
+  const handleSaveRestrictions = async () => {
+    setSavingRestrictions(true);
+    try {
+      await api.request('/admin/wallet/config/', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          gift_min_points_per_transaction: restrictions.min_points_per_transaction,
+          gift_max_points_per_transaction: restrictions.max_points_per_transaction,
+          gift_max_points_to_recipient_per_day: restrictions.max_points_to_recipient_per_day,
+          gift_max_total_points_sent_per_day: restrictions.max_total_points_sent_per_day,
+        }),
+      });
+      alert('Gift restrictions updated successfully!');
+    } catch (error) {
+      console.error('Error saving restrictions:', error);
+      alert('Error saving restrictions. Please try again.');
+    } finally {
+      setSavingRestrictions(false);
+    }
+  };
 
   const loadGifts = async () => {
     try {
@@ -214,11 +257,36 @@ export function GiftManagementPage({ theme }) {
             Configure virtual gifts with coin values and gamification settings
           </p>
         </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        marginBottom: '24px',
+        borderBottom: `1px solid ${theme.border}`,
+        paddingBottom: '4px',
+      }}>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => setActiveTab('gifts')}
           style={{
-            background: theme.pri,
-            color: '#fff',
+            background: activeTab === 'gifts' ? theme.pri : 'transparent',
+            color: activeTab === 'gifts' ? '#fff' : theme.sub,
+            border: 'none',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}
+        >
+          Gifts
+        </button>
+        <button
+          onClick={() => setActiveTab('restrictions')}
+          style={{
+            background: activeTab === 'restrictions' ? theme.pri : 'transparent',
+            color: activeTab === 'restrictions' ? '#fff' : theme.sub,
             border: 'none',
             padding: '12px 24px',
             borderRadius: '8px',
@@ -230,193 +298,412 @@ export function GiftManagementPage({ theme }) {
             gap: '8px',
           }}
         >
-          <Plus size={18} />
-          Add New Gift
+          <Shield size={16} />
+          Restrictions
         </button>
       </div>
 
-      {/* Gift Grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-        gap: '20px',
-      }}>
-        {gifts.map((gift) => (
-          <div key={gift.id} style={{
-            background: theme.bg,
-            borderRadius: '12px',
-            padding: '20px',
-            border: `1px solid ${theme.border}`,
-            position: 'relative',
+      {activeTab === 'gifts' && (
+        <div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '24px',
           }}>
-            <div style={{
-              position: 'absolute',
-              top: '12px',
-              right: '12px',
-              display: 'flex',
-              gap: '8px',
-            }}>
-              <button
-                onClick={() => handleEdit(gift)}
-                style={{
-                  background: theme.pri,
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '6px',
-                  cursor: 'pointer',
-                  color: '#fff',
-                }}
-              >
-                <Edit2 size={16} />
-              </button>
-              <button
-                onClick={() => handleDelete(gift.id)}
-                style={{
-                  background: theme.red,
-                  border: 'none',
-                  borderRadius: '6px',
-                  padding: '6px',
-                  cursor: 'pointer',
-                  color: '#fff',
-                }}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-
-            <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              marginBottom: '16px',
-              background: theme.bg,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              {gift.image_url ? (
-                <img
-                  src={gift.image_url}
-                  alt={gift.name}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
-              ) : (
-                <GiftIcon size={32} color={theme.sub} />
-              )}
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              marginBottom: '8px',
-            }}>
-              <span style={{ fontSize: '24px' }}>{getCategoryIcon(gift.category)}</span>
-              <h3 style={{
-                fontSize: '18px',
+            <button
+              onClick={() => setShowModal(true)}
+              style={{
+                background: theme.pri,
+                color: '#fff',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '14px',
                 fontWeight: '600',
-                color: theme.text,
-                margin: 0,
-              }}>
-                {gift.name}
-              </h3>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginBottom: '8px',
-            }}>
-              <Coins size={16} color={theme.pri} />
-              <span style={{
-                fontSize: '16px',
-                fontWeight: '600',
-                color: theme.pri,
-              }}>
-                {gift.coin_value}
-              </span>
-              <span style={{ fontSize: '12px', color: theme.sub }}>coins</span>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              flexWrap: 'wrap',
-              marginBottom: '12px',
-            }}>
-              <span style={{
-                fontSize: '12px',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                background: theme.bg,
-                color: getRarityColor(gift.rarity),
-                fontWeight: '500',
-              }}>
-                {gift.rarity}
-              </span>
-              <span style={{
-                fontSize: '12px',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                background: theme.bg,
-                color: theme.sub,
-              }}>
-                {gift.category}
-              </span>
-            </div>
-
-            <div style={{
-              fontSize: '12px',
-              color: theme.sub,
-              marginBottom: '8px',
-            }}>
-              {gift.description || 'No description'}
-            </div>
-
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '12px',
-              color: theme.sub,
-            }}>
-              <Sparkles size={12} />
-              <span>+{gift.xp_reward} XP</span>
-              {gift.animation_type && (
-                <>
-                  <Zap size={12} style={{ marginLeft: '8px' }} />
-                  <span>{gift.animation_type}</span>
-                </>
-              )}
-            </div>
-
-            {!gift.is_active && (
-              <div style={{
-                position: 'absolute',
-                top: '0',
-                left: '0',
-                right: '0',
-                bottom: '0',
-                background: 'rgba(0,0,0,0.5)',
-                borderRadius: '12px',
+                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <span style={{
-                  color: '#fff',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                }}>
-                  Inactive
-                </span>
-              </div>
-            )}
+                gap: '8px',
+              }}
+            >
+              <Plus size={18} />
+              Add New Gift
+            </button>
           </div>
-        ))}
-      </div>
+
+          {/* Gift Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            gap: '20px',
+          }}>
+            {gifts.map((gift) => (
+              <div key={gift.id} style={{
+                background: theme.bg,
+                borderRadius: '12px',
+                padding: '20px',
+                border: `1px solid ${theme.border}`,
+                position: 'relative',
+              }}>
+                <div style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  display: 'flex',
+                  gap: '8px',
+                }}>
+                  <button
+                    onClick={() => handleEdit(gift)}
+                    style={{
+                      background: theme.pri,
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '6px',
+                      cursor: 'pointer',
+                      color: '#fff',
+                    }}
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(gift.id)}
+                    style={{
+                      background: theme.red,
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '6px',
+                      cursor: 'pointer',
+                      color: '#fff',
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  marginBottom: '16px',
+                  background: theme.bg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  {gift.image_url ? (
+                    <img
+                      src={gift.image_url}
+                      alt={gift.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <GiftIcon size={32} color={theme.sub} />
+                  )}
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '8px',
+                }}>
+                  <span style={{ fontSize: '24px' }}>{getCategoryIcon(gift.category)}</span>
+                  <h3 style={{
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: theme.text,
+                    margin: 0,
+                  }}>
+                    {gift.name}
+                  </h3>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginBottom: '8px',
+                }}>
+                  <Coins size={16} color={theme.pri} />
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: theme.pri,
+                  }}>
+                    {gift.coin_value}
+                  </span>
+                  <span style={{ fontSize: '12px', color: theme.sub }}>coins</span>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  flexWrap: 'wrap',
+                  marginBottom: '12px',
+                }}>
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    background: theme.bg,
+                    color: getRarityColor(gift.rarity),
+                    fontWeight: '500',
+                  }}>
+                    {gift.rarity}
+                  </span>
+                  <span style={{
+                    fontSize: '12px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    background: theme.bg,
+                    color: theme.sub,
+                  }}>
+                    {gift.category}
+                  </span>
+                </div>
+
+                <div style={{
+                  fontSize: '12px',
+                  color: theme.sub,
+                  marginBottom: '8px',
+                }}>
+                  {gift.description || 'No description'}
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '12px',
+                  color: theme.sub,
+                }}>
+                  <Sparkles size={12} />
+                  <span>+{gift.xp_reward} XP</span>
+                  {gift.animation_type && (
+                    <>
+                      <Zap size={12} style={{ marginLeft: '8px' }} />
+                      <span>{gift.animation_type}</span>
+                    </>
+                  )}
+                </div>
+
+                {!gift.is_active && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '0',
+                    left: '0',
+                    right: '0',
+                    bottom: '0',
+                    background: 'rgba(0,0,0,0.5)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <span style={{
+                      color: '#fff',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                    }}>
+                      Inactive
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'restrictions' && (
+        <div style={{
+          background: theme.bg,
+          borderRadius: '12px',
+          padding: '24px',
+          border: `1px solid ${theme.border}`,
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            marginBottom: '24px',
+          }}>
+            <Shield size={24} color={theme.pri} />
+            <h2 style={{
+              fontSize: '20px',
+              fontWeight: '600',
+              color: theme.text,
+              margin: 0,
+            }}>
+              Gift Transfer Restrictions
+            </h2>
+          </div>
+
+          <div style={{
+            marginBottom: '24px',
+            padding: '16px',
+            background: theme.bg,
+            borderRadius: '8px',
+            border: `1px solid ${theme.border}`,
+          }}>
+            <p style={{ color: theme.sub, fontSize: '14px', margin: 0 }}>
+              These restrictions apply to all gift transactions based on the point transfer rules.
+            </p>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: theme.text,
+                marginBottom: '8px',
+              }}>
+                Minimum Points per Transaction
+              </label>
+              <input
+                type="number"
+                value={restrictions.min_points_per_transaction}
+                onChange={(e) => setRestrictions({ ...restrictions, min_points_per_transaction: parseInt(e.target.value) })}
+                min="1"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${theme.border}`,
+                  background: theme.bg,
+                  color: theme.text,
+                  fontSize: '14px',
+                }}
+              />
+              <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
+                Minimum points required per gift transaction
+              </p>
+            </div>
+
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: theme.text,
+                marginBottom: '8px',
+              }}>
+                Maximum Points per Transaction
+              </label>
+              <input
+                type="number"
+                value={restrictions.max_points_per_transaction}
+                onChange={(e) => setRestrictions({ ...restrictions, max_points_per_transaction: parseInt(e.target.value) })}
+                min="1"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${theme.border}`,
+                  background: theme.bg,
+                  color: theme.text,
+                  fontSize: '14px',
+                }}
+              />
+              <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
+                Maximum points allowed per single gift
+              </p>
+            </div>
+
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: theme.text,
+                marginBottom: '8px',
+              }}>
+                Max Points to One Recipient per Day
+              </label>
+              <input
+                type="number"
+                value={restrictions.max_points_to_recipient_per_day}
+                onChange={(e) => setRestrictions({ ...restrictions, max_points_to_recipient_per_day: parseInt(e.target.value) })}
+                min="1"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${theme.border}`,
+                  background: theme.bg,
+                  color: theme.text,
+                  fontSize: '14px',
+                }}
+              />
+              <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
+                Voting cap - max points to one recipient in 24h
+              </p>
+            </div>
+
+            <div>
+              <label style={{
+                display: 'block',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: theme.text,
+                marginBottom: '8px',
+              }}>
+                Max Total Points Sent per Day
+              </label>
+              <input
+                type="number"
+                value={restrictions.max_total_points_sent_per_day}
+                onChange={(e) => setRestrictions({ ...restrictions, max_total_points_sent_per_day: parseInt(e.target.value) })}
+                min="1"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${theme.border}`,
+                  background: theme.bg,
+                  color: theme.text,
+                  fontSize: '14px',
+                }}
+              />
+              <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
+                Total outbound points limit per 24h
+              </p>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '12px',
+          }}>
+            <button
+              onClick={handleSaveRestrictions}
+              disabled={savingRestrictions}
+              style={{
+                background: theme.pri,
+                color: '#fff',
+                border: 'none',
+                padding: '12px 24px',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: savingRestrictions ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                opacity: savingRestrictions ? 0.6 : 1,
+              }}
+            >
+              <Save size={16} />
+              {savingRestrictions ? 'Saving...' : 'Save Restrictions'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {showModal && (

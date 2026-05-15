@@ -518,6 +518,10 @@ def admin_wallet_config(request):
         'monthly_winner_points',
         'grand_finalist_points',
         'grand_winner_points',
+        'gift_min_points_per_transaction',
+        'gift_max_points_per_transaction',
+        'gift_max_points_to_recipient_per_day',
+        'gift_max_total_points_sent_per_day',
     ]
     for field in editable_fields:
         if field in request.data:
@@ -590,6 +594,12 @@ def _serialize_full_config(config):
             'purchased_coins_giftable': config.purchased_coins_giftable,
             'earned_coins_withdrawable': config.earned_coins_withdrawable,
             'purchased_coins_withdrawable': config.purchased_coins_withdrawable,
+            'restrictions': {
+                'min_points_per_transaction': config.gift_min_points_per_transaction,
+                'max_points_per_transaction': config.gift_max_points_per_transaction,
+                'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
+                'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
+            }
         },
         'expiry': {
             'earned_coins_expire_days': config.earned_coins_expire_days,

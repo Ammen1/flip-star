@@ -81,6 +81,12 @@ class WalletConfig(models.Model):
     purchased_coins_giftable = models.BooleanField(default=True)
     earned_coins_withdrawable = models.BooleanField(default=True, help_text='Can earned coins be withdrawn to Birr?')
     purchased_coins_withdrawable = models.BooleanField(default=False, help_text='Should not allow purchased->Birr (money laundering)')
+    
+    # ============ GIFT RESTRICTIONS (Point Transfer Rules) ============
+    gift_min_points_per_transaction = models.PositiveIntegerField(default=10, help_text='Minimum points per gift transaction')
+    gift_max_points_per_transaction = models.PositiveIntegerField(default=5000, help_text='Maximum points per single gift')
+    gift_max_points_to_recipient_per_day = models.PositiveIntegerField(default=5000, help_text='Max points to one recipient per day (Voting Cap)')
+    gift_max_total_points_sent_per_day = models.PositiveIntegerField(default=10000, help_text='Max total points sent per user per day')
 
     # ============ EXPIRY ============
     earned_coins_expire_days = models.PositiveIntegerField(default=0, help_text='0 = never expire')

@@ -217,6 +217,74 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         
         total_cost = gift.coin_value * quantity
         
+        # Convert coins to points for restriction checks
+        points_cost = wallet_config.coins_to_points(total_cost)
+        
+        # Check minimum points per transaction
+        if points_cost < wallet_config.gift_min_points_per_transaction:
+            return Response(
+                {
+                    'error': f'Minimum {wallet_config.gift_min_points_per_transaction} points required per gift transaction',
+                    'min_points': wallet_config.gift_min_points_per_transaction,
+                    'points_cost': points_cost
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check maximum points per transaction
+        if points_cost > wallet_config.gift_max_points_per_transaction:
+            return Response(
+                {
+                    'error': f'Maximum {wallet_config.gift_max_points_per_transaction} points allowed per gift transaction',
+                    'max_points': wallet_config.gift_max_points_per_transaction,
+                    'points_cost': points_cost
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check daily limit to specific recipient (Voting Cap)
+        from django.utils import timezone
+        from datetime import timedelta
+        twenty_four_hours_ago = timezone.now() - timedelta(hours=24)
+        
+        gifts_to_recipient_today = GiftTransaction.objects.filter(
+            sender=request.user,
+            recipient=recipient,
+            created_at__gte=twenty_four_hours_ago
+        ).aggregate(total=Sum('total_coins'))['total'] or 0
+        
+        points_to_recipient_today = wallet_config.coins_to_points(gifts_to_recipient_today)
+        
+        if points_to_recipient_today + points_cost > wallet_config.gift_max_points_to_recipient_per_day:
+            return Response(
+                {
+                    'error': f'Maximum {wallet_config.gift_max_points_to_recipient_per_day} points can be sent to one recipient per day',
+                    'max_points': wallet_config.gift_max_points_to_recipient_per_day,
+                    'points_sent_today': points_to_recipient_today,
+                    'points_cost': points_cost
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check total daily outgoing limit
+        total_gifts_today = GiftTransaction.objects.filter(
+            sender=request.user,
+            created_at__gte=twenty_four_hours_ago
+        ).aggregate(total=Sum('total_coins'))['total'] or 0
+        
+        points_sent_today = wallet_config.coins_to_points(total_gifts_today)
+        
+        if points_sent_today + points_cost > wallet_config.gift_max_total_points_sent_per_day:
+            return Response(
+                {
+                    'error': f'Maximum {wallet_config.gift_max_total_points_sent_per_day} points can be sent per day total',
+                    'max_points': wallet_config.gift_max_total_points_sent_per_day,
+                    'points_sent_today': points_sent_today,
+                    'points_cost': points_cost
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # Check if purchased coins can be used for gifting
         if not wallet_config.purchased_coins_giftable:
             return Response(
