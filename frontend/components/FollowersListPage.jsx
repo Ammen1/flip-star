@@ -221,18 +221,6 @@ export function FollowersListPage({ user, userId, type = "followers", onBack, on
                         gap: 6,
                       }}>
                         {user.username}
-                        {user.id === user?.id && (
-                          <span style={{
-                            fontSize: 10,
-                            background: T.pri,
-                            color: "#fff",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            fontWeight: 600,
-                          }}>
-                            You
-                          </span>
-                        )}
                         {mutualUsers.has(user.id) && user.id !== user?.id && (
                           <span style={{
                             fontSize: 10,
