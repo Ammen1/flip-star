@@ -113,12 +113,23 @@ def admin_users_list(request):
     # Search
     search = request.GET.get('search', '')
     if search:
+        # Normalize phone number for search - handle different formats
+        normalized_search = search.replace(' ', '').replace('-', '').replace('+', '')
+        # If search looks like a phone number starting with 0, also try with 251 prefix
+        phone_search_variants = [search]
+        if normalized_search.isdigit() and normalized_search.startswith('0'):
+            phone_search_variants.append('251' + normalized_search[1:])
+        
+        phone_query = Q()
+        for variant in phone_search_variants:
+            phone_query |= Q(profile__phone_number__icontains=variant)
+        
         users = users.filter(
             Q(username__icontains=search) | 
             Q(email__icontains=search) |
             Q(first_name__icontains=search) |
             Q(last_name__icontains=search) |
-            Q(profile__phone_number__icontains=search)
+            phone_query
         )
     
     total = users.count()
