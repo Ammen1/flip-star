@@ -30,6 +30,9 @@ COPY nginx.conf /etc/nginx/conf.d/custom.conf
 # Copy build artifacts from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Copy assets folder
+COPY --from=builder /app/assets /usr/share/nginx/html/assets
+
 # Expose port
 EXPOSE 80
 
