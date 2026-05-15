@@ -129,7 +129,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
         {/* Logo Header */}
         <div style={{ 
-          background: "#FFFFFF", 
+          background: "#000000", 
           height: 90, 
           marginBottom: 24, 
           borderRadius: 12, 
@@ -137,7 +137,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
           alignItems: "center", 
           justifyContent: "center"
         }}>
-          <img src="/assets/70x20.png" alt="Logo" style={{ width: 398, height: 90, objectFit: "contain" }} />
+          <img src="/assets/70x20.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
         </div>
 
         {/* Card */}
