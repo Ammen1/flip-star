@@ -619,7 +619,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           <SectionLabel>{t('appearance')}</SectionLabel>
           <SectionCard>
             <Row icon={darkMode ? Moon : Sun} title={t('darkMode')} type="switch" value={darkMode} onToggle={toggleDarkMode} />
-            <Row icon={Globe} title={t('language')} subtitle={language === 'en' ? 'English' : language === 'am' ? 'አማርኛ' : language} onPress={() => setShowLangModal(true)} />
+            <Row icon={Globe} title={t('language')} subtitle={language === 'en' ? 'English' : language} onPress={() => setShowLangModal(true)} />
           </SectionCard>
 
           {/* Help & Support */}
@@ -667,7 +667,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
               <div style={{ padding: '8px 20px' }}>
                 {[
                   { id: 'en', label: 'English' },
-                  { id: 'am', label: 'አማርኛ (Amharic)' },
                 ].map(l => (
                   <button
                     key={l.id}
@@ -1239,7 +1238,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
                 }}
               >
                 <option value="en">English</option>
-                <option value="am">አማርኛ (Amharic)</option>
               </select>
             </div>
           )}
