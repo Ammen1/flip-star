@@ -151,8 +151,8 @@ const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, 
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: isReply ? 12 : 13, color: '#8fc441' }}>{comment.user?.username}</span>
-            <span style={{ fontSize: isReply ? 12 : 13, color: '#8fc441', wordBreak: 'break-word', lineHeight: 1.4 }}>
+            <span style={{ fontWeight: 700, fontSize: isReply ? 12 : 13, color: '#fff' }}>{comment.user?.username}</span>
+            <span style={{ fontSize: isReply ? 12 : 13, color: '#fff', wordBreak: 'break-word', lineHeight: 1.4 }}>
               {comment.text}
             </span>
           </div>
@@ -674,7 +674,7 @@ const PostInfoSheet = memo(function PostInfoSheet({ post, onClose, T }) {
           {[['❤️', post.votes || 0, 'Likes'], ['💬', post.comment_count || 0, 'Comments'], ['👁️', post.view_count || 0, 'Views']].map(([emoji, val, lbl]) => (
             <div key={lbl} style={{ flex: 1, background: T?.cardBg || '#fff', borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: 18 }}>{emoji}</div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: T?.txt || '#000' }}>{Number(val).toLocaleString()}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: T?.txt || '#000' }}>{val === 0 ? 1 : Number(val).toLocaleString()}</div>
               <div style={{ fontSize: 11, color: T?.sub || '#666' }}>{lbl}</div>
             </div>
           ))}
@@ -689,7 +689,7 @@ const PostInfoSheet = memo(function PostInfoSheet({ post, onClose, T }) {
 
         {/* Caption */}
         {post.caption && (
-          <div style={{ fontSize: 14, color: T?.txt || '#000', lineHeight: 1.55, marginTop: 8 }}>
+          <div style={{ fontSize: 14, color: '#fff', lineHeight: 1.55, marginTop: 8 }}>
             <span style={{ fontWeight: 700 }}>@{post.user?.username} </span>
             {post.caption}
           </div>
@@ -1329,7 +1329,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
               <button
                 className="hp-btn"
                 onClick={(e) => { e.stopPropagation(); onShowProfile?.(post.user?.id); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'calc(var(--font-size-base, 16px) * 0.8125)', fontWeight: 700, color: T?.txt || '#000' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'calc(var(--font-size-base, 16px) * 0.8125)', fontWeight: 700, color: '#fff' }}
               >
                 {post.user?.username || 'user'}
               </button>
@@ -1528,7 +1528,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 }}
               >
                 <Share2 size={baseFontSize} color="#8fc441" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{post.shares > 0 ? post.shares : ''}</span>
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{post.shares > 0 ? post.shares : 1}</span>
               </button>
               {/* Gift - only show on other people's posts */}
               {post.user?.username !== currentUser?.username && (
@@ -1580,7 +1580,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 cursor: 'pointer',
               }}
             >
-              <span style={{ fontWeight: 700, color: '#8fc441' }}>{post.user?.username} </span>
+              <span style={{ fontWeight: 700, color: '#fff' }}>{post.user?.username} </span>
               {post.caption}
               {post.caption.length > 100 && (
                 <span

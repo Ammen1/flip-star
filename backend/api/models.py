@@ -25,8 +25,6 @@ from .models_subscription import (
     OnevasWebhookLog, PromoCode, UserPromoUsage, SubscriptionFeatureUsage,
     ExpiredSubscriptionAction, TrialPopupLog, SubscriptionCoinTransaction, AdminRole, SubscriptionReport
 )
-# Import direct debit models
-from .models_direct_debit import DirectDebitMandate, DirectDebitTransaction
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')

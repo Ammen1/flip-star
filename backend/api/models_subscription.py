@@ -110,24 +110,6 @@ class SubscriptionPlan(models.Model):
     subscription_source = models.CharField(max_length=20, choices=[('sms', 'SMS'), ('app', 'App')], default='app')
     setup_otp = models.CharField(max_length=6, null=True, blank=True, help_text='OTP for account setup after SMS subscription')
     
-    # Payment method
-    PAYMENT_METHOD_CHOICES = [
-        ('onevas', 'Onevas Airtime'),
-        ('telebirr_direct_debit', 'Telebirr Direct Debit'),
-        ('coins', 'Coins'),
-    ]
-    payment_method = models.CharField(max_length=30, choices=PAYMENT_METHOD_CHOICES, default='onevas')
-    
-    # Direct Debit mandate reference
-    direct_debit_mandate = models.ForeignKey(
-        'api.DirectDebitMandate',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='subscription_plans',
-        help_text='Linked direct debit mandate'
-    )
-    
     # Status and dates
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     duration_type = models.CharField(max_length=20, choices=SubscriptionTier.DURATION_CHOICES)

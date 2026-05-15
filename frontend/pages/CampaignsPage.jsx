@@ -447,7 +447,7 @@ export function CampaignsPage({ onCampaignClick, onBack }) {
                       }}>
                         <div style={{ flex: 1, textAlign: 'center', padding: '6px 4px', background: T.bg, borderRadius: 8 }}>
                           <div style={{ fontSize: 14, fontWeight: 800, color: T.txt }}>
-                            {campaign.total_entries || 0}
+                            {campaign.total_entries === 0 ? 1 : campaign.total_entries}
                           </div>
                           <div style={{ fontSize: 9, color: T.sub, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                             Entries
@@ -455,7 +455,7 @@ export function CampaignsPage({ onCampaignClick, onBack }) {
                         </div>
                         <div style={{ flex: 1, textAlign: 'center', padding: '6px 4px', background: T.bg, borderRadius: 8 }}>
                           <div style={{ fontSize: 14, fontWeight: 800, color: T.txt }}>
-                            {campaign.total_votes || 0}
+                            {campaign.total_votes === 0 ? 1 : campaign.total_votes}
                           </div>
                           <div style={{ fontSize: 9, color: T.sub, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                             Votes

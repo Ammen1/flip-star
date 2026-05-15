@@ -395,7 +395,7 @@ const PostCard = ({ post, rank, onVote, campaignType, isVotingOpen }) => {
           disabled={campaignType !== 'grand' || !isVotingOpen}
         >
           <Heart size={16} fill={userLiked ? T.red : 'none'} color={userLiked ? T.red : T.sub} />
-          {likes}
+          {likes === 0 ? 1 : likes}
         </button>
         <button style={{
           display: 'flex', alignItems: 'center', gap: 6,
@@ -403,7 +403,7 @@ const PostCard = ({ post, rank, onVote, campaignType, isVotingOpen }) => {
           fontSize: 14, fontWeight: 600, color: T.sub,
         }}>
           <MessageCircle size={18} />
-          {comments}
+          {comments === 0 ? 1 : comments}
         </button>
         {totalScore > 0 && (
           <button

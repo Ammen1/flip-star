@@ -696,10 +696,10 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
         </div>
 
         {/* Footer links */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 20, paddingBottom: 20 }}>
-          <button onClick={() => setModal("faq")} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>FAQ</button>
-          <span style={{ color: "#262626" }}>|</span>
-          <button onClick={() => setModal("terms")} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>Terms & Conditions</button>
+        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 24, paddingBottom: 24, borderTop: "1px solid #262626", paddingTop: 20 }}>
+          <button onClick={() => setModal("faq")} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 15, cursor: "pointer", fontWeight: 700, padding: "6px 12px", borderRadius: 6, textDecoration: "underline", textUnderlineOffset: "2px" }}>FAQ</button>
+          <span style={{ color: "#888", fontSize: 15 }}>|</span>
+          <button onClick={() => setModal("terms")} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 15, cursor: "pointer", fontWeight: 700, padding: "6px 12px", borderRadius: 6, textDecoration: "underline", textUnderlineOffset: "2px" }}>Terms & Conditions</button>
         </div>
       </div>
 

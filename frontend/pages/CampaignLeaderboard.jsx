@@ -240,19 +240,19 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Heart size={11} color="#EF4444" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.likes_count || 0}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.likes_count === 0 ? 1 : entry.likes_count}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <MessageCircle size={11} color="#888" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.comments_count || 0}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.comments_count === 0 ? 1 : entry.comments_count}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Share2 size={11} color="#3B82F6" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.shares_count || 0}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.shares_count === 0 ? 1 : entry.shares_count}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Gift size={11} color="#8fc441" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.gifts_count || 0}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.gifts_count === 0 ? 1 : entry.gifts_count}</span>
                           </div>
                           {entry.post_count > 0 && (
                             <span style={{ fontSize: 12, color: T.sub }}>{entry.post_count} posts</span>
@@ -262,7 +262,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                       {/* Score */}
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 18, fontWeight: 800, color: rank <= 3 ? T.pri : T.txt }}>
-                          {entry.total_score || entry.score || 0}
+                          {(entry.total_score || entry.score) === 0 ? 1 : (entry.total_score || entry.score)}
                         </div>
                         <div style={{ fontSize: 11, color: T.sub }}>points</div>
                       </div>

@@ -407,12 +407,11 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
 
           {/* Quick Stats Row */}
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+            display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
             gap: 8, marginBottom: 14,
           }}>
             {[
-              { label: 'Entries',    value: campaign.total_entries || 0, color: '#3B82F6', icon: Users },
-              { label: 'Total Votes', value: campaign.total_votes || 0,   color: '#EF4444', icon: Flame },
+              { label: 'Entries',    value: campaign.total_entries === 0 ? 1 : campaign.total_entries, color: '#3B82F6', icon: Users },
               { label: 'Winners',    value: campaign.winner_count || 1,  color: BRAND,     icon: Crown },
             ].map((s, i) => {
               const I = s.icon;
@@ -502,10 +501,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
                 <div style={{ fontSize: 14, fontWeight: 800, color: T.txt }}>
                   Your Entry is Live 🎉
                 </div>
-                <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>
-                  {userEntry.vote_count || 0} votes · Rank #{userEntry.rank || '—'}
-                </div>
-              </div>
+                              </div>
             </div>
           )}
 

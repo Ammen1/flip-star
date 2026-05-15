@@ -878,6 +878,7 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
       `}</style>
 
       {/* ── BOTTOM NAV BAR ──────────────────────────────────────────────── */}
+      {window.innerWidth <= 768 ? (
       <nav style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         height: 60,
@@ -983,6 +984,7 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           );
         })}
       </nav>
+      ) : null}
 
       {/* ── CAPTURE STAGE ─────────────────────────────────────────────── */}
       {stage === 'capture' && (

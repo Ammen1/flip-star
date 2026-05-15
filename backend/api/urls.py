@@ -38,11 +38,6 @@ from .views_push import push_public_key, push_subscribe, push_unsubscribe
 from .views_support import (
     my_support_requests, admin_support_requests, admin_update_support_request,
 )
-from .views_direct_debit import (
-    create_direct_debit_mandate, activate_direct_debit_mandate,
-    cancel_direct_debit_mandate, list_user_mandates,
-    telebirr_direct_debit_webhook, initiate_direct_debit
-)
 
 @api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
@@ -477,13 +472,6 @@ urlpatterns = [
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
     path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
     path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
-    # ============ TELEBIRR DIRECT DEBIT ============
-    path('direct-debit/create/', create_direct_debit_mandate, name='direct-debit-create'),
-    path('direct-debit/activate/', activate_direct_debit_mandate, name='direct-debit-activate'),
-    path('direct-debit/cancel/', cancel_direct_debit_mandate, name='direct-debit-cancel'),
-    path('direct-debit/mandates/', list_user_mandates, name='direct-debit-mandates'),
-    path('direct-debit/initiate/', initiate_direct_debit, name='direct-debit-initiate'),
-    path('webhooks/telebirr-direct-debit/', telebirr_direct_debit_webhook, name='telebirr-direct-debit-webhook'),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),
     path('legal/<str:document_type>/', get_legal_document, name='legal-document'),
