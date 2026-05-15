@@ -590,6 +590,17 @@ def _serialize_full_config(config):
         'expiry': {
             'earned_coins_expire_days': config.earned_coins_expire_days,
         },
+        'points': {
+            'coins_to_points_conversion': config.coins_to_points_conversion,
+            'points_per_birr': config.points_per_birr,
+            'withdrawal_min_points': config.withdrawal_min_points,
+            'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
+            'daily_winner_points': config.daily_winner_points,
+            'weekly_winner_points': config.weekly_winner_points,
+            'monthly_winner_points': config.monthly_winner_points,
+            'grand_finalist_points': config.grand_finalist_points,
+            'grand_winner_points': config.grand_winner_points,
+        },
         'updated_at': config.updated_at.isoformat() if config.updated_at else None,
         'updated_by': config.updated_by.username if config.updated_by_id else None,
     }
