@@ -38,6 +38,14 @@ from .views_push import push_public_key, push_subscribe, push_unsubscribe
 from .views_support import (
     my_support_requests, admin_support_requests, admin_update_support_request,
 )
+from .views_direct_debit import (
+    create_direct_debit_mandate,
+    activate_direct_debit_mandate,
+    cancel_direct_debit_mandate,
+    list_user_mandates,
+    telebirr_direct_debit_webhook,
+    initiate_direct_debit,
+)
 
 @api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
@@ -449,8 +457,14 @@ urlpatterns = [
     path('subscriptions/subscribe/', NewSubscriptionViewSet.as_view({'post': 'subscribe'}), name='subscription-subscribe'),
     path('subscriptions/unsubscribe/', NewSubscriptionViewSet.as_view({'post': 'unsubscribe'}), name='subscription-unsubscribe'),
     path('subscriptions/history/', NewSubscriptionViewSet.as_view({'get': 'history'}), name='subscription-history'),
-    # Trial Popup
-    path('trial/popup/', TrialPopupViewSet.as_view({'get': 'list', 'post': 'create'}), name='trial-popup'),
+    path('trial/popup/', trial_popup, name='trial-popup'),
+    # Telebirr Direct Debit
+    path('direct-debit/create/', create_direct_debit_mandate, name='direct-debit-create'),
+    path('direct-debit/activate/', activate_direct_debit_mandate, name='direct-debit-activate'),
+    path('direct-debit/cancel/', cancel_direct_debit_mandate, name='direct-debit-cancel'),
+    path('direct-debit/mandates/', list_user_mandates, name='direct-debit-mandates'),
+    path('direct-debit/initiate/', initiate_direct_debit, name='direct-debit-initiate'),
+    path('webhooks/telebirr-direct-debit/', telebirr_direct_debit_webhook, name='telebirr-direct-debit-webhook'),
     # Coin Transactions
     path('coins/transactions/', CoinTransactionViewSet.as_view({'get': 'list'}), name='coin-transactions'),
     path('coins/purchase/', CoinTransactionViewSet.as_view({'post': 'purchase'}), name='coin-purchase'),
