@@ -1,0 +1,479 @@
+"""
+Telebirr Direct Debit API Views
+
+API endpoints for direct debit mandate management:
+- Create mandate
+- Activate mandate
+- Cancel mandate
+- List user mandates
+- Webhook for async results
+"""
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import datetime, timedelta
+from decimal import Decimal
+
+from .models_direct_debit import DirectDebitMandate, DirectDebitTransaction
+from .models_subscription import SubscriptionTier, SubscriptionPlan, SubscriptionPayment
+from .telebirr_direct_debit_service import telebirr_direct_debit_service
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_direct_debit_mandate(request):
+    """
+    Create a direct debit mandate for subscription payment
+    
+    Request Body:
+    {
+        "tier_id": "uuid",
+        "payer_msisdn": "251911234567",
+        "frequency": "05"  // 02=Daily, 03=Weekly, 05=Monthly
+    }
+    """
+    try:
+        user = request.user
+        tier_id = request.data.get('tier_id')
+        payer_msisdn = request.data.get('payer_msisdn')
+        frequency = request.data.get('frequency')
+        
+        # Validate required fields
+        if not all([tier_id, payer_msisdn, frequency]):
+            return Response(
+                {'error': 'tier_id, payer_msisdn, and frequency are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get subscription tier
+        try:
+            tier = SubscriptionTier.objects.get(id=tier_id, is_active=True)
+        except SubscriptionTier.DoesNotExist:
+            return Response(
+                {'error': 'Invalid subscription tier'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate frequency matches tier duration
+        frequency_map = {
+            'daily': '02',
+            'weekly': '03',
+            'monthly': '05',
+        }
+        if tier.duration_type not in frequency_map:
+            return Response(
+                {'error': 'This tier does not support direct debit (only tier-based subscriptions)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        expected_frequency = frequency_map[tier.duration_type]
+        if frequency != expected_frequency:
+            return Response(
+                {'error': f'Frequency must be {expected_frequency} for {tier.duration_type} tier'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Generate payer reference number
+        payer_reference_number = f"FLP{user.id}{int(timezone.now().timestamp())}"
+        
+        # Calculate dates
+        first_payment_date = timezone.now().date()
+        expiry_date = first_payment_date + timedelta(days=365)  # 1 year expiry
+        
+        # Call Telebirr service to create mandate
+        result = telebirr_direct_debit_service.create_mandate(
+            payer_msisdn=payer_msisdn,
+            payer_reference_number=payer_reference_number,
+            frequency=frequency,
+            first_payment_date=first_payment_date.strftime('%Y%m%d'),
+            expiry_date=expiry_date.strftime('%Y%m%d'),
+        )
+        
+        if not result.get('success'):
+            return Response(
+                {'error': result.get('error', 'Mandate creation failed')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Create mandate record
+        mandate = DirectDebitMandate.objects.create(
+            user=user,
+            payer_msisdn=payer_msisdn,
+            payer_reference_number=payer_reference_number,
+            payee_identifier_value=getattr(tier, 'short_code', '9286'),
+            frequency=frequency,
+            first_payment_date=first_payment_date,
+            expiry_date=expiry_date,
+            agreed_tc=True,
+            originator_conversation_id=result.get('originator_conversation_id'),
+            conversation_id=result.get('conversation_id'),
+            status='pending_active'  # Awaiting activation
+        )
+        
+        return Response({
+            'success': True,
+            'mandate_id': str(mandate.id),
+            'payer_reference_number': payer_reference_number,
+            'status': mandate.status,
+            'message': 'Mandate created successfully. Please activate it to complete subscription.',
+            'originator_conversation_id': result.get('originator_conversation_id')
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to create mandate: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def activate_direct_debit_mandate(request):
+    """
+    Activate a direct debit mandate
+    
+    Request Body:
+    {
+        "mandate_id": "uuid",
+        "payer_account_name": "John Doe"  // optional
+    }
+    """
+    try:
+        user = request.user
+        mandate_id = request.data.get('mandate_id')
+        payer_account_name = request.data.get('payer_account_name', '')
+        
+        # Validate required fields
+        if not mandate_id:
+            return Response(
+                {'error': 'mandate_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get mandate
+        try:
+            mandate = DirectDebitMandate.objects.get(id=mandate_id, user=user)
+        except DirectDebitMandate.DoesNotExist:
+            return Response(
+                {'error': 'Mandate not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check mandate status
+        if mandate.status != 'pending_active':
+            return Response(
+                {'error': f'Mandate is in {mandate.status} status, cannot activate'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Call Telebirr service to activate mandate
+        result = telebirr_direct_debit_service.activate_mandate(
+            mandate_id=mandate.mandate_id or mandate.payer_reference_number,
+            payer_msisdn=mandate.payer_msisdn,
+            agreed_tc=True,
+            payer_account_name=payer_account_name
+        )
+        
+        if not result.get('success'):
+            mandate.mark_failed(result.get('error'))
+            return Response(
+                {'error': result.get('error', 'Mandate activation failed')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Update mandate
+        mandate.payer_account_name = payer_account_name
+        mandate.originator_conversation_id = result.get('originator_conversation_id')
+        mandate.conversation_id = result.get('conversation_id')
+        mandate.activate()
+        
+        # Create subscription plan
+        tier = mandate.subscription_plan.tier if mandate.subscription_plan else None
+        if tier:
+            subscription_plan = SubscriptionPlan.objects.create(
+                user=user,
+                tier=tier,
+                status='active',
+                duration_type=tier.duration_type,
+                start_date=timezone.now(),
+                end_date=timezone.now() + timedelta(days=tier.duration_days) if tier.duration_days else None,
+                next_renewal_date=timezone.now() + timedelta(days=tier.duration_days) if tier.duration_days else None,
+                auto_renew=True,
+                payment_method='telebirr_direct_debit'
+            )
+            
+            # Link mandate to subscription
+            mandate.subscription_plan = subscription_plan
+            mandate.save()
+            
+            # Create initial payment record
+            SubscriptionPayment.objects.create(
+                subscription=subscription_plan,
+                user=user,
+                amount=tier.price_etb,
+                currency='ETB',
+                status='pending',
+                payment_method='telebirr_direct_debit',
+                duration_type=tier.duration_type,
+                period_start=timezone.now(),
+                period_end=subscription_plan.end_date or timezone.now() + timedelta(days=30)
+            )
+        
+        return Response({
+            'success': True,
+            'mandate_id': str(mandate.id),
+            'status': mandate.status,
+            'subscription_id': str(subscription_plan.id) if subscription_plan else None,
+            'message': 'Mandate activated successfully. Subscription created.'
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to activate mandate: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def cancel_direct_debit_mandate(request):
+    """
+    Cancel a direct debit mandate
+    
+    Request Body:
+    {
+        "mandate_id": "uuid"
+    }
+    """
+    try:
+        user = request.user
+        mandate_id = request.data.get('mandate_id')
+        
+        # Validate required fields
+        if not mandate_id:
+            return Response(
+                {'error': 'mandate_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get mandate
+        try:
+            mandate = DirectDebitMandate.objects.get(id=mandate_id, user=user)
+        except DirectDebitMandate.DoesNotExist:
+            return Response(
+                {'error': 'Mandate not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if mandate is active
+        if not mandate.is_active():
+            return Response(
+                {'error': f'Mandate is {mandate.status}, cannot cancel'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Call Telebirr service to cancel mandate
+        result = telebirr_direct_debit_service.cancel_mandate(
+            mandate_id=mandate.mandate_id or mandate.payer_reference_number,
+            payer_msisdn=mandate.payer_msisdn
+        )
+        
+        if not result.get('success'):
+            return Response(
+                {'error': result.get('error', 'Mandate cancellation failed')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Update mandate
+        mandate.cancel()
+        
+        # Cancel linked subscription auto-renewal
+        if mandate.subscription_plan:
+            mandate.subscription_plan.auto_renew = False
+            mandate.subscription_plan.save()
+        
+        return Response({
+            'success': True,
+            'mandate_id': str(mandate.id),
+            'status': mandate.status,
+            'message': 'Mandate cancelled successfully. Auto-renewal disabled.'
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to cancel mandate: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_user_mandates(request):
+    """
+    List all mandates for the authenticated user
+    """
+    try:
+        user = request.user
+        mandates = DirectDebitMandate.objects.filter(user=user).order_by('-created_at')
+        
+        mandate_data = []
+        for mandate in mandates:
+            mandate_data.append({
+                'id': str(mandate.id),
+                'mandate_id': mandate.mandate_id,
+                'payer_msisdn': mandate.payer_msisdn,
+                'status': mandate.status,
+                'frequency': mandate.frequency,
+                'first_payment_date': mandate.first_payment_date,
+                'expiry_date': mandate.expiry_date,
+                'subscription_plan_id': str(mandate.subscription_plan.id) if mandate.subscription_plan else None,
+                'created_at': mandate.created_at,
+                'is_active': mandate.is_active(),
+            })
+        
+        return Response({
+            'success': True,
+            'mandates': mandate_data
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to list mandates: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # Telebirr calls this webhook
+def telebirr_direct_debit_webhook(request):
+    """
+    Webhook endpoint for Telebirr async results
+    
+    Request Body: SOAP Result envelope
+    """
+    try:
+        callback_data = request.data
+        
+        # Process callback
+        result = telebirr_direct_debit_service.process_callback(callback_data)
+        
+        if not result.get('success'):
+            return Response(
+                {'error': result.get('error')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Find mandate by originator_conversation_id
+        originator_conversation_id = result.get('originator_conversation_id')
+        mandate = DirectDebitMandate.objects.filter(
+            originator_conversation_id=originator_conversation_id
+        ).first()
+        
+        if mandate:
+            # Update mandate based on result
+            if result.get('result_code') == '0':
+                # Success
+                if mandate.status == 'pending_created':
+                    mandate.status = 'pending_active'
+                    mandate.mandate_id = result.get('transaction_id') or mandate.payer_reference_number
+                    mandate.save()
+                elif mandate.status == 'pending_active':
+                    mandate.activate()
+                    mandate.mandate_id = result.get('transaction_id') or mandate.mandate_id
+                    mandate.save()
+            else:
+                # Failure
+                mandate.mark_failed(result.get('result_desc'))
+        
+        return Response({'success': True})
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Webhook processing failed: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def initiate_direct_debit(request):
+    """
+    Manually initiate a direct debit transaction (for testing or manual renewal)
+    
+    Request Body:
+    {
+        "mandate_id": "uuid",
+        "amount": 100.00
+    }
+    """
+    try:
+        user = request.user
+        mandate_id = request.data.get('mandate_id')
+        amount = request.data.get('amount')
+        
+        # Validate required fields
+        if not all([mandate_id, amount]):
+            return Response(
+                {'error': 'mandate_id and amount are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get mandate
+        try:
+            mandate = DirectDebitMandate.objects.get(id=mandate_id, user=user)
+        except DirectDebitMandate.DoesNotExist:
+            return Response(
+                {'error': 'Mandate not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if mandate is active
+        if not mandate.is_active():
+            return Response(
+                {'error': f'Mandate is {mandate.status}, cannot initiate debit'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create transaction record
+        transaction = DirectDebitTransaction.objects.create(
+            mandate=mandate,
+            amount=Decimal(str(amount)),
+            currency='ETB',
+            status='pending'
+        )
+        
+        # Call Telebirr service to initiate debit
+        result = telebirr_direct_debit_service.initiate_debit(
+            mandate_id=mandate.mandate_id or mandate.payer_reference_number,
+            payer_reference_number=mandate.payer_reference_number,
+            amount=amount,
+            shortcode=mandate.payee_identifier_value
+        )
+        
+        if not result.get('success'):
+            transaction.mark_failed(result.get('error'))
+            return Response(
+                {'error': result.get('error', 'Direct debit initiation failed')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Update transaction
+        transaction.originator_conversation_id = result.get('originator_conversation_id')
+        transaction.conversation_id = result.get('conversation_id')
+        transaction.telebirr_transaction_id = result.get('transaction_id')
+        transaction.save()
+        
+        return Response({
+            'success': True,
+            'transaction_id': str(transaction.id),
+            'status': transaction.status,
+            'message': 'Direct debit initiated successfully'
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to initiate direct debit: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

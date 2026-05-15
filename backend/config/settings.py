@@ -334,3 +334,17 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
 VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
 VAPID_SUBJECT = config('VAPID_SUBJECT', default='mailto:admin@flipstar.et')
+
+# ─── Telebirr Direct Debit (SOAP API) ───────────────────────────────────────
+# SOAP API endpoint for direct debit mandate operations
+TELEBIRR_SOAP_URL = config('TELEBIRR_SOAP_URL', default='https://cps.huawei.com/cpsinterface/api_requestmgr')
+TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='')
+TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='')
+TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='9286')
+TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://uat.flipstar.et/api/webhooks/telebirr-direct-debit')
+TELEBIRR_PAYEE_ACCOUNT_NAME = config('TELEBIRR_PAYEE_ACCOUNT_NAME', default='Flipstar')
+TELEBIRR_CALLER_TYPE = config('TELEBIRR_CALLER_TYPE', default='2')  # 2 = Third Party
+
+# SP Operator credentials for SOAP API
+TELEBIRR_SP_OPERATOR_ID = config('TELEBIRR_SP_OPERATOR_ID', default='')
+TELEBIRR_SP_OPERATOR_CREDENTIAL = config('TELEBIRR_SP_OPERATOR_CREDENTIAL', default='')
