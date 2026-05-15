@@ -1178,7 +1178,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0,0,0,0.7)',
+        background: 'rgba(0,0,0,0.8)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1189,13 +1189,15 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
     >
       <div
         style={{
-          background: '#fff',
-          borderRadius: 16,
-          padding: 32,
+          background: T.cardBg || T.bg,
+          borderRadius: 20,
+          padding: 28,
           width: '100%',
           maxWidth: 600,
-          maxHeight: '80vh',
+          maxHeight: '85vh',
           overflowY: 'auto',
+          border: `1px solid ${T.border}`,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1277,9 +1279,9 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
             {campaign && (
               <div style={{
                 padding: 16,
-                background: 'rgba(59,130,246,0.1)',
+                background: `${T.pri}15`,
                 borderRadius: 12,
-                border: '2px solid rgba(59,130,246,0.3)',
+                border: `1px solid ${T.pri}40`,
                 marginBottom: 20,
               }}>
                 <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 12 }}>
@@ -1367,7 +1369,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
               border: `2px dashed ${T.border}`,
               borderRadius: 12,
               textAlign: 'center',
-              background: newReelFile ? `${T.green}10` : T.bg,
+              background: newReelFile ? `${T.pri}15` : T.card,
               position: 'relative',
               minHeight: 200,
             }}
@@ -1459,6 +1461,8 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                   outline: 'none',
                   resize: 'vertical',
                   boxSizing: 'border-box',
+                  background: T.card,
+                  color: T.txt,
                 }}
               />
               {campaign?.required_hashtags && (
@@ -1542,7 +1546,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                   <div style={{
                     width: '100%',
                     height: '100%',
-                    background: T.bg,
+                    background: T.card,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1582,13 +1586,14 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
             style={{
               flex: 1,
               padding: 14,
-              background: T.cardBg,
+              background: T.card,
               border: `2px solid ${T.border}`,
               borderRadius: 8,
               color: T.txt,
               fontSize: 15,
               fontWeight: 600,
               cursor: 'pointer',
+              transition: 'all 0.2s',
             }}
           >
             Cancel
@@ -1606,6 +1611,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
               fontSize: 15,
               fontWeight: 600,
               cursor: ((showCreateNew ? newReelFile : selectedReel) && !submitting) ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s',
             }}
           >
             {submitting ? 'Submitting...' : showCreateNew ? '🚀 Create & Submit' : 'Submit Entry'}
