@@ -264,6 +264,7 @@ const CampaignFeed = ({ campaignId, onBack }) => {
 };
 
 const PostCard = ({ post, rank, onVote, campaignType, isVotingOpen }) => {
+  const { colors: T } = useTheme();
   const [showScores, setShowScores] = useState(false);
 
   const totalScore = post.scores?.total ?? post.total_score ?? 0;
