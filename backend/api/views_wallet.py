@@ -774,17 +774,19 @@ def admin_user_transactions(request):
             'transaction_type': tx.transaction_type,
             'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
             'coins': tx.coins if tx.coins is not None else 0,
-            'points': tx.points if tx.points is not None else 0,
-            'is_credit': (tx.coins > 0 if tx.coins is not None else False) or (tx.points > 0 if tx.points is not None else False),
+            'is_credit': tx.coins > 0 if tx.coins is not None else False,
             'created_at': tx.created_at.isoformat() if tx.created_at else None,
             'description': tx.description or '',
+            'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
+            'payment_method': tx.payment_method or '',
         } for tx in transactions]
         
         return Response({'results': data})
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        logger.error(f"[Admin Transactions] Error for user {user_id}: {str(e)}")
+        import logging
+        logging.error(f"[Admin Transactions] Error for user {user_id}: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
