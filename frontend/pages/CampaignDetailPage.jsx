@@ -871,30 +871,7 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
             borderRadius: 20,
             border: hasVoted ? `2px solid #EF4444` : `1px solid ${T.border}`,
           }}>
-            <Heart 
-              size={20} 
-              color="#EF4444" 
-              fill={hasVoted ? "#EF4444" : 'none'}
-              style={{
-                transition: 'all 0.3s ease',
-                transform: hasVoted ? 'scale(1.2)' : 'scale(1)',
-              }}
-            />
-            <span style={{
-              fontSize: 18,
-              fontWeight: 800,
-              color: hasVoted ? "#EF4444" : T.txt,
-            }}>
-              {voteCount}
-            </span>
-            <span style={{
-              fontSize: 11,
-              color: T.sub,
-              fontWeight: 600,
-            }}>
-              votes
-            </span>
-          </div>
+                                  </div>
 
           {canVote && (
             <button

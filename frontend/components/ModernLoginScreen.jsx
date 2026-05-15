@@ -537,7 +537,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           alignItems: "center", 
           justifyContent: "center"
         }}>
-          <img src="/assets/70x20.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
+          <img src="/assets/70x20.jpg" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
         </div>
 
         {/* Card */}
@@ -695,75 +695,107 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
           </div>
         </div>
 
-        {/* Footer links */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 32, paddingBottom: 32, borderTop: "1px solid #333", paddingTop: 24, backgroundColor: "rgba(143,196,65,0.05)", borderRadius: "8px" }}>
+        {/* Footer links - SUPER VISIBLE */}
+        <div style={{ 
+          display: "flex", 
+          justifyContent: "center", 
+          gap: 24, 
+          marginTop: 40, 
+          paddingBottom: 40, 
+          borderTop: "3px solid #8fc441", 
+          paddingTop: 30, 
+          backgroundColor: "rgba(143,196,65,0.15)", 
+          borderRadius: "12px",
+          position: "relative",
+          zIndex: 1000
+        }}>
           <button 
             onClick={() => {
               console.log("FAQ button clicked!");
+              alert("FAQ button clicked!");
               setModal("faq");
             }} 
             style={{ 
-              background: "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))", 
-              border: "2px solid #8fc441", 
-              color: "#8fc441", 
-              fontSize: 16, 
+              background: "#8fc441", 
+              border: "3px solid #fff", 
+              color: "#000", 
+              fontSize: 18, 
               cursor: "pointer", 
-              fontWeight: 800, 
-              padding: "12px 20px", 
-              borderRadius: 8, 
+              fontWeight: 900, 
+              padding: "16px 24px", 
+              borderRadius: 12, 
               textDecoration: "none", 
               textUnderlineOffset: "0px",
               transition: "all 0.3s ease",
-              boxShadow: "0 4px 12px rgba(143,196,65,0.2)",
-              minHeight: "48px",
-              minWidth: "120px",
+              boxShadow: "0 8px 24px rgba(143,196,65,0.4)",
+              minHeight: "60px",
+              minWidth: "150px",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
+              transform: "scale(1.1)",
+              position: "relative",
+              zIndex: 1001
             }}
             onMouseEnter={(e) => {
-              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.2), rgba(143,196,65,0.1))";
-              e.target.style.transform = "translateY(-2px)";
+              e.target.style.background = "#6ba835";
+              e.target.style.transform = "scale(1.15)";
+              e.target.style.boxShadow = "0 12px 32px rgba(143,196,65,0.6)";
             }}
             onMouseLeave={(e) => {
-              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))";
-              e.target.style.transform = "translateY(0px)";
+              e.target.style.background = "#8fc441";
+              e.target.style.transform = "scale(1.1)";
+              e.target.style.boxShadow = "0 8px 24px rgba(143,196,65,0.4)";
             }}
           >
             📖 FAQ
           </button>
-          <span style={{ color: "#666", fontSize: 16, fontWeight: 600, alignSelf: "center" }}>•</span>
+          <span style={{ 
+            color: "#000", 
+            fontSize: 20, 
+            fontWeight: 800, 
+            alignSelf: "center",
+            background: "#fff",
+            padding: "8px 12px",
+            borderRadius: "50%"
+          }}>•</span>
           <button 
             onClick={() => {
               console.log("Terms button clicked!");
+              alert("Terms button clicked!");
               setModal("terms");
             }} 
             style={{ 
-              background: "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))", 
-              border: "2px solid #8fc441", 
-              color: "#8fc441", 
-              fontSize: 16, 
+              background: "#8fc441", 
+              border: "3px solid #fff", 
+              color: "#000", 
+              fontSize: 18, 
               cursor: "pointer", 
-              fontWeight: 800, 
-              padding: "12px 20px", 
-              borderRadius: 8, 
+              fontWeight: 900, 
+              padding: "16px 24px", 
+              borderRadius: 12, 
               textDecoration: "none", 
               textUnderlineOffset: "0px",
               transition: "all 0.3s ease",
-              boxShadow: "0 4px 12px rgba(143,196,65,0.2)",
-              minHeight: "48px",
-              minWidth: "120px",
+              boxShadow: "0 8px 24px rgba(143,196,65,0.4)",
+              minHeight: "60px",
+              minWidth: "150px",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center"
+              justifyContent: "center",
+              transform: "scale(1.1)",
+              position: "relative",
+              zIndex: 1001
             }}
             onMouseEnter={(e) => {
-              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.2), rgba(143,196,65,0.1))";
-              e.target.style.transform = "translateY(-2px)";
+              e.target.style.background = "#6ba835";
+              e.target.style.transform = "scale(1.15)";
+              e.target.style.boxShadow = "0 12px 32px rgba(143,196,65,0.6)";
             }}
             onMouseLeave={(e) => {
-              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))";
-              e.target.style.transform = "translateY(0px)";
+              e.target.style.background = "#8fc441";
+              e.target.style.transform = "scale(1.1)";
+              e.target.style.boxShadow = "0 8px 24px rgba(143,196,65,0.4)";
             }}
           >
             📋 Terms & Conditions

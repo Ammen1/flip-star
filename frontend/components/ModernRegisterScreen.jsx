@@ -250,7 +250,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
           alignItems: "center", 
           justifyContent: "center"
         }}>
-          <img src="/assets/70x20.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
+          <img src="/assets/70x20.jpg" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
         </div>
 
         {/* Step indicator */}
