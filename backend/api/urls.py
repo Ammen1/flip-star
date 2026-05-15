@@ -32,7 +32,7 @@ from .views_messaging import (
 )
 from .views_charging import (
     initiate_on_demand_charging, get_charging_statistics, get_charging_transactions,
-    purchase_coins_on_demand,
+    purchase_coins_on_demand, search_charging_transactions, get_charging_analytics,
 )
 from .views_push import push_public_key, push_subscribe, push_unsubscribe
 from .views_support import (
@@ -484,6 +484,8 @@ urlpatterns = [
     path('charging/on-demand/', initiate_on_demand_charging, name='on-demand-charging'),
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
     path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
+    path('charging/on-demand/search/', search_charging_transactions, name='charging-search'),
+    path('charging/on-demand/analytics/', get_charging_analytics, name='charging-analytics'),
     path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),
