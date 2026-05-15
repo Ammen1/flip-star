@@ -201,7 +201,7 @@ export function GiftManagementPage({ theme }) {
           <h1 style={{
             fontSize: '32px',
             fontWeight: '700',
-            color: theme.text,
+            color: '#fff',
             marginBottom: '8px',
             display: 'flex',
             alignItems: 'center',
@@ -259,12 +259,12 @@ export function GiftManagementPage({ theme }) {
               <button
                 onClick={() => handleEdit(gift)}
                 style={{
-                  background: theme.bg,
-                  border: `1px solid ${theme.border}`,
+                  background: theme.pri,
+                  border: 'none',
                   borderRadius: '6px',
                   padding: '6px',
                   cursor: 'pointer',
-                  color: theme.text,
+                  color: '#fff',
                 }}
               >
                 <Edit2 size={16} />
@@ -272,12 +272,12 @@ export function GiftManagementPage({ theme }) {
               <button
                 onClick={() => handleDelete(gift.id)}
                 style={{
-                  background: theme.bg,
-                  border: `1px solid ${theme.border}`,
+                  background: theme.red,
+                  border: 'none',
                   borderRadius: '6px',
                   padding: '6px',
                   cursor: 'pointer',
-                  color: theme.red,
+                  color: '#fff',
                 }}
               >
                 <Trash2 size={16} />
