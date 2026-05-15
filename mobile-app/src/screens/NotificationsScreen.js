@@ -6,8 +6,8 @@ import api from '../api';
 import config from '../config';
 import SoundManager from '../utils/SoundUtils';
 
-const GOLD = '#C8B56A';
-const LIGHT_GOLD = '#F9E08B';
+const GOLD = '#8fc441';
+const LIGHT_GOLD = '#b5dd8f';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
