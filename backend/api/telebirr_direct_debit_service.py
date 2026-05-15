@@ -173,18 +173,35 @@ class TelebirrDirectDebitService:
             if self.client is None:
                 self._init_client()
             
-            # Note: Actual SOAP call implementation depends on WSDL structure
-            # This is a placeholder for the actual zeep call
-            # response = self.client.service.Request(envelope)
-            
-            # For now, return mock response
-            return {
-                'success': True,
-                'originator_conversation_id': originator_conversation_id,
-                'conversation_id': f"AG_{datetime.now().strftime('%Y%m%d')}_mock",
-                'message': 'Mandate creation request submitted successfully',
-                'envelope': envelope
-            }
+            # Make actual SOAP call
+            try:
+                response = self.client.service.Request(envelope)
+                # Parse response
+                response_code = response.Body.ResponseCode
+                response_desc = response.Body.ResponseDesc
+                conversation_id = response.Header.ConversationID
+                
+                if response_code == '0':
+                    return {
+                        'success': True,
+                        'originator_conversation_id': originator_conversation_id,
+                        'conversation_id': conversation_id,
+                        'message': response_desc,
+                        'response_code': response_code
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': response_desc,
+                        'response_code': response_code,
+                        'conversation_id': conversation_id
+                    }
+            except Exception as soap_error:
+                print(f"SOAP call failed: {str(soap_error)}")
+                return {
+                    'success': False,
+                    'error': f'SOAP call failed: {str(soap_error)}'
+                }
             
         except Exception as e:
             return {
@@ -238,15 +255,38 @@ class TelebirrDirectDebitService:
             )
             
             # Call SOAP API
-            # response = self.client.service.Request(envelope)
+            if self.client is None:
+                self._init_client()
             
-            return {
-                'success': True,
-                'originator_conversation_id': originator_conversation_id,
-                'conversation_id': f"AG_{datetime.now().strftime('%Y%m%d')}_mock",
-                'message': 'Mandate activation request submitted successfully',
-                'envelope': envelope
-            }
+            # Make actual SOAP call
+            try:
+                response = self.client.service.Request(envelope)
+                # Parse response
+                response_code = response.Body.ResponseCode
+                response_desc = response.Body.ResponseDesc
+                conversation_id = response.Header.ConversationID
+                
+                if response_code == '0':
+                    return {
+                        'success': True,
+                        'originator_conversation_id': originator_conversation_id,
+                        'conversation_id': conversation_id,
+                        'message': response_desc,
+                        'response_code': response_code
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': response_desc,
+                        'response_code': response_code,
+                        'conversation_id': conversation_id
+                    }
+            except Exception as soap_error:
+                print(f"SOAP call failed: {str(soap_error)}")
+                return {
+                    'success': False,
+                    'error': f'SOAP call failed: {str(soap_error)}'
+                }
             
         except Exception as e:
             return {
@@ -314,16 +354,44 @@ class TelebirrDirectDebitService:
             )
             
             # Call SOAP API
-            # response = self.client.service.Request(envelope)
+            if self.client is None:
+                self._init_client()
             
-            return {
-                'success': True,
-                'originator_conversation_id': originator_conversation_id,
-                'conversation_id': f"AG_{datetime.now().strftime('%Y%m%d')}_mock",
-                'transaction_id': f"TX{datetime.now().strftime('%Y%m%d%H%M%S')}",
-                'message': 'Direct debit transaction initiated successfully',
-                'envelope': envelope
-            }
+            # Make actual SOAP call
+            try:
+                response = self.client.service.Request(envelope)
+                # Parse response
+                response_code = response.Body.ResponseCode
+                response_desc = response.Body.ResponseDesc
+                conversation_id = response.Header.ConversationID
+                
+                if response_code == '0':
+                    # Extract transaction ID if present
+                    transaction_id = None
+                    if hasattr(response.Body, 'TransactionResult'):
+                        transaction_id = response.Body.TransactionResult.TransactionID
+                    
+                    return {
+                        'success': True,
+                        'originator_conversation_id': originator_conversation_id,
+                        'conversation_id': conversation_id,
+                        'transaction_id': transaction_id,
+                        'message': response_desc,
+                        'response_code': response_code
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': response_desc,
+                        'response_code': response_code,
+                        'conversation_id': conversation_id
+                    }
+            except Exception as soap_error:
+                print(f"SOAP call failed: {str(soap_error)}")
+                return {
+                    'success': False,
+                    'error': f'SOAP call failed: {str(soap_error)}'
+                }
             
         except Exception as e:
             return {
@@ -372,15 +440,38 @@ class TelebirrDirectDebitService:
             )
             
             # Call SOAP API
-            # response = self.client.service.Request(envelope)
+            if self.client is None:
+                self._init_client()
             
-            return {
-                'success': True,
-                'originator_conversation_id': originator_conversation_id,
-                'conversation_id': f"AG_{datetime.now().strftime('%Y%m%d')}_mock",
-                'message': 'Mandate cancellation request submitted successfully',
-                'envelope': envelope
-            }
+            # Make actual SOAP call
+            try:
+                response = self.client.service.Request(envelope)
+                # Parse response
+                response_code = response.Body.ResponseCode
+                response_desc = response.Body.ResponseDesc
+                conversation_id = response.Header.ConversationID
+                
+                if response_code == '0':
+                    return {
+                        'success': True,
+                        'originator_conversation_id': originator_conversation_id,
+                        'conversation_id': conversation_id,
+                        'message': response_desc,
+                        'response_code': response_code
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': response_desc,
+                        'response_code': response_code,
+                        'conversation_id': conversation_id
+                    }
+            except Exception as soap_error:
+                print(f"SOAP call failed: {str(soap_error)}")
+                return {
+                    'success': False,
+                    'error': f'SOAP call failed: {str(soap_error)}'
+                }
             
         except Exception as e:
             return {
