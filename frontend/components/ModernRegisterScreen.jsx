@@ -252,7 +252,7 @@ export function ModernRegisterScreen({ onSuccess, onLogin, onBack }) {
         }}>
           <div style={{ width: "50%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
           <div style={{ width: "50%", backgroundColor: "#000000", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
-          <img src="/assets/green-logo.jpg" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain", position: "relative", zIndex: 1 }} />
+          <img src="/assets/green-logo.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain", position: "relative", zIndex: 1 }} />
         </div>
 
         {/* Step indicator */}

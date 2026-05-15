@@ -77,7 +77,7 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         }}>
           <div style={{ width: "50%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
           <div style={{ width: "50%", backgroundColor: "#000000", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
-          <img src="/assets/green-logo.jpg" alt="Logo" style={{ height: 90, width: "100%", objectFit: "contain", position: "relative", zIndex: 1 }} />
+          <img src="/assets/green-logo.png" alt="Logo" style={{ height: 90, width: "100%", objectFit: "contain", position: "relative", zIndex: 1 }} />
         </div>
       </div>
       <div style={{ flex:1, background:"#fff", borderRadius:"28px 28px 0 0", marginTop:30, padding:"28px 24px 40px" }}>
