@@ -348,3 +348,7 @@ TELEBIRR_CALLER_TYPE = config('TELEBIRR_CALLER_TYPE', default='2')  # 2 = Third 
 # SP Operator credentials for SOAP API
 TELEBIRR_SP_OPERATOR_ID = config('TELEBIRR_SP_OPERATOR_ID', default='TestSPOperAPI')
 TELEBIRR_SP_OPERATOR_CREDENTIAL = config('TELEBIRR_SP_OPERATOR_CREDENTIAL', default='2JKSrKYlLAVvKWuIUXcexc3GHiT0+lEKzeVb6JRcZUM=')
+
+# ─── Onevas SMS Configuration ─────────────────────────────────────────────────────
+ONEVAS_APPLICATION_KEY = config('ONEVAS_APPLICATION_KEY', default='UPJG5ZM3X6C9LLDSKKCME4MA86UQRKWV')
+ONEVAS_PRODUCT_NUMBER = config('ONEVAS_PRODUCT_NUMBER', default='10000302850')
