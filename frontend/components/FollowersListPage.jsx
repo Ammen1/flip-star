@@ -265,7 +265,7 @@ export function FollowersListPage({ user, userId, type = "followers", onBack, on
                     style={{
                       padding: "8px 16px",
                       border: isFollowing ? `1px solid ${T.border}` : "none",
-                      background: isFollowing ? "#fff" : T.pri,
+                      background: isFollowing ? (T.card || T.cardBg) : T.pri,
                       borderRadius: 8,
                       cursor: "pointer",
                       fontSize: 13,
