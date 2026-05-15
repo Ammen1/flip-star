@@ -106,15 +106,15 @@ export function CoinManagementPage({ theme }) {
         min_balance_to_post: config.thresholds.min_balance_to_post,
         min_balance_to_join_campaign: config.thresholds.min_balance_to_join_campaign,
         earned_coins_expire_days: config.expiry.earned_coins_expire_days,
-        coins_to_points_conversion: config.points?.coins_to_points_conversion || 1,
-        points_per_birr: config.points?.points_per_birr || 10,
-        withdrawal_min_points: config.points?.withdrawal_min_points || 100,
-        withdrawal_max_points_per_request: config.points?.withdrawal_max_points_per_request || 10000,
-        daily_winner_points: config.points?.daily_winner_points || 500,
-        weekly_winner_points: config.points?.weekly_winner_points || 2000,
-        monthly_winner_points: config.points?.monthly_winner_points || 10000,
-        grand_finalist_points: config.points?.grand_finalist_points || 5000,
-        grand_winner_points: config.points?.grand_winner_points || 50000,
+        coins_to_points_conversion: config.points?.coins_to_points_conversion ?? 1,
+        points_per_birr: config.points?.points_per_birr ?? 10,
+        withdrawal_min_points: config.points?.withdrawal_min_points ?? 100,
+        withdrawal_max_points_per_request: config.points?.withdrawal_max_points_per_request ?? 10000,
+        daily_winner_points: config.points?.daily_winner_points ?? 500,
+        weekly_winner_points: config.points?.weekly_winner_points ?? 2000,
+        monthly_winner_points: config.points?.monthly_winner_points ?? 10000,
+        grand_finalist_points: config.points?.grand_finalist_points ?? 5000,
+        grand_winner_points: config.points?.grand_winner_points ?? 50000,
       };
       await api.request('/admin/wallet/config/', {
         method: 'PATCH',
@@ -285,15 +285,21 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
   if (!config) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
 
   const updateField = (section, field, value) => {
-    setConfig({ ...config, [section]: { ...config[section], [field]: value } });
+    setConfig({ 
+      ...config, 
+      [section]: { 
+        ...(config[section] || {}), 
+        [field]: value 
+      } 
+    });
   };
 
   const updateNested = (section, nestedSection, field, value) => {
     setConfig({
       ...config,
       [section]: {
-        ...config[section],
-        [nestedSection]: { ...config[section][nestedSection], [field]: value },
+        ...(config[section] || {}),
+        [nestedSection]: { ...(config[section]?.[nestedSection] || {}), [field]: value },
       },
     });
   };
