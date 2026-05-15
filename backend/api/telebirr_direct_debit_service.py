@@ -27,6 +27,8 @@ class TelebirrDirectDebitService:
         self.result_url = getattr(settings, 'TELEBIRR_RESULT_URL', '')
         self.payee_account_name = getattr(settings, 'TELEBIRR_PAYEE_ACCOUNT_NAME', 'Flipstar')
         self.caller_type = getattr(settings, 'TELEBIRR_CALLER_TYPE', '2')
+        self.sp_operator_id = getattr(settings, 'TELEBIRR_SP_OPERATOR_ID', '')
+        self.sp_operator_credential = getattr(settings, 'TELEBIRR_SP_OPERATOR_CREDENTIAL', '')
         
         # Initialize SOAP client
         self.client = None
@@ -128,8 +130,8 @@ class TelebirrDirectDebitService:
             # Build initiator (SP Operator)
             initiator = {
                 'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.third_party_id,
-                'SecurityCredential': self.third_party_password,
+                'Identifier': self.sp_operator_id or self.third_party_id,
+                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
             
             # Build receiver party (Payer MSISDN)
@@ -208,8 +210,8 @@ class TelebirrDirectDebitService:
             # Build initiator (SP Operator)
             initiator = {
                 'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.third_party_id,
-                'SecurityCredential': self.third_party_password,
+                'Identifier': self.sp_operator_id or self.third_party_id,
+                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
             
             # Build receiver party (Payer MSISDN)
@@ -344,8 +346,8 @@ class TelebirrDirectDebitService:
             # Build initiator (SP Operator)
             initiator = {
                 'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.third_party_id,
-                'SecurityCredential': self.third_party_password,
+                'Identifier': self.sp_operator_id or self.third_party_id,
+                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
             
             # Build receiver party (Payer MSISDN)

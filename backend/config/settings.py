@@ -344,3 +344,7 @@ TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='9286')
 TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://uat.flipstar.et/api/webhooks/telebirr-direct-debit')
 TELEBIRR_PAYEE_ACCOUNT_NAME = config('TELEBIRR_PAYEE_ACCOUNT_NAME', default='Flipstar')
 TELEBIRR_CALLER_TYPE = config('TELEBIRR_CALLER_TYPE', default='2')  # 2 = Third Party
+
+# SP Operator credentials for SOAP API
+TELEBIRR_SP_OPERATOR_ID = config('TELEBIRR_SP_OPERATOR_ID', default='')
+TELEBIRR_SP_OPERATOR_CREDENTIAL = config('TELEBIRR_SP_OPERATOR_CREDENTIAL', default='')
