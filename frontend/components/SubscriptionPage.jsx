@@ -128,9 +128,16 @@ export function SubscriptionPage({ user, onBack }) {
     window.location.href = smsUrl;
   };
 
-  const handleTelebirrSubscribe = (tier) => {
+  const handleTelebirrSubscribe = async (tier) => {
     setSelectedTierForTelebirr(tier);
-    setTelebirrPhone(user?.profile?.phone_number || '');
+    // Fetch phone number from API like the coin purchase modal does
+    try {
+      const profile = await api.request('/profile/me/');
+      setTelebirrPhone(profile?.phone_number || user?.profile?.phone_number || '');
+    } catch (error) {
+      console.error('Failed to fetch phone number:', error);
+      setTelebirrPhone(user?.profile?.phone_number || '');
+    }
     setTelebirrModalOpen(true);
   };
 
