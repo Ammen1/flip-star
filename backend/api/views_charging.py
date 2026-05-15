@@ -92,6 +92,7 @@ def initiate_on_demand_charging(request):
                 tier=tier,
                 status='active',
                 start_date=timezone.now(),
+                payment_method='onevas',  # On-demand charging uses onevas
                 # On-demand has no end date
             )
             
