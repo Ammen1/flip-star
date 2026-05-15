@@ -2577,7 +2577,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                     >
                       <LikeButton
                         liked={video.liked}
-                        count={video.likes}
+                        count={video.likes === 0 ? '' : video.likes}
                         onLike={() => handleLike(video.id)}
                         size={32}
                       />
@@ -2657,7 +2657,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           textAlign: 'center',
                         }}
                       >
-                        {video.comments}
+                        {video.comments === 0 ? '' : video.comments}
                       </div>
                     </div>
 
@@ -2690,7 +2690,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           textAlign: 'center',
                         }}
                       >
-                        {video.shares}
+                        {video.shares === 0 ? '' : video.shares}
                       </div>
                     </div>
 

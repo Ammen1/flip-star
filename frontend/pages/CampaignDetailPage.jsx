@@ -258,15 +258,15 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
       return (
         <div style={{
           width: '100%', padding: '12px 16px',
-          background: 'rgba(16,185,129,0.15)',
-          border: '1.5px solid #10B981',
+          background: T.bg,
+          border: `1.5px solid ${T.border}`,
           borderRadius: 12,
-          color: '#10B981',
+          color: T.sub,
           fontSize: 14, fontWeight: 700,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}>
           <Check size={16} strokeWidth={3} />
-          You're in! Rank #{userEntry.rank || '—'}
+          Your Entry is Live 🎉
         </div>
       );
     }
@@ -825,19 +825,6 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
               }}>
                 @{entry.user.username}
               </div>
-              {entry.rank && (
-                <div style={{
-                  fontSize: 11,
-                  color: rankBadge ? rankBadge.color : T.pri,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}>
-                  <TrendingUp size={12} />
-                  Rank #{entry.rank}
-                </div>
-              )}
             </div>
           </div>
           {entry.is_winner && (

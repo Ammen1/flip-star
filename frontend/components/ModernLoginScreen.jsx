@@ -696,10 +696,78 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
         </div>
 
         {/* Footer links */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 24, paddingBottom: 24, borderTop: "1px solid #262626", paddingTop: 20 }}>
-          <button onClick={() => setModal("faq")} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 15, cursor: "pointer", fontWeight: 700, padding: "6px 12px", borderRadius: 6, textDecoration: "underline", textUnderlineOffset: "2px" }}>FAQ</button>
-          <span style={{ color: "#888", fontSize: 15 }}>|</span>
-          <button onClick={() => setModal("terms")} style={{ background: "none", border: "none", color: "#8fc441", fontSize: 15, cursor: "pointer", fontWeight: 700, padding: "6px 12px", borderRadius: 6, textDecoration: "underline", textUnderlineOffset: "2px" }}>Terms & Conditions</button>
+        <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 32, paddingBottom: 32, borderTop: "1px solid #333", paddingTop: 24, backgroundColor: "rgba(143,196,65,0.05)", borderRadius: "8px" }}>
+          <button 
+            onClick={() => {
+              console.log("FAQ button clicked!");
+              setModal("faq");
+            }} 
+            style={{ 
+              background: "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))", 
+              border: "2px solid #8fc441", 
+              color: "#8fc441", 
+              fontSize: 16, 
+              cursor: "pointer", 
+              fontWeight: 800, 
+              padding: "12px 20px", 
+              borderRadius: 8, 
+              textDecoration: "none", 
+              textUnderlineOffset: "0px",
+              transition: "all 0.3s ease",
+              boxShadow: "0 4px 12px rgba(143,196,65,0.2)",
+              minHeight: "48px",
+              minWidth: "120px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.2), rgba(143,196,65,0.1))";
+              e.target.style.transform = "translateY(-2px)";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))";
+              e.target.style.transform = "translateY(0px)";
+            }}
+          >
+            📖 FAQ
+          </button>
+          <span style={{ color: "#666", fontSize: 16, fontWeight: 600, alignSelf: "center" }}>•</span>
+          <button 
+            onClick={() => {
+              console.log("Terms button clicked!");
+              setModal("terms");
+            }} 
+            style={{ 
+              background: "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))", 
+              border: "2px solid #8fc441", 
+              color: "#8fc441", 
+              fontSize: 16, 
+              cursor: "pointer", 
+              fontWeight: 800, 
+              padding: "12px 20px", 
+              borderRadius: 8, 
+              textDecoration: "none", 
+              textUnderlineOffset: "0px",
+              transition: "all 0.3s ease",
+              boxShadow: "0 4px 12px rgba(143,196,65,0.2)",
+              minHeight: "48px",
+              minWidth: "120px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.2), rgba(143,196,65,0.1))";
+              e.target.style.transform = "translateY(-2px)";
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = "linear-gradient(135deg, rgba(143,196,65,0.1), rgba(143,196,65,0.05))";
+              e.target.style.transform = "translateY(0px)";
+            }}
+          >
+            📋 Terms & Conditions
+          </button>
         </div>
       </div>
 
