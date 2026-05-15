@@ -1110,6 +1110,7 @@ function CreateCampaignModal({ theme, onClose, onSuccess, selectedMasterCampaign
                   outline: 'none',
                   resize: 'vertical',
                   boxSizing: 'border-box',
+                  color: theme.txt,
                 }}
                 onFocus={(e) => e.target.style.borderColor = theme.pri}
                 onBlur={(e) => e.target.style.borderColor = theme.border}
@@ -1256,6 +1257,7 @@ function CreateCampaignModal({ theme, onClose, onSuccess, selectedMasterCampaign
                     outline: 'none',
                     resize: 'vertical',
                     boxSizing: 'border-box',
+                    color: theme.txt,
                   }}
                   onFocus={(e) => e.target.style.borderColor = theme.pri}
                   onBlur={(e) => e.target.style.borderColor = theme.border}
