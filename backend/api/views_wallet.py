@@ -729,7 +729,13 @@ def admin_user_wallet(request, user_id):
     try:
         user = User.objects.get(id=user_id)
         balance = _get_or_create_balance(user)
-        
+
+        # Ensure user has a profile
+        if not hasattr(user, 'profile'):
+            from .models import UserProfile
+            UserProfile.objects.get_or_create(user=user)
+            user.refresh_from_db()
+
         return Response({
             'balance': {
                 'total': balance.balance,
@@ -737,13 +743,16 @@ def admin_user_wallet(request, user_id):
                 'purchased': balance.purchased_balance,
             },
             'points': {
-                'current': user.profile.points,
-                'earned_total': user.profile.points_earned_total,
-                'withdrawn_total': user.profile.points_withdrawn_total,
+                'current': user.profile.points if hasattr(user, 'profile') else 0,
+                'earned_total': user.profile.points_earned_total if hasattr(user, 'profile') else 0,
+                'withdrawn_total': user.profile.points_withdrawn_total if hasattr(user, 'profile') else 0,
             }
         })
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"[Admin Wallet] Error for user {user_id}: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
