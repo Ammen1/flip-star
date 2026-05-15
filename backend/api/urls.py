@@ -205,7 +205,7 @@ from .views_legal import (
 from .views_gift import GiftViewSet, PublicGiftViewSet, GiftTransactionViewSet, UserGiftStatsViewSet
 from .views_wallet import (
     wallet_summary, wallet_transactions, withdrawal_info, request_withdrawal,
-    my_withdrawals, cancel_withdrawal, public_wallet_config,
+    my_withdrawals, cancel_withdrawal, public_wallet_config, reinvest_points,
     admin_wallet_config, admin_withdrawals_list, admin_withdrawal_action, admin_adjust_balance,
     admin_user_wallet, admin_user_transactions,
     telebirr_initiate_payment, telebirr_callback,
