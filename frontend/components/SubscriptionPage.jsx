@@ -14,8 +14,7 @@ const getFallbackTiers = () => [
     duration_type: 'daily',
     price_etb: 3,
     price_coins: null,
-    description: 'Access for 24 hours',
-    features: ['Full access for 24 hours', 'Ad-free experience', 'HD quality videos']
+    description: 'Access for 24 hours'
   },
   {
     id: 2,
@@ -23,8 +22,7 @@ const getFallbackTiers = () => [
     duration_type: 'weekly',
     price_etb: 20,
     price_coins: null,
-    description: 'Access for 7 days',
-    features: ['Full access for 7 days', 'Ad-free experience', 'HD quality videos']
+    description: 'Access for 7 days'
   },
   {
     id: 3,
@@ -32,8 +30,7 @@ const getFallbackTiers = () => [
     duration_type: 'monthly',
     price_etb: 70,
     price_coins: null,
-    description: 'Access for 30 days',
-    features: ['Full access for 30 days', 'Ad-free experience', 'HD quality videos']
+    description: 'Access for 30 days'
   },
 ];
 
@@ -78,12 +75,16 @@ export function SubscriptionPage({ user, onBack }) {
       ]);
       // Only update tiers if API returns valid data
       if (Array.isArray(tiersData) && tiersData.length > 0) {
-        setTiers(tiersData);
+        // Filter out OnDemand tier
+        const filteredTiers = tiersData.filter(tier => tier.name !== 'OnDemand');
+        setTiers(filteredTiers);
       }
       setCurrentSubscription(subscriptionData);
     } catch (error) {
       console.error('Error loading subscription data:', error);
-      // Keep using fallback tiers
+      // Keep using fallback tiers without OnDemand
+      const fallbackTiers = getFallbackTiers().filter(tier => tier.name !== 'OnDemand');
+      setTiers(fallbackTiers);
     }
   };
 
@@ -262,7 +263,7 @@ export function SubscriptionPage({ user, onBack }) {
         <div style={{ width: 36 }} />
       </div>
 
-      <div style={{ maxWidth: 520, margin: '0 auto', paddingBottom: 32 }}>
+      <div style={{ maxWidth: '100%', margin: '0 auto', paddingBottom: 32 }}>
         {/* Hero */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px' }}>
           <div style={{
@@ -320,12 +321,15 @@ export function SubscriptionPage({ user, onBack }) {
           {isActive ? 'Add On-Demand Access' : 'Choose a plan'}
         </div>
 
-        {/* Plan cards - grid on desktop, stack on mobile */}
+        {/* Plan cards - horizontal on desktop, stack on mobile */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 14,
           padding: '0 16px',
+          width: '100%',
+          maxWidth: '1200px',
+          margin: '0 auto',
         }}>
           {tiers.map((tier) => {
               const TierIcon = getTierIcon(tier.duration_type);
@@ -377,16 +381,6 @@ export function SubscriptionPage({ user, onBack }) {
                     </div>
                     <div style={{ fontSize: 11, color: '#666', fontWeight: 600 }}>ETB</div>
                   </div>
-                </div>
-
-                {/* Features */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 16 }}>
-                  {(tier.features || []).map((f, fi) => (
-                    <div key={fi} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Check size={13} color={color} />
-                      <span style={{ fontSize: 13, color: '#aaa' }}>{f}</span>
-                    </div>
-                  ))}
                 </div>
 
                 {/* CTA buttons */}
