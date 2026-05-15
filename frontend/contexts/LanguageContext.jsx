@@ -157,159 +157,13 @@ const translations = {
     loading: "Loading...",
     noResults: "No results found",
   },
-  am: {
-    // Navigation
-    home: "መነሻ",
-    forYou: "ለእርስዎ",
-    search: "ፈልግ",
-    explore: "ያስሱ",
-    reels: "ሪልስ",
-    followingTab: "እየተከተሉ",
-    inbox: "መልዕክቶች",
-    messages: "መልዕክቶች",
-    notifications: "ማሳወቂያዎች",
-    bookmarks: "የተቀመጡ",
-    create: "ይፍጠሩ",
-    profile: "መገለጫ",
-    settings: "ቅንብሮች",
-    logout: "ውጣ",
-    login: "ግባ",
-    signUp: "ይመዝገቡ",
-    campaigns: "ዘመቻዎች",
-    winners: "አሸናፊዎች",
-    suggestions: "ጥቆማዎች",
-    recommended: "ለእርስዎ የሚመከር",
-
-    // Actions
-    like: "ይወዱ",
-    comment: "አስተያየት",
-    share: "አጋራ",
-    save: "አስቀምጥ",
-    saved: "ተቀምጧል",
-    follow: "ተከተል",
-    following: "እየተከተሉ",
-    unfollow: "አትከተል",
-    edit: "አርትዕ",
-    delete: "ሰርዝ",
-    cancel: "ይቅር",
-    confirm: "አረጋግጥ",
-    ok: "እሺ",
-    post: "ለጥፍ",
-    send: "ላክ",
-    next: "ቀጥል",
-    back: "ተመለስ",
-    submit: "አስገባ",
-    retry: "እንደገና ሞክር",
-    close: "ዝጋ",
-    refresh: "አድስ",
-
-    // Profile
-    posts: "ልጥፎች",
-    followers: "ተከታዮች",
-    followingCount: "እየተከተሉ",
-    editProfile: "መገለጫ አርትዕ",
-    bio: "ስለ እኔ",
-    photo: "ፎቶ",
-
-    // Wallet
-    wallet: "ቦርሳ",
-    coins: "ሳንቲሞች",
-    points: "ነጥቦች",
-    totalBalance: "ጠቅላላ ቀሪ",
-    earned: "የተገኘ",
-    purchased: "የተገዛ",
-    buyCoins: "ሳንቲም ግዛ",
-    withdraw: "ውጣ",
-    withdrawToBirr: "ነጥብ → ብር",
-    recentActivity: "የቅርብ ጊዜ እንቅስቃሴ",
-    overview: "አጠቃላይ እይታ",
-    transactions: "ግብይቶች",
-    withdrawals: "ውጣዎች",
-
-    // Subscription
-    subscription: "የደንበኝነት ምዝገባ",
-    plansAndBilling: "ዕቅዶች እና ክፍያ",
-
-    // Settings
-    account: "መለያ",
-    accountSettings: "የመለያ ቅንብሮች",
-    manageAccount: "የመለያ መረጃዎን ያስተዳድሩ",
-    notificationsSettings: "ማሳወቂያዎች",
-    manageNotifications: "የማሳወቂያ ምርጫዎችዎን ያስተዳድሩ",
-    privacy: "ግላዊነት እና ደህንነት",
-    controlPrivacy: "የግላዊነት ቅንብሮችዎን ይቆጣጠሩ",
-    appearance: "መልክ",
-    customizeAppearance: "FlipStar እንዴት እንደሚታይ ያቀናብሩ",
-    language: "ቋንቋ",
-    chooseLanguage: "የሚፈልጉትን ቋንቋ ይምረጡ",
-    help: "እገዛ እና ድጋፍ",
-    getHelp: "እገዛ እና ድጋፍ ያግኙ",
-    darkMode: "ጨለማ ሁነታ",
-    changePassword: "የይለፍ ቃል ቀይር",
-    currentPassword: "አሁን ያለው የይለፍ ቃል",
-    newPassword: "አዲስ የይለፍ ቃል (6 ቁጥሮች)",
-    confirmPassword: "አዲሱን የይለፍ ቃል ያረጋግጡ",
-    updatePassword: "የይለፍ ቃል ያዘምኑ",
-    downloadData: "መረጃዎን ያውርዱ",
-    downloadDataDesc: "ሁሉንም ልጥፎችዎን፣ አስተያየቶችን እና የመገለጫ መረጃዎን ይውርዱ",
-    deleteAccount: "መለያ ሰርዝ",
-    dangerZone: "የአደጋ ቀጠና",
-    deleteWarning: "መለያዎን ካስወገዱ መመለስ አይቻልም። እባክዎ እርግጠኛ ይሁኑ።",
-    basicInfo: "መሰረታዊ መረጃ",
-    username: "የተጠቃሚ ስም",
-    email: "ኢሜይል",
-    phoneNumber: "ስልክ ቁጥር",
-    dataManagement: "የመረጃ አስተዳደር",
-    success: "ተሳክቷል",
-    settingsSaved: "ቅንብሮች በተሳካ ሁኔታ ተቀምጠዋል!",
-    error: "ስህተት",
-    passwordMismatch: "አዲሶቹ የይለፍ ቃሎች አይዛመዱም!",
-    passwordTooShort: "የይለፍ ቃል ቢያንስ 6 ቁጥሮች መሆን አለበት!",
-    passwordChanged: "የይለፍ ቃል በተሳካ ሁኔታ ተቀይሯል!",
-    passwordChangeFailed: "የይለፍ ቃል መቀየር አልተሳካም",
-    deleteConfirm: "መለያዎን ለመሰረዝ እርግጠኛ ነዎት? ይህ ድርጊት መቀልበስ አይቻልም!",
-    finalConfirm: "ይህ ሁሉንም መረጃዎን በቋሚነት ያጠፋል። በእርግጥ እርግጠኛ ነዎት?",
-    accountDeleted: "መለያ ተሰርዟል",
-    accountDeleting: "የመለያ ስረዛ ተጀምሯል። ይወጣሉ።",
-    downloadInitiated: "ውርድ ተጀምሯል",
-    downloadEmail: "የመረጃ ውርድዎ ተጀምሯል። የውርድ አገናኝ ያለው ኢሜይል ይደርስዎታል።",
-    notificationEnabled: "ማሳወቂያ ነቅቷል",
-    willReceive: "አሁን ለዚህ ማሳወቂያ ይደርስዎታል",
-    privacyUpdated: "ግላዊነት ተዘምኗል",
-    privacySettingChanged: "የግላዊነት ቅንብር",
-    enabled: "ነቅቷል",
-    disabled: "ተሰናክሏል",
-    darkEnabled: "ጨለማ ገጽታ ነቅቷል",
-    lightEnabled: "ብርሃን ገጽታ ነቅቷል",
-    receiveNotifications: "ለዚህ ማሳወቂያ ይቀበሉ",
-    privateAccountDesc: "የተፈቀዱ ተከታዮች ብቻ ልጥፎችዎን ማየት ይችላሉ",
-    showActivityDesc: "የእንቅስቃሴ ሁኔታዎን ለሌሎች አሳይ",
-    allowMessagesDesc: "ሌሎች መልዕክት እንዲልኩልዎ ፍቀዱ",
-    helpCenter: "የእገዛ ማዕከል",
-    reportProblem: "ችግር ሪፖርት ያድርጉ",
-    termsOfService: "የአገልግሎት ውሎች",
-    privacyPolicy: "የግላዊነት ፖሊሲ",
-    version: "ስሪት",
-    likes: "ውዶታዎች",
-    comments: "አስተያየቶች",
-    follows: "ተከታዮች",
-
-    // Post
-    caption: "መግለጫ",
-    hashtags: "ሃሽታጎች",
-    uploadMedia: "ሚዲያ ይስቀሉ",
-
-    // Common
-    loading: "በመጫን ላይ...",
-    noResults: "ምንም ውጤት አልተገኘም",
-  },
 };
 
 export const LanguageProvider = ({ children }) => {
   const [language, setLanguage] = useState(() => {
     const saved = localStorage.getItem('language');
-    // Only allow en or am; migrate other stored values to en
-    return saved && translations[saved] ? saved : 'en';
+    // Only allow English; migrate any other stored values to en
+    return saved === 'en' ? 'en' : 'en';
   });
 
   useEffect(() => {
@@ -323,7 +177,8 @@ export const LanguageProvider = ({ children }) => {
   };
 
   const changeLanguage = (lang) => {
-    if (translations[lang]) {
+    // Only allow English language
+    if (lang === 'en') {
       setLanguage(lang);
     }
   };
