@@ -1586,7 +1586,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
             style={{
               flex: 1,
               padding: 14,
-              background: T.card,
+              background: 'transparent',
               border: `2px solid ${T.border}`,
               borderRadius: 8,
               color: T.txt,
