@@ -976,7 +976,7 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
 
   return (
     <Modal onClose={onClose} theme={T} title="Re-invest Points to Coins">
-      <div>
+      <div style={{ background: T.card, padding: 0 }}>
         <div style={{ marginBottom: 16 }}>
           <label style={modalLabel(T)}>Points to convert</label>
           <input
