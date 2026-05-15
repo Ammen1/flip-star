@@ -526,24 +526,22 @@ export function SubscriptionPage({ user, onBack }) {
                 <input
                   type="tel"
                   value={telebirrPhone}
-                  onChange={(e) => setTelebirrPhone(e.target.value)}
+                  readOnly
                   placeholder="2519XXXXXXXX"
                   style={{
                     width: '100%',
                     padding: '12px 16px',
-                    background: '#222',
+                    background: '#1a1a1a',
                     border: '1px solid #444',
                     borderRadius: 8,
-                    color: '#fff',
+                    color: '#888',
                     fontSize: 14,
                     outline: 'none',
                     boxSizing: 'border-box',
                   }}
-                  onFocus={(e) => e.target.style.borderColor = '#8fc441'}
-                  onBlur={(e) => e.target.style.borderColor = '#444'}
                 />
                 <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>
-                  Enter your Telebirr registered phone number
+                  Phone number from your profile
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 12 }}>
