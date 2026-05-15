@@ -165,7 +165,7 @@ const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, 
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
                 >
                   <Heart size={14} fill={comment.is_liked ? '#E2B355' : 'none'} color={comment.is_liked ? '#E2B355' : (T?.sub || '#999')} />
-                  {comment.likes > 0 && <span style={{ fontSize: 10, color: T?.sub || '#666' }}>{comment.likes}</span>}
+                  {comment.likes > 0 && <span style={{ fontSize: 10, color: T?.sub || '#666' }}>{comment.likes === 0 ? 1 : comment.likes}</span>}
                 </button>
                 <button
                   onClick={() => onReply(comment)}
@@ -674,7 +674,7 @@ const PostInfoSheet = memo(function PostInfoSheet({ post, onClose, T }) {
           {[['❤️', post.votes || 0, 'Likes'], ['💬', post.comment_count || 0, 'Comments'], ['👁️', post.view_count || 0, 'Views']].map(([emoji, val, lbl]) => (
             <div key={lbl} style={{ flex: 1, background: T?.cardBg || '#fff', borderRadius: 10, padding: '10px 6px', textAlign: 'center' }}>
               <div style={{ fontSize: 18 }}>{emoji}</div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: T?.txt || '#000' }}>{val === 0 ? 1 : Number(val).toLocaleString()}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: T?.txt || '#000' }}>{val === 0 ? '' : (val === 1 ? 1 : Number(val).toLocaleString())}</div>
               <div style={{ fontSize: 11, color: T?.sub || '#666' }}>{lbl}</div>
             </div>
           ))}
@@ -1499,7 +1499,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                     style={{ transition: 'transform 0.15s' }}
                   />
                 )}
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{likes}</span>
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{likes === 0 ? '' : likes}</span>
               </button>
               {/* Comment */}
               <button
@@ -1513,7 +1513,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 }}
               >
                 <MessageCircle size={baseFontSize} color="#8fc441" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{commentCount}</span>
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{commentCount === 0 ? '' : commentCount}</span>
               </button>
               {/* Share */}
               <button
@@ -1528,7 +1528,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                 }}
               >
                 <Share2 size={baseFontSize} color="#8fc441" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
-                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{post.shares > 0 ? post.shares : 1}</span>
+                <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{post.shares === 0 ? '' : post.shares}</span>
               </button>
               {/* Gift - only show on other people's posts */}
               {post.user?.username !== currentUser?.username && (
