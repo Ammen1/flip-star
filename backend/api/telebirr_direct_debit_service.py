@@ -11,9 +11,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from django.conf import settings
-from zeep import Client
-from zeep.transports import Transport
-from requests import Session
+import requests
 
 
 class TelebirrDirectDebitService:
@@ -30,29 +28,22 @@ class TelebirrDirectDebitService:
         self.sp_operator_id = getattr(settings, 'TELEBIRR_SP_OPERATOR_ID', '')
         self.sp_operator_credential = getattr(settings, 'TELEBIRR_SP_OPERATOR_CREDENTIAL', '')
         
-        # Initialize SOAP client
+        # No SOAP client initialization needed for raw requests
         self.client = None
-        self._init_client()
-    
-    def _init_client(self):
-        """Initialize SOAP client"""
-        try:
-            session = Session()
-            session.verify = False  # Disable SSL verification for testing (enable in production)
-            transport = Transport(session=session)
-            self.client = Client(self.soap_url, transport=transport)
-        except Exception as e:
-            print(f"Failed to initialize SOAP client: {str(e)}")
     
     def _generate_originator_conversation_id(self):
         """Generate unique originator conversation ID"""
         return f"S_X{datetime.now().strftime('%Y%m%d%H%M%S')}"
     
+    def _generate_conversation_id(self):
+        """Generate unique conversation ID"""
+        return f"AG_{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:12]}"
+    
     def _generate_timestamp(self):
         """Generate timestamp in YYYYMMDDHHMMSS format"""
         return datetime.now().strftime('%Y%m%d%H%M%S')
     
-    def _build_soap_envelope(self, command_id, initiator, receiver_party, body_data):
+    def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml):
         """
         Build SOAP envelope for Telebirr Direct Debit API
         
@@ -60,38 +51,53 @@ class TelebirrDirectDebitService:
             command_id: SOAP command ID
             initiator: Initiator identifier dict (IdentifierType, Identifier, SecurityCredential)
             receiver_party: Receiver party dict (IdentifierType, Identifier)
-            body_data: Body data dict specific to the operation
+            body_xml: Body XML string specific to the operation
             
         Returns:
-            dict: SOAP request envelope
+            str: Complete SOAP envelope XML
         """
         originator_conversation_id = self._generate_originator_conversation_id()
+        conversation_id = self._generate_conversation_id()
         timestamp = self._generate_timestamp()
         
-        envelope = {
-            'Header': {
-                'Version': '1.0',
-                'CommandID': command_id,
-                'OriginatorConversationID': originator_conversation_id,
-                'Caller': {
-                    'CallerType': self.caller_type,
-                    'ThirdPartyID': self.third_party_id,
-                    'Password': self.third_party_password,
-                    'ResultURL': self.result_url,
-                },
-                'KeyOwner': '1',
-                'Timestamp': timestamp,
-            },
-            'Body': {
-                'Identity': {
-                    'Initiator': initiator,
-                    'ReceiverParty': receiver_party,
-                },
-                **body_data
-            }
-        }
+        soap_envelope = f'''<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:api="http://cps.huawei.com/cpsinterface/api_requestmgr" xmlns:req="http://cps.huawei.com/cpsinterface/request" xmlns:com="http://cps.huawei.com/cpsinterface/common">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <api:Request>
+      <req:Header>
+        <req:Version>1.0</req:Version>
+        <req:CommandID>{command_id}</req:CommandID>
+        <req:OriginatorConversationID>{originator_conversation_id}</req:OriginatorConversationID>
+        <req:ConversationID>{conversation_id}</req:ConversationID>
+        <req:Caller>
+          <req:CallerType>{self.caller_type}</req:CallerType>
+          <req:ThirdPartyID>{self.third_party_id}</req:ThirdPartyID>
+          <req:Password>{self.third_party_password}</req:Password>
+          <req:ResultURL>{self.result_url}</req:ResultURL>
+        </req:Caller>
+        <req:KeyOwner>1</req:KeyOwner>
+        <req:Timestamp>{timestamp}</req:Timestamp>
+      </req:Header>
+      <req:Body>
+        <req:Identity>
+          <req:Initiator>
+            <req:IdentifierType>{initiator['IdentifierType']}</req:IdentifierType>
+            <req:Identifier>{initiator['Identifier']}</req:Identifier>
+            <req:SecurityCredential>{initiator['SecurityCredential']}</req:SecurityCredential>
+          </req:Initiator>
+          <req:ReceiverParty>
+            <req:IdentifierType>{receiver_party['IdentifierType']}</req:IdentifierType>
+            <req:Identifier>{receiver_party['Identifier']}</req:Identifier>
+          </req:ReceiverParty>
+        </req:Identity>
+        {body_xml}
+      </req:Body>
+    </api:Request>
+  </soapenv:Body>
+</soapenv:Envelope>'''
         
-        return envelope, originator_conversation_id
+        return soap_envelope, originator_conversation_id, conversation_id
     
     def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
                       first_payment_date, expiry_date, payee_shortcode=None,
@@ -140,67 +146,86 @@ class TelebirrDirectDebitService:
                 'Identifier': payer_msisdn,
             }
             
-            # Build body data
-            body_data = {
-                'CreateDirectDebitMandateByPayerRequest': {
-                    'Payee': {
-                        'IdentifierType': 4,  # Shortcode
-                        'IdentifierValue': payee_shortcode,
-                    },
-                    'DirectDebitMandateInfo': {
-                        'PayerReferenceNumber': payer_reference_number,
-                        'AgreedTC': '1',  # User agreed to TC
-                        'PayeeAccountName': payee_account_name,
-                        'PayerAccountName': '',  # Optional, filled during activation
-                        'FirstPaymentDate': first_payment_date,
-                        'Frequency': frequency,
-                        'StartRangeOfDays': str(start_range_of_days),
-                        'EndRangeOfDays': str(end_range_of_days),
-                        'ExpiryDate': expiry_date,
-                    }
-                }
-            }
+            # Build body XML according to Telebirr documentation
+            body_xml = f'''<req:CreateDirectDebitMandateByPayerRequest>
+          <req:Payee> 
+            <com:IdentifierType>4</com:IdentifierType>
+            <com:IdentifierValue>{payee_shortcode}</com:IdentifierValue>
+          </req:Payee>
+          <req:DirectDebitMandateInfo>
+            <com:PayerReferenceNumber>{payer_reference_number}</com:PayerReferenceNumber>
+            <com:AgreedTC>1</com:AgreedTC>
+            <com:PayeeAccountName>{payee_account_name}</com:PayeeAccountName>
+            <com:PayerAccountName></com:PayerAccountName>
+            <com:FirstPaymentDate>{first_payment_date}</com:FirstPaymentDate>
+            <com:Frequency>{frequency}</com:Frequency>
+            <com:StartRangeOfDays>{start_range_of_days}</com:StartRangeOfDays>
+            <com:EndRangeOfDays>{end_range_of_days}</com:EndRangeOfDays>
+            <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
+          </req:DirectDebitMandateInfo>
+        </req:CreateDirectDebitMandateByPayerRequest>'''
             
             # Build SOAP envelope
-            envelope, originator_conversation_id = self._build_soap_envelope(
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='CreateDirectDebitMandateByCustomer',
                 initiator=initiator,
                 receiver_party=receiver_party,
-                body_data=body_data
+                body_xml=body_xml
             )
             
-            # Call SOAP API
-            if self.client is None:
-                self._init_client()
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'CreateDirectDebitMandateByCustomer'
+            }
             
-            # Make actual SOAP call
-            try:
-                response = self.client.service.Request(envelope)
-                # Parse response
-                response_code = response.Body.ResponseCode
-                response_desc = response.Body.ResponseDesc
-                conversation_id = response.Header.ConversationID
-                
-                if response_code == '0':
-                    return {
-                        'success': True,
-                        'originator_conversation_id': originator_conversation_id,
-                        'conversation_id': conversation_id,
-                        'message': response_desc,
-                        'response_code': response_code
-                    }
-                else:
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                # Check for SOAP fault
+                if 'soapenv:Fault' in response.text:
                     return {
                         'success': False,
-                        'error': response_desc,
-                        'response_code': response_code,
-                        'conversation_id': conversation_id
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
                     }
-            except Exception as soap_error:
-                print(f"SOAP call failed: {str(soap_error)}")
+                
+                # Parse ResponseCode and ResponseDesc
+                # Simple XML parsing for response
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                    
+                    if response_code == '0':
+                        return {
+                            'success': True,
+                            'originator_conversation_id': originator_conversation_id,
+                            'conversation_id': conversation_id,
+                            'message': response_desc,
+                            'response_code': response_code
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': response_desc,
+                            'response_code': response_code,
+                            'conversation_id': conversation_id
+                        }
+                except Exception as parse_error:
+                    return {
+                        'success': False,
+                        'error': f'Failed to parse response: {str(parse_error)}',
+                        'response_text': response.text[:500]
+                    }
+            else:
                 return {
                     'success': False,
-                    'error': f'SOAP call failed: {str(soap_error)}'
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
             
         except Exception as e:
@@ -237,55 +262,71 @@ class TelebirrDirectDebitService:
                 'Identifier': payer_msisdn,
             }
             
-            # Build body data
-            body_data = {
-                'ActivateDirectDebitMandateRequest': {
-                    'MandateID': mandate_id,
-                    'AgreedTC': '1' if agreed_tc else '0',
-                    'PayerAccountName': payer_account_name,
-                }
-            }
+            # Build body XML according to Telebirr documentation
+            body_xml = f'''<req:ActivateDirectDebitMandateRequest>
+          <req:MandateID>{mandate_id}</req:MandateID>
+          <req:AgreedTC>{'1' if agreed_tc else '0'}</req:AgreedTC>
+          <req:PayerAccountName>{payer_account_name}</req:PayerAccountName>
+        </req:ActivateDirectDebitMandateRequest>'''
             
             # Build SOAP envelope
-            envelope, originator_conversation_id = self._build_soap_envelope(
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='ActivateCustomerDirectDebitMandate',
                 initiator=initiator,
                 receiver_party=receiver_party,
-                body_data=body_data
+                body_xml=body_xml
             )
             
-            # Call SOAP API
-            if self.client is None:
-                self._init_client()
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'ActivateCustomerDirectDebitMandate'
+            }
             
-            # Make actual SOAP call
-            try:
-                response = self.client.service.Request(envelope)
-                # Parse response
-                response_code = response.Body.ResponseCode
-                response_desc = response.Body.ResponseDesc
-                conversation_id = response.Header.ConversationID
-                
-                if response_code == '0':
-                    return {
-                        'success': True,
-                        'originator_conversation_id': originator_conversation_id,
-                        'conversation_id': conversation_id,
-                        'message': response_desc,
-                        'response_code': response_code
-                    }
-                else:
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                if 'soapenv:Fault' in response.text:
                     return {
                         'success': False,
-                        'error': response_desc,
-                        'response_code': response_code,
-                        'conversation_id': conversation_id
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
                     }
-            except Exception as soap_error:
-                print(f"SOAP call failed: {str(soap_error)}")
+                
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                    
+                    if response_code == '0':
+                        return {
+                            'success': True,
+                            'originator_conversation_id': originator_conversation_id,
+                            'conversation_id': conversation_id,
+                            'message': response_desc,
+                            'response_code': response_code
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': response_desc,
+                            'response_code': response_code,
+                            'conversation_id': conversation_id
+                        }
+                except Exception as parse_error:
+                    return {
+                        'success': False,
+                        'error': f'Failed to parse response: {str(parse_error)}',
+                        'response_text': response.text[:500]
+                    }
+            else:
                 return {
                     'success': False,
-                    'error': f'SOAP call failed: {str(soap_error)}'
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
             
         except Exception as e:
@@ -328,69 +369,86 @@ class TelebirrDirectDebitService:
                 'Identifier': payer_reference_number,
             }
             
-            # Build transaction parameters
-            parameters = [
-                {'Key': 'MandateID', 'Value': mandate_id},
-                {'Key': 'Amount', 'Value': str(amount)},
-                {'Key': 'Currency', 'Value': currency},
-            ]
-            
-            # Build body data
-            body_data = {
-                'TransactionRequest': {
-                    'Parameters': {
-                        'Parameter': parameters
-                    }
-                },
-                'Remark': f'Direct debit for mandate {mandate_id}'
-            }
+            # Build body XML according to Telebirr documentation
+            body_xml = f'''<req:TransactionRequest>
+          <req:Parameters>
+            <req:Parameter>
+              <com:Key>MandateID</com:Key>
+              <com:Value>{mandate_id}</com:Value>
+            </req:Parameter>
+            <req:Parameter>
+              <com:Key>Amount</com:Key>
+              <com:Value>{amount}</com:Value>
+            </req:Parameter>
+            <req:Parameter>
+              <com:Key>Currency</com:Key>
+              <com:Value>{currency}</com:Value>
+            </req:Parameter>
+          </req:Parameters>
+        </req:TransactionRequest>
+        <req:Remark>Direct debit for mandate {mandate_id}</req:Remark>'''
             
             # Build SOAP envelope
-            envelope, originator_conversation_id = self._build_soap_envelope(
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='InitTrans_Initiate Direct Debit Transaction',
                 initiator=initiator,
                 receiver_party=receiver_party,
-                body_data=body_data
+                body_xml=body_xml
             )
             
-            # Call SOAP API
-            if self.client is None:
-                self._init_client()
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'InitTrans_Initiate Direct Debit Transaction'
+            }
             
-            # Make actual SOAP call
-            try:
-                response = self.client.service.Request(envelope)
-                # Parse response
-                response_code = response.Body.ResponseCode
-                response_desc = response.Body.ResponseDesc
-                conversation_id = response.Header.ConversationID
-                
-                if response_code == '0':
-                    # Extract transaction ID if present
-                    transaction_id = None
-                    if hasattr(response.Body, 'TransactionResult'):
-                        transaction_id = response.Body.TransactionResult.TransactionID
-                    
-                    return {
-                        'success': True,
-                        'originator_conversation_id': originator_conversation_id,
-                        'conversation_id': conversation_id,
-                        'transaction_id': transaction_id,
-                        'message': response_desc,
-                        'response_code': response_code
-                    }
-                else:
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                if 'soapenv:Fault' in response.text:
                     return {
                         'success': False,
-                        'error': response_desc,
-                        'response_code': response_code,
-                        'conversation_id': conversation_id
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
                     }
-            except Exception as soap_error:
-                print(f"SOAP call failed: {str(soap_error)}")
+                
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    transaction_id_match = re.search(r'<res:TransactionID>([^<]+)</res:TransactionID>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                    transaction_id = transaction_id_match.group(1) if transaction_id_match else None
+                    
+                    if response_code == '0':
+                        return {
+                            'success': True,
+                            'originator_conversation_id': originator_conversation_id,
+                            'conversation_id': conversation_id,
+                            'transaction_id': transaction_id,
+                            'message': response_desc,
+                            'response_code': response_code
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': response_desc,
+                            'response_code': response_code,
+                            'conversation_id': conversation_id
+                        }
+                except Exception as parse_error:
+                    return {
+                        'success': False,
+                        'error': f'Failed to parse response: {str(parse_error)}',
+                        'response_text': response.text[:500]
+                    }
+            else:
                 return {
                     'success': False,
-                    'error': f'SOAP call failed: {str(soap_error)}'
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
             
         except Exception as e:
@@ -424,53 +482,69 @@ class TelebirrDirectDebitService:
                 'Identifier': payer_msisdn,
             }
             
-            # Build body data
-            body_data = {
-                'CancelDirectDebitMandateByPayerRequest': {
-                    'MandateID': mandate_id,
-                }
-            }
+            # Build body XML according to Telebirr documentation
+            body_xml = f'''<req:CancelDirectDebitMandateByPayerRequest>
+               <req:MandateID>{mandate_id}</req:MandateID>
+            </req:CancelDirectDebitMandateByPayerRequest>'''
             
             # Build SOAP envelope
-            envelope, originator_conversation_id = self._build_soap_envelope(
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='CancelCustomerDirectDebitMandateByPayer',
                 initiator=initiator,
                 receiver_party=receiver_party,
-                body_data=body_data
+                body_xml=body_xml
             )
             
-            # Call SOAP API
-            if self.client is None:
-                self._init_client()
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'CancelCustomerDirectDebitMandateByPayer'
+            }
             
-            # Make actual SOAP call
-            try:
-                response = self.client.service.Request(envelope)
-                # Parse response
-                response_code = response.Body.ResponseCode
-                response_desc = response.Body.ResponseDesc
-                conversation_id = response.Header.ConversationID
-                
-                if response_code == '0':
-                    return {
-                        'success': True,
-                        'originator_conversation_id': originator_conversation_id,
-                        'conversation_id': conversation_id,
-                        'message': response_desc,
-                        'response_code': response_code
-                    }
-                else:
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                if 'soapenv:Fault' in response.text:
                     return {
                         'success': False,
-                        'error': response_desc,
-                        'response_code': response_code,
-                        'conversation_id': conversation_id
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
                     }
-            except Exception as soap_error:
-                print(f"SOAP call failed: {str(soap_error)}")
+                
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                    
+                    if response_code == '0':
+                        return {
+                            'success': True,
+                            'originator_conversation_id': originator_conversation_id,
+                            'conversation_id': conversation_id,
+                            'message': response_desc,
+                            'response_code': response_code
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': response_desc,
+                            'response_code': response_code,
+                            'conversation_id': conversation_id
+                        }
+                except Exception as parse_error:
+                    return {
+                        'success': False,
+                        'error': f'Failed to parse response: {str(parse_error)}',
+                        'response_text': response.text[:500]
+                    }
+            else:
                 return {
                     'success': False,
-                    'error': f'SOAP call failed: {str(soap_error)}'
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
             
         except Exception as e:
