@@ -46,6 +46,9 @@ export function SubscriptionPage({ user, onBack }) {
   const [processingTierId, setProcessingTierId] = useState(null);
   const [smsSent, setSmsSent] = useState(false);
   const [pendingTier, setPendingTier] = useState(null);
+  const [telebirrModalOpen, setTelebirrModalOpen] = useState(false);
+  const [telebirrPhone, setTelebirrPhone] = useState('');
+  const [selectedTierForTelebirr, setSelectedTierForTelebirr] = useState(null);
   const [pollCount, setPollCount] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
   // Inline toast state — replaces native alert() popups for the on-demand flow
@@ -125,27 +128,32 @@ export function SubscriptionPage({ user, onBack }) {
     window.location.href = smsUrl;
   };
 
-  const handleTelebirrSubscribe = async (tier) => {
+  const handleTelebirrSubscribe = (tier) => {
+    setSelectedTierForTelebirr(tier);
+    setTelebirrPhone(user?.profile?.phone_number || '');
+    setTelebirrModalOpen(true);
+  };
+
+  const handleTelebirrProceed = async () => {
+    if (!telebirrPhone || telebirrPhone.length < 10) {
+      showToast('error', 'Please enter a valid phone number');
+      return;
+    }
+
     setProcessing(true);
-    setProcessingTierId(tier.id);
+    setProcessingTierId(selectedTierForTelebirr.id);
+    setTelebirrModalOpen(false);
+
     try {
-      const frequency = tier.duration_type === 'daily' ? '02' :
-                       tier.duration_type === 'weekly' ? '03' :
-                       tier.duration_type === 'monthly' ? '05' : '05';
-      
-      const payerMsisdn = user?.profile?.phone_number || '';
-      if (!payerMsisdn) {
-        showToast('error', 'Please add your phone number in your profile first');
-        setProcessing(false);
-        setProcessingTierId(null);
-        return;
-      }
+      const frequency = selectedTierForTelebirr.duration_type === 'daily' ? '02' :
+                       selectedTierForTelebirr.duration_type === 'weekly' ? '03' :
+                       selectedTierForTelebirr.duration_type === 'monthly' ? '05' : '05';
       
       const response = await api.request('/direct-debit/create/', {
         method: 'POST',
         body: JSON.stringify({
-          tier_id: tier.id,
-          payer_msisdn: payerMsisdn,
+          tier_id: selectedTierForTelebirr.id,
+          payer_msisdn: telebirrPhone,
           frequency: frequency,
         }),
       });
@@ -153,7 +161,7 @@ export function SubscriptionPage({ user, onBack }) {
       if (response.success) {
         showToast('success', `Mandate created! Ref: ${response.payer_reference_number}. Please confirm via Telebirr app.`);
         // Start polling for mandate activation
-        startPolling(tier);
+        startPolling(selectedTierForTelebirr);
       } else {
         showToast('error', response.error || 'Failed to create mandate');
       }
@@ -483,6 +491,96 @@ export function SubscriptionPage({ user, onBack }) {
             </div>
           </div>
         </div>
+
+        {/* Telebirr Modal */}
+        {telebirrModalOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0, 0, 0, 0.8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+            padding: 16,
+          }}>
+            <div style={{
+              background: '#1a1a1a',
+              borderRadius: 16,
+              padding: 24,
+              width: '100%',
+              maxWidth: 400,
+              border: '1px solid #333',
+            }}>
+              <div style={{
+                fontSize: 18, fontWeight: 700, color: '#fff',
+                marginBottom: 16, textAlign: 'center',
+              }}>
+                Subscribe via Telebirr
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{
+                  display: 'block', fontSize: 13, fontWeight: 600,
+                  color: '#aaa', marginBottom: 8,
+                }}>
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={telebirrPhone}
+                  onChange={(e) => setTelebirrPhone(e.target.value)}
+                  placeholder="2519XXXXXXXX"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    background: '#222',
+                    border: '1px solid #444',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontSize: 14,
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#8fc441'}
+                  onBlur={(e) => e.target.style.borderColor = '#444'}
+                />
+                <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>
+                  Enter your Telebirr registered phone number
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button
+                  onClick={() => setTelebirrModalOpen(false)}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: '#333',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleTelebirrProceed}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: '#8fc441',
+                    border: 'none',
+                    borderRadius: 8,
+                    color: '#000',
+                    fontSize: 14, fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Proceed
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Inline toast — replaces native alert() popups for the on-demand
