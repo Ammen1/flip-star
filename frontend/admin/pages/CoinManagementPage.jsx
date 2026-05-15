@@ -16,7 +16,7 @@ import api from '../../api';
  */
 export function CoinManagementPage({ theme }) {
   const T = theme || defaultTheme();
-  const [activeTab, setActiveTab] = useState('config'); // config | withdrawals | adjust
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('adminCoinTab') || 'config'); // config | withdrawals | adjust
 
   const [config, setConfig] = useState(null);
   const [withdrawals, setWithdrawals] = useState([]);
@@ -41,6 +41,10 @@ export function CoinManagementPage({ theme }) {
   useEffect(() => {
     loadConfig();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('adminCoinTab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'withdrawals') {
@@ -279,7 +283,11 @@ export function CoinManagementPage({ theme }) {
 // ---------------------------------------------------------------
 
 function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loading, error, onRetry }) {
-  const [activeSubTab, setActiveSubTab] = useState('earned');
+  const [activeSubTab, setActiveSubTab] = useState(() => localStorage.getItem('adminCoinConfigSubTab') || 'earned');
+
+  useEffect(() => {
+    localStorage.setItem('adminCoinConfigSubTab', activeSubTab);
+  }, [activeSubTab]);
 
   if (loading) return <LoadingState theme={T} />;
   if (!config) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
