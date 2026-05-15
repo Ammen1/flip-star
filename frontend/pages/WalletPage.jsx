@@ -1048,7 +1048,8 @@ function Modal({ children, onClose, theme: T, title }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: T.card, borderRadius: 18, padding: 20,
+          background: T.mode === 'dark' ? '#1a1a1a' : '#ffffff',
+          borderRadius: 18, padding: 20,
           width: '100%', maxWidth: 460, maxHeight: '90vh', overflow: 'auto',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
         }}
