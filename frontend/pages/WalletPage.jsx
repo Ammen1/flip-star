@@ -976,7 +976,7 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
 
   return (
     <Modal onClose={onClose} theme={T} title="Re-invest Points to Coins">
-      <div style={{ background: T.card, padding: 0 }}>
+      <div>
         <div style={{ marginBottom: 16 }}>
           <label style={modalLabel(T)}>Points to convert</label>
           <input
@@ -1009,7 +1009,17 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
         )}
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onClose} style={btnSecondary(T)} disabled={submitting}>
+          <button onClick={onClose} disabled={submitting} style={{
+            flex: 1,
+            padding: '12px 16px',
+            borderRadius: 8,
+            border: `1px solid ${T.border}`,
+            background: T.bg,
+            color: T.txt,
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: submitting ? 'not-allowed' : 'pointer',
+          }}>
             Cancel
           </button>
           <button onClick={handleReinvest} disabled={submitting || amount < 1 || amount > availablePoints} style={{ ...btnPrimary(T), flex: 1 }}>
