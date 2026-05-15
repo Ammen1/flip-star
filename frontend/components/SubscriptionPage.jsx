@@ -265,8 +265,8 @@ export function SubscriptionPage({ user, onBack }) {
   const M_BG     = '#0B0B0C';
   const M_CARD   = '#161616';
   const M_BORDER = '#242424';
-  const GOLD     = '#8fc441';
-  const PLAN_COLORS = { daily: '#F59E0B', weekly: '#8B5CF6', monthly: GOLD };
+  const BRAND_GREEN = '#8fc441';
+  const PLAN_COLORS = { daily: BRAND_GREEN, weekly: BRAND_GREEN, monthly: BRAND_GREEN };
   const PLAN_ICON   = { daily: Zap,       weekly: Star,      monthly: Trophy };
   const BENEFITS = [
     { icon: Video,  text: 'HD Videos' },
@@ -275,7 +275,7 @@ export function SubscriptionPage({ user, onBack }) {
     { icon: Trophy, text: 'Campaign Priority' },
   ];
 
-  const getTierColor = (durationType) => PLAN_COLORS[durationType] || GOLD;
+  const getTierColor = (durationType) => PLAN_COLORS[durationType] || BRAND_GREEN;
   const getTierIcon  = (durationType) => PLAN_ICON[durationType] || Crown;
 
   if (loading) {
@@ -323,16 +323,16 @@ export function SubscriptionPage({ user, onBack }) {
         {/* Hero */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px' }}>
           <div style={{
-            width: 80, height: 80, borderRadius: 40,
-            background: '#8fc44118',
-            border: `1.5px solid #8fc44140`,
+            width: 100, height: 100, borderRadius: 50,
+            background: BRAND_GREEN,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 16,
+            marginBottom: 20,
+            boxShadow: '0 8px 32px rgba(143,196,65,0.3)',
           }}>
-            <Trophy size={36} color="#8fc441" />
+            <Trophy size={48} color="#fff" />
           </div>
-          <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 6 }}>FlipStar Premium</div>
-          <div style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>Unlock the full experience</div>
+          <div style={{ fontSize: 32, fontWeight: 900, marginBottom: 8, color: '#fff' }}>FlipStar Premium</div>
+          <div style={{ fontSize: 16, color: BRAND_GREEN, textAlign: 'center', fontWeight: 600 }}>Unlock the full experience</div>
           {isActive && currentSubscription?.end_date && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 14 }}>
               <div style={{
@@ -370,20 +370,21 @@ export function SubscriptionPage({ user, onBack }) {
 
         {/* Benefits row */}
         <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 8,
-          padding: '0 16px', marginBottom: 28, justifyContent: 'center',
+          display: 'flex', flexWrap: 'wrap', gap: 12,
+          padding: '0 16px', marginBottom: 32, justifyContent: 'center',
         }}>
           {BENEFITS.map((b, i) => {
             const BIcon = b.icon;
             return (
               <div key={i} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                background: M_CARD, borderRadius: 20,
-                padding: '7px 12px',
-                border: `1px solid ${M_BORDER}`,
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                background: BRAND_GREEN + '15',
+                borderRadius: 25,
+                padding: '10px 16px',
+                border: `1px solid ${BRAND_GREEN}40`,
               }}>
-                <BIcon size={16} color="#8fc441" />
-                <span style={{ fontSize: 12, color: '#ccc', fontWeight: 500 }}>{b.text}</span>
+                <BIcon size={18} color={BRAND_GREEN} />
+                <span style={{ fontSize: 13, color: BRAND_GREEN, fontWeight: 600 }}>{b.text}</span>
               </div>
             );
           })}
@@ -401,8 +402,8 @@ export function SubscriptionPage({ user, onBack }) {
         {/* Plan cards - horizontal on desktop, stack on mobile */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 14,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: 20,
           padding: '0 16px',
           width: '100%',
           maxWidth: '1200px',
@@ -410,7 +411,7 @@ export function SubscriptionPage({ user, onBack }) {
         }}>
           {tiers.map((tier) => {
               const TierIcon = getTierIcon(tier.duration_type);
-              const color = getTierColor(tier.duration_type);
+              const color = BRAND_GREEN;
               const isCurrent = isActive && currentSubscription?.tier?.id === tier.id;
               const isProcessingThis = processing && processingTierId === tier.id;
 
@@ -418,71 +419,82 @@ export function SubscriptionPage({ user, onBack }) {
                 <div
                   key={tier.id}
                   style={{
-                    background: isCurrent ? '#0D2D1A18' : M_CARD,
-                    borderRadius: 20,
-                    padding: 18,
-                    border: `1.5px solid ${isCurrent ? '#10B98150' : M_BORDER}`,
+                    background: isCurrent ? BRAND_GREEN + '10' : M_CARD,
+                    borderRadius: 24,
+                    padding: 24,
+                    border: `2px solid ${isCurrent ? BRAND_GREEN : M_BORDER}`,
                     position: 'relative',
+                    transition: 'all 0.3s ease',
                   }}
                 >
                 {isCurrent && (
                   <div style={{
-                    position: 'absolute', top: -10, right: 16,
-                    background: color,
-                    padding: '3px 10px', borderRadius: 10,
-                    color: '#000', fontSize: 10, fontWeight: 800,
+                    position: 'absolute', top: -12, right: 20,
+                    background: BRAND_GREEN,
+                    padding: '6px 16px', borderRadius: 20,
+                    color: '#000', fontSize: 12, fontWeight: 800,
+                    boxShadow: '0 4px 12px rgba(143,196,65,0.3)',
                   }}>
-                    Current
+                    Current Plan
                   </div>
                 )}
 
                 {/* Top: icon + name/desc + price */}
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
                   <div style={{
-                    width: 46, height: 46, borderRadius: 14,
-                    background: color + '22',
+                    width: 60, height: 60, borderRadius: 20,
+                    background: BRAND_GREEN,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
+                    boxShadow: '0 8px 24px rgba(143,196,65,0.2)',
                   }}>
-                    <TierIcon size={22} color={color} />
+                    <TierIcon size={28} color="#fff" />
                   </div>
-                  <div style={{ flex: 1, marginLeft: 14, minWidth: 0 }}>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 2 }}>
+                  <div style={{ flex: 1, marginLeft: 16, minWidth: 0 }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', marginBottom: 4 }}>
                       {tier.name}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#666', fontWeight: 500 }}>
+                      {tier.description}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color, lineHeight: '26px' }}>
+                    <div style={{ fontSize: 32, fontWeight: 900, color: BRAND_GREEN, lineHeight: '34px' }}>
                       {tier.price_etb}
                     </div>
-                    <div style={{ fontSize: 11, color: '#666', fontWeight: 600 }}>ETB</div>
+                    <div style={{ fontSize: 13, color: BRAND_GREEN, fontWeight: 600 }}>ETB</div>
                   </div>
                 </div>
 
                 {/* CTA buttons */}
                 {!isCurrent && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <button
                       onClick={() => handleTelebirrSubscribe(tier)}
                       disabled={isProcessingThis}
                       style={{
                         width: '100%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                        background: isProcessingThis ? '#222' : '#8fc441',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        background: isProcessingThis ? '#333' : BRAND_GREEN,
                         color: isProcessingThis ? '#666' : '#000',
-                        border: 'none', borderRadius: 14, padding: 13,
-                        fontSize: 14, fontWeight: 800,
+                        border: 'none', borderRadius: 16, padding: 16,
+                        fontSize: 15, fontWeight: 800,
                         cursor: isProcessingThis ? 'wait' : 'pointer',
                         opacity: isProcessingThis ? 0.7 : 1,
-                        transition: 'transform 0.15s, opacity 0.15s',
+                        transition: 'all 0.3s ease',
+                        boxShadow: isProcessingThis ? 'none' : '0 8px 24px rgba(143,196,65,0.3)',
                       }}
                       onMouseOver={(e) => {
                         if (isProcessingThis) return;
-                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 12px 32px rgba(143,196,65,0.4)';
                       }}
-                      onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                      onMouseOut={(e) => { 
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(143,196,65,0.3)';
+                      }}
                     >
-                      <Trophy size={15} color={isProcessingThis ? '#666' : '#000'} />
+                      <Trophy size={16} color={isProcessingThis ? '#666' : '#000'} />
                       {isProcessingThis ? 'Processing…' : 'Subscribe via Telebirr'}
                     </button>
                     <button
@@ -490,22 +502,27 @@ export function SubscriptionPage({ user, onBack }) {
                       disabled={isProcessingThis}
                       style={{
                         width: '100%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                        background: isProcessingThis ? '#222' : color,
-                        color: isProcessingThis ? '#666' : '#000',
-                        border: 'none', borderRadius: 14, padding: 13,
-                        fontSize: 14, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        background: isProcessingThis ? '#333' : 'transparent',
+                        color: isProcessingThis ? '#666' : BRAND_GREEN,
+                        border: `2px solid ${isProcessingThis ? '#333' : BRAND_GREEN}`,
+                        borderRadius: 16, padding: 14,
+                        fontSize: 15, fontWeight: 800,
                         cursor: isProcessingThis ? 'wait' : 'pointer',
                         opacity: isProcessingThis ? 0.7 : 1,
-                        transition: 'transform 0.15s, opacity 0.15s',
+                        transition: 'all 0.3s ease',
                       }}
                       onMouseOver={(e) => {
                         if (isProcessingThis) return;
+                        e.currentTarget.style.background = BRAND_GREEN + '10';
                         e.currentTarget.style.transform = 'translateY(-1px)';
                       }}
-                      onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                      onMouseOut={(e) => { 
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
                     >
-                      <MessageCircle size={15} color={isProcessingThis ? '#666' : '#000'} />
+                      <MessageCircle size={16} color={isProcessingThis ? '#666' : BRAND_GREEN} />
                       {'Subscribe via SMS'}
                     </button>
                   </div>
@@ -515,15 +532,16 @@ export function SubscriptionPage({ user, onBack }) {
                     disabled
                     style={{
                       width: '100%',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                      background: '#222',
-                      color: '#666',
-                      border: 'none', borderRadius: 14, padding: 13,
-                      fontSize: 14, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      background: BRAND_GREEN + '15',
+                      color: BRAND_GREEN,
+                      border: `2px solid ${BRAND_GREEN}`,
+                      borderRadius: 16, padding: 16,
+                      fontSize: 15, fontWeight: 800,
                       cursor: 'default',
                     }}
                   >
-                    <Check size={15} color="#666" />
+                    <Check size={16} color={BRAND_GREEN} />
                     Active Plan
                   </button>
                 )}
@@ -534,19 +552,19 @@ export function SubscriptionPage({ user, onBack }) {
 
         {/* Payment info */}
         <div style={{
-          display: 'flex', gap: 10, alignItems: 'flex-start',
+          display: 'flex', gap: 12, alignItems: 'flex-start',
           margin: '4px 16px 0',
-          background: M_CARD, borderRadius: 14, padding: 14,
-          border: `1px solid ${M_BORDER}`,
+          background: BRAND_GREEN + '10', borderRadius: 16, padding: 16,
+          border: `1px solid ${BRAND_GREEN}30`,
         }}>
-          <Info size={18} color="#8fc441" style={{ flexShrink: 0, marginTop: 1 }} />
-          <div style={{ flex: 1, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
-            <div style={{ marginBottom: 6 }}>
-              <strong style={{ color: '#8fc441' }}>Telebirr:</strong> One-tap subscription via Telebirr app. Auto-renew enabled.
+          <Info size={20} color={BRAND_GREEN} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ flex: 1, fontSize: 13, color: '#ccc', lineHeight: 1.6 }}>
+            <div style={{ marginBottom: 8 }}>
+              <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>Telebirr:</strong> One-tap subscription via Telebirr app. Auto-renew enabled.
             </div>
             <div>
-              <strong style={{ color: '#8fc441' }}>SMS:</strong> Send SMS to <span style={{ color: "#8fc441", fontWeight: 700 }}>9286</span> with code{' '}
-              <span style={{ color: '#fff' }}>OK1</span> (Daily),{' '}
+              <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>SMS:</strong> Send SMS to <span style={{ color: BRAND_GREEN, fontWeight: 800 }}>9286</span> with code{' '}
+              <span style={{ color: '#fff', fontWeight: 700 }}>OK1</span> (Daily),{' '}
               <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
               <span style={{ color: '#fff' }}>OK3</span> (Monthly) via Ethio Telecom.
             </div>

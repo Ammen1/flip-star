@@ -2071,11 +2071,11 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
                 key={tab}
                 onClick={() => handleTabClick(tab)}
                 style={{
-                  paddingLeft: 18,
-                  paddingRight: 18,
-                  paddingTop: 8,
-                  paddingBottom: 8,
-                  borderRadius: 20,
+                  paddingLeft: 12,
+                  paddingRight: 12,
+                  paddingTop: 6,
+                  paddingBottom: 6,
+                  borderRadius: 16,
                   border: 'none',
                   cursor: 'pointer',
                   background: isActive
@@ -2083,7 +2083,7 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
                     : (T?.cardBg || '#1A1A1A'),
                   color: isActive ? '#000' : '#8fc441',
                   fontWeight: isActive ? 700 : 600,
-                  fontSize: 13,
+                  fontSize: 12,
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
                   boxShadow: isActive
