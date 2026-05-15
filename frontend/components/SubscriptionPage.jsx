@@ -124,6 +124,39 @@ export function SubscriptionPage({ user, onBack }) {
     window.location.href = smsUrl;
   };
 
+  const handleTelebirrSubscribe = async (tier) => {
+    setProcessing(true);
+    setProcessingTierId(tier.id);
+    try {
+      const frequency = tier.duration_type === 'daily' ? '02' :
+                       tier.duration_type === 'weekly' ? '03' :
+                       tier.duration_type === 'monthly' ? '05' : '05';
+      
+      const response = await api.request('/direct-debit/create/', {
+        method: 'POST',
+        body: JSON.stringify({
+          tier_id: tier.id,
+          payer_msisdn: user.phone || '',
+          frequency: frequency,
+        }),
+      });
+
+      if (response.success) {
+        showToast('success', `Mandate created! Ref: ${response.payer_reference_number}. Please confirm via Telebirr app.`);
+        // Start polling for mandate activation
+        startPolling(tier);
+      } else {
+        showToast('error', response.error || 'Failed to create mandate');
+      }
+    } catch (error) {
+      console.error('Telebirr subscription error:', error);
+      showToast('error', 'Failed to process Telebirr subscription');
+    } finally {
+      setProcessing(false);
+      setProcessingTierId(null);
+    }
+  };
+
 
   const handlePayment = async () => {
     if (!selectedTier) return;
@@ -356,40 +389,80 @@ export function SubscriptionPage({ user, onBack }) {
                   ))}
                 </div>
 
-                {/* CTA button */}
-                <button
-                  onClick={() => !isCurrent && handleSubscribe(tier)}
-                  disabled={isCurrent || isProcessingThis}
-                  style={{
-                    width: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    background: isCurrent ? '#222' : color,
-                    color: isCurrent ? '#666' : '#000',
-                    border: 'none', borderRadius: 14, padding: 13,
-                    fontSize: 14, fontWeight: 800,
-                    cursor: isCurrent ? 'default' : isProcessingThis ? 'wait' : 'pointer',
-                    opacity: isProcessingThis ? 0.7 : 1,
-                    transition: 'transform 0.15s, opacity 0.15s',
-                  }}
-                  onMouseOver={(e) => {
-                    if (isCurrent || isProcessingThis) return;
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <MessageCircle size={15} color={isCurrent ? '#666' : '#000'} />
-                  {isCurrent
-                    ? 'Active Plan'
-                    : isProcessingThis
-                    ? 'Processing…'
-                    : 'Subscribe via SMS'}
-                </button>
+                {/* CTA buttons */}
+                {!isCurrent && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button
+                      onClick={() => handleTelebirrSubscribe(tier)}
+                      disabled={isProcessingThis}
+                      style={{
+                        width: '100%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                        background: isProcessingThis ? '#222' : '#8fc441',
+                        color: isProcessingThis ? '#666' : '#000',
+                        border: 'none', borderRadius: 14, padding: 13,
+                        fontSize: 14, fontWeight: 800,
+                        cursor: isProcessingThis ? 'wait' : 'pointer',
+                        opacity: isProcessingThis ? 0.7 : 1,
+                        transition: 'transform 0.15s, opacity 0.15s',
+                      }}
+                      onMouseOver={(e) => {
+                        if (isProcessingThis) return;
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                      <Trophy size={15} color={isProcessingThis ? '#666' : '#000'} />
+                      {isProcessingThis ? 'Processing…' : 'Subscribe via Telebirr'}
+                    </button>
+                    <button
+                      onClick={() => handleSubscribe(tier)}
+                      disabled={isProcessingThis}
+                      style={{
+                        width: '100%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                        background: isProcessingThis ? '#222' : color,
+                        color: isProcessingThis ? '#666' : '#000',
+                        border: 'none', borderRadius: 14, padding: 13,
+                        fontSize: 14, fontWeight: 800,
+                        cursor: isProcessingThis ? 'wait' : 'pointer',
+                        opacity: isProcessingThis ? 0.7 : 1,
+                        transition: 'transform 0.15s, opacity 0.15s',
+                      }}
+                      onMouseOver={(e) => {
+                        if (isProcessingThis) return;
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                      <MessageCircle size={15} color={isProcessingThis ? '#666' : '#000'} />
+                      {'Subscribe via SMS'}
+                    </button>
+                  </div>
+                )}
+                {isCurrent && (
+                  <button
+                    disabled
+                    style={{
+                      width: '100%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      background: '#222',
+                      color: '#666',
+                      border: 'none', borderRadius: 14, padding: 13,
+                      fontSize: 14, fontWeight: 800,
+                      cursor: 'default',
+                    }}
+                  >
+                    <Check size={15} color="#666" />
+                    Active Plan
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
 
-        {/* SMS info */}
+        {/* Payment info */}
         <div style={{
           display: 'flex', gap: 10, alignItems: 'flex-start',
           margin: '4px 16px 0',
@@ -398,10 +471,15 @@ export function SubscriptionPage({ user, onBack }) {
         }}>
           <Info size={18} color="#8fc441" style={{ flexShrink: 0, marginTop: 1 }} />
           <div style={{ flex: 1, fontSize: 12, color: '#666', lineHeight: 1.6 }}>
-            Send SMS to <span style={{ color: "#8fc441", fontWeight: 700 }}>9286</span> with code{' '}
-            <span style={{ color: '#fff' }}>OK1</span> (Daily),{' '}
-            <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
-            <span style={{ color: '#fff' }}>OK3</span> (Monthly) via Ethio Telecom.
+            <div style={{ marginBottom: 6 }}>
+              <strong style={{ color: '#8fc441' }}>Telebirr:</strong> One-tap subscription via Telebirr app. Auto-renew enabled.
+            </div>
+            <div>
+              <strong style={{ color: '#8fc441' }}>SMS:</strong> Send SMS to <span style={{ color: "#8fc441", fontWeight: 700 }}>9286</span> with code{' '}
+              <span style={{ color: '#fff' }}>OK1</span> (Daily),{' '}
+              <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
+              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via Ethio Telecom.
+            </div>
           </div>
         </div>
       </div>
