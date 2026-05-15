@@ -230,6 +230,37 @@ export function SubscriptionPage({ user, onBack }) {
     }
   };
 
+  const handleCancelTelebirrSubscription = async () => {
+    if (!currentSubscription?.mandate_id) {
+      showToast('error', 'No Telebirr mandate found');
+      return;
+    }
+
+    if (confirm('Are you sure you want to cancel your Telebirr subscription?')) {
+      setProcessing(true);
+      try {
+        const response = await api.request('/direct-debit/cancel/', {
+          method: 'POST',
+          body: JSON.stringify({
+            mandate_id: currentSubscription.mandate_id,
+          }),
+        });
+
+        if (response.success) {
+          showToast('success', 'Telebirr subscription cancelled successfully');
+          loadSubscriptionData();
+        } else {
+          showToast('error', response.error || 'Failed to cancel Telebirr subscription');
+        }
+      } catch (error) {
+        console.error('Cancel Telebirr subscription error:', error);
+        showToast('error', 'Failed to cancel Telebirr subscription');
+      } finally {
+        setProcessing(false);
+      }
+    }
+  };
+
   // ── Mobile-app design tokens (mirrors mobile-app/src/screens/SubscriptionScreen.js) ──
   const M_BG     = '#0B0B0C';
   const M_CARD   = '#161616';
@@ -303,15 +334,36 @@ export function SubscriptionPage({ user, onBack }) {
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 6 }}>FlipStar Premium</div>
           <div style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>Unlock the full experience</div>
           {isActive && currentSubscription?.end_date && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: '#0D2D1A', padding: '7px 14px', borderRadius: 20,
-              marginTop: 14, border: '1px solid #10B98140',
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: 4, background: '#10B981' }} />
-              <span style={{ color: '#10B981', fontSize: 13, fontWeight: 600 }}>
-                Active · expires {new Date(currentSubscription.end_date).toLocaleDateString()}
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 14 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: '#0D2D1A', padding: '7px 14px', borderRadius: 20,
+                border: '1px solid #10B98140',
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: '#10B981' }} />
+                <span style={{ color: '#10B981', fontSize: 13, fontWeight: 600 }}>
+                  Active · expires {new Date(currentSubscription.end_date).toLocaleDateString()}
+                </span>
+              </div>
+              {currentSubscription?.payment_method === 'telebirr_direct_debit' && (
+                <button
+                  onClick={handleCancelTelebirrSubscription}
+                  disabled={processing}
+                  style={{
+                    background: '#EF4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: processing ? 'wait' : 'pointer',
+                    opacity: processing ? 0.7 : 1,
+                  }}
+                >
+                  Cancel Telebirr Subscription
+                </button>
+              )}
             </div>
           )}
         </div>
