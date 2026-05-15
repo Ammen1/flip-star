@@ -710,11 +710,13 @@ function WithdrawalCard({ w, theme: T, onAction }) {
 
 function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState('id');
+  const [searchType, setSearchType] = useState('phone'); // phone, id, username
   const [searching, setSearching] = useState(false);
   const [userData, setUserData] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [adjustmentType, setAdjustmentType] = useState('coins');
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [adjustmentType, setAdjustmentType] = useState('coins'); // coins, points
+  const [adjustmentAction, setAdjustmentAction] = useState('add'); // add, subtract
 
   const searchUser = async () => {
     if (!searchQuery.trim()) {
@@ -723,6 +725,8 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
     }
     try {
       setSearching(true);
+      setUserData(null);
+      setTransactions([]);
       console.log('Searching for user:', searchType, searchQuery);
       let user;
       
@@ -784,13 +788,7 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
         }
         
         // Load recent transactions using admin endpoint
-        try {
-          const txData = await api.request(`/admin/wallet/transactions/?user_id=${user.id}&page_size=10`);
-          setTransactions(txData.results || []);
-        } catch (txErr) {
-          console.error('Transaction history load failed:', txErr);
-          setTransactions([]);
-        }
+        loadUserTransactions(user.id);
       } else {
         setResult && setResult({ type: 'error', message: 'User not found' });
       }
@@ -802,91 +800,482 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
     }
   };
 
+  const loadUserTransactions = async (userId) => {
+    setTransactionsLoading(true);
+    try {
+      const txData = await api.request(`/admin/wallet/transactions/?user_id=${userId}&page_size=50`);
+      setTransactions(txData.results || []);
+    } catch (txErr) {
+      console.error('Transaction history load failed:', txErr);
+      setTransactions([]);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
+
   const handleAdjust = async () => {
     if (!userData) {
       setResult && setResult({ type: 'error', message: 'Please search and select a user first' });
       return;
     }
     
-    const coinType = adjustmentType === 'points' ? 'points' : form.bucket;
+    if (!form.amount || form.amount === '') {
+      setResult && setResult({ type: 'error', message: 'Please enter an amount' });
+      return;
+    }
+    
+    // Convert amount based on action
+    const amount = adjustmentAction === 'subtract' ? -Math.abs(parseFloat(form.amount)) : Math.abs(parseFloat(form.amount));
+    setForm({ ...form, amount: amount.toString() });
+    
     await onSubmit();
+    
+    // Reload data after adjustment
+    if (userData) {
+      await loadUserTransactions(userData.id);
+      try {
+        const walletData = await api.request(`/admin/wallet/user/${userData.id}/`);
+        setUserData(prev => ({ ...prev, wallet: walletData }));
+      } catch (walletErr) {
+        console.error('Wallet data reload failed:', walletErr);
+      }
+    }
+  };
+
+  const getTransactionIcon = (type) => {
+    switch (type) {
+      case 'credit':
+      case 'reward':
+      case 'deposit':
+        return <ArrowUpFromLine size={16} color="#10B981" />;
+      case 'debit':
+      case 'withdrawal':
+      case 'purchase':
+        return <TrendingDown size={16} color="#EF4444" />;
+      default:
+        return <Clock size={16} color={T.sub} />;
+    }
+  };
+
+  const formatTransactionType = (type) => {
+    return type ? type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ') : 'Unknown';
   };
 
   return (
-    <div style={{ maxWidth: 500 }}>
-      <SectionCard theme={T} title="Manual Balance Adjustment" icon={<User size={20} color="#8B5CF6" />}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* User Search Section */}
+      <SectionCard theme={T} title="User Search" icon={<Search size={20} color="#8B5CF6" />}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-              User ID
-            </label>
-            <input
-              type="number"
-              value={form.user_id}
-              onChange={(e) => setForm({ ...form, user_id: e.target.value })}
-              placeholder="Enter user ID"
-              style={inputStyle(T)}
-            />
+          {/* Search Type Tabs */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            {[
+              { id: 'phone', label: 'Phone' },
+              { id: 'id', label: 'User ID' },
+              { id: 'username', label: 'Username' },
+            ].map((type) => (
+              <button
+                key={type.id}
+                onClick={() => setSearchType(type.id)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  background: searchType === type.id ? T.pri : T.bg,
+                  border: searchType === type.id ? 'none' : `1px solid ${T.border}`,
+                  borderRadius: 8,
+                  color: searchType === type.id ? '#fff' : T.txt,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {type.label}
+              </button>
+            ))}
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-              Amount (positive to add, negative to deduct)
-            </label>
+          {/* Search Input */}
+          <div style={{ display: 'flex', gap: 8 }}>
             <input
-              type="number"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              placeholder="e.g., 100 or -50"
-              style={inputStyle(T)}
+              type={searchType === 'id' ? 'number' : 'text'}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={searchType === 'phone' ? 'Enter phone number (e.g., 0912345678)' : searchType === 'id' ? 'Enter user ID' : 'Enter username'}
+              onKeyPress={(e) => e.key === 'Enter' && searchUser()}
+              style={{
+                flex: 1,
+                padding: '12px 16px',
+                borderRadius: 8,
+                border: `1px solid ${T.border}`,
+                background: T.bg,
+                color: T.txt,
+                fontSize: 14,
+              }}
             />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-              Bucket
-            </label>
-            <select
-              value={form.bucket}
-              onChange={(e) => setForm({ ...form, bucket: e.target.value })}
-              style={inputStyle(T)}
+            <button
+              onClick={searchUser}
+              disabled={searching}
+              style={{
+                padding: '12px 20px',
+                background: T.pri,
+                border: 'none',
+                borderRadius: 8,
+                color: '#fff',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: searching ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
             >
-              <option value="earned">Earned Balance</option>
-              <option value="purchased">Purchased Balance</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 6 }}>
-              Reason
-            </label>
-            <input
-              type="text"
-              value={form.reason}
-              onChange={(e) => setForm({ ...form, reason: e.target.value })}
-              placeholder="Reason for adjustment"
-              style={inputStyle(T)}
-            />
+              {searching ? <Loader size={16} className="spin" /> : <Search size={16} />}
+              {searching ? 'Searching...' : 'Search'}
+            </button>
           </div>
 
           {result && (
             <div style={{
               background: result.type === 'success' ? '#D1FAE5' : '#FEE2E2',
               color: result.type === 'success' ? '#065F46' : '#991B1B',
-              padding: 10, borderRadius: 8, fontSize: 13,
+              padding: 12, borderRadius: 8, fontSize: 13,
             }}>
               {result.message}
             </div>
           )}
-
-          <button onClick={onSubmit} style={btnPrimary(T)}>
-            <Save size={16} /> Adjust Balance
-          </button>
         </div>
       </SectionCard>
 
-      <div style={{ marginTop: 16, padding: 16, background: '#FEF3C7', borderRadius: 8, fontSize: 12, color: '#92400E' }}>
-        <strong>⚠️ Warning:</strong> Manual balance adjustments are logged as admin transactions. Use this feature responsibly and only for legitimate corrections.
+      {/* User Info and Balances */}
+      {userData && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+          {/* User Profile Card */}
+          <SectionCard theme={T} title="User Profile" icon={<User size={20} color="#8B5CF6" />}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                {userData.profile_photo ? (
+                  <img
+                    src={userData.profile_photo}
+                    alt={userData.username}
+                    style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 64, height: 64, borderRadius: '50%',
+                    background: T.pri, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontSize: 24, fontWeight: 700,
+                  }}>
+                    {userData.username?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: T.txt, marginBottom: 4 }}>
+                    {userData.username || 'Unknown'}
+                  </div>
+                  <div style={{ fontSize: 13, color: T.sub, marginBottom: 2 }}>
+                    ID: {userData.id}
+                  </div>
+                  {userData.phone && (
+                    <div style={{ fontSize: 13, color: T.sub }}>
+                      {userData.phone}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {userData.wallet && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ padding: 12, background: T.card, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 12, color: T.sub, marginBottom: 8 }}>Coin Balances</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.sub }}>Total</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: T.txt }}>
+                          {userData.wallet.balance?.total || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.sub }}>Earned</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#10B981' }}>
+                          {userData.wallet.balance?.earned || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: T.sub }}>Purchased</div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#3B82F6' }}>
+                          {userData.wallet.balance?.purchased || 0}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 12, background: T.card, borderRadius: 8, border: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 12, color: T.sub, marginBottom: 8 }}>Points Balance</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: T.txt }}>
+                      {userData.wallet.points?.current || 0}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* Balance Adjustment Form */}
+          <SectionCard theme={T} title="Balance Adjustment" icon={<Wallet size={20} color="#8B5CF6" />}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Balance Type Selection */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setAdjustmentType('coins')}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    background: adjustmentType === 'coins' ? T.pri : T.bg,
+                    border: adjustmentType === 'coins' ? 'none' : `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    color: adjustmentType === 'coins' ? '#fff' : T.txt,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <Coins size={16} />
+                  Coins
+                </button>
+                <button
+                  onClick={() => setAdjustmentType('points')}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    background: adjustmentType === 'points' ? T.pri : T.bg,
+                    border: adjustmentType === 'points' ? 'none' : `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    color: adjustmentType === 'points' ? '#fff' : T.txt,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <Trophy size={16} />
+                  Points
+                </button>
+              </div>
+
+              {/* Add/Subtract Selection */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => setAdjustmentAction('add')}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    background: adjustmentAction === 'add' ? '#10B981' : T.bg,
+                    border: adjustmentAction === 'add' ? 'none' : `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    color: adjustmentAction === 'add' ? '#fff' : T.txt,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <TrendingUp size={16} />
+                  Add
+                </button>
+                <button
+                  onClick={() => setAdjustmentAction('subtract')}
+                  style={{
+                    flex: 1,
+                    padding: '12px 16px',
+                    background: adjustmentAction === 'subtract' ? '#EF4444' : T.bg,
+                    border: adjustmentAction === 'subtract' ? 'none' : `1px solid ${T.border}`,
+                    borderRadius: 8,
+                    color: adjustmentAction === 'subtract' ? '#fff' : T.txt,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <TrendingDown size={16} />
+                  Subtract
+                </button>
+              </div>
+
+              {/* Amount Input */}
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 8 }}>
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  placeholder="Enter amount"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: 8,
+                    border: `1px solid ${T.border}`,
+                    background: T.bg,
+                    color: T.txt,
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+
+              {/* Bucket Selection for Coins */}
+              {adjustmentType === 'coins' && (
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 8 }}>
+                    Balance Bucket
+                  </label>
+                  <select
+                    value={form.bucket}
+                    onChange={(e) => setForm({ ...form, bucket: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      borderRadius: 8,
+                      border: `1px solid ${T.border}`,
+                      background: T.bg,
+                      color: T.txt,
+                      fontSize: 14,
+                    }}
+                  >
+                    <option value="earned">Earned Balance</option>
+                    <option value="purchased">Purchased Balance</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Reason Input */}
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.sub, marginBottom: 8 }}>
+                  Reason for Adjustment
+                </label>
+                <input
+                  type="text"
+                  value={form.reason}
+                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                  placeholder="Enter reason (e.g., Refund, Bonus, Correction)"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    borderRadius: 8,
+                    border: `1px solid ${T.border}`,
+                    background: T.bg,
+                    color: T.txt,
+                    fontSize: 14,
+                  }}
+                />
+              </div>
+
+              {/* Submit Button */}
+              <button
+                onClick={handleAdjust}
+                style={{
+                  width: '100%',
+                  padding: '14px 20px',
+                  background: T.pri,
+                  border: 'none',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+              >
+                <Save size={18} />
+                {adjustmentAction === 'add' ? 'Add' : 'Subtract'} {adjustmentType}
+              </button>
+            </div>
+          </SectionCard>
+        </div>
+      )}
+
+      {/* Transaction History */}
+      {userData && (
+        <SectionCard theme={T} title="Transaction History" icon={<Clock size={20} color="#8B5CF6" />}>
+          {transactionsLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, color: T.sub }}>
+              <Loader size={24} className="spin" style={{ marginRight: 8 }} />
+              Loading transactions...
+            </div>
+          ) : transactions.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: T.sub }}>
+              No transactions found
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {transactions.map((tx, index) => (
+                <div
+                  key={tx.id || index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: 12,
+                    background: T.card,
+                    borderRadius: 8,
+                    border: `1px solid ${T.border}`,
+                  }}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: tx.type === 'credit' || tx.type === 'reward' ? '#D1FAE5' : '#FEE2E2',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {getTransactionIcon(tx.type)}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: T.txt, marginBottom: 2 }}>
+                      {formatTransactionType(tx.type)}
+                    </div>
+                    <div style={{ fontSize: 12, color: T.sub }}>
+                      {tx.description || tx.reason || 'No description'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{
+                      fontSize: 14, fontWeight: 700,
+                      color: tx.type === 'credit' || tx.type === 'reward' ? '#10B981' : '#EF4444',
+                      marginBottom: 2,
+                    }}>
+                      {tx.type === 'credit' || tx.type === 'reward' ? '+' : '-'}{tx.amount || 0}
+                    </div>
+                    <div style={{ fontSize: 11, color: T.sub }}>
+                      {tx.created_at ? new Date(tx.created_at).toLocaleDateString() : 'N/A'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {/* Warning Message */}
+      <div style={{ padding: 16, background: '#FEF3C7', borderRadius: 8, fontSize: 12, color: '#92400E', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <AlertTriangle size={16} />
+        <strong>Warning:</strong> Manual balance adjustments are logged as admin transactions. Use this feature responsibly and only for legitimate corrections.
       </div>
     </div>
   );
