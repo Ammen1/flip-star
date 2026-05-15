@@ -432,7 +432,7 @@ export function CampaignDetailPage({ campaignId, onBack, onShowLeaderboard, onSh
                       {s.label}
                     </span>
                   </div>
-                  <div style={{ fontSize: 16, fontWeight: 900, color: s.color }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: '#fff' }}>
                     {s.value}
                   </div>
                 </div>

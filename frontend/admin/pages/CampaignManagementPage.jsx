@@ -1798,7 +1798,7 @@ function CampaignEntriesModal({ theme, campaign, onClose }) {
                 </div>
                 
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: theme.pri }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
                     {entry.vote_count}
                   </div>
                   <div style={{ fontSize: 11, color: theme.sub }}>
