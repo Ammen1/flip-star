@@ -732,12 +732,12 @@ def admin_user_wallet(request, user_id):
         
         return Response({
             'balance': {
-                'total': balance.total_coins,
+                'total': balance.balance,
                 'earned': balance.earned_balance,
                 'purchased': balance.purchased_balance,
             },
             'points': {
-                'current': balance.points,
+                'current': 0,  # Points not implemented in balance model yet
             }
         })
     except User.DoesNotExist:
