@@ -49,6 +49,7 @@ export function SubscriptionPage({ user, onBack }) {
   const [telebirrModalOpen, setTelebirrModalOpen] = useState(false);
   const [telebirrPhone, setTelebirrPhone] = useState('');
   const [selectedTierForTelebirr, setSelectedTierForTelebirr] = useState(null);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [pollCount, setPollCount] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
   // Inline toast state — replaces native alert() popups for the on-demand flow
@@ -166,7 +167,8 @@ export function SubscriptionPage({ user, onBack }) {
       });
 
       if (response.success) {
-        showToast('success', `Mandate created! Ref: ${response.payer_reference_number}. Please confirm via Telebirr app.`);
+        setSuccessModalOpen(true);
+        setTimeout(() => setSuccessModalOpen(false), 3000);
         // Start polling for mandate activation
         startPolling(selectedTierForTelebirr);
       } else {
@@ -582,6 +584,59 @@ export function SubscriptionPage({ user, onBack }) {
                 >
                   Proceed
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {successModalOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              animation: 'fadeIn 0.3s ease',
+            }}
+          >
+            <div
+              style={{
+                background: '#1A1A1A',
+                borderRadius: 16,
+                padding: 32,
+                maxWidth: 320,
+                width: '90%',
+                textAlign: 'center',
+                border: '1px solid #333',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+                animation: 'scaleIn 0.3s ease',
+              }}
+            >
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  background: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 8 }}>
+                Successfully Subscribed!
+              </div>
+              <div style={{ fontSize: 14, color: '#999', lineHeight: 1.5 }}>
+                Please confirm via Telebirr app to complete activation.
               </div>
             </div>
           </div>
