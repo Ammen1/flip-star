@@ -137,7 +137,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
           alignItems: "center", 
           justifyContent: "center"
         }}>
-<img src="/assets/green-logo.jpg" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain", border: "2px solid #8fc441", borderRadius: 12, padding: 8 }} />
+<img src="/assets/green-logo.jpg" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain", border: "1px solid #8fc441", borderRadius: 12, padding: 8 }} />
         </div>
 
         {/* Card */}
