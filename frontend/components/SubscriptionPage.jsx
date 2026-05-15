@@ -263,7 +263,7 @@ export function SubscriptionPage({ user, onBack }) {
         <div style={{ width: 36 }} />
       </div>
 
-      <div style={{ maxWidth: 520, margin: '0 auto', paddingBottom: 32 }}>
+      <div style={{ maxWidth: '100%', margin: '0 auto', paddingBottom: 32 }}>
         {/* Hero */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px' }}>
           <div style={{
@@ -327,6 +327,9 @@ export function SubscriptionPage({ user, onBack }) {
           gridTemplateColumns: 'repeat(3, 1fr)',
           gap: 14,
           padding: '0 16px',
+          width: '100%',
+          maxWidth: '1200px',
+          margin: '0 auto',
         }}>
           {tiers.map((tier) => {
               const TierIcon = getTierIcon(tier.duration_type);
