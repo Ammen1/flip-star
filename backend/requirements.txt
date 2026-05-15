@@ -29,3 +29,6 @@ ffmpeg-python==0.2.0
 
 # Web Push notifications (VAPID)
 pywebpush==2.0.0
+
+# Telebirr Direct Debit SOAP client
+zeep==4.2.1

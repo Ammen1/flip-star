@@ -457,7 +457,6 @@ urlpatterns = [
     path('subscriptions/subscribe/', NewSubscriptionViewSet.as_view({'post': 'subscribe'}), name='subscription-subscribe'),
     path('subscriptions/unsubscribe/', NewSubscriptionViewSet.as_view({'post': 'unsubscribe'}), name='subscription-unsubscribe'),
     path('subscriptions/history/', NewSubscriptionViewSet.as_view({'get': 'history'}), name='subscription-history'),
-    path('trial/popup/', trial_popup, name='trial-popup'),
     # Telebirr Direct Debit
     path('direct-debit/create/', create_direct_debit_mandate, name='direct-debit-create'),
     path('direct-debit/activate/', activate_direct_debit_mandate, name='direct-debit-activate'),
