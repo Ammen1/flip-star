@@ -243,10 +243,10 @@ export function GiftManagementPage({ theme }) {
       }}>
         {gifts.map((gift) => (
           <div key={gift.id} style={{
-            background: '#ffffff',
+            background: theme.bg,
             borderRadius: '12px',
             padding: '20px',
-            border: '1px solid #E7E5E4',
+            border: `1px solid ${theme.border}`,
             position: 'relative',
           }}>
             <div style={{
@@ -431,7 +431,7 @@ export function GiftManagementPage({ theme }) {
           padding: 20,
         }} onClick={() => closeModal()}>
           <div style={{
-            background: '#ffffff',
+            background: theme.bg,
             borderRadius: 16,
             padding: 24,
             width: '100%',
