@@ -133,11 +133,19 @@ export function SubscriptionPage({ user, onBack }) {
                        tier.duration_type === 'weekly' ? '03' :
                        tier.duration_type === 'monthly' ? '05' : '05';
       
+      const payerMsisdn = user?.profile?.phone_number || '';
+      if (!payerMsisdn) {
+        showToast('error', 'Please add your phone number in your profile first');
+        setProcessing(false);
+        setProcessingTierId(null);
+        return;
+      }
+      
       const response = await api.request('/direct-debit/create/', {
         method: 'POST',
         body: JSON.stringify({
           tier_id: tier.id,
-          payer_msisdn: user.phone || '',
+          payer_msisdn: payerMsisdn,
           frequency: frequency,
         }),
       });
