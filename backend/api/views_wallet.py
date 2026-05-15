@@ -737,7 +737,9 @@ def admin_user_wallet(request, user_id):
                 'purchased': balance.purchased_balance,
             },
             'points': {
-                'current': 0,  # Points not implemented in balance model yet
+                'current': user.profile.points,
+                'earned_total': user.profile.points_earned_total,
+                'withdrawn_total': user.profile.points_withdrawn_total,
             }
         })
     except User.DoesNotExist:
@@ -779,7 +781,7 @@ def admin_user_transactions(request):
 def admin_adjust_balance(request):
     """
     Manually credit or debit a user's wallet (admin only).
-    Body: { user_id, amount (positive or negative), bucket: 'earned'|'purchased', reason }
+    Body: { user_id, amount (positive or negative), bucket: 'earned'|'purchased'|'points', reason }
     """
     try:
         user_id = int(request.data.get('user_id'))
@@ -790,14 +792,35 @@ def admin_adjust_balance(request):
     bucket = request.data.get('bucket', 'earned')
     reason = request.data.get('reason', 'Admin adjustment')
 
-    if bucket not in ('earned', 'purchased'):
-        return Response({'error': 'bucket must be earned or purchased'}, status=status.HTTP_400_BAD_REQUEST)
+    if bucket not in ('earned', 'purchased', 'points'):
+        return Response({'error': 'bucket must be earned, purchased, or points'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Handle points adjustment
+    if bucket == 'points':
+        profile = user.profile
+        if amount >= 0:
+            profile.points += amount
+            profile.points_earned_total += amount
+        else:
+            deduct = abs(amount)
+            if profile.points < deduct:
+                return Response({'error': 'Insufficient points to deduct'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            profile.points -= deduct
+            profile.points_withdrawn_total += deduct
+        profile.save()
+        
+        return Response({
+            'message': f'Adjusted {user.username}\'s points by {amount}',
+            'new_points': profile.points,
+        })
+
+    # Handle coin balance adjustment
     balance = _get_or_create_balance(user)
 
     if amount >= 0:

@@ -826,8 +826,14 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
     
     // Convert amount based on action
     const amount = adjustmentAction === 'subtract' ? -Math.abs(parseFloat(form.amount)) : Math.abs(parseFloat(form.amount));
-    setForm({ ...form, amount: amount.toString() });
     
+    // Set bucket based on adjustment type
+    const bucket = adjustmentType === 'points' ? 'points' : form.bucket;
+    
+    // Update form with correct bucket and amount
+    setForm({ ...form, amount: amount.toString(), bucket });
+    
+    // Call onSubmit with updated form
     await onSubmit();
     
     // Reload data after adjustment
