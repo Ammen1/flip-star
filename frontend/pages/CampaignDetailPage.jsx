@@ -921,7 +921,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [showCreateNew, setShowCreateNew] = useState(false);
+  const [showCreateNew, setShowCreateNew] = useState(true);
   const [newReelFile, setNewReelFile] = useState(null);
   const [newReelCaption, setNewReelCaption] = useState('');
   const [showCamera, setShowCamera] = useState(false);
