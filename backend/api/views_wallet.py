@@ -338,6 +338,66 @@ def request_withdrawal(request):
     )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reinvest_points(request):
+    """
+    Convert points back to coins (re-invest).
+    Body: { points }
+    1 Point = 1 Coin
+    """
+    try:
+        points_amount = int(request.data.get('points', 0))
+    except (TypeError, ValueError):
+        return Response({'error': 'Invalid points amount'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if points_amount < 1:
+        return Response({'error': 'Minimum 1 point required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Check user's point balance
+    user_profile = request.user.profile
+    if user_profile.points < points_amount:
+        return Response(
+            {'error': f'Insufficient points. You have {user_profile.points} points.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Get or create user's coin balance
+    coin_balance = _get_or_create_balance(request.user)
+
+    # Deduct points
+    user_profile.points -= points_amount
+    user_profile.save()
+
+    # Add coins (1 point = 1 coin)
+    coin_balance.earned_balance += points_amount
+    coin_balance.balance += points_amount
+    coin_balance.total_earned += points_amount
+    coin_balance._sync_balance()
+    coin_balance.save(update_fields=[
+        'earned_balance', 'balance', 'total_earned', 'updated_at'
+    ])
+
+    # Create transaction record
+    CoinTransaction.objects.create(
+        user=request.user,
+        transaction_type='reinvest',
+        coins=points_amount,
+        description=f'Converted {points_amount} points to coins'
+    )
+
+    return Response({
+        'message': 'Successfully converted points to coins',
+        'points_converted': points_amount,
+        'coins_received': points_amount,
+        'new_balance': {
+            'points': user_profile.points,
+            'coins': coin_balance.balance,
+            'earned_coins': coin_balance.earned_balance,
+        },
+    })
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def my_withdrawals(request):

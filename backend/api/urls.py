@@ -434,6 +434,7 @@ urlpatterns = [
     path('wallet/withdraw/', request_withdrawal, name='wallet-withdraw'),
     path('wallet/withdrawals/', my_withdrawals, name='wallet-my-withdrawals'),
     path('wallet/withdrawals/<int:withdrawal_id>/cancel/', cancel_withdrawal, name='wallet-cancel-withdrawal'),
+    path('wallet/reinvest/', reinvest_points, name='wallet-reinvest'),
     path('wallet/telebirr/initiate/', telebirr_initiate_payment, name='telebirr-initiate'),
     path('wallet/telebirr-callback/', telebirr_callback, name='telebirr-callback'),
     # ============ WALLET (Admin) ============
