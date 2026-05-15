@@ -171,6 +171,22 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
     setEditMediaPreview(null);
   };
 
+  const handleRemoveFromSaved = async (postId) => {
+    try {
+      await api.request(`/saved/${postId}/`, { method: 'DELETE' });
+      setSuccessMsg('Removed from saved');
+      setTimeout(() => setSuccessMsg(''), 2500);
+      setPostMenuId(null);
+      // Refresh posts to update the saved list
+      const targetUserId = userId || user?.id;
+      const raw = await api.getSavedPosts();
+      setPosts(Array.isArray(raw) ? raw : (raw.results || []));
+    } catch (error) {
+      console.error('Failed to remove from saved:', error);
+      alert('Failed to remove from saved. Please try again.');
+    }
+  };
+
   const handleEditMediaChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1021,26 +1037,41 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
             }}
           >
             <div style={{ width: 36, height: 4, background: '#E7E5E4', borderRadius: 4, margin: '12px auto 20px' }} />
-            <button
-              onClick={() => { const p = posts.find(p => p.id === postMenuId); handleEditPost(p); }}
-              style={{
-                width: '100%', padding: '16px 24px', background: 'none', border: 'none',
-                textAlign: 'left', fontSize: 16, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 14, color: '#8fc441',
-              }}
-            >
-              <Edit2 size={20} style={{ color: T.pri }} /> Edit Caption
-            </button>
-            <button
-              onClick={() => { setConfirmDeleteId(postMenuId); setPostMenuId(null); }}
-              style={{
-                width: '100%', padding: '16px 24px', background: 'none', border: 'none',
-                textAlign: 'left', fontSize: 16, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 14, color: '#EF4444',
-              }}
-            >
-              <Trash2 size={20} /> Delete Post
-            </button>
+            {activeTab === 'saved' ? (
+              <button
+                onClick={() => handleRemoveFromSaved(postMenuId)}
+                style={{
+                  width: '100%', padding: '16px 24px', background: 'none', border: 'none',
+                  textAlign: 'left', fontSize: 16, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 14, color: '#EF4444',
+                }}
+              >
+                <Bookmark size={20} /> Remove from Saved
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => { const p = posts.find(p => p.id === postMenuId); handleEditPost(p); }}
+                  style={{
+                    width: '100%', padding: '16px 24px', background: 'none', border: 'none',
+                    textAlign: 'left', fontSize: 16, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 14, color: '#8fc441',
+                  }}
+                >
+                  <Edit2 size={20} style={{ color: T.pri }} /> Edit Caption
+                </button>
+                <button
+                  onClick={() => { setConfirmDeleteId(postMenuId); setPostMenuId(null); }}
+                  style={{
+                    width: '100%', padding: '16px 24px', background: 'none', border: 'none',
+                    textAlign: 'left', fontSize: 16, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 14, color: '#EF4444',
+                  }}
+                >
+                  <Trash2 size={20} /> Delete Post
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

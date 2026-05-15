@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, UserPlus, UserCheck } from "lucide-react";
+import { ArrowLeft, UserPlus, UserCheck } from "lucide-react";
 import api from "../api";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -95,7 +95,7 @@ export function FollowersListPage({ user, userId, type = "followers", onBack, on
       left: 0,
       right: 0,
       bottom: 0,
-      background: "#fff",
+      background: T.cardBg || T.bg,
       overflowY: "auto",
       zIndex: 200,
     }}>
@@ -103,7 +103,7 @@ export function FollowersListPage({ user, userId, type = "followers", onBack, on
       <div style={{
         position: "sticky",
         top: 0,
-        background: "#fff",
+        background: T.cardBg || T.bg,
         borderBottom: `1px solid ${T.border}`,
         padding: "12px 20px",
         display: "flex",
@@ -123,7 +123,7 @@ export function FollowersListPage({ user, userId, type = "followers", onBack, on
             color: T.txt,
           }}
         >
-          <ChevronLeft size={24} />
+          <ArrowLeft size={24} />
         </button>
         <div style={{ flex: 1, fontSize: 18, fontWeight: 700, color: T.txt }}>
           {type === "followers" ? "Followers" : "Following"}
@@ -137,9 +137,9 @@ export function FollowersListPage({ user, userId, type = "followers", onBack, on
             Loading...
           </div>
         ) : users.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: T.sub }}>
+          <div style={{ padding: 40, textAlign: "center", color: T.sub, background: T.card }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>👥</div>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: T.txt }}>
               No {type} yet
             </div>
             <div style={{ fontSize: 13 }}>
