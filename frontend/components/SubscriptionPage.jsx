@@ -49,6 +49,7 @@ export function SubscriptionPage({ user, onBack }) {
   const [telebirrModalOpen, setTelebirrModalOpen] = useState(false);
   const [telebirrPhone, setTelebirrPhone] = useState('');
   const [selectedTierForTelebirr, setSelectedTierForTelebirr] = useState(null);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
   const [pollCount, setPollCount] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
   // Inline toast state — replaces native alert() popups for the on-demand flow
@@ -128,9 +129,16 @@ export function SubscriptionPage({ user, onBack }) {
     window.location.href = smsUrl;
   };
 
-  const handleTelebirrSubscribe = (tier) => {
+  const handleTelebirrSubscribe = async (tier) => {
     setSelectedTierForTelebirr(tier);
-    setTelebirrPhone(user?.profile?.phone_number || '');
+    // Fetch phone number from API like the coin purchase modal does
+    try {
+      const profile = await api.request('/profile/me/');
+      setTelebirrPhone(profile?.phone_number || user?.profile?.phone_number || '');
+    } catch (error) {
+      console.error('Failed to fetch phone number:', error);
+      setTelebirrPhone(user?.profile?.phone_number || '');
+    }
     setTelebirrModalOpen(true);
   };
 
@@ -159,7 +167,8 @@ export function SubscriptionPage({ user, onBack }) {
       });
 
       if (response.success) {
-        showToast('success', `Mandate created! Ref: ${response.payer_reference_number}. Please confirm via Telebirr app.`);
+        setSuccessModalOpen(true);
+        setTimeout(() => setSuccessModalOpen(false), 3000);
         // Start polling for mandate activation
         startPolling(selectedTierForTelebirr);
       } else {
@@ -217,6 +226,37 @@ export function SubscriptionPage({ user, onBack }) {
         loadSubscriptionData();
       } catch (error) {
         alert('Failed to cancel subscription');
+      }
+    }
+  };
+
+  const handleCancelTelebirrSubscription = async () => {
+    if (!currentSubscription?.mandate_id) {
+      showToast('error', 'No Telebirr mandate found');
+      return;
+    }
+
+    if (confirm('Are you sure you want to cancel your Telebirr subscription?')) {
+      setProcessing(true);
+      try {
+        const response = await api.request('/direct-debit/cancel/', {
+          method: 'POST',
+          body: JSON.stringify({
+            mandate_id: currentSubscription.mandate_id,
+          }),
+        });
+
+        if (response.success) {
+          showToast('success', 'Telebirr subscription cancelled successfully');
+          loadSubscriptionData();
+        } else {
+          showToast('error', response.error || 'Failed to cancel Telebirr subscription');
+        }
+      } catch (error) {
+        console.error('Cancel Telebirr subscription error:', error);
+        showToast('error', 'Failed to cancel Telebirr subscription');
+      } finally {
+        setProcessing(false);
       }
     }
   };
@@ -294,15 +334,36 @@ export function SubscriptionPage({ user, onBack }) {
           <div style={{ fontSize: 26, fontWeight: 900, marginBottom: 6 }}>FlipStar Premium</div>
           <div style={{ fontSize: 14, color: '#666', textAlign: 'center' }}>Unlock the full experience</div>
           {isActive && currentSubscription?.end_date && (
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: '#0D2D1A', padding: '7px 14px', borderRadius: 20,
-              marginTop: 14, border: '1px solid #10B98140',
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: 4, background: '#10B981' }} />
-              <span style={{ color: '#10B981', fontSize: 13, fontWeight: 600 }}>
-                Active · expires {new Date(currentSubscription.end_date).toLocaleDateString()}
-              </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginTop: 14 }}>
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: '#0D2D1A', padding: '7px 14px', borderRadius: 20,
+                border: '1px solid #10B98140',
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: 4, background: '#10B981' }} />
+                <span style={{ color: '#10B981', fontSize: 13, fontWeight: 600 }}>
+                  Active · expires {new Date(currentSubscription.end_date).toLocaleDateString()}
+                </span>
+              </div>
+              {currentSubscription?.payment_method === 'telebirr_direct_debit' && (
+                <button
+                  onClick={handleCancelTelebirrSubscription}
+                  disabled={processing}
+                  style={{
+                    background: '#EF4444',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: processing ? 'wait' : 'pointer',
+                    opacity: processing ? 0.7 : 1,
+                  }}
+                >
+                  Cancel Telebirr Subscription
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -575,6 +636,59 @@ export function SubscriptionPage({ user, onBack }) {
                 >
                   Proceed
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {successModalOpen && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.85)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              animation: 'fadeIn 0.3s ease',
+            }}
+          >
+            <div
+              style={{
+                background: '#1A1A1A',
+                borderRadius: 16,
+                padding: 32,
+                maxWidth: 320,
+                width: '90%',
+                textAlign: 'center',
+                border: '1px solid #333',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+                animation: 'scaleIn 0.3s ease',
+              }}
+            >
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  background: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 20px',
+                }}
+              >
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginBottom: 8 }}>
+                Successfully Subscribed!
+              </div>
+              <div style={{ fontSize: 14, color: '#999', lineHeight: 1.5 }}>
+                Please confirm via Telebirr app to complete activation.
               </div>
             </div>
           </div>
