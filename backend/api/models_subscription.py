@@ -113,7 +113,7 @@ class SubscriptionPlan(models.Model):
     # Status and dates
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     duration_type = models.CharField(max_length=20, choices=SubscriptionTier.DURATION_CHOICES)
-    start_date = models.DateTimeField()
+    start_date = models.DateTimeField(null=True, blank=True)
     end_date = models.DateTimeField(null=True, blank=True)
     next_renewal_date = models.DateTimeField(null=True, blank=True)
     auto_renew = models.BooleanField(default=False)

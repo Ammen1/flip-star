@@ -9,7 +9,7 @@ const mediaUrl = (url) => {
   return `${config.API_BASE_URL.replace('/api', '')}${url}`;
 };
 
-const PRI = '#DA9B2A';
+const PRI = '#8fc441';
 const BG = '#FAFAF9';
 const CARD = '#FFFFFF';
 const BORDER = '#E7E5E4';
@@ -146,7 +146,7 @@ const CampaignPostModeration = ({ campaignId, onBack }) => {
               {/* Info */}
               <div style={{ padding: '12px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg, ${PRI}, #F59E0B)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: `linear-gradient(135deg, ${PRI}, #8fc441)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 800, flexShrink: 0 }}>
                     {post.user?.username?.[0]?.toUpperCase() || '?'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -221,7 +221,7 @@ const ModerationModal = ({ post, onClose, onModerate }) => {
           <div style={{ padding: '18px 20px', flex: 1 }}>
             {/* User */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: `1.5px solid ${BORDER}` }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: `linear-gradient(135deg, ${PRI}, #F59E0B)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: `linear-gradient(135deg, ${PRI}, #8fc441)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, fontWeight: 800, flexShrink: 0 }}>
                 {post.user?.username?.[0]?.toUpperCase() || '?'}
               </div>
               <div>

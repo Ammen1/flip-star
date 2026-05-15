@@ -48,7 +48,7 @@ function DistributionBar({ label, count, total, color, theme }) {
 const EVENT_ICON = {
   security: { icon: Shield,        color: '#8B5CF6' },
   error:    { icon: AlertCircle,   color: '#EF4444' },
-  warning:  { icon: AlertTriangle, color: '#F59E0B' },
+  warning:  { icon: AlertTriangle, color: '#8fc441' },
   info:     { icon: Info,          color: '#3B82F6' },
   critical: { icon: AlertCircle,   color: '#DC2626' },
 };

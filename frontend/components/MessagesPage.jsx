@@ -165,7 +165,7 @@ const Avatar = ({ user, size = 44 }) => {
     <div
       style={{
         width: size, height: size, borderRadius: '50%',
-        background: 'linear-gradient(135deg,#DA9B2A,#F59E0B)',
+        background: 'linear-gradient(135deg,#8fc441,#8fc441)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: '#fff', fontWeight: 800, fontSize: size * 0.38, flexShrink: 0,
       }}

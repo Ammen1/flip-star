@@ -87,7 +87,7 @@ function DailyConfig({ config, updateField, updateSimple, theme }) {
         </div>
       </Section>
 
-      <Section theme={theme} icon="📅" title="Daily Consistency" color="#F59E0B">
+      <Section theme={theme} icon="📅" title="Daily Consistency" color="#8fc441">
         <p style={{ fontSize: 13, color: theme.sub, marginBottom: 16 }}>
           Points for posting content on any given day of the campaign.
         </p>
@@ -134,7 +134,7 @@ function WeeklyConfig({ config, updateField, updateSimple, theme }) {
         </div>
       </Section>
 
-      <Section theme={theme} icon="🔥" title="Streak Bonuses" color="#F59E0B">
+      <Section theme={theme} icon="🔥" title="Streak Bonuses" color="#8fc441">
         <p style={{ fontSize: 13, color: theme.sub, marginBottom: 16 }}>
           Bonus points for consecutive posting days. Full week = max bonus!
         </p>
@@ -250,7 +250,7 @@ function GrandConfig({ config, updateField, updateSimple, theme }) {
         </p>
       </Section>
 
-      <Section theme={theme} icon="🗳️" title="Voting Phase" color="#F59E0B">
+      <Section theme={theme} icon="🗳️" title="Voting Phase" color="#8fc441">
         <p style={{ fontSize: 13, color: theme.sub, marginBottom: 16 }}>
           Configure the public voting period.
         </p>

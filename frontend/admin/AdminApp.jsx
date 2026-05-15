@@ -50,7 +50,7 @@ export function AdminApp() {
     green: '#10B981',
     blue: '#3B82F6',
     purple: '#8B5CF6',
-    orange: '#F59E0B',
+    orange: '#8fc441',
   };
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);

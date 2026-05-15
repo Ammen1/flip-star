@@ -4,7 +4,7 @@ import api from '../../api';
 
 const PRIORITY_COLORS = {
   critical: '#EF4444',
-  high: '#F59E0B',
+  high: '#8fc441',
   medium: '#3B82F6',
   low: '#6B7280',
 };
@@ -22,10 +22,10 @@ const REPORT_TYPE_LABELS = {
 };
 
 const MODERATION_ACTIONS = [
-  { value: 'warning', label: 'Issue Warning', icon: AlertOctagon, color: '#F59E0B', desc: 'Send a warning to the user without removing content.' },
+  { value: 'warning', label: 'Issue Warning', icon: AlertOctagon, color: '#8fc441', desc: 'Send a warning to the user without removing content.' },
   { value: 'content_removed', label: 'Remove Content', icon: Trash2, color: '#EF4444', desc: 'Delete the reported reel or comment.' },
   { value: 'shadowban', label: 'Shadow Ban', icon: Eye, color: '#8B5CF6', desc: "Hide user's content from others without notifying them." },
-  { value: 'temp_ban', label: 'Temporary Ban', icon: Clock, color: '#F97316', desc: 'Restrict user posting for 24–72 hours.' },
+  { value: 'temp_ban', label: 'Temporary Ban', icon: Clock, color: '#8fc441', desc: 'Restrict user posting for 24–72 hours.' },
   { value: 'permanent_ban', label: 'Permanent Ban', icon: Ban, color: '#DC2626', desc: 'Permanently deactivate the user account.' },
   { value: 'no_action', label: 'No Action', icon: CheckCircle, color: '#6B7280', desc: 'Dismiss — report does not violate guidelines.' },
 ];
@@ -107,7 +107,7 @@ export function ReportsPage({ theme }) {
     }
   };
 
-  const getStatusColor = (s) => ({ pending: '#F59E0B', reviewing: '#3B82F6', resolved: '#10B981', dismissed: '#6B7280' }[s] || theme.txt);
+  const getStatusColor = (s) => ({ pending: '#8fc441', reviewing: '#3B82F6', resolved: '#10B981', dismissed: '#6B7280' }[s] || theme.txt);
   const getStatusIcon = (s) => ({ pending: AlertCircle, reviewing: Eye, resolved: CheckCircle, dismissed: XCircle }[s] || Flag);
 
   const visibleReports = filterPriority === 'all' ? reports : reports.filter(r => r.priority === filterPriority);
@@ -147,7 +147,7 @@ export function ReportsPage({ theme }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12, marginBottom: 24 }}>
           {[
             { label: 'Total', value: stats.total_reports, color: theme.txt },
-            { label: 'Pending', value: stats.pending_reports, color: '#F59E0B' },
+            { label: 'Pending', value: stats.pending_reports, color: '#8fc441' },
             { label: 'Reviewing', value: stats.reviewing_reports, color: '#3B82F6' },
             { label: 'Resolved', value: stats.resolved_reports, color: '#10B981' },
             { label: 'Dismissed', value: stats.dismissed_reports, color: '#6B7280' },

@@ -37,7 +37,7 @@ export function AlertModal({
       case "error":
         return T.red;
       case "warning":
-        return "#F59E0B";
+        return "#8fc441";
       default:
         return T.pri;
     }

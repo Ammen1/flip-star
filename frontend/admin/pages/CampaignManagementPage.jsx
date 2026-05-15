@@ -648,7 +648,7 @@ export function CampaignManagementPage({ theme, onManageCampaign }) {
                       style={{
                         flex: 1,
                         padding: '6px',
-                        background: '#F59E0B15',
+                        background: '#8fc44115',
                         border: 'none',
                         borderRadius: 6,
                         color: theme.txt,
@@ -698,10 +698,10 @@ export function CampaignManagementPage({ theme, onManageCampaign }) {
                       onClick={() => handleEditCampaign(campaign)}
                       style={{
                         padding: '8px',
-                        background: '#F59E0B15',
+                        background: '#8fc44115',
                         border: 'none',
                         borderRadius: 6,
-                        color: '#F59E0B',
+                        color: '#8fc441',
                         cursor: 'pointer',
                       }}
                     >

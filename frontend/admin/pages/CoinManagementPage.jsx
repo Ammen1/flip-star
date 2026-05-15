@@ -342,7 +342,7 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
         </SectionCard>
 
         {/* Withdrawal Settings */}
-        <SectionCard theme={T} title="Withdrawal (Coin → Birr)" icon={<ArrowUpFromLine size={20} color="#F59E0B" />}>
+        <SectionCard theme={T} title="Withdrawal (Coin → Birr)" icon={<ArrowUpFromLine size={20} color="#8fc441" />}>
           <ToggleField
             label="Enabled"
             checked={config.withdrawal.enabled}
@@ -368,7 +368,7 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
         </SectionCard>
 
         {/* Campaign Winner Point Rewards */}
-        <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#F59E0B" />}>
+        <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#8fc441" />}>
           <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
             Points awarded to winners of each campaign type.
           </div>
@@ -422,7 +422,7 @@ function WithdrawalsTab({ theme: T, withdrawals, summary, statusFilter, setStatu
       {/* Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Pending', value: summary.pending || 0, color: '#F59E0B' },
+          { label: 'Pending', value: summary.pending || 0, color: '#8fc441' },
           { label: 'Approved', value: summary.approved || 0, color: '#3B82F6' },
           { label: 'Processing', value: summary.processing || 0, color: '#8B5CF6' },
           { label: 'Completed', value: summary.completed || 0, color: '#10B981' },
@@ -880,7 +880,7 @@ function defaultTheme() {
 }
 
 const WITHDRAWAL_STATUS = {
-  pending: { color: '#F59E0B', icon: Clock },
+  pending: { color: '#8fc441', icon: Clock },
   approved: { color: '#3B82F6', icon: CheckCircle2 },
   processing: { color: '#8B5CF6', icon: Loader },
   completed: { color: '#10B981', icon: CheckCircle2 },

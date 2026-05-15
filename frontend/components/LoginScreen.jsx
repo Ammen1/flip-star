@@ -61,21 +61,23 @@ export function LoginScreen({ onSuccess, onRegister, onBack }) {
         />
       )}
       <div style={{ minHeight:"100vh", background:T.dark, display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"52px 24px 0" }}>
+      <div style={{ padding:"52px 0 0" }}>
         <button onClick={onBack} style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%", width:36, height:36, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}>
           <ChevronLeft size={20} />
         </button>
         {/* Logo Header */}
         <div style={{ 
-          background: "#000000", 
           height: 90, 
           marginTop: 20, 
           borderRadius: 12, 
           display: "flex", 
-          alignItems: "center", 
-          justifyContent: "center"
+          flexDirection: "row",
+          overflow: "hidden",
+          position: "relative"
         }}>
-          <img src="/assets/70x20.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain" }} />
+          <div style={{ width: "50%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
+          <div style={{ width: "50%", backgroundColor: "#000000", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
+          <img src="/assets/logo-ethio-and-flip.png" alt="Logo" style={{ height: 90, width: "100%", objectFit: "contain", position: "relative", zIndex: 1 }} />
         </div>
       </div>
       <div style={{ flex:1, background:"#fff", borderRadius:"28px 28px 0 0", marginTop:30, padding:"28px 24px 40px" }}>

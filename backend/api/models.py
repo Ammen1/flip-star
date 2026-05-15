@@ -106,6 +106,7 @@ class Reel(models.Model):
     overlay_text = models.TextField(blank=True, default='')
     votes = models.IntegerField(default=0)
     view_count = models.PositiveBigIntegerField(default=0)
+    shares = models.IntegerField(default=0)
     
     # Campaign integration
     campaign = models.ForeignKey('Campaign', on_delete=models.SET_NULL, null=True, blank=True, related_name='campaign_posts')

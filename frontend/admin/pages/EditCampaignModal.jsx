@@ -8,7 +8,7 @@ const toLocalInput = (iso) => {
 };
 
 const STATUS_OPTIONS = [
-  { value: 'draft',     label: 'Draft',     color: '#F59E0B' },
+  { value: 'draft',     label: 'Draft',     color: '#8fc441' },
   { value: 'active',    label: 'Active',    color: '#10B981' },
   { value: 'voting',    label: 'Voting',    color: '#3B82F6' },
   { value: 'completed', label: 'Completed', color: '#6B7280' },
@@ -334,7 +334,7 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
           </Section>
 
           {/* ── PRIZE ── */}
-          <Section icon={Trophy} title="Prize Details" color="#F59E0B">
+          <Section icon={Trophy} title="Prize Details" color="#8fc441">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Prize Title" required>
                 <input type="text" value={formData.prize_title}

@@ -3,7 +3,7 @@ import { Smartphone, Bell, RefreshCw, ToggleLeft, ToggleRight, Users, Activity, 
 import api from '../../api';
 
 // ── Brand gold to match mobile app theme ──────────────────────────────────────
-const GOLD = '#DA9B2A';
+const GOLD = '#8fc441';
 
 export function MobileAppPage({ theme: T }) {
   const [stats,    setStats]    = useState(null);

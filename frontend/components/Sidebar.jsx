@@ -266,7 +266,7 @@ export function Sidebar({ activeTab, onTabChange, user, onLogout, onRequireAuth,
               style={{
                 width: "100%",
                 padding: "12px",
-                background: `linear-gradient(135deg, ${T.pri}, #B8821E)`,
+                background: `linear-gradient(135deg, ${T.pri}, #6fa32e)`,
                 border: "none",
                 borderRadius: 8,
                 color: "#fff",
