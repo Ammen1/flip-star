@@ -373,7 +373,6 @@ export function SubscriptionPage({ user, onBack }) {
                     <div style={{ fontSize: 16, fontWeight: 800, color: '#fff', marginBottom: 2 }}>
                       {tier.name}
                     </div>
-                    <div style={{ fontSize: 12, color: '#666' }}>{tier.description}</div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
                     <div style={{ fontSize: 24, fontWeight: 900, color, lineHeight: '26px' }}>
