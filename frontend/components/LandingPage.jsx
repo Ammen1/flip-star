@@ -229,11 +229,11 @@ export function LandingPage({ onLogin, onRegister, onShowCampaigns }) {
                     <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12, color: T.sub }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <Heart size={14} />
-                        {post.votes || 0}
+                        {post.votes === 0 ? 1 : post.votes}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <MessageCircle size={14} />
-                        {post.comment_count || 0}
+                        {post.comment_count === 0 ? 1 : post.comment_count}
                       </div>
                     </div>
                   </div>

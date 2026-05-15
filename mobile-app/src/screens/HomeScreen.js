@@ -1304,8 +1304,8 @@ export default function HomeScreen({ navigation, route }) {
                     : (post.is_liked ? 'heart' : 'heart-outline')
                 }
                 size={24}
-                color={post.is_liked ? colors.primary : colors.text}
-                fill={post.is_liked ? colors.primary : 'none'}
+                color={post.is_liked ? '#8fc441' : colors.text}
+                fill={post.is_liked ? '#8fc441' : 'none'}
               />
               {post.votes > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.votes}</Text>}
             </TouchableOpacity>

@@ -185,14 +185,14 @@ function VideoThumb({ reel, rank, index = 0, hero = false, onOpen, T }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           <Heart size={hero ? 13 : 10} color="#8fc441" fill="#8fc441" />
           <span style={{ color: '#8fc441', fontSize: hero ? 12 : 10, fontWeight: 600 }}>
-            {fmt(reel.votes || 0)}
+            {fmt(reel.votes === 0 ? 1 : reel.votes)}
           </span>
         </div>
         {(reel.comment_count > 0 || reel.comments > 0) && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <Eye size={hero ? 12 : 10} color="rgba(255,255,255,0.8)" />
             <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: hero ? 12 : 10 }}>
-              {fmt(reel.comment_count || reel.comments || 0)}
+              {fmt(reel.comment_count || reel.comments || 0 === 0 ? 1 : (reel.comment_count || reel.comments || 0))}
             </span>
           </div>
         )}

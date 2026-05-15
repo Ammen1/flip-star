@@ -770,7 +770,7 @@ export default function CampaignDetailScreen({ route, navigation }) {
                     <View style={styles.feedOverlay}>
                       <View style={styles.feedStats}>
                         <View style={styles.feedStat}>
-                          <Ionicons name='heart' size={14} color='#fff' />
+                          <Ionicons name='heart' size={14} color='#8fc441' />
                           <Text style={styles.feedStatText}>{post.engagement?.likes || post.reel?.votes || 0}</Text>
                         </View>
                         <View style={styles.feedStat}>

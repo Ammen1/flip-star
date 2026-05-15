@@ -444,9 +444,9 @@ export default function SettingsScreen({ navigation }) {
 
   const languages = [
     { id: 'en', label: 'English' },
-    { id: 'am', label: 'አማርኛ (Amharic)' },
   ];
 
+  
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       {/* Header */}
@@ -503,7 +503,7 @@ export default function SettingsScreen({ navigation }) {
         <SectionLabel colors={colors}>{t('appearance')}</SectionLabel>
         <SectionCard colors={colors}>
           <SettingRow icon={darkMode ? "moon-outline" : "sunny-outline"} label={t('darkMode')} isSwitch switchValue={darkMode} onSwitch={handleDarkModeToggle} colors={colors} />
-          <SettingRow icon="globe-outline" label={t('language')} subtitle={language === 'en' ? t('english') : language === 'am' ? t('amharic') : language === 'es' ? t('spanish') : language === 'fr' ? t('french') : language === 'ar' ? t('arabic') : language} onPress={() => setShowLangModal(true)} colors={colors} />
+          <SettingRow icon="globe-outline" label={t('language')} subtitle="English" onPress={() => setShowLangModal(true)} colors={colors} />
           <SettingRow icon="ios-notifications-outline" label="Notification Sound" subtitle="Choose a notification sound" onPress={() => console.log('Notification Sound')} colors={colors} />
         </SectionCard>
 
@@ -561,34 +561,7 @@ export default function SettingsScreen({ navigation }) {
         </View>
       </ScrollView>
 
-      {/* Language Modal */}
-      <BeautifulModal
-        visible={showLangModal}
-        onClose={() => setShowLangModal(false)}
-        title={t('chooseLanguage')}
-        height="50%"
-        colors={colors}
-      >
-        <View style={{ gap: 8 }}>
-          {languages.map(l => (
-            <TouchableOpacity
-              key={l.id}
-              onPress={() => handleLanguageChange(l.id)}
-              style={[styles.languageOption, { backgroundColor: colors.bg, borderColor: colors.border }]}
-            >
-              <View style={styles.languageOptionContent}>
-                <Text style={[styles.languageLabel, { color: language === l.id ? colors.primary : colors.text }]}>{l.label}</Text>
-                {language === l.id && (
-                  <View style={[styles.languageSelectedIndicator, { backgroundColor: colors.primary }]}>
-                    <Ionicons name="checkmark" size={16} color={darkMode ? '#000' : '#fff'} />
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </BeautifulModal>
-
+      
       {/* Password Modal */}
       <BeautifulModal
         visible={showPassModal}
@@ -676,6 +649,34 @@ export default function SettingsScreen({ navigation }) {
           <TouchableOpacity style={[styles.beautifulUpdateButton, { backgroundColor: colors.primary }]} onPress={handlePasswordChange}>
             <Text style={[styles.updateButtonText, { color: darkMode ? '#000' : '#fff' }]}>{t('updatePassword')}</Text>
           </TouchableOpacity>
+        </View>
+      </BeautifulModal>
+
+      {/* Language Modal */}
+      <BeautifulModal
+        visible={showLangModal}
+        onClose={() => setShowLangModal(false)}
+        title={t('chooseLanguage')}
+        height="40%"
+        colors={colors}
+      >
+        <View style={{ gap: 8 }}>
+          {languages.map(l => (
+            <TouchableOpacity
+              key={l.id}
+              onPress={() => handleLanguageChange(l.id)}
+              style={[styles.languageOption, { backgroundColor: colors.bg, borderColor: colors.border }]}
+            >
+              <View style={styles.languageOptionContent}>
+                <Text style={[styles.languageLabel, { color: language === l.id ? colors.primary : colors.text }]}>{l.label}</Text>
+                {language === l.id && (
+                  <View style={[styles.languageSelectedIndicator, { backgroundColor: colors.primary }]}>
+                    <Ionicons name="checkmark" size={16} color={darkMode ? '#000' : '#fff'} />
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
       </BeautifulModal>
 
@@ -1012,25 +1013,25 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   headerTitle: { fontSize: 17, fontWeight: '700', color: TEXT },
   
-  profileSummary: { flexDirection: 'column', alignItems: 'center', padding: 28, backgroundColor: CARD, marginBottom: 8 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center', marginBottom: 12, overflow: 'hidden' },
+  profileSummary: { flexDirection: 'column', alignItems: 'center', padding: 32, backgroundColor: CARD, marginBottom: 16 },
+  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center', marginBottom: 16, overflow: 'hidden' },
   avatarImage: { width: '100%', height: '100%' },
   avatarText: { fontSize: 32, fontWeight: '800', color: '#000' },
   username: { fontSize: 18, fontWeight: '800', color: TEXT },
-  email: { fontSize: 13, color: SUB, marginTop: 2 },
+  email: { fontSize: 13, color: SUB, marginTop: 4 },
   
-  sectionLabel: { fontSize: 12, fontWeight: '700', color: SUB, textTransform: 'uppercase', letterSpacing: 1.2, marginHorizontal: 20, marginTop: 20, marginBottom: 8 },
-  sectionCard: { marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: BORDER, backgroundColor: CARD, overflow: 'hidden' },
-  section: { marginTop: 24, paddingHorizontal: 16 },
+  sectionLabel: { fontSize: 12, fontWeight: '700', color: SUB, textTransform: 'uppercase', letterSpacing: 1.2, marginHorizontal: 20, marginTop: 32, marginBottom: 12 },
+  sectionCard: { marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: BORDER, backgroundColor: CARD, overflow: 'hidden', marginBottom: 8 },
+  section: { marginTop: 32, paddingHorizontal: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: SUB, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
   
-  row: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: BORDER + '80' },
-  rowIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: BORDER + '80' },
+  rowIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   rowLabel: { fontSize: 15, color: TEXT, fontWeight: '500' },
   rowSubtitle: { fontSize: 12, color: SUB, marginTop: 2 },
   rowValue: { fontSize: 13, color: SUB },
   
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginHorizontal: 16, marginTop: 24, padding: 16, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 16 },
+  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginHorizontal: 16, marginTop: 32, padding: 18, backgroundColor: CARD, borderWidth: 1, borderColor: BORDER, borderRadius: 16 },
   logoutText: { color: '#EF4444', fontSize: 15, fontWeight: '800' },
   
   footer: { alignItems: 'center', padding: 32 },
@@ -1127,12 +1128,24 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   
+  beautifulUpdateButton: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
   // Language Option Styles
   languageOption: {
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: BG,
     borderWidth: 1,
     borderColor: BORDER,
   },
@@ -1145,23 +1158,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: GOLD,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  
-  // Beautiful Button Styles
-  beautifulUpdateButton: {
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 14,
-    backgroundColor: GOLD,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
 
   // FAQ and Terms Modal Styles

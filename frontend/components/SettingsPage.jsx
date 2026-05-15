@@ -2,12 +2,42 @@ import { useState, useEffect } from "react";
 import {
   X, User, Bell, Lock, Globe, HelpCircle, LogOut, ChevronRight, Moon, Sun, Wallet,
   ChevronLeft, MessageCircle, Heart, Users as UsersIcon, Mail, Eye, EyeOff, Activity,
-  Trash2, Shield, FileText, Check, Crown
+  Trash2, Shield, FileText, Check, Crown, ChevronUp, ChevronDown
 } from "lucide-react";
 import api from "../api";
 import config from "../config";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLanguage } from "../contexts/LanguageContext";
+
+const FAQ_ITEMS = [
+  { q: "What is FlipStar?", a: "FlipStar is a premium, subscription-based gamified social media platform by Ethio Telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr." },
+  { q: "Who can use FlipStar?", a: "All active Ethio Telecom prepaid, postpaid, and hybrid mobile customers with a smartphone (Android, iOS) or web browser. Users must be at least 13 years old. For claiming prizes, users must be 18 or older." },
+  { q: "What devices and platforms does FlipStar support?", a: "Android App: Available on Google Play Store (search: FlipStar). iOS App: Available on Apple App Store (search: FlipStar). Web: Visit https://flipstar.et in any modern browser." },
+  { q: "Is FlipStar available to all Ethio Telecom customers?", a: "Yes. All active prepaid, postpaid, and hybrid Ethio Telecom mobile customers can subscribe and use the service. The subscriber's number must be in 'Active' status at the time of subscription." },
+  { q: "How do I subscribe to FlipStar?", a: "Via SMS: Send 'OK' to the FlipStar shortcode. Via App/Web: Download the app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, then enter the confirmation code sent to your number." },
+  { q: "What subscription plans are available?", a: "Flip Daily: 3 ETB/24hrs • Flip Weekly: 20 ETB/7days • Flip Monthly: 70 ETB/30days • Flip Yearly: 600 ETB/365days • Flip On-Demand: 10 ETB for 100 Coins (one-time purchase)." },
+  { q: "Is there a free trial?", a: "Yes. New subscribers receive a 1-day (24-hour) free trial on their first subscription. Re-subscribers who previously used the trial are not eligible for another." },
+  { q: "How am I charged?", a: "Prepaid: fee deducted from airtime balance. Postpaid: fee added to monthly bill. Hybrid: charged from your default account. A maximum of one charge applies per 24-hour cycle. Failed charges are retried automatically if you recharge the same day." },
+  { q: "How do I unsubscribe?", a: "Send 'STOP' to the FlipStar shortcode, or go to Account Settings in the app and select Unsubscribe. Your request is processed immediately and you will receive a confirmation SMS." },
+  { q: "What happens to my coins and progress if I unsubscribe?", a: "Your coins and digital assets remain valid for 30 days after unsubscription. Re-subscribing within 30 days restores your unexpired coins and progress. Assets not recovered within 30 days will expire." },
+  { q: "What are coins and how do I earn them?", a: "Coins are FlipStar's digital currency. Earn them through: Daily login bonus (3 coins/day), Weekly loyalty bonus (50 coins for 7-day streak), or Purchase (1 ETB = 10 Coins via telebirr/Airtime)." },
+  { q: "What can I do with coins?", a: "Gift creators, boost your content visibility, unlock extended video uploads (up to 90-120 seconds), level up, and unlock premium features." },
+  { q: "Can I cash out my coins?", a: "Bonus coins (from login/loyalty) cannot be cashed out. However, Points earned by creators from gifts can be cashed out via telebirr. Minimum: 1,000 Points (80 ETB after 20% commission)." },
+  { q: "What is the platform commission?", a: "A 20% commission applies to all gifting transaction payouts. For example: if a creator earns 1,000 Points, 200 Points (20%) are retained as platform commission, and the creator receives 800 Points (80 ETB) via telebirr." },
+  { q: "Can I convert my Points back into Coins?", a: "Yes. The swap rate is 1 Point = 1 Coin. You can use earned Points to purchase more Coins for in-app spending instead of cashing out." },
+  { q: "What is a Flip and how do I upload one?", a: "A Flip is a short video (15–120 seconds) or photo you upload to the platform. Tap the '+' button, select or record your content, add a caption and hashtags, optionally link it to a campaign, and tap 'Post'." },
+  { q: "How long can my videos be?", a: "Standard subscribers: 15 to 60 seconds. Coin buyers (On-Demand / premium): up to 90–120 seconds." },
+  { q: "What are the competition prizes?", a: "Daily Sprint (50 winners): 1GB data • Weekly Battle (10 winners): 1,000 ETB • Monthly Star (5 winners): 10,000 ETB • Grand Final: 1st-500,000 ETB, 2nd-300,000 ETB, 3rd-200,000 ETB." },
+  { q: "How is my competition score calculated?", a: "Score = (Likes × 1) + (Comments × 2) + (Shares × 5) + (Gift/Vote Points × 10). The highest Engagement Score wins each tier." },
+  { q: "Can I win multiple prizes?", a: "Yes, with rules. After winning a tier, you're ineligible for that same tier for 30 days. You can still win other tiers during the cooldown. Eligibility restores after 30 days." },
+  { q: "How do I claim my prize?", a: "Cash prizes (ETB): sent automatically via telebirr. Daily Data prizes: credited to your Ethio Telecom account within 24 hours. Grand Final prizes: our team will contact you — you must present a valid National ID or passport. All prizes must be claimed within 30 days of notification." },
+  { q: "Is there a daily voting limit for one creator?", a: "Yes. A single user can contribute a maximum of 5,000 Score Points (equivalent to 500 Coins) per day to any one specific creator. This Voting Cap prevents pay-to-win behaviour and protects competition integrity." },
+  { q: "Do boosted views count toward my leaderboard score?", a: "No. Views and impressions from paid content boosts (Standard, Premium, or Viral Boost) do not count toward your organic Engagement Score. Only genuine, unboosted engagement contributes to your score." },
+  { q: "Are there internet data charges for using FlipStar?", a: "Yes. Accessing FlipStar via the app or web portal at https://flipstar.et uses your regular Ethio Telecom data plan. You are responsible for any data charges incurred." },
+  { q: "Is my personal data safe?", a: "Yes. FlipStar is hosted on Ethio Telecom InfraCloud within Ethiopia. Your phone number is encrypted and never displayed publicly. All personal metadata is removed from uploads." },
+  { q: "Can Ethio Telecom change the Terms or cancel the service?", a: "Yes. Ethio Telecom reserves the right to modify, suspend, or terminate the FlipStar service at any time in accordance with Ethiopian laws. Changes will be published at https://flipstar.et. Continued use after changes take effect constitutes acceptance." },
+  { q: "How do I contact support?", a: "In-App: Profile → Help & Support • Email: support@flipstar.et • SMS: 8994 • WhatsApp: +251 99 400 0000 • Telegram: t.me/ethio_telecom • Web: ethiotelecom.et" },
+];
 
 export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubscription, onShowEditProfile }) {
   const { darkMode, toggleDarkMode, colors: T } = useTheme();
@@ -105,6 +135,9 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
   const [password, setPassword] = useState({ current: '', new: '', confirm: '' });
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
+  const [showFaqModal, setShowFaqModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(null);
 
   // Support / help requests
   const [supportRequests, setSupportRequests] = useState([]);
@@ -266,6 +299,102 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
       )}
     </div>
   );
+
+  // FAQ Modal Component
+  const FaqModal = () => {
+    if (!showFaqModal) return null;
+    
+    return (
+      <div onClick={() => setShowFaqModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+        <div onClick={e => e.stopPropagation()} style={{ background: T.cardBg || "#111", borderRadius: "18px 18px 0 0", width: "100%", maxWidth: 520, maxHeight: "88vh", overflowY: "auto", padding: "24px 20px 40px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#8fc441" }}>FAQ</div>
+            <button onClick={() => setShowFaqModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}><X size={22} /></button>
+          </div>
+          {FAQ_ITEMS.map((item, i) => (
+            <div key={i} style={{ borderBottom: "1px solid #262626", marginBottom: 2 }}>
+              <button onClick={() => setFaqOpen(faqOpen === i ? null : i)}
+                style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff", textAlign: "left" }}>{item.q}</span>
+                {faqOpen === i ? <ChevronUp size={16} color="#8fc441" style={{ flexShrink: 0 }} /> : <ChevronDown size={16} color="#8fc441" style={{ flexShrink: 0 }} />}
+              </button>
+              {faqOpen === i && <div style={{ fontSize: 13, color: "#ccc", paddingBottom: 14, lineHeight: 1.6 }}>{item.a}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Terms Modal Component
+  const TermsModal = () => {
+    if (!showTermsModal) return null;
+    
+    const sec  = { fontSize: 14, fontWeight: 800, color: "#8fc441", marginTop: 20, marginBottom: 8 };
+    const sub  = { fontSize: 13, fontWeight: 700, color: "#ddd", marginTop: 12, marginBottom: 6 };
+    const para = { fontSize: 12, color: "#ccc", lineHeight: 1.7, marginBottom: 8 };
+    const bul  = { fontSize: 12, color: "#bbb", lineHeight: 1.7, marginBottom: 4, paddingLeft: 8 };
+    
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.97)", zIndex: 9999, overflowY: "auto" }}>
+        <div style={{ background: T.cardBg || "#111", minHeight: "100vh", width: "100%", maxWidth: 640, margin: "0 auto", padding: "48px 24px 60px" }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441" }}>Terms &amp; Conditions</div>
+            <button onClick={() => setShowTermsModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}><X size={24} /></button>
+          </div>
+
+          {/* Preamble */}
+          <p style={para}>Please read these Terms and Conditions ("Terms") carefully before using the FlipStar service ("FlipStar", "the Service") provided by Ethio Telecom and SkykinTechnologies PLC ("the Providers"). These Terms apply to all visitors, users, and others who access or use the Service via the FlipStar mobile application (Android and iOS) or web portal at https://flipstar.et.</p>
+          <p style={para}>By subscribing, downloading, installing, or otherwise accessing FlipStar, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not agree, do not use the Service.</p>
+
+          {/* 1 */}
+          <div style={sec}>1. Introduction</div>
+          <p style={para}>FlipStar is a premium, subscription-based gamified social media platform developed for Ethio Telecom customers. The platform enables users to create, share, and discover short-form videos and photos ('Flips'), participate in competitive campaigns, earn rewards, and engage in a digital creator economy powered by the telebirr wallet.</p>
+          <p style={para}>FlipStar is accessible via:</p>
+          <p style={bul}>• Web Portal: https://flipstar.et</p>
+          <p style={bul}>• Android App: Available on Google Play Store (search: FlipStar)</p>
+          <p style={bul}>• iOS App: Available on Apple App Store (search: FlipStar)</p>
+
+          {/* 2 */}
+          <div style={sec}>2. Service Overview</div>
+          <p style={bul}>• FlipStar is available to all active Ethio Telecom prepaid, postpaid, and hybrid mobile customers with a smartphone device (Android, iOS, or any HTML5-capable browser for web access).</p>
+          <p style={bul}>• The Service allows users to upload short-form videos (15–120 seconds depending on user tier) and photos, interact with content, participate in daily, weekly, monthly, and grand prize competitions, and earn and spend digital coins.</p>
+          <p style={bul}>• To subscribe via SMS: send 'OK' to the FlipStar shortcode. To unsubscribe: send 'STOP' to the same shortcode.</p>
+          <p style={bul}>• To subscribe via app or web: download the FlipStar app or visit https://flipstar.et, select Sign Up, and follow the on-screen registration flow.</p>
+
+          {/* 3 */}
+          <div style={sec}>3. Subscription and Billing</div>
+          <div style={sub}>3.1 Subscription Plans</div>
+          <p style={bul}>• Flip Daily: 3 ETB per 24 hours</p>
+          <p style={bul}>• Flip Weekly: 20 ETB per 7 days</p>
+          <p style={bul}>• Flip Monthly: 70 ETB per 30 days</p>
+          <p style={bul}>• Flip On-Demand: 10 ETB for 100 Coins (one-time purchase)</p>
+          
+          <div style={sub}>3.2 Eligibility</div>
+          <p style={bul}>• All active prepaid, postpaid, and hybrid Ethio Telecom mobile customers are eligible to subscribe.</p>
+          <p style={bul}>• The subscriber's service number must be in 'Active' status at the time of subscription.</p>
+          <p style={bul}>• Users must be at least 13 years old to use the service.</p>
+
+          {/* Add more sections as needed */}
+          <div style={sec}>4. User Conduct</div>
+          <p style={bul}>• Users must not upload content that is unlawful, harmful, threatening, abusive, defamatory, or otherwise objectionable under Ethiopian law.</p>
+          <p style={bul}>• Botting, automated engagement, self-gifting, vote manipulation, or any attempt to artificially inflate scores or leaderboard rankings is strictly prohibited.</p>
+          <p style={bul}>• A single user may contribute a maximum of 5,000 Score Points per day to any one specific creator to prevent pay-to-win manipulation.</p>
+
+          <div style={sec}>5. Privacy and Data Protection</div>
+          <p style={bul}>• FlipStar is hosted on Ethio Telecom InfraCloud within Ethiopia.</p>
+          <p style={bul}>• Your phone number is encrypted and never displayed publicly.</p>
+          <p style={bul}>• All personal metadata is removed from uploads.</p>
+
+          <div style={sec}>6. Service Modifications</div>
+          <p style={bul}>• Ethio Telecom reserves the right to modify, suspend, or terminate the FlipStar service at any time.</p>
+          <p style={bul}>• Changes will be published at https://flipstar.et.</p>
+          <p style={bul}>• Continued use after changes take effect constitutes acceptance.</p>
+        </div>
+      </div>
+    );
+  };
 
   const sections = [
     { id: "account", icon: User, label: t('account') },
@@ -499,8 +628,9 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
             <SupportSection compact />
           </div>
           <SectionCard>
+            <Row icon={HelpCircle} title="Frequently Asked Questions" onPress={() => setShowFaqModal(true)} />
             <Row icon={Shield} title={t('privacyPolicy')} onPress={() => window.open('/legal/privacy-policy', '_blank')} />
-            <Row icon={FileText} title={t('termsOfService')} onPress={() => window.open('/legal/terms-of-service', '_blank')} />
+            <Row icon={FileText} title={t('termsOfService')} onPress={() => setShowTermsModal(true)} />
           </SectionCard>
 
           {/* Logout */}
@@ -1223,6 +1353,10 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           </div>
         </div>
       )}
+      
+      {/* FAQ and Terms Modals */}
+      <FaqModal />
+      <TermsModal />
     </div>
   );
 }

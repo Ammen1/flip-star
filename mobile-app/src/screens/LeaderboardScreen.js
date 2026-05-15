@@ -111,7 +111,7 @@ function LeaderboardRow({ item, index, isVoting, onVote }) {
           onPress={() => onVote(item.id)}
           disabled={item.user_voted}
         >
-          <Ionicons name={item.user_voted ? 'heart' : 'heart-outline'} size={13} color="#fff" />
+          <Ionicons name={item.user_voted ? 'heart' : 'heart-outline'} size={13} color="#8fc441" />
           <Text style={styles.voteBtnText}>{item.user_voted ? 'Voted' : 'Vote'}</Text>
         </TouchableOpacity>
       )}

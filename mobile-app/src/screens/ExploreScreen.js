@@ -12,8 +12,8 @@ import api from '../api';
 import config from '../config';
 
 const { width, height } = Dimensions.get('window');
-const GOLD = '#C8B56A';
-const LIGHT_GOLD = '#F9E08B';
+const GOLD = '#8fc441';
+const LIGHT_GOLD = '#b5dd8f';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
@@ -21,19 +21,9 @@ const COLS = 3;
 const GAP = 1; // Minimal gap between items
 const ITEM_SIZE = Math.floor((width - (GAP * (COLS - 1))) / COLS); // Calculate exact size for 3 columns
 
-// Categories matching website
+// Categories matching website - simplified to focus on trending
 const CATEGORIES = [
-  { id: 'all', label: 'Trending', icon: 'flame', emoji: '🔥' },
-  { id: 'dance', label: 'Dance', icon: 'musical-note', emoji: '💃' },
-  { id: 'comedy', label: 'Comedy', icon: 'happy', emoji: '😂' },
-  { id: 'sports', label: 'Sports', icon: 'football', emoji: '⚽' },
-  { id: 'food', label: 'Food', icon: 'restaurant', emoji: '🍕' },
-  { id: 'travel', label: 'Travel', icon: 'airplane', emoji: '✈️' },
-  { id: 'art', label: 'Art', icon: 'palette', emoji: '🎨' },
-  { id: 'gaming', label: 'Gaming', icon: 'game-controller', emoji: '🎮' },
-  { id: 'beauty', label: 'Beauty', icon: 'sparkles', emoji: '✨' },
-  { id: 'fashion', label: 'Fashion', icon: 'shirt', emoji: '👗' },
-  { id: 'education', label: 'Learn', icon: 'book', emoji: '📚' },
+  { id: 'all', label: 'Trending', icon: 'flame', emoji: '�' },
 ];
 
 const TIME_RANGES = [
@@ -569,6 +559,9 @@ export default function ExploreScreen({ navigation }) {
         ) : (
           // Explore Mode
           <View style={styles.exploreContent}>
+            {/* Top spacer to center trending content */}
+            <View style={styles.topSpacer} />
+            
             {/* Trending hashtags dropdown */}
             {!hashLoading && hashtags.length > 0 && (
               <View style={styles.hashtagSection}>
@@ -663,25 +656,15 @@ export default function ExploreScreen({ navigation }) {
                   ))}
                 </View>
                 
-                {/* Load more indicator */}
-                {hasMore && !hashtagView && (
-                  <View style={styles.loadMoreContainer}>
-                    {loadingMore && (
-                      <ActivityIndicator size="small" color={LIGHT_GOLD} />
-                    )}
-                    <Text style={styles.loadMoreText}>
-                      {loadingMore ? 'Loading more…' : 'Scroll for more'}
-                    </Text>
-                  </View>
-                )}
-                
-                {!hasMore && videos.length > INITIAL_LIMIT && (
-                  <View style={styles.endMessage}>
-                    <Text style={styles.endText}>You're all caught up</Text>
-                  </View>
+                {/* Silent load more - no indicators */}
+                {hasMore && !hashtagView && loadingMore && (
+                  <View style={{ height: 1 }} />
                 )}
               </>
             )}
+            
+            {/* Bottom spacer to center trending content */}
+            <View style={styles.bottomSpacer} />
           </View>
         )}
       </ScrollView>
@@ -901,9 +884,18 @@ const styles = StyleSheet.create({
   
   // Explore Content
   exploreContent: {
+    flex: 1,
     paddingTop: 120, // Add top padding to account for absolute header
     paddingHorizontal: 0, // Remove side padding to fill full width
     paddingBottom: 32,
+  },
+  
+  // Spacers to center trending content
+  topSpacer: {
+    flex: 1,
+  },
+  bottomSpacer: {
+    flex: 1,
   },
   
   // Hashtag Section
@@ -1133,22 +1125,4 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   
-  // Load More
-  loadMoreContainer: {
-    padding: '16px 0',
-    alignItems: 'center',
-  },
-  loadMoreText: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
-  },
-  endMessage: {
-    alignItems: 'center',
-    padding: '18px 0',
-  },
-  endText: {
-    fontSize: 12,
-    color: '#666',
-  },
-});
+  });
