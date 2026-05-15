@@ -331,3 +331,110 @@ def send_push_notification(user_id, message_data):
         return f"FCM sent user={user_id} status={resp.status_code}"
     except Exception as e:
         return f"FCM error user={user_id}: {e}"
+
+
+# ── Subscription Renewal (Telebirr Direct Debit) ───────────────────────────────
+
+@shared_task
+def renew_telebirr_direct_debit_subscriptions():
+    """Renew subscriptions using Telebirr Direct Debit mandates."""
+    from django.utils import timezone
+    from datetime import timedelta
+    from api.models_subscription import SubscriptionPlan, SubscriptionPayment
+    from api.models_direct_debit import DirectDebitMandate, DirectDebitTransaction
+    from api.telebirr_direct_debit_service import telebirr_direct_debit_service
+
+    try:
+        # Find subscriptions that:
+        # - Have telebirr_direct_debit payment method
+        # - Have auto_renew enabled
+        # - Are active
+        # - Have end_date within the next 1 day (or already expired but within grace period)
+        renew_window = timezone.now() + timedelta(days=1)
+        subscriptions_to_renew = SubscriptionPlan.objects.filter(
+            payment_method='telebirr_direct_debit',
+            auto_renew=True,
+            status='active',
+            end_date__lte=renew_window
+        ).select_related('user', 'tier', 'direct_debit_mandate')
+
+        renewed_count = 0
+        failed_count = 0
+
+        for subscription in subscriptions_to_renew:
+            mandate = subscription.direct_debit_mandate
+
+            # Check if mandate exists and is active
+            if not mandate or not mandate.is_active():
+                # Mandate not active, disable auto-renew
+                subscription.auto_renew = False
+                subscription.save()
+                failed_count += 1
+                print(f"[RENEWAL] Skipping subscription {subscription.id}: Mandate not active")
+                continue
+
+            # Check tier
+            tier = subscription.tier
+            if not tier:
+                failed_count += 1
+                print(f"[RENEWAL] Skipping subscription {subscription.id}: No tier")
+                continue
+
+            # Create transaction record
+            transaction = DirectDebitTransaction.objects.create(
+                mandate=mandate,
+                amount=tier.price_etb,
+                currency='ETB',
+                status='pending'
+            )
+
+            # Initiate direct debit
+            result = telebirr_direct_debit_service.initiate_debit(
+                mandate_id=mandate.mandate_id or mandate.payer_reference_number,
+                payer_reference_number=mandate.payer_reference_number,
+                amount=tier.price_etb,
+                shortcode=mandate.payee_identifier_value
+            )
+
+            if result.get('success'):
+                # Update transaction
+                transaction.originator_conversation_id = result.get('originator_conversation_id')
+                transaction.conversation_id = result.get('conversation_id')
+                transaction.telebirr_transaction_id = result.get('transaction_id')
+                transaction.save()
+
+                # Extend subscription
+                if tier.duration_days:
+                    subscription.end_date = subscription.end_date + timedelta(days=tier.duration_days)
+                    subscription.next_renewal_date = subscription.end_date
+                    subscription.save()
+
+                # Create payment record
+                SubscriptionPayment.objects.create(
+                    subscription=subscription,
+                    user=subscription.user,
+                    amount=tier.price_etb,
+                    currency='ETB',
+                    status='pending',
+                    payment_method='telebirr_direct_debit',
+                    duration_type=tier.duration_type,
+                    period_start=subscription.end_date - timedelta(days=tier.duration_days) if tier.duration_days else timezone.now(),
+                    period_end=subscription.end_date
+                )
+
+                renewed_count += 1
+                print(f"[RENEWAL] Renewed subscription {subscription.id} for user {subscription.user.username}")
+            else:
+                # Debit failed
+                transaction.mark_failed(result.get('error'))
+                subscription.auto_renew = False
+                subscription.status = 'failed'
+                subscription.save()
+                failed_count += 1
+                print(f"[RENEWAL] Failed to renew subscription {subscription.id}: {result.get('error')}")
+
+        return f"Renewed {renewed_count} subscriptions, {failed_count} failed"
+
+    except Exception as e:
+        print(f"[RENEWAL] Error: {str(e)}")
+        return f"Renewal task failed: {str(e)}"

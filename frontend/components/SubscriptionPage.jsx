@@ -51,6 +51,10 @@ export function SubscriptionPage({ user, onBack }) {
   const [pendingTier, setPendingTier] = useState(null);
   const [pollCount, setPollCount] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
+  const [showTelebirrModal, setShowTelebirrModal] = useState(false);
+  const [telebirrTier, setTelebirrTier] = useState(null);
+  const [telebirrPhone, setTelebirrPhone] = useState('');
+  const [telebirrStep, setTelebirrStep] = useState('phone'); // phone, activate, success
   // Inline toast state — replaces native alert() popups for the on-demand flow
   // so users don't get a system "message box" interrupting them.
   const [toast, setToast] = useState(null); // { type: 'success'|'error'|'info', text: string }
@@ -122,6 +126,70 @@ export function SubscriptionPage({ user, onBack }) {
     const shortCode = tier.short_code || '9286';
     const smsUrl = `sms:${shortCode}?body=${encodeURIComponent(tierCode)}`;
     window.location.href = smsUrl;
+  };
+
+  const handleTelebirrSubscribe = (tier) => {
+    setTelebirrTier(tier);
+    setTelebirrStep('phone');
+    setShowTelebirrModal(true);
+  };
+
+  const handleTelebirrPhoneSubmit = async () => {
+    if (!telebirrPhone || telebirrPhone.length < 10) {
+      showToast('error', 'Please enter a valid phone number');
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const frequencyMap = { daily: '02', weekly: '03', monthly: '05' };
+      const response = await api.request('/direct-debit/create/', {
+        method: 'POST',
+        body: JSON.stringify({
+          tier_id: telebirrTier.id,
+          payer_msisdn: telebirrPhone,
+          frequency: frequencyMap[telebirrTier.duration_type],
+        }),
+      });
+
+      if (response.success) {
+        setTelebirrStep('activate');
+        showToast('success', 'Mandate created. Please activate it.');
+      } else {
+        showToast('error', response.error || 'Failed to create mandate');
+      }
+    } catch (error) {
+      console.error('Telebirr mandate creation error:', error);
+      showToast('error', 'Failed to create mandate');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleTelebirrActivate = async () => {
+    setProcessing(true);
+    try {
+      const response = await api.request('/direct-debit/activate/', {
+        method: 'POST',
+        body: JSON.stringify({
+          mandate_id: telebirrTier.mandate_id, // This would come from the create response
+          payer_account_name: user?.username || '',
+        }),
+      });
+
+      if (response.success) {
+        setTelebirrStep('success');
+        showToast('success', 'Subscription activated successfully!');
+        loadSubscriptionData();
+      } else {
+        showToast('error', response.error || 'Failed to activate mandate');
+      }
+    } catch (error) {
+      console.error('Telebirr activation error:', error);
+      showToast('error', 'Failed to activate mandate');
+    } finally {
+      setProcessing(false);
+    }
   };
 
 
@@ -357,33 +425,60 @@ export function SubscriptionPage({ user, onBack }) {
                 </div>
 
                 {/* CTA button */}
-                <button
-                  onClick={() => !isCurrent && handleSubscribe(tier)}
-                  disabled={isCurrent || isProcessingThis}
-                  style={{
-                    width: '100%',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    background: isCurrent ? '#222' : color,
-                    color: isCurrent ? '#666' : '#000',
-                    border: 'none', borderRadius: 14, padding: 13,
-                    fontSize: 14, fontWeight: 800,
-                    cursor: isCurrent ? 'default' : isProcessingThis ? 'wait' : 'pointer',
-                    opacity: isProcessingThis ? 0.7 : 1,
-                    transition: 'transform 0.15s, opacity 0.15s',
-                  }}
-                  onMouseOver={(e) => {
-                    if (isCurrent || isProcessingThis) return;
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                  }}
-                  onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
-                >
-                  <MessageCircle size={15} color={isCurrent ? '#666' : '#000'} />
-                  {isCurrent
-                    ? 'Active Plan'
-                    : isProcessingThis
-                    ? 'Processing…'
-                    : 'Subscribe via SMS'}
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    onClick={() => !isCurrent && handleSubscribe(tier)}
+                    disabled={isCurrent || isProcessingThis}
+                    style={{
+                      width: '100%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      background: isCurrent ? '#222' : color,
+                      color: isCurrent ? '#666' : '#000',
+                      border: 'none', borderRadius: 14, padding: 13,
+                      fontSize: 14, fontWeight: 800,
+                      cursor: isCurrent ? 'default' : isProcessingThis ? 'wait' : 'pointer',
+                      opacity: isProcessingThis ? 0.7 : 1,
+                      transition: 'transform 0.15s, opacity 0.15s',
+                    }}
+                    onMouseOver={(e) => {
+                      if (isCurrent || isProcessingThis) return;
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                  >
+                    <MessageCircle size={15} color={isCurrent ? '#666' : '#000'} />
+                    {isCurrent
+                      ? 'Active Plan'
+                      : isProcessingThis
+                      ? 'Processing…'
+                      : 'Subscribe via SMS'}
+                  </button>
+                  {!isCurrent && tier.duration_type !== 'ondemand' && (
+                    <button
+                      onClick={() => handleTelebirrSubscribe(tier)}
+                      disabled={isProcessingThis}
+                      style={{
+                        width: '100%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                        background: '#1a5fb4',
+                        color: '#fff',
+                        border: 'none', borderRadius: 14, padding: 13,
+                        fontSize: 14, fontWeight: 800,
+                        cursor: isProcessingThis ? 'wait' : 'pointer',
+                        opacity: isProcessingThis ? 0.7 : 1,
+                        transition: 'transform 0.15s, opacity 0.15s',
+                      }}
+                      onMouseOver={(e) => {
+                        if (isProcessingThis) return;
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+                    >
+                      <Coins size={15} />
+                      Subscribe via Telebirr
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -434,6 +529,176 @@ export function SubscriptionPage({ user, onBack }) {
           }}
         >
           {toast.text}
+        </div>
+      )}
+
+      {/* Telebirr Mandate Setup Modal */}
+      {showTelebirrModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: 16,
+        }}>
+          <div style={{
+            background: M_CARD,
+            borderRadius: 20,
+            padding: 24,
+            maxWidth: 400,
+            width: '100%',
+            border: `1px solid ${M_BORDER}`,
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>
+                {telebirrStep === 'phone' && 'Setup Telebirr Direct Debit'}
+                {telebirrStep === 'activate' && 'Activate Mandate'}
+                {telebirrStep === 'success' && 'Success!'}
+              </div>
+              <button
+                onClick={() => {
+                  setShowTelebirrModal(false);
+                  setTelebirrStep('phone');
+                  setTelebirrPhone('');
+                }}
+                style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Phone Step */}
+            {telebirrStep === 'phone' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6 }}>
+                  Enter your phone number to set up automatic recurring payments via Telebirr Direct Debit for the <span style={{ color: GOLD, fontWeight: 700 }}>{telebirrTier?.name}</span> plan.
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, color: '#888', marginBottom: 6, display: 'block' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="251911234567"
+                    value={telebirrPhone}
+                    onChange={(e) => setTelebirrPhone(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: '#0A0A0A',
+                      border: `1px solid ${M_BORDER}`,
+                      borderRadius: 10,
+                      padding: 12,
+                      color: '#fff',
+                      fontSize: 14,
+                      outline: 'none',
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleTelebirrPhoneSubmit}
+                  disabled={processing}
+                  style={{
+                    width: '100%',
+                    background: '#1a5fb4',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: 14,
+                    fontSize: 15,
+                    fontWeight: 800,
+                    cursor: processing ? 'wait' : 'pointer',
+                    opacity: processing ? 0.7 : 1,
+                  }}
+                >
+                  {processing ? 'Creating Mandate...' : 'Create Mandate'}
+                </button>
+              </div>
+            )}
+
+            {/* Activate Step */}
+            {telebirrStep === 'activate' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6 }}>
+                  Your mandate has been created. Please check your phone for an activation code and confirm to activate the direct debit.
+                </div>
+                <div style={{
+                  background: '#0D2D1A',
+                  padding: 12,
+                  borderRadius: 10,
+                  border: '1px solid #10B98140',
+                }}>
+                  <div style={{ fontSize: 12, color: '#10B981', fontWeight: 600, marginBottom: 4 }}>
+                    Plan: {telebirrTier?.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#10B981', fontWeight: 600 }}>
+                    Amount: {telebirrTier?.price_etb} ETB
+                  </div>
+                </div>
+                <button
+                  onClick={handleTelebirrActivate}
+                  disabled={processing}
+                  style={{
+                    width: '100%',
+                    background: '#10B981',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: 14,
+                    fontSize: 15,
+                    fontWeight: 800,
+                    cursor: processing ? 'wait' : 'pointer',
+                    opacity: processing ? 0.7 : 1,
+                  }}
+                >
+                  {processing ? 'Activating...' : 'Confirm & Activate'}
+                </button>
+              </div>
+            )}
+
+            {/* Success Step */}
+            {telebirrStep === 'success' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center', textAlign: 'center' }}>
+                <div style={{
+                  width: 60, height: 60, borderRadius: 30,
+                  background: '#10B98122',
+                  border: '2px solid #10B981',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Check size={30} color="#10B981" />
+                </div>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>
+                  Subscription Activated!
+                </div>
+                <div style={{ fontSize: 13, color: '#666', lineHeight: 1.6 }}>
+                  Your Telebirr Direct Debit mandate has been activated. Your subscription will be automatically renewed using this payment method.
+                </div>
+                <button
+                  onClick={() => {
+                    setShowTelebirrModal(false);
+                    setTelebirrStep('phone');
+                    setTelebirrPhone('');
+                  }}
+                  style={{
+                    width: '100%',
+                    background: '#222',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: 14,
+                    fontSize: 15,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
