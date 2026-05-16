@@ -291,6 +291,14 @@ const ReelItem = React.memo(function ReelItem({
   };
 
   
+  const handleComment = () => {
+    setShowComments(true);
+  };
+
+  const handleReport = () => {
+    setShowReportModal(true);
+  };
+
   const handleShareVideo = async () => {
     // Use both web URL and app URL for better compatibility
     const webUrl = `https://uat.flipstar.et/post/${item.id}`;
@@ -1657,8 +1665,13 @@ export default function ReelsScreen({ navigation, route }) {
       followStates={followStates}
       fromDeepLink={fromDeepLink}
       localShareCounts={localShareCounts}
+      onLike={handleLike}
+      onComment={handleComment}
+      onSave={handleSave}
+      onShare={handleShareVideo}
+      onReport={handleReport}
     />
-  ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates, fromDeepLink, localShareCounts]);
+  ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates, fromDeepLink, localShareCounts, handleLike, handleComment, handleSave, handleShareVideo, handleReport]);
 
   if (loading) {
     return (
