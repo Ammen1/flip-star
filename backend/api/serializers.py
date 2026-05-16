@@ -233,6 +233,13 @@ class ReelSerializer(serializers.ModelSerializer):
         # Check if any transactions exist for this reel
         tx_count = GiftTransaction.objects.filter(reel_id=obj.id).count()
         print(f'[GIFT_COUNT] Reel {obj.id}: tx_count = {tx_count}')
+        # Check if any transactions exist at all in database
+        if tx_count == 0:
+            total_tx = GiftTransaction.objects.count()
+            print(f'[GIFT_COUNT] Total GiftTransaction records in DB: {total_tx}')
+            # Check if any have reel_id set
+            with_reel = GiftTransaction.objects.exclude(reel_id__isnull=True).count()
+            print(f'[GIFT_COUNT] GiftTransaction with reel_id set: {with_reel}')
         result = GiftTransaction.objects.filter(reel_id=obj.id).aggregate(total=Sum('quantity'))['total']
         print(f'[GIFT_COUNT] Reel {obj.id}: gift_count = {result}')
         return result or 0
