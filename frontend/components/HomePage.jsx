@@ -2313,29 +2313,6 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
   );
 }
 
-// Add CSS for icon hover and active states
-const iconStyles = `
-  .hp-action:hover svg {
-    fill: #8fc441 !important;
-    transition: fill 0.15s ease;
-  }
-  .hp-action:active svg {
-    fill: #8fc441 !important;
-    transform: scale(0.9);
-    transition: all 0.1s ease;
-  }
-  .hp-action svg {
-    transition: fill 0.15s ease, transform 0.15s ease;
-  }
-`;
-
-// Inject styles into document
-if (typeof document !== 'undefined') {
-  const styleElement = document.createElement('style');
-  styleElement.textContent = iconStyles;
-  document.head.appendChild(styleElement);
-}
-
 export default HomePage;
 
 
