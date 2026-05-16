@@ -60,6 +60,8 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
   const isOwnProfile = !userId || userId === user?.id;
   const [showStreakModal, setShowStreakModal] = useState(false);
   const [streakData, setStreakData] = useState(null);
+  const [claimed, setClaimed] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const [showProfileZoom, setShowProfileZoom] = useState(false);
   const targetUserId = userId || user?.id;
   const [mounted, setMounted] = useState(false); // Prevent flash on initial load
@@ -1379,51 +1381,102 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
                   )}
                 </div>
 
-                {streakData.login_streak.bonus_available && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await api.request('/gamification/login-bonus/', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({})
-                        });
-                        await loadStreakData();
-                      } catch (error) {
-                        console.error('Failed to claim bonus:', error);
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '16px',
-                      borderRadius: 14,
-                      border: 'none',
-                      background: '#8fc441',
-                      color: '#000',
-                      fontSize: 17,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 16px rgba(249,224,139,0.4)',
-                      marginBottom: 16
-                    }}
-                  >
-                    Claim +{streakData.login_streak.next_bonus?.coins ?? 3} Coins
-                  </button>
-                )}
-
-                <div style={{
-                  background: 'rgba(249,224,139,0.1)',
-                  borderRadius: 12,
-                  padding: '12px 16px',
-                  marginBottom: 16,
-                  border: '1px solid rgba(249,224,139,0.2)'
-                }}>
-                  <div style={{ fontSize: 12, color: '#78716C', marginBottom: 8, fontWeight: 600 }}>🎁 Milestone Rewards:</div>
-                  <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#78716C' }}>
-                    <div>7 days: <span style={{ color: '#8fc441', fontWeight: 700 }}>50 coins</span></div>
-                    <div>30 days: <span style={{ color: '#8fc441', fontWeight: 700 }}>150 coins</span></div>
-                  </div>
+                {/* 7-day progress - real calendar days */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, padding: '0 4px' }}>
+                  {(() => {
+                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const today = new Date();
+                    const days = [];
+                    for (let i = 6; i >= 0; i--) {
+                      const d = new Date(today);
+                      d.setDate(today.getDate() - i);
+                      days.push({
+                        name: dayNames[d.getDay()],
+                        date: d.getDate(),
+                        isToday: i === 0,
+                        isPast: i > 0,
+                      });
+                    }
+                    const cur = streakData.login_streak.current ?? 0;
+                    return days.map((day, i) => {
+                      const daysFromEnd = 6 - i;
+                      const active = daysFromEnd < cur && daysFromEnd > 0;
+                      const isToday = day.isToday;
+                      return (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          <div style={{
+                            width: 36, height: 36, borderRadius: '50%',
+                            background: active ? 'linear-gradient(135deg,#8fc441,#F59E0B)' : isToday ? 'rgba(249,224,139,0.1)' : '#F5F5F4',
+                            border: isToday ? '2.5px solid #8fc441' : active ? 'none' : '2px solid transparent',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: isToday ? 12 : 14,
+                            fontWeight: 700,
+                            color: active ? '#000' : isToday ? '#8fc441' : '#A8A29E',
+                            boxShadow: active ? '0 2px 8px rgba(249,224,139,.35)' : isToday ? '0 2px 8px rgba(249,224,139,.2)' : 'none'
+                          }}>
+                            {active ? '✓' : day.date}
+                          </div>
+                          <span style={{ fontSize: 10, color: active || isToday ? '#8fc441' : '#A8A29E', fontWeight: 600 }}>{day.name}</span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
+
+                {(streakData.login_streak.bonus_available && !claimed) ? (
+                  <div>
+                    {/* Milestone info */}
+                    <div style={{ background: 'rgba(249,224,139,0.1)', borderRadius: 12, padding: '12px 16px', marginBottom: 16, border: '1px solid rgba(249,224,139,0.2)' }}>
+                      <div style={{ fontSize: 12, color: '#78716C', marginBottom: 8, fontWeight: 600 }}>🎁 Milestone Rewards:</div>
+                      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#78716C' }}>
+                        <div>7 days: <span style={{ color: '#8fc441', fontWeight: 700 }}>50 coins</span></div>
+                        <div>30 days: <span style={{ color: '#8fc441', fontWeight: 700 }}>150 coins</span></div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (claiming) return;
+                        setClaiming(true);
+                        try {
+                          await api.request('/gamification/login-bonus/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({})
+                          });
+                          setClaimed(true);
+                          await loadStreakData();
+                        } catch (error) {
+                          console.error('Failed to claim bonus:', error);
+                        } finally {
+                          setClaiming(false);
+                        }
+                      }}
+                      disabled={claiming}
+                      style={{
+                        width: '100%',
+                        padding: '16px',
+                        borderRadius: 14,
+                        border: 'none',
+                        background: claiming ? 'rgba(249,224,139,0.5)' : '#8fc441',
+                        color: '#000',
+                        fontSize: 17,
+                        fontWeight: 700,
+                        cursor: claiming ? 'not-allowed' : 'pointer',
+                        boxShadow: claiming ? 'none' : '0 4px 16px rgba(249,224,139,0.4)'
+                      }}
+                    >
+                      {claiming ? 'Claiming...' : `Claim +${streakData.login_streak.next_bonus?.coins ?? 3} Coins`}
+                    </button>
+                  </div>
+                ) : claimed ? (
+                  <div style={{ textAlign: 'center', padding: '16px', background: '#ECFDF5', borderRadius: 14, color: '#10B981', fontWeight: 700 }}>
+                    ✅ Bonus Claimed!
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#78716C', fontSize: 13 }}>
+                    Come back tomorrow to continue your streak! 🔥
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ textAlign: 'center', padding: 40, color: '#78716C' }}>
