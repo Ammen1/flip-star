@@ -753,8 +753,7 @@ class OnevasWebhookView(APIView):
                         subscription_source='app',
                         end_date=timezone.now() + timedelta(days=total_duration_days),
                         setup_otp=otp_code,  # Set OTP for account login
-                        free_trial_days=free_trial_days,  # Track free trial days granted
-                        payment_method='onevas'  # Onevas webhook always uses onevas payment method
+                        free_trial_days=free_trial_days  # Track free trial days granted
                     )
                     print(f"[SUBSCRIPTION DEBUG] New subscription created: ID {subscription.id}, setup_otp: {subscription.setup_otp}, free_trial_days: {free_trial_days}")
                 

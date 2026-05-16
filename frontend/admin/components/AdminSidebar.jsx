@@ -184,25 +184,25 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
 
       {/* User footer */}
       <div style={{
-        padding: '10px 12px',
+        padding: '14px 16px',
         borderTop: `1px solid ${BORDER}`,
         background: '#1A1A1A',
       }}>
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          marginBottom: 8,
+          gap: 10,
+          marginBottom: 10,
         }}>
           <div style={{
-            width: 28,
-            height: 28,
+            width: 36,
+            height: 36,
             borderRadius: '50%',
             background: `linear-gradient(135deg, ${PRIMARY}, ${PRIMARY_DARK})`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: 700,
             color: '#fff',
             flexShrink: 0,
@@ -211,7 +211,7 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: 600,
               color: TEXT,
               overflow: 'hidden',
@@ -220,34 +220,49 @@ export function AdminSidebar({ theme, currentPage, onPageChange, adminUser, onLo
             }}>
               {adminUser?.username || 'Admin'}
             </div>
-          </div>
-          <button
-            onClick={onLogout}
-            style={{
-              padding: '6px 8px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 6,
-              color: SUB,
+            <div style={{
               fontSize: 11,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#262626';
-              e.currentTarget.style.color = '#DC2626';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = SUB;
-            }}
-          >
-            <LogOut size={12} />
-          </button>
+              color: SUB,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              Administrator
+            </div>
+          </div>
         </div>
+
+        <button
+          onClick={onLogout}
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            background: '#FFFFFF',
+            border: `1px solid ${BORDER}`,
+            borderRadius: 8,
+            color: TEXT,
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = '#FEF2F2';
+            e.currentTarget.style.borderColor = '#FCA5A5';
+            e.currentTarget.style.color = '#DC2626';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#FFFFFF';
+            e.currentTarget.style.borderColor = BORDER;
+            e.currentTarget.style.color = TEXT;
+          }}
+        >
+          <LogOut size={14} />
+          Logout
+        </button>
       </div>
     </aside>
   );

@@ -338,66 +338,6 @@ def request_withdrawal(request):
     )
 
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def reinvest_points(request):
-    """
-    Convert points back to coins (re-invest).
-    Body: { points }
-    1 Point = 1 Coin
-    """
-    try:
-        points_amount = int(request.data.get('points', 0))
-    except (TypeError, ValueError):
-        return Response({'error': 'Invalid points amount'}, status=status.HTTP_400_BAD_REQUEST)
-
-    if points_amount < 1:
-        return Response({'error': 'Minimum 1 point required'}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Check user's point balance
-    user_profile = request.user.profile
-    if user_profile.points < points_amount:
-        return Response(
-            {'error': f'Insufficient points. You have {user_profile.points} points.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Get or create user's coin balance
-    coin_balance = _get_or_create_balance(request.user)
-
-    # Deduct points
-    user_profile.points -= points_amount
-    user_profile.save()
-
-    # Add coins (1 point = 1 coin)
-    coin_balance.earned_balance += points_amount
-    coin_balance.balance += points_amount
-    coin_balance.total_earned += points_amount
-    coin_balance._sync_balance()
-    coin_balance.save(update_fields=[
-        'earned_balance', 'balance', 'total_earned', 'updated_at'
-    ])
-
-    # Create transaction record
-    CoinTransaction.objects.create(
-        user=request.user,
-        transaction_type='reinvest',
-        coins=points_amount,
-        description=f'Converted {points_amount} points to coins'
-    )
-
-    return Response({
-        'message': 'Successfully converted points to coins',
-        'points_converted': points_amount,
-        'coins_received': points_amount,
-        'new_balance': {
-            'points': user_profile.points,
-            'coins': coin_balance.balance,
-            'earned_coins': coin_balance.earned_balance,
-        },
-    })
-
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def my_withdrawals(request):
@@ -534,10 +474,6 @@ def public_wallet_config(request):
         'gifting': {
             'earned_coins_giftable': config.earned_coins_giftable,
             'purchased_coins_giftable': config.purchased_coins_giftable,
-            'min_points_per_transaction': config.gift_min_points_per_transaction,
-            'max_points_per_transaction': config.gift_max_points_per_transaction,
-            'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
-            'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
         },
         'packages': packages,
     })
@@ -565,27 +501,13 @@ def admin_wallet_config(request):
         'receive_like_daily_cap', 'quality_comment_reward', 'quality_comment_daily_cap',
         'profile_complete_reward', 'referral_reward', 'campaign_winner_reward',
         'cost_post_create', 'cost_like', 'cost_comment', 'cost_join_campaign',
-        'cost_extra_campaign_entry', 'cost_boost_1hr', 'cost_boost_2hr', 'cost_boost_24hr',
-        'cost_trending_1hr', 'cost_trending_24hr',
+        'cost_extra_campaign_entry', 'cost_boost_2hr', 'cost_boost_24hr',
         'min_balance_to_post', 'min_balance_to_join_campaign',
         'withdrawal_enabled', 'withdrawal_min_coins', 'withdrawal_max_coins_per_request',
         'coins_per_birr', 'withdrawal_fee_percent', 'withdrawal_processing_days',
         'earned_coins_giftable', 'purchased_coins_giftable',
         'earned_coins_withdrawable', 'purchased_coins_withdrawable',
         'earned_coins_expire_days',
-        'coins_to_points_conversion',
-        'points_per_birr',
-        'withdrawal_min_points',
-        'withdrawal_max_points_per_request',
-        'daily_winner_points',
-        'weekly_winner_points',
-        'monthly_winner_points',
-        'grand_finalist_points',
-        'grand_winner_points',
-        'gift_min_points_per_transaction',
-        'gift_max_points_per_transaction',
-        'gift_max_points_to_recipient_per_day',
-        'gift_max_total_points_sent_per_day',
     ]
     for field in editable_fields:
         if field in request.data:
@@ -635,11 +557,8 @@ def _serialize_full_config(config):
             'comment': config.cost_comment,
             'join_campaign': config.cost_join_campaign,
             'extra_campaign_entry': config.cost_extra_campaign_entry,
-            'boost_1hr': config.cost_boost_1hr,
             'boost_2hr': config.cost_boost_2hr,
             'boost_24hr': config.cost_boost_24hr,
-            'trending_1hr': config.cost_trending_1hr,
-            'trending_24hr': config.cost_trending_24hr,
         },
         'thresholds': {
             'min_balance_to_post': config.min_balance_to_post,
@@ -658,26 +577,9 @@ def _serialize_full_config(config):
             'purchased_coins_giftable': config.purchased_coins_giftable,
             'earned_coins_withdrawable': config.earned_coins_withdrawable,
             'purchased_coins_withdrawable': config.purchased_coins_withdrawable,
-            'restrictions': {
-                'min_points_per_transaction': config.gift_min_points_per_transaction,
-                'max_points_per_transaction': config.gift_max_points_per_transaction,
-                'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
-                'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
-            }
         },
         'expiry': {
             'earned_coins_expire_days': config.earned_coins_expire_days,
-        },
-        'points': {
-            'coins_to_points_conversion': config.coins_to_points_conversion,
-            'points_per_birr': config.points_per_birr,
-            'withdrawal_min_points': config.withdrawal_min_points,
-            'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
-            'daily_winner_points': config.daily_winner_points,
-            'weekly_winner_points': config.weekly_winner_points,
-            'monthly_winner_points': config.monthly_winner_points,
-            'grand_finalist_points': config.grand_finalist_points,
-            'grand_winner_points': config.grand_winner_points,
         },
         'updated_at': config.updated_at.isoformat() if config.updated_at else None,
         'updated_by': config.updated_by.username if config.updated_by_id else None,
@@ -803,30 +705,19 @@ def admin_user_wallet(request, user_id):
     try:
         user = User.objects.get(id=user_id)
         balance = _get_or_create_balance(user)
-
-        # Ensure user has a profile
-        if not hasattr(user, 'profile'):
-            from .models import UserProfile
-            UserProfile.objects.get_or_create(user=user)
-            user.refresh_from_db()
-
+        
         return Response({
             'balance': {
-                'total': balance.balance,
+                'total': balance.total_coins,
                 'earned': balance.earned_balance,
                 'purchased': balance.purchased_balance,
             },
             'points': {
-                'current': user.profile.points if hasattr(user, 'profile') else 0,
-                'earned_total': user.profile.points_earned_total if hasattr(user, 'profile') else 0,
-                'withdrawn_total': user.profile.points_withdrawn_total if hasattr(user, 'profile') else 0,
+                'current': balance.points,
             }
         })
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        logger.error(f"[Admin Wallet] Error for user {user_id}: {str(e)}")
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['GET'])
@@ -847,21 +738,16 @@ def admin_user_transactions(request):
             'id': tx.id,
             'transaction_type': tx.transaction_type,
             'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
-            'coins': tx.coins if tx.coins is not None else 0,
-            'is_credit': tx.coins > 0 if tx.coins is not None else False,
-            'created_at': tx.created_at.isoformat() if tx.created_at else None,
-            'description': tx.description or '',
-            'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
-            'payment_method': tx.payment_method or '',
+            'coins': tx.coins,
+            'points': tx.points,
+            'is_credit': tx.coins > 0 or tx.points > 0,
+            'created_at': tx.created_at,
+            'description': tx.description,
         } for tx in transactions]
         
         return Response({'results': data})
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        import logging
-        logging.error(f"[Admin Transactions] Error for user {user_id}: {str(e)}")
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -869,7 +755,7 @@ def admin_user_transactions(request):
 def admin_adjust_balance(request):
     """
     Manually credit or debit a user's wallet (admin only).
-    Body: { user_id, amount (positive or negative), bucket: 'earned'|'purchased'|'points', reason }
+    Body: { user_id, amount (positive or negative), bucket: 'earned'|'purchased', reason }
     """
     try:
         user_id = int(request.data.get('user_id'))
@@ -880,35 +766,14 @@ def admin_adjust_balance(request):
     bucket = request.data.get('bucket', 'earned')
     reason = request.data.get('reason', 'Admin adjustment')
 
-    if bucket not in ('earned', 'purchased', 'points'):
-        return Response({'error': 'bucket must be earned, purchased, or points'}, status=status.HTTP_400_BAD_REQUEST)
+    if bucket not in ('earned', 'purchased'):
+        return Response({'error': 'bucket must be earned or purchased'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         user = User.objects.get(id=user_id)
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Handle points adjustment
-    if bucket == 'points':
-        profile = user.profile
-        if amount >= 0:
-            profile.points += amount
-            profile.points_earned_total += amount
-        else:
-            deduct = abs(amount)
-            if profile.points < deduct:
-                return Response({'error': 'Insufficient points to deduct'},
-                                status=status.HTTP_400_BAD_REQUEST)
-            profile.points -= deduct
-            profile.points_withdrawn_total += deduct
-        profile.save()
-        
-        return Response({
-            'message': f'Adjusted {user.username}\'s points by {amount}',
-            'new_points': profile.points,
-        })
-
-    # Handle coin balance adjustment
     balance = _get_or_create_balance(user)
 
     if amount >= 0:

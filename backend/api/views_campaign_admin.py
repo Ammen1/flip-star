@@ -346,11 +346,16 @@ def get_leaderboard(request, campaign_id):
     engine = CampaignScoringEngine(campaign)
     config = engine.type_config
 
-    # Use fixed weights as requested: Votes × 1, Comments × 2, Shares × 5, GiftPoints × 10
-    likes_weight = 1
-    comments_weight = 2
-    shares_weight = 5
-    gifts_weight = 10
+    # Get engagement weights from config (fallback to 0 if not present)
+    engagement_weights = config.get('engagement', {})
+    if campaign.campaign_type == 'grand':
+        # Grand uses phase1_qualification for weights
+        engagement_weights = config.get('phase1_qualification', {})
+    
+    likes_weight = engagement_weights.get('likes_weight', 0)
+    comments_weight = engagement_weights.get('comments_weight', 0)
+    shares_weight = engagement_weights.get('shares_weight', 0)
+    gifts_weight = engagement_weights.get('gifts_weight', 0)
 
     # Determine date range based on period_type
     now = timezone.now()
@@ -401,24 +406,19 @@ def get_leaderboard(request, campaign_id):
         # Count engagement metrics
         total_likes = Vote.objects.filter(reel_id__in=reel_ids).count()
         total_comments = Comment.objects.filter(reel_id__in=reel_ids).count()
+        total_shares = 0  # TODO: implement shares tracking
         
-        # Count shares from Reel.shares field
-        total_shares = user_posts.aggregate(total=Sum('reel__shares'))['total'] or 0
-        
-        # Count gift points (total_coins from GiftTransaction converted to points)
-        total_gift_points = 0
+        # Count unique gifters per post (distinct senders)
+        total_gifters = 0
         for reel_id in reel_ids:
-            gift_transactions = GiftTransaction.objects.filter(reel_id=reel_id)
-            for transaction in gift_transactions:
-                # Convert coins to points (assuming 1 coin = 1 point for gifting)
-                total_gift_points += transaction.total_coins
+            total_gifters += GiftTransaction.objects.filter(reel_id=reel_id).values('sender').distinct().count()
         
         # Calculate score using campaign weights: score = likes*pt + comments*pt + shares*pt + gifts*pt
         calculated_score = (
             total_likes * likes_weight +
             total_comments * comments_weight +
             total_shares * shares_weight +
-            total_gift_points * gifts_weight
+            total_gifters * gifts_weight
         )
         
         entries_data.append({
@@ -429,7 +429,7 @@ def get_leaderboard(request, campaign_id):
             'likes_count': total_likes,
             'comments_count': total_comments,
             'shares_count': total_shares,
-            'gift_points_count': total_gift_points,
+            'gifts_count': total_gifters,
             'weights': {
                 'likes': likes_weight,
                 'comments': comments_weight,

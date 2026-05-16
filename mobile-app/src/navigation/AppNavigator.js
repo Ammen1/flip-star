@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { AppAlertProvider } from '../components/AppAlert';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
+import { BlockProvider } from '../contexts/BlockContext';
 
 // Import screens directly (no lazy loading) to prevent blank screen flash
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -37,7 +38,13 @@ import CoinPurchaseScreen from '../screens/CoinPurchaseScreen';
 
 // Configure deep linking
 const linking = {
-  prefixes: ['https://uat.flipstar.et', 'uat.flipstar.et'],
+  prefixes: [
+    'https://uat.flipstar.et', 
+    'uat.flipstar.et', 
+    'https://flipstar.app', 
+    'flipstar.app',
+    'flipstar://'
+  ],
   config: {
     screens: {
       MainTabs: {
@@ -62,7 +69,14 @@ function ReelsDetailWrapper({ route }) {
   const videoId = initialVideoId || id;
   console.log('ReelsDetailWrapper - received params:', route.params);
   console.log('ReelsDetailWrapper - using videoId:', videoId);
-  return <ReelsScreen route={{ params: { initialVideoId: videoId } }} />;
+  
+  // Ensure we have a valid video ID
+  if (!videoId) {
+    console.log('No video ID found, navigating to Home');
+    return <HomeScreen />;
+  }
+  
+  return <ReelsScreen route={{ params: { initialVideoId: videoId, fromDeepLink: true } }} />;
 }
 
 const GOLD = '#C8B56A';
@@ -272,11 +286,13 @@ function AppNavigatorContent() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <AuthProvider>
-        <AppAlertProvider>
-          <NavigationContainer linking={linkingConfig} theme={navTheme}>
-            <RootNavigator />
-          </NavigationContainer>
-        </AppAlertProvider>
+        <BlockProvider>
+          <AppAlertProvider>
+            <NavigationContainer linking={linkingConfig} theme={navTheme}>
+              <RootNavigator />
+            </NavigationContainer>
+          </AppAlertProvider>
+        </BlockProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );

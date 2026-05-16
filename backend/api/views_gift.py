@@ -105,44 +105,17 @@ class PublicGiftViewSet(viewsets.ReadOnlyModelViewSet):
         
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def send(self, request):
-        """Send a gift to another user by username or phone number"""
+        """Send a gift to another user by username"""
         gift_id = request.data.get('gift_id')
         recipient_username = request.data.get('recipient_username')
-        phone_number = request.data.get('phone_number')
         quantity = request.data.get('quantity', 1)
         message = request.data.get('message', '')
-
-        # Validate that at least one identifier is provided
-        if not recipient_username and not phone_number:
-            return Response(
-                {'error': 'Either recipient_username or phone_number is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Look up recipient by phone number if provided
-        if phone_number:
-            # Normalize phone number
-            phone_number = phone_number.replace(' ', '').replace('-', '').replace('+', '')
-            if not phone_number.startswith('251'):
-                phone_number = '251' + phone_number
-
-            try:
-                recipient = User.objects.get(profile__phone_number=phone_number)
-            except User.DoesNotExist:
-                return Response(
-                    {'error': 'User with this phone number not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-        else:
-            # Look up recipient by username
-            try:
-                recipient = User.objects.get(username=recipient_username)
-            except User.DoesNotExist:
-                return Response(
-                    {'error': 'Recipient not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-
+        
+        try:
+            recipient = User.objects.get(username=recipient_username)
+        except User.DoesNotExist:
+            return Response({'error': 'Recipient not found'}, status=status.HTTP_404_NOT_FOUND)
+            
         data = {
             'gift_id': gift_id,
             'recipient_id': recipient.id,
@@ -244,74 +217,6 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         
         total_cost = gift.coin_value * quantity
         
-        # Convert coins to points for restriction checks
-        points_cost = wallet_config.coins_to_points(total_cost)
-        
-        # Check minimum points per transaction
-        if points_cost < wallet_config.gift_min_points_per_transaction:
-            return Response(
-                {
-                    'error': f'Minimum {wallet_config.gift_min_points_per_transaction} points required per gift transaction',
-                    'min_points': wallet_config.gift_min_points_per_transaction,
-                    'points_cost': points_cost
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Check maximum points per transaction
-        if points_cost > wallet_config.gift_max_points_per_transaction:
-            return Response(
-                {
-                    'error': f'Maximum {wallet_config.gift_max_points_per_transaction} points allowed per gift transaction',
-                    'max_points': wallet_config.gift_max_points_per_transaction,
-                    'points_cost': points_cost
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Check daily limit to specific recipient (Voting Cap)
-        from django.utils import timezone
-        from datetime import timedelta
-        twenty_four_hours_ago = timezone.now() - timedelta(hours=24)
-        
-        gifts_to_recipient_today = GiftTransaction.objects.filter(
-            sender=request.user,
-            recipient=recipient,
-            created_at__gte=twenty_four_hours_ago
-        ).aggregate(total=Sum('total_coins'))['total'] or 0
-        
-        points_to_recipient_today = wallet_config.coins_to_points(gifts_to_recipient_today)
-        
-        if points_to_recipient_today + points_cost > wallet_config.gift_max_points_to_recipient_per_day:
-            return Response(
-                {
-                    'error': f'Maximum {wallet_config.gift_max_points_to_recipient_per_day} points can be sent to one recipient per day',
-                    'max_points': wallet_config.gift_max_points_to_recipient_per_day,
-                    'points_sent_today': points_to_recipient_today,
-                    'points_cost': points_cost
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Check total daily outgoing limit
-        total_gifts_today = GiftTransaction.objects.filter(
-            sender=request.user,
-            created_at__gte=twenty_four_hours_ago
-        ).aggregate(total=Sum('total_coins'))['total'] or 0
-        
-        points_sent_today = wallet_config.coins_to_points(total_gifts_today)
-        
-        if points_sent_today + points_cost > wallet_config.gift_max_total_points_sent_per_day:
-            return Response(
-                {
-                    'error': f'Maximum {wallet_config.gift_max_total_points_sent_per_day} points can be sent per day total',
-                    'max_points': wallet_config.gift_max_total_points_sent_per_day,
-                    'points_sent_today': points_sent_today,
-                    'points_cost': points_cost
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
         # Check if purchased coins can be used for gifting
         if not wallet_config.purchased_coins_giftable:
             return Response(
@@ -357,7 +262,17 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         wallet_config = WalletConfig.get_config()
         points_received = wallet_config.coins_to_points(total_cost)
         
-        # Add points to recipient (not coins)
+        # Get or create recipient's coin balance and add coins to their balance
+        recipient_coin_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
+        recipient_coin_balance.add_coins(
+            amount=total_cost,
+            transaction_type='gift_received',
+            recipient=request.user,  # The sender (stored as "other party")
+            reel=reel,
+            description=f'Received {gift.name} from @{request.user.username}'
+        )
+        
+        # Add points to recipient profile
         recipient_profile = recipient.profile
         recipient_profile.points += points_received
         recipient_profile.points_earned_total += points_received
@@ -365,16 +280,8 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         recipient_profile.save()
         
         # Log gift_received as a CoinTransaction for the recipient's activity feed
-        # coins field stores the points received (1 coin = 1 point conversion)
+        # This is already created by the add_coins method above, but we'll ensure it's properly logged
         from .models_contest import CoinTransaction
-        CoinTransaction.objects.create(
-            user=recipient,
-            transaction_type='gift_received',
-            coins=points_received,
-            recipient=request.user,  # The sender (stored as "other party")
-            reel=reel,
-            description=f'Received {gift.name} from @{request.user.username}',
-        )
         
         # Handle combo logic
         is_combo = False

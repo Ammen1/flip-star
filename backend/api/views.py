@@ -1177,8 +1177,6 @@ class ReelViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         try:
             from .models import Comment
-            from .models_gift import GiftTransaction
-            from django.db.models import Sum
             # Prefetch recent comments to avoid N+1 queries in serializer
             recent_comments_prefetch = Prefetch(
                 'comments',
@@ -1189,12 +1187,10 @@ class ReelViewSet(viewsets.ModelViewSet):
             queryset = Reel.objects.select_related(
                 'user', 'user__profile'
             ).prefetch_related(
-                recent_comments_prefetch,
-                'gifts_received'
+                recent_comments_prefetch
             ).annotate(
                 comment_count_db=Count('comments', distinct=True),
                 votes_count_db=Count('reel_votes', distinct=True),
-                gift_count_db=Sum('gifts_received__quantity'),
             ).order_by('-created_at')
             
             # Skip NotInterested filter to prevent crashes - it's causing performance issues
@@ -1296,53 +1292,12 @@ class ReelViewSet(viewsets.ModelViewSet):
 
             # Create reel with file - Django S3Boto3Storage handles upload automatically
             if is_video:
-                # Generate thumbnail from video
-                import os
-                import tempfile
-                from django.core.files.uploadedfile import SimpleUploadedFile
-                
-                thumbnail_file = None
-                try:
-                    # Save uploaded video to temp file
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-                        for chunk in upload_file.chunks():
-                            temp_video.write(chunk)
-                        temp_video_path = temp_video.name
-                    
-                    # Generate thumbnail using ffmpeg
-                    thumbnail_path = temp_video_path.replace('.mp4', '_thumb.jpg')
-                    import ffmpeg
-                    (
-                        ffmpeg
-                        .input(temp_video_path, ss='00:00:01')  # Capture frame at 1 second
-                        .output(thumbnail_path, vframes=1, format='image2', vcodec='mjpeg')
-                        .overwrite_output()
-                        .run(quiet=True)
-                    )
-                    
-                    # Read thumbnail and create Django file
-                    with open(thumbnail_path, 'rb') as thumb_file:
-                        thumbnail_file = SimpleUploadedFile(
-                            name=f"{upload_file.name.rsplit('.', 1)[0]}_thumb.jpg",
-                            content=thumb_file.read(),
-                            content_type='image/jpeg'
-                        )
-                    
-                    # Clean up temp files
-                    os.unlink(temp_video_path)
-                    if os.path.exists(thumbnail_path):
-                        os.unlink(thumbnail_path)
-                except Exception as e:
-                    print(f"[REEL CREATE] Thumbnail generation failed: {e}")
-                    # Continue without thumbnail if generation fails
-                
                 reel = Reel.objects.create(
                     user=request.user,
                     caption=caption,
                     hashtags=hashtags,
                     overlay_text=overlay_text,
-                    media=upload_file,
-                    image=thumbnail_file
+                    media=upload_file
                 )
             else:
                 reel = Reel.objects.create(

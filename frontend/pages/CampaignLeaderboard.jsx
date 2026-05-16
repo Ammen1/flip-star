@@ -45,7 +45,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
       {/* Header */}
       <div style={{
         background: T.card, borderBottom: `1px solid ${T.border}`,
-        padding: '16px 24px',
+        padding: '16px 24px', position: 'sticky', top: 0, zIndex: 100,
       }}>
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
           <button
@@ -169,7 +169,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         {top3[0].username?.[0]?.toUpperCase()}
                       </div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: T.txt, marginBottom: 2 }}>{top3[0].username}</div>
-                      <div style={{ fontSize: 22, fontWeight: 900, color: '#fff' }}>{top3[0].total_score || top3[0].score}</div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: T.pri }}>{top3[0].total_score || top3[0].score}</div>
                       <div style={{ fontSize: 11, color: T.sub }}>pts · Champion</div>
                     </div>
                   )}

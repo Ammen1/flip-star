@@ -134,7 +134,6 @@ class ReelSerializer(serializers.ModelSerializer):
     media = serializers.SerializerMethodField()
     recent_comments = serializers.SerializerMethodField()
     votes = serializers.SerializerMethodField()  # Calculate dynamically from Vote table
-    gift_count = serializers.SerializerMethodField()  # Count of gifts received
     campaign_id = serializers.PrimaryKeyRelatedField(source='campaign', read_only=True)
     campaign_title = serializers.CharField(source='campaign.title', read_only=True, default=None)
 
@@ -145,7 +144,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'shares', 'gift_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title']
+        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title']
     
     def _build_url(self, field, request):
         """Build absolute URL for a file field, handling both local and Cloudinary storage."""
@@ -225,14 +224,6 @@ class ReelSerializer(serializers.ModelSerializer):
         # Fallback to separate query only when annotation not available
         from .models import Vote
         return Vote.objects.filter(reel=obj).count()
-    
-    def get_gift_count(self, obj):
-        # Use DB annotation if available (set by ReelViewSet.get_queryset)
-        if hasattr(obj, 'gift_count_db'):
-            return obj.gift_count_db or 0
-        # Fallback to summing quantity of gifts_received
-        from django.db.models import Sum
-        return obj.gifts_received.aggregate(total=Sum('quantity'))['total'] or 0
     
     def get_is_saved(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)

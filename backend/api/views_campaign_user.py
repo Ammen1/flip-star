@@ -175,59 +175,12 @@ def create_campaign_post(request):
     if not media_file and not image_file:
         return Response({'error': 'No media file provided'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Generate thumbnail if video is uploaded without image
-    thumbnail_file = image_file
-    if media_file and not image_file:
-        import os
-        import tempfile
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        
-        is_video = (
-            media_file.content_type.startswith('video/')
-            or media_file.name.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.mkv'))
-        )
-        
-        if is_video:
-            try:
-                # Save uploaded video to temp file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-                    for chunk in media_file.chunks():
-                        temp_video.write(chunk)
-                    temp_video_path = temp_video.name
-                
-                # Generate thumbnail using ffmpeg
-                thumbnail_path = temp_video_path.replace('.mp4', '_thumb.jpg')
-                import ffmpeg
-                (
-                    ffmpeg
-                    .input(temp_video_path, ss='00:00:01')  # Capture frame at 1 second
-                    .output(thumbnail_path, vframes=1, format='image2', vcodec='mjpeg')
-                    .overwrite_output()
-                    .run(quiet=True)
-                )
-                
-                # Read thumbnail and create Django file
-                with open(thumbnail_path, 'rb') as thumb_file:
-                    thumbnail_file = SimpleUploadedFile(
-                        name=f"{media_file.name.rsplit('.', 1)[0]}_thumb.jpg",
-                        content=thumb_file.read(),
-                        content_type='image/jpeg'
-                    )
-                
-                # Clean up temp files
-                os.unlink(temp_video_path)
-                if os.path.exists(thumbnail_path):
-                    os.unlink(thumbnail_path)
-            except Exception as e:
-                print(f"[CAMPAIGN_POST] Thumbnail generation failed: {e}")
-                # Continue without thumbnail if generation fails
-    
     reel = Reel.objects.create(
         user=request.user,
         caption=caption,
         hashtags=hashtags,
         media=media_file,
-        image=thumbnail_file,
+        image=image_file,
         campaign=campaign,
         theme=theme,
         is_campaign_post=True

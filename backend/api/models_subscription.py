@@ -117,7 +117,6 @@ class SubscriptionPlan(models.Model):
     end_date = models.DateTimeField(null=True, blank=True)
     next_renewal_date = models.DateTimeField(null=True, blank=True)
     auto_renew = models.BooleanField(default=False)
-    payment_method = models.CharField(max_length=20, choices=[('onevas', 'Onevas Airtime'), ('telebirr', 'Telebirr'), ('coins', 'Coins')], default='onevas')
     
     # Free trial tracking
     free_trial_days = models.IntegerField(default=0, help_text='Number of free trial days granted')

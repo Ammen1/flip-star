@@ -32,7 +32,7 @@ from .views_messaging import (
 )
 from .views_charging import (
     initiate_on_demand_charging, get_charging_statistics, get_charging_transactions,
-    purchase_coins_on_demand, search_charging_transactions, get_charging_analytics,
+    purchase_coins_on_demand,
 )
 from .views_push import push_public_key, push_subscribe, push_unsubscribe
 from .views_support import (
@@ -205,7 +205,7 @@ from .views_legal import (
 from .views_gift import GiftViewSet, PublicGiftViewSet, GiftTransactionViewSet, UserGiftStatsViewSet
 from .views_wallet import (
     wallet_summary, wallet_transactions, withdrawal_info, request_withdrawal,
-    my_withdrawals, cancel_withdrawal, public_wallet_config, reinvest_points,
+    my_withdrawals, cancel_withdrawal, public_wallet_config,
     admin_wallet_config, admin_withdrawals_list, admin_withdrawal_action, admin_adjust_balance,
     admin_user_wallet, admin_user_transactions,
     telebirr_initiate_payment, telebirr_callback,
@@ -434,7 +434,6 @@ urlpatterns = [
     path('wallet/withdraw/', request_withdrawal, name='wallet-withdraw'),
     path('wallet/withdrawals/', my_withdrawals, name='wallet-my-withdrawals'),
     path('wallet/withdrawals/<int:withdrawal_id>/cancel/', cancel_withdrawal, name='wallet-cancel-withdrawal'),
-    path('wallet/reinvest/', reinvest_points, name='wallet-reinvest'),
     path('wallet/telebirr/initiate/', telebirr_initiate_payment, name='telebirr-initiate'),
     path('wallet/telebirr-callback/', telebirr_callback, name='telebirr-callback'),
     # ============ WALLET (Admin) ============
@@ -485,8 +484,6 @@ urlpatterns = [
     path('charging/on-demand/', initiate_on_demand_charging, name='on-demand-charging'),
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
     path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
-    path('charging/on-demand/search/', search_charging_transactions, name='charging-search'),
-    path('charging/on-demand/analytics/', get_charging_analytics, name='charging-analytics'),
     path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),

@@ -44,11 +44,8 @@ class WalletConfig(models.Model):
     cost_comment = models.PositiveIntegerField(default=0)
     cost_join_campaign = models.PositiveIntegerField(default=50)
     cost_extra_campaign_entry = models.PositiveIntegerField(default=100)
-    cost_boost_1hr = models.PositiveIntegerField(default=100, help_text='Cost to boost post for 1 hour')
     cost_boost_2hr = models.PositiveIntegerField(default=200)
     cost_boost_24hr = models.PositiveIntegerField(default=800)
-    cost_trending_1hr = models.PositiveIntegerField(default=150, help_text='Cost to make post trending for 1 hour')
-    cost_trending_24hr = models.PositiveIntegerField(default=1200, help_text='Cost to make post trending for 24 hours')
 
     # ============ MINIMUM BALANCE THRESHOLDS ============
     min_balance_to_post = models.PositiveIntegerField(default=0)
@@ -66,8 +63,8 @@ class WalletConfig(models.Model):
     # Points are separate from coins and can only be withdrawn/transferred as birr
     coins_to_points_conversion = models.PositiveIntegerField(default=1, help_text='How many coins = 1 point (gift conversion)')
     points_per_birr = models.PositiveIntegerField(default=10, help_text='How many points = 1 ETB (withdrawal)')
-    withdrawal_min_points = models.PositiveIntegerField(default=1000, help_text='Minimum points required to withdraw')
-    withdrawal_max_points_per_request = models.PositiveIntegerField(default=50000, help_text='Maximum points that can be withdrawn per request')
+    withdrawal_min_points = models.PositiveIntegerField(default=100, help_text='Minimum points required to withdraw')
+    withdrawal_max_points_per_request = models.PositiveIntegerField(default=10000, help_text='Maximum points that can be withdrawn per request')
 
     # ============ CAMPAIGN WINNER POINT REWARDS ============
     daily_winner_points = models.PositiveIntegerField(default=500, help_text='Points awarded to daily campaign winners')
@@ -81,12 +78,6 @@ class WalletConfig(models.Model):
     purchased_coins_giftable = models.BooleanField(default=True)
     earned_coins_withdrawable = models.BooleanField(default=True, help_text='Can earned coins be withdrawn to Birr?')
     purchased_coins_withdrawable = models.BooleanField(default=False, help_text='Should not allow purchased->Birr (money laundering)')
-    
-    # ============ GIFT RESTRICTIONS (Point Transfer Rules) ============
-    gift_min_points_per_transaction = models.PositiveIntegerField(default=10, help_text='Minimum points per gift transaction')
-    gift_max_points_per_transaction = models.PositiveIntegerField(default=5000, help_text='Maximum points per single gift')
-    gift_max_points_to_recipient_per_day = models.PositiveIntegerField(default=5000, help_text='Max points to one recipient per day (Voting Cap)')
-    gift_max_total_points_sent_per_day = models.PositiveIntegerField(default=10000, help_text='Max total points sent per user per day')
 
     # ============ EXPIRY ============
     earned_coins_expire_days = models.PositiveIntegerField(default=0, help_text='0 = never expire')

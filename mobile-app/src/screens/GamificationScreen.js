@@ -150,7 +150,7 @@ export default function GamificationScreen({ navigation }) {
             </Animated.View>
             <View style={{ marginLeft: 16 }}>
               <Text style={[styles.coinAmount, { color: colors.text }]}>{coins.toLocaleString()}</Text>
-              <Text style={[styles.coinLabel, { color: colors.textSecondary }]}>Coins Balance</Text>
+              <Text style={[styles.coinLabel, { color: colors.textSecondary }]}>Streak Balance</Text>
             </View>
           </View>
           <View style={styles.heroStats}>

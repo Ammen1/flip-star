@@ -1544,7 +1544,6 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                   }}
                 >
                   <Gift size={baseFontSize} color="#8fc441" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
-                  <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{post.gift_count || 0}</span>
                 </button>
               )}
             </div>
@@ -1720,10 +1719,6 @@ export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, o
 
   // Prevent flash on initial load, but skip if we already have cached data
   useEffect(() => {
-    // Clear cache to ensure fresh data with gift_count field is fetched
-    try {
-      localStorage.removeItem(CACHE_KEY);
-    } catch {}
     if (!mounted) {
       const timer = setTimeout(() => setMounted(true), 50);
       return () => clearTimeout(timer);

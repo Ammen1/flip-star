@@ -10,6 +10,8 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useBlock } from '../contexts/BlockContext';
 import api from '../api';
 import config from '../config';
 import SoundManager from '../utils/SoundUtils';
@@ -18,6 +20,7 @@ const MEDIA_BASE = config.API_BASE_URL.replace('/api', '');
 
 const { width, height } = Dimensions.get('window');
 const GOLD = '#8fc441';
+const BRAND_GREEN = '#8fc441';
 const DARK_GOLD = '#6ba835';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
@@ -119,7 +122,9 @@ const ReelItem = React.memo(function ReelItem({
   user,
   index,
   videos,
-  setVideos
+  setVideos,
+  fromDeepLink,
+  localShareCounts
 }) {
   const [showPauseIcon, setShowPauseIcon] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -286,18 +291,57 @@ const ReelItem = React.memo(function ReelItem({
   };
 
   
+  const handleComment = () => {
+    setShowComments(true);
+  };
+
+  const handleReport = () => {
+    setShowReportModal(true);
+  };
+
   const handleShareVideo = async () => {
-    const url = `https://flipstar.app/post/${item.id}`;
+    // Use both web URL and app URL for better compatibility
+    const webUrl = `https://uat.flipstar.et/post/${item.id}`;
+    const appUrl = `flipstar://post/${item.id}`;
     const title = item.caption ? item.caption.slice(0, 80) : 'Check out this reel on FlipStar';
     
     try {
       await Share.share({
-        message: `${title} ${url}`,
+        message: `${title}\n\n${webUrl}\n\nOr open in app: ${appUrl}`,
         title: 'FlipStar Reel',
+        url: webUrl,
       });
       
       // Increment share count
-      try { await api.request(`/reels/${item.id}/share/`, { method: 'POST' }); } catch {}
+      try {
+        console.log('Before share - item shares:', item.shares);
+        console.log('Before share - localShareCounts:', localShareCounts[item.id]);
+        
+        await api.request(`/reels/${item.id}/share/`, { method: 'POST' });
+        
+        // Update persistent local share count
+        setLocalShareCounts(prev => {
+          const updated = {
+            ...prev,
+            [item.id]: (prev[item.id] || 0) + 1
+          };
+          console.log('Updated localShareCounts:', updated[item.id]);
+          return updated;
+        });
+        
+        // Update local share count
+        setVideos(prev => {
+          const updated = prev.map(v => 
+            v.id === item.id ? { ...v, shares: (v.shares || 0) + 1 } : v
+          );
+          console.log('Updated videos share count for item', item.id);
+          return updated;
+        });
+        
+        console.log('Share increment successful');
+      } catch (error) {
+        console.log('Share increment failed:', error);
+      }
     } catch (error) {
       console.log('Share error:', error);
     }
@@ -566,20 +610,32 @@ const ReelItem = React.memo(function ReelItem({
         </View>
 
         {/* Sound Toggle Button */}
-        <TouchableOpacity style={styles.actionItem} onPress={() => {
-          if (player) {
-            const newMuted = !isMuted;
-            setIsMuted(newMuted);
-            player.muted = newMuted;
-          }
-        }}>
+        <TouchableOpacity 
+          style={[
+            styles.actionItem,
+            fromDeepLink && styles.deepLinkSoundButton // Enhanced style for deep link
+          ]} 
+          onPress={() => {
+            if (player) {
+              const newMuted = !isMuted;
+              setIsMuted(newMuted);
+              player.muted = newMuted;
+              console.log('Sound toggled:', newMuted ? 'muted' : 'unmuted');
+            }
+          }}
+        >
           <View style={styles.actionIconRow}>
             <Ionicons 
               name={isMuted ? 'volume-mute' : 'volume-high'}
-              size={28}
-              color={DARK_GOLD}
+              size={fromDeepLink ? 32 : 28} // Larger icon for deep link
+              color={fromDeepLink ? BRAND_GREEN : DARK_GOLD} // Use brand green for deep link
               style={styles.iconShadow}
             />
+            {fromDeepLink && (
+              <Text style={styles.soundButtonText}>
+                {isMuted ? 'Sound Off' : 'Sound On'}
+              </Text>
+            )}
           </View>
         </TouchableOpacity>
 
@@ -616,7 +672,15 @@ const ReelItem = React.memo(function ReelItem({
         <TouchableOpacity style={styles.actionItem} onPress={handleShareVideo}>
           <View style={styles.actionIconRow}>
             <Ionicons name="share-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
-            <Text style={styles.actionLabelInline}>{(item.shares || 0) + 1}</Text>
+            <Text style={styles.actionLabelInline}>
+          {(() => {
+            const shares = item.shares || 0;
+            const localShares = localShareCounts[item.id] || 0;
+            const total = shares + localShares;
+            console.log('Share display - item:', item.id, 'shares:', shares, 'localShares:', localShares, 'total:', total);
+            return total;
+          })()}
+        </Text>
           </View>
         </TouchableOpacity>
 
@@ -693,6 +757,9 @@ const ReelItem = React.memo(function ReelItem({
           reel={item}
           user={user}
           onClose={() => setShowComments(false)}
+          onOpenGiftModal={openGiftModal}
+          onShare={handleShareVideo}
+          onLike={handleLike}
         />
       </Modal>
 
@@ -774,7 +841,7 @@ const ReelItem = React.memo(function ReelItem({
 });
 
 // Comments Modal Component
-const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose }) {
+const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose, onOpenGiftModal, onShare, onLike }) {
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [postingComment, setPostingComment] = useState(false);
@@ -824,7 +891,31 @@ const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose })
       <View style={styles.commentsSheet}>
         <View style={styles.sheetHandle} />
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Comments</Text>
+          <View style={styles.sheetHeaderLeft}>
+            <Text style={styles.sheetTitle}>Comments</Text>
+            <View style={styles.sheetActions}>
+              <TouchableOpacity 
+                onPress={() => onLike && onLike(reel)} 
+                style={styles.sheetActionButton}
+              >
+                <Ionicons 
+                  name={reel.is_liked ? "heart" : "heart-outline"} 
+                  size={20} 
+                  color={reel.is_liked ? "#ff6b6b" : "#fff"} 
+                />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => onShare && onShare(reel)} 
+                style={styles.sheetActionButton}
+              >
+                <Ionicons 
+                  name="share-outline" 
+                  size={20} 
+                  color="#fff" 
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
           <TouchableOpacity onPress={onClose}>
             <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
@@ -881,7 +972,7 @@ const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose })
             multiline
           />
           <TouchableOpacity 
-            onPress={() => onOpenGiftModal(item.user)} 
+            onPress={() => onOpenGiftModal && onOpenGiftModal(reel.user)} 
             style={{ marginRight: 8 }}
           >
             <Ionicons 
@@ -912,16 +1003,17 @@ const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose })
 
 // Report Modal Component
 function ReportModal({ reel, onClose }) {
+  const { colors } = useTheme();
   const [selectedReason, setSelectedReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const reportReasons = [
-    { id: 'spam', label: 'Spam', icon: 'alert-circle-outline' },
-    { id: 'inappropriate', label: 'Inappropriate Content', icon: 'warning-outline' },
-    { id: 'harassment', label: 'Harassment', icon: 'person-outline' },
-    { id: 'copyright', label: 'Copyright Violation', icon: 'lock-closed-outline' },
-    { id: 'violence', label: 'Violence', icon: 'flash-outline' },
-    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline' },
+    { id: 'spam', label: 'Spam', icon: 'alert-circle-outline', description: 'Unwanted or repetitive content' },
+    { id: 'inappropriate', label: 'Inappropriate Content', icon: 'warning-outline', description: 'Offensive or harmful content' },
+    { id: 'harassment', label: 'Harassment', icon: 'person-outline', description: 'Bullying or targeting individuals' },
+    { id: 'copyright', label: 'Copyright Violation', icon: 'lock-closed-outline', description: 'Using someone else\'s content' },
+    { id: 'violence', label: 'Violence', icon: 'flash-outline', description: 'Violent or dangerous content' },
+    { id: 'other', label: 'Other', icon: 'ellipsis-horizontal-outline', description: 'Other issues not listed' },
   ];
 
   const submitReport = useCallback(async () => {
@@ -943,59 +1035,91 @@ function ReportModal({ reel, onClose }) {
       Alert.alert('Success', 'Report submitted successfully');
       onClose();
     } catch (error) {
+      console.log('Report error:', error);
       Alert.alert('Error', 'Failed to submit report');
     } finally {
       setSubmitting(false);
     }
-  }, [selectedReason, reel.id, onClose]);
+  }, [selectedReason, reel, onClose]);
 
   return (
     <View style={styles.modalOverlay}>
       <View style={styles.reportSheet}>
-        <View style={styles.sheetHandle} />
-        <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Report Content</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="#fff" />
+        {/* Header */}
+        <View style={styles.reportHeader}>
+          <View style={styles.reportHeaderContent}>
+            <View style={styles.reportIconContainer}>
+              <Ionicons name="flag-outline" size={24} color={GOLD} />
+            </View>
+            <View>
+              <Text style={styles.reportTitle}>Report Content</Text>
+              <Text style={styles.reportSubtitle}>Help keep our community safe</Text>
+            </View>
+          </View>
+          <TouchableOpacity 
+            style={styles.reportCloseButton}
+            onPress={onClose}
+          >
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
         
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-          <Text style={styles.reportDescription}>
-            Why are you reporting this content?
-          </Text>
+        {/* Content */}
+        <ScrollView style={styles.reportContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.reportSection}>
+            <Text style={styles.reportSectionTitle}>
+              Why are you reporting this content?
+            </Text>
+            <Text style={styles.reportSectionDescription}>
+              Select the reason that best describes your concern
+            </Text>
+          </View>
           
-          {reportReasons.map(reason => (
-            <TouchableOpacity
-              key={reason.id}
-              style={[
-                styles.reportReasonItem,
-                selectedReason === reason.id && styles.reportReasonItemSelected
-              ]}
-              onPress={() => setSelectedReason(reason.id)}
-            >
-              <Ionicons 
-                name={reason.icon} 
-                size={20} 
-                color={selectedReason === reason.id ? GOLD : '#666'} 
-              />
-              <Text style={[
-                styles.reportReasonText,
-                selectedReason === reason.id && styles.reportReasonTextSelected
-              ]}>
-                {reason.label}
-              </Text>
-              {selectedReason === reason.id && (
-                <Ionicons name="checkmark-circle" size={20} color={GOLD} />
-              )}
-            </TouchableOpacity>
-          ))}
+          <View style={styles.reportReasonsContainer}>
+            {reportReasons.map(reason => (
+              <TouchableOpacity
+                key={reason.id}
+                style={[
+                  styles.reportReasonItem,
+                  selectedReason === reason.id && styles.reportReasonItemSelected
+                ]}
+                onPress={() => setSelectedReason(reason.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.reportReasonIcon}>
+                  <Ionicons 
+                    name={reason.icon} 
+                    size={22} 
+                    color={selectedReason === reason.id ? GOLD : '#666'} 
+                  />
+                </View>
+                <View style={styles.reportReasonContent}>
+                  <Text style={[
+                    styles.reportReasonText,
+                    selectedReason === reason.id && styles.reportReasonTextSelected
+                  ]}>
+                    {reason.label}
+                  </Text>
+                  <Text style={styles.reportReasonDescription}>
+                    {reason.description}
+                  </Text>
+                </View>
+                <View style={styles.reportReasonCheck}>
+                  {selectedReason === reason.id && (
+                    <Ionicons name="checkmark-circle" size={22} color={GOLD} />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </ScrollView>
         
+        {/* Actions */}
         <View style={styles.reportActions}>
           <TouchableOpacity 
-            style={[styles.reportCancelBtn]} 
+            style={styles.reportCancelBtn} 
             onPress={onClose}
+            activeOpacity={0.8}
           >
             <Text style={styles.reportCancelText}>Cancel</Text>
           </TouchableOpacity>
@@ -1006,6 +1130,7 @@ function ReportModal({ reel, onClose }) {
             ]}
             onPress={submitReport}
             disabled={!selectedReason || submitting}
+            activeOpacity={0.8}
           >
             {submitting ? (
               <ActivityIndicator size="small" color="#000" />
@@ -1021,11 +1146,13 @@ function ReportModal({ reel, onClose }) {
 export default function ReelsScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const auth = useAuth();
+  const { filterBlockedUsers } = useBlock();
   const user = auth?.user ?? null;
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [localShareCounts, setLocalShareCounts] = useState({}); // Track local share increments
   const [loadingMore, setLoadingMore] = useState(false);
   const [activeTab, setActiveTab] = useState('for_you');
   const [screenMenuVisible, setScreenMenuVisible] = useState(false);
@@ -1048,6 +1175,7 @@ export default function ReelsScreen({ navigation, route }) {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const LIMIT = 10;
   const initialVideoId = route?.params?.initialVideoId;
+  const fromDeepLink = route?.params?.fromDeepLink;
   const flatListRef = useRef(null);
 
   // Follow/Unfollow handler
@@ -1271,11 +1399,26 @@ export default function ReelsScreen({ navigation, route }) {
       if (initialVideoId) {
         console.log('Fetching specific video:', initialVideoId);
         try {
-          const specificVideo = await api.request(`/reels/${initialVideoId}/`);
+          // Force fresh data fetch for deep link
+          const specificVideo = await api.request(`/reels/${initialVideoId}/`, { 
+            headers: { 'Cache-Control': 'no-cache' },
+            cache: 'no-cache'
+          });
           if (specificVideo && specificVideo.media) {
             console.log('Specific video loaded:', specificVideo.id);
-            // Set the specific video as the first item
-            setReels([specificVideo]);
+            console.log('Video stats:', {
+              likes: specificVideo.likes_count,
+              comments: specificVideo.comments_count,
+              shares: specificVideo.shares_count
+            });
+            // Set the specific video as the first item with preserved share counts
+            setReels(prev => {
+              const updatedVideo = {
+                ...specificVideo,
+                shares: (specificVideo.shares || 0) + (localShareCounts[specificVideo.id] || 0)
+              };
+              return [updatedVideo];
+            });
             setLoading(false);
             
             // Then load the rest of the feed in the background
@@ -1287,8 +1430,18 @@ export default function ReelsScreen({ navigation, route }) {
             const results = Array.isArray(data) ? data : (data.results || []);
             const filteredResults = results.filter(reel => reel && reel.media && String(reel.id) !== String(initialVideoId));
             
-            // Add the rest of the videos after the specific one
-            setReels([specificVideo, ...filteredResults]);
+            // Add the rest of the videos after the specific one with preserved share counts
+            setReels(prev => {
+              const updatedSpecificVideo = {
+                ...specificVideo,
+                shares: (specificVideo.shares || 0) + (localShareCounts[specificVideo.id] || 0)
+              };
+              const updatedFilteredResults = filteredResults.map(reel => ({
+                ...reel,
+                shares: (reel.shares || 0) + (localShareCounts[reel.id] || 0)
+              }));
+              return [updatedSpecificVideo, ...updatedFilteredResults];
+            });
             setHasMore(filteredResults.length === LIMIT);
             return;
           }
@@ -1313,7 +1466,12 @@ export default function ReelsScreen({ navigation, route }) {
         // Only show video content in reels
         const filteredResults = results.filter(reel => reel && reel.media);
         const shuffled = shuffleArray(filteredResults);
-        setReels(shuffled);
+        // Preserve local share counts
+        const updatedShuffled = shuffled.map(reel => ({
+          ...reel,
+          shares: (reel.shares || 0) + (localShareCounts[reel.id] || 0)
+        }));
+        setReels(updatedShuffled);
         setLoading(false);
       }
       
@@ -1324,7 +1482,14 @@ export default function ReelsScreen({ navigation, route }) {
         // Only show video content in reels
         const filteredResults = results.filter(reel => reel && reel.media);
         const shuffledResults = shuffleArray(filteredResults);
-        setReels(shuffledResults);
+        // Preserve local share counts and filter blocked users
+        const updatedShuffledResults = shuffledResults.map(reel => ({
+          ...reel,
+          shares: (reel.shares || 0) + (localShareCounts[reel.id] || 0)
+        }));
+        // Filter out reels from blocked users
+        const filteredShuffledResults = filterBlockedUsers(updatedShuffledResults);
+        setReels(filteredShuffledResults);
         setHasMore(filteredResults.length === LIMIT);
         
         // Persist fresh data so next load is instant
@@ -1340,6 +1505,12 @@ export default function ReelsScreen({ navigation, route }) {
     
     loadFeed();
   }, [activeTab, initialVideoId]);
+
+  // Auto-refresh content when block state changes
+  useEffect(() => {
+    // Refresh the current tab to reflect block/unblock changes
+    fetchReels(0, true);
+  }, [filterBlockedUsers]);
 
   const fetchReels = async (offset = 0, reset = false) => {
     try {
@@ -1357,7 +1528,14 @@ export default function ReelsScreen({ navigation, route }) {
       
       // Always shuffle for normal feed loading
       const shuffledResults = shuffleArray(filteredResults);
-      setReels(prev => reset ? shuffledResults : [...prev, ...shuffledResults]);
+      // Preserve local share counts and filter blocked users
+      const updatedShuffledResults = shuffledResults.map(reel => ({
+        ...reel,
+        shares: (reel.shares || 0) + (localShareCounts[reel.id] || 0)
+      }));
+      // Filter out reels from blocked users
+      const filteredShuffledResults = filterBlockedUsers(updatedShuffledResults);
+      setReels(prev => reset ? filteredShuffledResults : [...prev, ...filteredShuffledResults]);
       
       setHasMore(filteredResults.length === LIMIT);
     } catch (e) { 
@@ -1485,8 +1663,15 @@ export default function ReelsScreen({ navigation, route }) {
       onOpenGiftModal={openGiftModal}
       onFollow={handleFollow}
       followStates={followStates}
+      fromDeepLink={fromDeepLink}
+      localShareCounts={localShareCounts}
+      onLike={handleLike}
+      onComment={handleComment}
+      onSave={handleSave}
+      onShare={handleShareVideo}
+      onReport={handleReport}
     />
-  ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates]);
+  ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates, fromDeepLink, localShareCounts, handleLike, handleComment, handleSave, handleShareVideo, handleReport]);
 
   if (loading) {
     return (
@@ -2155,50 +2340,138 @@ const styles = StyleSheet.create({
   // Report Modal
   reportSheet: {
     backgroundColor: CARD,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '70%',
-    paddingBottom: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    height: '75%',
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 12,
   },
-  reportDescription: {
+  reportHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  reportHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  reportIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(143, 196, 65, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  reportTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  reportSubtitle: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  reportCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reportContent: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  reportSection: {
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  reportSectionTitle: {
+    color: '#fff',
+    fontSize: 18,
     fontWeight: '600',
-    padding: 16,
-    textAlign: 'center',
+    marginBottom: 4,
+  },
+  reportSectionDescription: {
+    color: '#666',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  reportReasonsContainer: {
+    paddingTop: 8,
   },
   reportReasonItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
-    gap: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderWidth: 1,
+    borderColor: BORDER,
   },
   reportReasonItemSelected: {
-    backgroundColor: 'rgba(200,181,106,0.1)',
+    backgroundColor: 'rgba(143, 196, 65, 0.15)',
+    borderColor: GOLD,
+  },
+  reportReasonIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  reportReasonContent: {
+    flex: 1,
   },
   reportReasonText: {
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
-    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
   },
   reportReasonTextSelected: {
-    color: LIGHT_GOLD,
-    fontWeight: '600',
+    color: GOLD,
+  },
+  reportReasonDescription: {
+    color: '#666',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reportReasonCheck: {
+    marginLeft: 12,
   },
   reportActions: {
     flexDirection: 'row',
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 8,
     gap: 12,
   },
   reportCancelBtn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: BORDER,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
     alignItems: 'center',
   },
   reportCancelText: {
@@ -2208,13 +2481,20 @@ const styles = StyleSheet.create({
   },
   reportSubmitBtn: {
     flex: 1,
-    padding: 14,
-    borderRadius: 8,
+    padding: 16,
+    borderRadius: 12,
     backgroundColor: GOLD,
     alignItems: 'center',
+    shadowColor: GOLD,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   reportSubmitBtnDisabled: {
     backgroundColor: '#444',
+    shadowOpacity: 0,
+    elevation: 0,
   },
   reportSubmitText: {
     color: '#000',
@@ -2302,5 +2582,37 @@ const styles = StyleSheet.create({
     color: '#000',
     fontSize: 16,
     fontWeight: '700',
+  },
+  deepLinkSoundButton: {
+    backgroundColor: 'rgba(143, 196, 65, 0.2)',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 2,
+    borderColor: BRAND_GREEN,
+  },
+  soundButtonText: {
+    color: BRAND_GREEN,
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  sheetHeaderLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  sheetActionButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
 });
