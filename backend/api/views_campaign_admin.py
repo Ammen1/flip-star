@@ -424,6 +424,7 @@ def get_leaderboard(request, campaign_id):
         entries_data.append({
             'user_id': user.id,
             'username': user.username,
+            'profile_photo': user.profile.profile_photo if hasattr(user, 'profile') else None,
             'total_score': float(calculated_score),
             'post_count': len(reel_ids),
             'likes_count': total_likes,
