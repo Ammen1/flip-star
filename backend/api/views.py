@@ -1194,7 +1194,6 @@ class ReelViewSet(viewsets.ModelViewSet):
             ).annotate(
                 comment_count_db=Count('comments', distinct=True),
                 votes_count_db=Count('reel_votes', distinct=True),
-                gift_count_db=Sum('gifts_received__quantity'),
             ).order_by('-created_at')
             
             # Skip NotInterested filter to prevent crashes - it's causing performance issues

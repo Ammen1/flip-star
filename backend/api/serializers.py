@@ -227,12 +227,11 @@ class ReelSerializer(serializers.ModelSerializer):
         return Vote.objects.filter(reel=obj).count()
     
     def get_gift_count(self, obj):
-        # Use DB annotation if available (set by ReelViewSet.get_queryset)
-        if hasattr(obj, 'gift_count_db'):
-            return obj.gift_count_db or 0
-        # Fallback to summing quantity of gifts_received
+        # Query GiftTransaction directly to count gifts for this reel
+        from .models_gift import GiftTransaction
         from django.db.models import Sum
-        return obj.gifts_received.aggregate(total=Sum('quantity'))['total'] or 0
+        result = GiftTransaction.objects.filter(reel=obj).aggregate(total=Sum('quantity'))['total']
+        return result or 0
     
     def get_is_saved(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
