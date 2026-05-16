@@ -224,13 +224,31 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                       {/* Avatar */}
                       <div style={{
                         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                        background: medalColor
-                          ? `linear-gradient(135deg, ${medalColor}, ${medalColor}bb)`
-                          : `linear-gradient(135deg, ${T.pri}60, #8fc44160)`,
+                        background: entry.profile_photo
+                          ? 'none'
+                          : medalColor
+                            ? `linear-gradient(135deg, ${medalColor}, ${medalColor}bb)`
+                            : `linear-gradient(135deg, ${T.pri}60, #8fc44160)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontSize: 15, fontWeight: 800,
+                        overflow: 'hidden',
                       }}>
-                        {entry.username?.[0]?.toUpperCase()}
+                        {entry.profile_photo ? (
+                          <img
+                            src={entry.profile_photo.startsWith('http') ? entry.profile_photo : `${config.API_BASE_URL.replace('/api', '')}${entry.profile_photo}`}
+                            alt={entry.username}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.style.background = medalColor
+                                ? `linear-gradient(135deg, ${medalColor}, ${medalColor}bb)`
+                                : `linear-gradient(135deg, ${T.pri}60, #8fc44160)`;
+                              e.target.parentElement.innerHTML = entry.username?.[0]?.toUpperCase();
+                            }}
+                          />
+                        ) : (
+                          entry.username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       {/* Name */}
                       <div style={{ flex: 1, minWidth: 0 }}>
