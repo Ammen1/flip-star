@@ -229,9 +229,10 @@ class ReelSerializer(serializers.ModelSerializer):
     def get_gift_count(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
         if hasattr(obj, 'gift_count_db'):
-            return obj.gift_count_db
-        # Fallback to counting gifts_received
-        return obj.gifts_received.count()
+            return obj.gift_count_db or 0
+        # Fallback to summing quantity of gifts_received
+        from django.db.models import Sum
+        return obj.gifts_received.aggregate(total=Sum('quantity'))['total'] or 0
     
     def get_is_saved(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
