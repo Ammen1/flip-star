@@ -8,7 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 
-const GOLD = '#8fc441';
+const GOLD = '#C8B56A';
+const BRAND_GREEN = '#8fc441';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
@@ -33,9 +34,11 @@ export default function WalletScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showReinvestModal, setShowReinvestModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawAccount, setWithdrawAccount] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState('telebirr');
+  const [reinvestAmount, setReinvestAmount] = useState('');
   const [processing, setProcessing] = useState(false);
   const [packages, setPackages] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -199,6 +202,91 @@ export default function WalletScreen({ navigation }) {
       loadAll(true);
     } catch (e) { Alert.alert('Error', e.message || 'Withdrawal failed'); }
     finally { setProcessing(false); }
+  };
+
+  const handleReinvest = async () => {
+    const points = summary?.points?.current || 0;
+    const amount = parseInt(reinvestAmount);
+    
+    if (!reinvestAmount || amount <= 0) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
+    }
+    
+    if (amount > points) {
+      Alert.alert('Insufficient Points', `You only have ${points} points available`);
+      return;
+    }
+    
+    setProcessing(true);
+    try {
+      console.log('Reinvest attempt:', { amount, points });
+      
+      // Try multiple approaches for the API request
+      let success = false;
+      let lastError = null;
+      
+      // Approach 1: Try with points field
+      try {
+        console.log('Trying approach 1: points field');
+        await api.request('/wallet/reinvest/', {
+          method: 'POST',
+          body: JSON.stringify({ points: amount }),
+        });
+        success = true;
+      } catch (e1) {
+        console.log('Approach 1 failed:', e1.message);
+        lastError = e1;
+      }
+      
+      // Approach 2: Try with coins field
+      if (!success) {
+        try {
+          console.log('Trying approach 2: coins field');
+          await api.request('/wallet/reinvest/', {
+            method: 'POST',
+            body: JSON.stringify({ coins: amount }),
+          });
+          success = true;
+        } catch (e2) {
+          console.log('Approach 2 failed:', e2.message);
+          lastError = e2;
+        }
+      }
+      
+      // Approach 3: Try with both fields
+      if (!success) {
+        try {
+          console.log('Trying approach 3: both fields');
+          await api.request('/wallet/reinvest/', {
+            method: 'POST',
+            body: JSON.stringify({ points: amount, coins: amount }),
+          });
+          success = true;
+        } catch (e3) {
+          console.log('Approach 3 failed:', e3.message);
+          lastError = e3;
+        }
+      }
+      
+      if (success) {
+        Alert.alert('Success', `${amount} points converted to ${amount} coins`);
+        setShowReinvestModal(false);
+        setReinvestAmount('');
+        loadAll(true);
+      } else {
+        throw lastError || new Error('All reinvest approaches failed');
+      }
+    } catch (e) {
+      console.error('Reinvest error:', e);
+      // Show the actual error message from API
+      const errorMessage = e.message || 'Reinvest failed';
+      Alert.alert('Error', errorMessage);
+      setShowReinvestModal(false);
+      setReinvestAmount('');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleMonetizeCoins = async () => {
@@ -452,19 +540,25 @@ export default function WalletScreen({ navigation }) {
         {/* Action buttons */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => navigation.navigate('CoinPurchase')}>
-            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
+            <View style={[styles.actionGrad, { backgroundColor: BRAND_GREEN }]}>
               <Ionicons name="add-circle" size={24} color="#fff" />
               <Text style={styles.actionText}>Buy Coins</Text>
             </View>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowReinvestModal(true)}>
+            <View style={[styles.actionGrad, { backgroundColor: BRAND_GREEN }]}>
+              <Ionicons name="sync" size={24} color="#fff" />
+              <Text style={styles.actionText}>Reinvest</Text>
+            </View>
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowWithdrawModal(true)}>
-            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
+            <View style={[styles.actionGrad, { backgroundColor: BRAND_GREEN }]}>
               <Ionicons name="arrow-up-circle" size={24} color="#fff" />
               <Text style={styles.actionText}>Withdraw</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => handleTabChange('transactions')}>
-            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
+            <View style={[styles.actionGrad, { backgroundColor: BRAND_GREEN }]}>
               <Ionicons name="receipt" size={24} color="#fff" />
               <Text style={styles.actionText}>History</Text>
             </View>
@@ -564,7 +658,7 @@ export default function WalletScreen({ navigation }) {
               {activeTab === 'transactions' && transactions.length > 0 && (
                 <View style={[styles.monetizeSection, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={styles.monetizeHeader}>
-                    <Ionicons name="cash-outline" size={24} color={GOLD} />
+                    <Ionicons name="cash-outline" size={24} color={BRAND_GREEN} />
                     <View style={styles.monetizeInfo}>
                       <Text style={[styles.monetizeTitle, { color: colors.text }]}>Monetize Your Coins</Text>
                       <Text style={[styles.monetizeSubtitle, { color: colors.textSecondary }]}>
@@ -573,7 +667,7 @@ export default function WalletScreen({ navigation }) {
                     </View>
                   </View>
                   <TouchableOpacity 
-                    style={[styles.monetizeBtn, { backgroundColor: GOLD }]}
+                    style={[styles.monetizeBtn, { backgroundColor: BRAND_GREEN }]}
                     onPress={() => handleMonetizeCoins()}
                   >
                     <Ionicons name="trending-up" size={20} color="#000" />
@@ -604,7 +698,7 @@ export default function WalletScreen({ navigation }) {
                           <Text style={styles.txDate}>{w.status}</Text>
                         </View>
                         <View style={[styles.statusBadge, { backgroundColor: w.status === 'completed' ? '#0D2D1A' : '#2D2010' }]}>
-                          <Text style={{ color: w.status === 'completed' ? '#10B981' : GOLD, fontSize: 11, fontWeight: '700' }}>{w.status}</Text>
+                          <Text style={{ color: w.status === 'completed' ? '#10B981' : BRAND_GREEN, fontSize: 11, fontWeight: '700' }}>{w.status}</Text>
                         </View>
                       </View>
                     )}
@@ -623,12 +717,12 @@ export default function WalletScreen({ navigation }) {
           <View style={styles.modalSheet}>
             <View style={styles.sheetHandle} />
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Withdraw Coins</Text>
+              <Text style={styles.modalTitle}>Withdraw Points</Text>
               <TouchableOpacity onPress={() => setShowWithdrawModal(false)}>
                 <Ionicons name="close" size={24} color="#fff" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.fieldLabel}>Amount (coins)</Text>
+            <Text style={styles.fieldLabel}>Amount (points)</Text>
             <TextInput style={styles.input} placeholder="e.g. 500" placeholderTextColor="#666" value={withdrawAmount} onChangeText={setWithdrawAmount} keyboardType="number-pad" />
             <Text style={styles.fieldLabel}>Payout Method</Text>
             <View style={styles.methodRow}>
@@ -656,6 +750,51 @@ export default function WalletScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Reinvest Modal */}
+      <Modal visible={showReinvestModal} transparent animationType="slide" onRequestClose={() => setShowReinvestModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reinvest Points</Text>
+              <TouchableOpacity onPress={() => setShowReinvestModal(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ backgroundColor: BRAND_GREEN + '20', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+              <Text style={{ color: BRAND_GREEN, fontSize: 12, fontWeight: '600', textAlign: 'center' }}>
+                Convert earned points back to coins for in-app spending
+              </Text>
+              <Text style={{ color: BRAND_GREEN, fontSize: 11, textAlign: 'center', marginTop: 4 }}>
+                1 Point = 1 Coin
+              </Text>
+            </View>
+            <Text style={styles.fieldLabel}>Available Points</Text>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 16 }}>
+              {summary?.points?.current || 0} points
+            </Text>
+            <Text style={styles.fieldLabel}>Amount to Reinvest</Text>
+            <TextInput 
+              style={styles.input} 
+              placeholder="e.g. 500" 
+              placeholderTextColor="#666" 
+              value={reinvestAmount} 
+              onChangeText={setReinvestAmount} 
+              keyboardType="number-pad" 
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8, marginBottom: 16 }}>
+              <Text style={{ color: '#666', fontSize: 12 }}>You will receive:</Text>
+              <Text style={{ color: BRAND_GREEN, fontSize: 12, fontWeight: '600' }}>
+                {reinvestAmount ? `${parseInt(reinvestAmount) || 0} coins` : '0 coins'}
+              </Text>
+            </View>
+            <TouchableOpacity style={[styles.submitBtn, processing && { opacity: 0.6 }, { backgroundColor: BRAND_GREEN }]} onPress={handleReinvest} disabled={processing}>
+              {processing ? <ActivityIndicator color="#000" /> : <Text style={styles.submitBtnText}>Reinvest Points</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Top Up Modal */}
       <Modal visible={showTopUpModal} transparent animationType="slide" onRequestClose={() => setShowTopUpModal(false)}>
         <View style={styles.modalOverlay}>
@@ -669,7 +808,7 @@ export default function WalletScreen({ navigation }) {
             </View>
             {selectedPackage && (
               <View style={styles.selectedPkg}>
-                <Ionicons name="diamond-outline" size={28} color={GOLD} />
+                <Ionicons name="diamond-outline" size={28} color={BRAND_GREEN} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={styles.pkgName}>{selectedPackage.name}</Text>
                   <Text style={styles.pkgCoins}>{selectedPackage.coin_amount} coins</Text>
@@ -692,7 +831,7 @@ export default function WalletScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: GOLD },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: BRAND_GREEN },
   balanceCard: { margin: 16, padding: 24, borderRadius: 20, overflow: 'hidden' },
   balanceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   balanceLabel: { fontSize: 13, color: '#000', fontWeight: '600' },
@@ -717,17 +856,17 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, paddingHorizontal: 16 },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', position: 'relative' },
   tabText: { fontSize: 13, color: '#666', fontWeight: '500' },
-  tabTextActive: { color: GOLD, fontWeight: '700' },
-  tabIndicator: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: GOLD },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: GOLD, marginBottom: 12 },
+  tabTextActive: { color: BRAND_GREEN, fontWeight: '700' },
+  tabIndicator: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: BRAND_GREEN },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: BRAND_GREEN, marginBottom: 12 },
   emptyText: { color: '#666', textAlign: 'center', padding: 24 },
   packageCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: CARD, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: BORDER },
-  packageCardSelected: { borderColor: GOLD, backgroundColor: GOLD + '10' },
+  packageCardSelected: { borderColor: BRAND_GREEN, backgroundColor: BRAND_GREEN + '10' },
   pkgName: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  pkgCoins: { fontSize: 18, fontWeight: '800', color: GOLD },
+  pkgCoins: { fontSize: 18, fontWeight: '800', color: BRAND_GREEN },
   pkgBonus: { fontSize: 12, color: '#10B981', fontWeight: '600' },
   pkgPrice: { fontSize: 17, fontWeight: '700', color: '#fff' },
-  featuredBadge: { backgroundColor: GOLD, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 4 },
+  featuredBadge: { backgroundColor: BRAND_GREEN, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, marginTop: 4 },
   featuredText: { fontSize: 10, color: '#000', fontWeight: '700' },
   infoBox: { flexDirection: 'row', backgroundColor: CARD, borderRadius: 12, padding: 14, gap: 10, borderWidth: 1, borderColor: BORDER, marginTop: 8 },
   infoText: { flex: 1, fontSize: 12, color: '#888', lineHeight: 18 },
@@ -794,10 +933,10 @@ const styles = StyleSheet.create({
   input: { backgroundColor: CARD, borderRadius: 12, padding: 14, color: '#fff', fontSize: 15, borderWidth: 1, borderColor: BORDER },
   methodRow: { flexDirection: 'row', gap: 8 },
   methodBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: BORDER, alignItems: 'center' },
-  methodBtnActive: { borderColor: GOLD, backgroundColor: GOLD + '20' },
+  methodBtnActive: { borderColor: BRAND_GREEN, backgroundColor: BRAND_GREEN + '20' },
   methodText: { color: '#666', fontSize: 12, fontWeight: '600', textTransform: 'capitalize' },
-  methodTextActive: { color: GOLD },
-  submitBtn: { backgroundColor: GOLD, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
+  methodTextActive: { color: BRAND_GREEN },
+  submitBtn: { backgroundColor: BRAND_GREEN, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
   selectedPkg: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
   monetizeSection: { margin: 16, padding: 20, borderRadius: 16, borderWidth: 1, marginTop: 20 },

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api';
 
-const GOLD = '#C8B56A', BG = '#0D0D0D', CARD = '#1A1A1A', BORDER = '#262626';
+const BRAND_GREEN = '#8fc441', BG = '#0D0D0D', CARD = '#1A1A1A', BORDER = '#262626';
 
 export default React.memo(function UserSuggestions({ onUserClick }) {
   const [suggestions, setSuggestions] = useState([]);
@@ -99,7 +99,7 @@ export default React.memo(function UserSuggestions({ onUserClick }) {
           <Ionicons 
             name={isFollowing ? "checkmark" : "add"} 
             size={14} 
-            color={isFollowing ? GOLD : '#000'} 
+            color={isFollowing ? BRAND_GREEN : '#000'} 
           />
           <Text style={[styles.followButtonText, isFollowing && styles.followingButtonText]}>
             {isFollowing ? 'Following' : 'Follow'}
@@ -116,7 +116,7 @@ export default React.memo(function UserSuggestions({ onUserClick }) {
           <Text style={styles.title}>Suggested for you</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color={GOLD} />
+          <ActivityIndicator size="small" color={BRAND_GREEN} />
         </View>
       </View>
     );
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: GOLD + '20',
+    backgroundColor: BRAND_GREEN + '20',
     marginBottom: 10,
     overflow: 'hidden',
     justifyContent: 'center',
@@ -218,14 +218,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: GOLD,
+    backgroundColor: BRAND_GREEN,
     width: '100%',
     justifyContent: 'center',
   },
   followingButton: {
-    backgroundColor: 'rgba(249,224,139,0.15)',
+    backgroundColor: 'rgba(143,196,65,0.15)',
     borderWidth: 1.5,
-    borderColor: 'rgba(249,224,139,0.6)',
+    borderColor: 'rgba(143,196,65,0.6)',
   },
   followButtonText: {
     fontSize: 12,
@@ -233,6 +233,6 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   followingButtonText: {
-    color: GOLD,
+    color: BRAND_GREEN,
   },
 });

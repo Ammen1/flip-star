@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useBlock } from '../contexts/BlockContext';
 import api from '../api';
 import config from '../config';
 
@@ -58,6 +59,7 @@ export default function ProfileScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { user: authUser, logout } = useAuth();
   const { colors } = useTheme();
+  const { blockUser, unblockUser, isUserBlocked } = useBlock();
   // authUser from /profile/me/ (UserProfileSerializer):
   //   authUser.id      = UserProfile.pk
   //   authUser.user.id = User.pk (or authUser.id if flat login response)
@@ -220,6 +222,10 @@ export default function ProfileScreen({ navigation, route }) {
       // ────────────────────────────────────────────────────────────────────────
 
       setIsFollowing(amOwner ? false : (nestedUser.is_following || profileData.is_following || false));
+      // Check if user is already blocked
+      if (!amOwner && realUserId) {
+        setIsBlocked(isUserBlocked(realUserId));
+      }
       setBioText(profileData.bio || nestedUser.bio || '');
       setEditForm({
         first_name: nestedUser.first_name || profileData.first_name || '',
@@ -231,6 +237,21 @@ export default function ProfileScreen({ navigation, route }) {
     } catch (e) { console.warn('loadProfile error:', e?.message); }
     finally { setLoading(false); setRefreshing(false); }
   };
+
+  // Auto-update blocked status when block state changes
+  useEffect(() => {
+    if (!isOwnProfile && targetUserId) {
+      setIsBlocked(isUserBlocked(targetUserId));
+    }
+  }, [isUserBlocked, targetUserId, isOwnProfile]);
+
+  // Auto-reload content when block state changes (for other users viewing this profile)
+  useEffect(() => {
+    if (!isOwnProfile && profile) {
+      // Reload reels to reflect block/unblock changes
+      loadReels();
+    }
+  }, [isBlocked, isOwnProfile, profile]);
 
   const loadReels = async () => {
     try {
@@ -251,8 +272,12 @@ export default function ProfileScreen({ navigation, route }) {
   const loadCampaignStats = async () => {
     try {
       const campaignData = await api.request(`/campaigns/profile/${targetUserId || ''}`);
+      console.log('Campaign data received:', campaignData);
+      console.log('Campaigns array:', campaignData.campaigns);
       setCampaignStats(campaignData);
-    } catch (e) { /* silent */ }
+    } catch (e) { 
+      console.log('Failed to load campaign stats:', e);
+    }
   };
 
   const onRefresh = () => {
@@ -277,11 +302,11 @@ export default function ProfileScreen({ navigation, route }) {
   };
 
   const handleBlockUser = async () => {
-    if (!user || user.id === targetUserId) return;
+    if (!authUser || authUser.id === targetUserId) return;
     
     Alert.alert(
       'Block User',
-      `Block ${profileUser?.username}? They won't be able to find your profile, posts, or interact with you.`,
+      `Block ${profile?.username || profile?.user?.username}? They won't be able to find your profile, posts, or interact with you.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -289,11 +314,23 @@ export default function ProfileScreen({ navigation, route }) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await api.blockUser(targetUserId);
-              setIsBlocked(true);
-              Alert.alert('Blocked', `Blocked ${profileUser?.username}`);
+              console.log('Blocking user:', targetUserId);
+              const success = await blockUser(targetUserId);
+              if (success) {
+                setIsBlocked(true);
+                Alert.alert('Blocked', `Blocked ${profile?.username || profile?.user?.username}`);
+              } else {
+                Alert.alert('Error', 'Failed to block user');
+              }
             } catch (error) {
-              Alert.alert('Error', 'Failed to block user');
+              console.log('Block error:', error);
+              // Handle "Already blocked" error gracefully
+              if (error.message && error.message.includes('Already blocked')) {
+                setIsBlocked(true); // Update UI state to reflect blocked status
+                Alert.alert('Already Blocked', `You have already blocked ${profile?.username || profile?.user?.username}`);
+              } else {
+                Alert.alert('Error', 'Failed to block user');
+              }
             }
           }
         },
@@ -303,10 +340,16 @@ export default function ProfileScreen({ navigation, route }) {
 
   const handleUnblockUser = async () => {
     try {
-      await api.unblockUser(targetUserId);
-      setIsBlocked(false);
-      Alert.alert('Unblocked', `Unblocked ${profileUser?.username}`);
+      console.log('Unblocking user:', targetUserId);
+      const success = await unblockUser(targetUserId);
+      if (success) {
+        setIsBlocked(false);
+        Alert.alert('Unblocked', `Unblocked ${profile?.username || profile?.user?.username}`);
+      } else {
+        Alert.alert('Error', 'Failed to unblock user');
+      }
     } catch (error) {
+      console.log('Unblock error:', error);
       Alert.alert('Error', 'Failed to unblock user');
     }
   };
@@ -445,16 +488,81 @@ export default function ProfileScreen({ navigation, route }) {
     setConfirmDeleteId(null);
     setPostMenuId(null);
     
+    console.log('Removing from saved posts - postId:', postId);
+    console.log('Current saved posts count:', savedPosts.length);
+    
     // Remove from saved posts immediately (no rollback needed)
-    setSavedPosts(prev => prev.filter(p => p.id !== postId));
+    setSavedPosts(prev => {
+      const filtered = prev.filter(p => p.id !== postId);
+      console.log('After filtering, saved posts count:', filtered.length);
+      return filtered;
+    });
     
     // Try to call API but don't show errors to user
     try {
-      await api.request(`/reels/${postId}/unsave/`, { method: 'POST' });
-      setSuccessMessage('Removed from saved posts!');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      console.log('Attempting to unsave post with ID:', postId);
+      
+      // Try different possible endpoints
+      let success = false;
+      let lastError = null;
+      
+      // Try 1: /reels/{id}/unsave/
+      try {
+        await api.request(`/reels/${postId}/unsave/`, { method: 'POST' });
+        console.log('Unsave successful with /reels/{id}/unsave/');
+        success = true;
+      } catch (e1) {
+        console.log('Endpoint 1 failed:', e1.message);
+        lastError = e1;
+      }
+      
+      // Try 2: /reels/{id}/unsave (without trailing slash)
+      if (!success) {
+        try {
+          await api.request(`/reels/${postId}/unsave`, { method: 'POST' });
+          console.log('Unsave successful with /reels/{id}/unsave');
+          success = true;
+        } catch (e2) {
+          console.log('Endpoint 2 failed:', e2.message);
+          lastError = e2;
+        }
+      }
+      
+      // Try 3: /posts/{id}/unsave/
+      if (!success) {
+        try {
+          await api.request(`/posts/${postId}/unsave/`, { method: 'POST' });
+          console.log('Unsave successful with /posts/{id}/unsave/');
+          success = true;
+        } catch (e3) {
+          console.log('Endpoint 3 failed:', e3.message);
+          lastError = e3;
+        }
+      }
+      
+      // Try 4: /posts/{id}/unsave (without trailing slash)
+      if (!success) {
+        try {
+          await api.request(`/posts/${postId}/unsave`, { method: 'POST' });
+          console.log('Unsave successful with /posts/{id}/unsave');
+          success = true;
+        } catch (e4) {
+          console.log('Endpoint 4 failed:', e4.message);
+          lastError = e4;
+        }
+      }
+      
+      if (success) {
+        setSuccessMessage('Removed from saved posts!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        console.log('All unsave endpoints failed, but post removed from UI:', lastError);
+        // Don't show error to user - just remove from UI
+        setSuccessMessage('Removed from saved posts!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+      }
     } catch (error) {
-      console.log('API unsave failed, but post removed from UI:', error);
+      console.log('Unexpected error in unsave process:', error);
       // Don't show error to user - just remove from UI
       setSuccessMessage('Removed from saved posts!');
       setTimeout(() => setSuccessMessage(''), 3000);
@@ -516,13 +624,32 @@ export default function ProfileScreen({ navigation, route }) {
   };
 
   const currentTabContent = useMemo(() => {
+    let content;
     switch (activeTab) {
-      case 'posts': return posts;
-      case 'reels': return reels;
-      case 'saved': return savedPosts;
-      case 'campaigns': return [];
-      default: return posts;
+      case 'posts': 
+        content = posts;
+        break;
+      case 'reels': 
+        content = reels;
+        break;
+      case 'saved': 
+        content = savedPosts;
+        break;
+      case 'campaigns': 
+        content = [];
+        break;
+      default: 
+        content = posts;
+        break;
     }
+    
+    // Debug logging for saved tab
+    if (activeTab === 'saved') {
+      console.log('Saved tab content - count:', content.length);
+      console.log('Saved tab content - IDs:', content.map(p => p.id));
+    }
+    
+    return content;
   }, [activeTab, posts, reels, savedPosts]);
 
   const renderPost = useCallback(({ item, index }) => {
@@ -532,7 +659,7 @@ export default function ProfileScreen({ navigation, route }) {
     console.log('ProfileScreen - renderPost item:', { id: item.id, media: item.media, thumbnail, isVideo });
     
     return (
-      <View key={item.id} style={styles.gridItemWrapper}>
+      <View key={`${item.id || index}`} style={styles.gridItemWrapper}>
         <TouchableOpacity
           style={styles.gridItem}
           onPress={() => {
@@ -856,11 +983,18 @@ export default function ProfileScreen({ navigation, route }) {
                 {/* Campaign List */}
                 <View style={[styles.campaignList, { backgroundColor: colors.cardBg }]}>
                   <Text style={[styles.campaignListTitle, { color: colors.text }]}>Active Campaigns</Text>
-                  {campaignStats.campaigns.map((campaign) => (
-                    <View key={campaign.campaign_id} style={[styles.campaignItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                      <Text style={[styles.campaignName, { color: colors.text }]}>{campaign.campaign_title}</Text>
-                    </View>
-                  ))}
+                  {campaignStats.campaigns.map((campaign, index) => {
+                    console.log(`Campaign ${index}:`, campaign);
+                    // Try different possible field names for campaign name
+                    const campaignName = campaign.campaign_title || campaign.title || campaign.name || campaign.campaign_name || `Campaign ${index + 1}`;
+                    const campaignId = campaign.campaign_id || campaign.id || campaign.campaignId || index;
+                    
+                    return (
+                      <View key={campaignId} style={[styles.campaignItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                        <Text style={[styles.campaignName, { color: colors.text }]}>{campaignName}</Text>
+                      </View>
+                    );
+                  })}
                 </View>
 
                 {/* Badges */}
@@ -906,7 +1040,11 @@ export default function ProfileScreen({ navigation, route }) {
               <FlatList
                 data={currentTabContent}
                 renderItem={renderPost}
-                keyExtractor={(item, index) => `${activeTab}-${item.id}-${index}`}
+                keyExtractor={(item, index) => {
+                  // Ensure we have a unique key even if item.id is missing or duplicate
+                  const uniqueId = item.id || `item-${index}`;
+                  return `${activeTab}-${uniqueId}`;
+                }}
                 numColumns={3}
                 scrollEnabled={false}
                 columnWrapperStyle={styles.gridRow}
@@ -1055,24 +1193,59 @@ export default function ProfileScreen({ navigation, route }) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.reportModal}>
+            {/* Header */}
             <View style={styles.reportHeader}>
-              <Text style={styles.reportTitle}>Report User</Text>
-              <TouchableOpacity onPress={() => setShowReportModal(false)}>
-                <Ionicons name="close" size={24} color="#fff" />
+              <View style={styles.reportHeaderContent}>
+                <View style={styles.reportIconContainer}>
+                  <Ionicons name="flag-outline" size={24} color={GOLD} />
+                </View>
+                <View>
+                  <Text style={styles.reportTitle}>Report User</Text>
+                  <Text style={styles.reportSubtitle}>Help keep our community safe</Text>
+                </View>
+              </View>
+              <TouchableOpacity 
+                style={styles.reportCloseButton}
+                onPress={() => setShowReportModal(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
             
-            <ScrollView style={styles.reportReasons}>
-              {REPORT_REASONS.map((reason) => (
-                <TouchableOpacity
-                  key={reason.id}
-                  onPress={() => handleReportUser(reason.id)}
-                  style={styles.reportReason}
-                >
-                  <Text style={styles.reportEmoji}>{reason.emoji}</Text>
-                  <Text style={styles.reportReasonText}>{reason.label}</Text>
-                </TouchableOpacity>
-              ))}
+            {/* Content */}
+            <ScrollView style={styles.reportContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.reportSection}>
+                <Text style={styles.reportSectionTitle}>
+                  Why are you reporting this user?
+                </Text>
+                <Text style={styles.reportSectionDescription}>
+                  Select the reason that best describes your concern
+                </Text>
+              </View>
+              
+              <View style={styles.reportReasonsContainer}>
+                {REPORT_REASONS.map((reason) => (
+                  <TouchableOpacity
+                    key={reason.id}
+                    style={styles.reportReason}
+                    onPress={() => handleReportUser(reason.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.reportReasonIcon}>
+                      <Text style={styles.reportEmoji}>{reason.emoji}</Text>
+                    </View>
+                    <View style={styles.reportReasonContent}>
+                      <Text style={styles.reportReasonText}>{reason.label}</Text>
+                      <Text style={styles.reportReasonDescription}>
+                        {reason.description || 'Report this user for inappropriate behavior'}
+                      </Text>
+                    </View>
+                    <View style={styles.reportReasonCheck}>
+                      <Ionicons name="chevron-forward" size={20} color="#666" />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -1628,41 +1801,118 @@ const styles = StyleSheet.create({
   reportModal: {
     backgroundColor: CARD,
     width: width * 0.9,
-    maxHeight: height * 0.7,
-    borderRadius: 20,
+    height: height * 0.75,
+    maxHeight: height * 0.8,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 12,
   },
   reportHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: BORDER,
   },
-  reportTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: LIGHT_GOLD,
-  },
-  reportReasons: {
+  reportHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
-    padding: 20,
+  },
+  reportIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(143, 196, 65, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  reportTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  reportSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+  },
+  reportCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reportContent: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  reportSection: {
+    paddingTop: 20,
+    paddingBottom: 12,
+  },
+  reportSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  reportSectionDescription: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  reportReasonsContainer: {
+    paddingTop: 8,
   },
   reportReason: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  reportReasonIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
   reportEmoji: {
-    fontSize: 20,
+    fontSize: 22,
+  },
+  reportReasonContent: {
+    flex: 1,
   },
   reportReasonText: {
     fontSize: 16,
-    color: LIGHT_GOLD,
-    flex: 1,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 2,
+  },
+  reportReasonDescription: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 18,
+  },
+  reportReasonCheck: {
+    marginLeft: 12,
   },
   // Edit Profile Modal Styles
   editProfileModal: {

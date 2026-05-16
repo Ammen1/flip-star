@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useBlock } from '../contexts/BlockContext';
 import api from '../api';
 import config from '../config';
 
@@ -174,7 +175,7 @@ const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
     ? [styles.bubble, styles.bubbleMine]
     : [styles.bubble, styles.bubbleOther];
 
-  const textColor = own ? colors.text : '#fff';
+  const textColor = own ? '#000' : '#fff';
 
   const renderContent = () => {
     if (msg.is_deleted) {
@@ -236,6 +237,7 @@ const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
 function ChatView({ conversation, onBack, userId, navigation }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { isUserBlocked } = useBlock();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -252,18 +254,30 @@ function ChatView({ conversation, onBack, userId, navigation }) {
       if (!silent) setLoading(true);
       const data = await api.request(`/messages/conversations/${convId}/messages/`);
       const arr = Array.isArray(data) ? data : [];
-      setMessages((prev) => {
-        if (pendingRef.current > 0 && prev.length > arr.length) {
-          const optimistic = prev.slice(arr.length);
-          return [...arr, ...optimistic];
+      
+      // Filter out messages from blocked users
+      const filteredMessages = arr.filter(msg => {
+        // Don't filter own messages
+        if (msg.is_own || msg.sender?.id === userId || msg.sender_id === userId) {
+          return true;
         }
-        return arr;
+        // Filter messages from blocked users
+        const senderId = msg.sender?.id || msg.sender_id;
+        return !isUserBlocked(senderId);
+      });
+      
+      setMessages((prev) => {
+        if (pendingRef.current > 0 && prev.length > filteredMessages.length) {
+          const optimistic = prev.slice(filteredMessages.length);
+          return [...filteredMessages, ...optimistic];
+        }
+        return filteredMessages;
       });
       // Mark as read
       api.request(`/messages/conversations/${convId}/read/`, { method: 'POST' }).catch(() => {});
     } catch {}
     finally { if (!silent) setLoading(false); }
-  }, [convId]);
+  }, [convId, userId, isUserBlocked]);
 
   useEffect(() => { fetchMessages(false); }, [fetchMessages]);
 
@@ -551,6 +565,7 @@ export default function MessagesScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { user: authUser } = useAuth();
   const { colors } = useTheme();
+  const { filterBlockedUsers, isUserBlocked } = useBlock();
   // authUser from /profile/me/ is UserProfileSerializer — actual user id is in .user.id
   const userId = authUser?.user?.id || authUser?.id;
 
@@ -566,16 +581,19 @@ export default function MessagesScreen({ navigation }) {
       if (!silent) setLoading(true);
       const data = await api.request('/messages/conversations/');
       const arr = Array.isArray(data) ? data : [];
-      setConversations(arr);
+      
+      // Filter out conversations with blocked users
+      const filteredConversations = filterBlockedUsers(arr);
+      setConversations(filteredConversations);
       setFiltered(prev => {
-        if (!search.trim()) return arr;
-        return arr.filter(c =>
+        if (!search.trim()) return filteredConversations;
+        return filteredConversations.filter(c =>
           c.other_user?.username?.toLowerCase().includes(search.toLowerCase()),
         );
       });
     } catch {}
     finally { if (!silent) setLoading(false); }
-  }, [search]);
+  }, [search, filterBlockedUsers]);
 
   useEffect(() => { fetchConversations(false); }, []);
 
@@ -599,18 +617,21 @@ export default function MessagesScreen({ navigation }) {
   }, [search, conversations]);
 
   const handleStartChat = async (u) => {
+    // Check if user is blocked before starting chat
+    if (isUserBlocked(u.id)) {
+      Alert.alert('Cannot Start Chat', 'You cannot start a chat with a user you have blocked.');
+      return;
+    }
+    
     try {
       const conv = await api.request('/messages/conversations/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: u.id }),
       });
-      setShowNewChat(false);
       setActiveConv(conv);
-      fetchConversations(true);
-    } catch (e) {
-      Alert.alert('Error', e?.message || 'Failed to start conversation');
-    }
+      setShowNewChat(false);
+    } catch { Alert.alert('Error', 'Failed to start chat'); }
   };
 
   // If in a chat, show ChatView full-screen

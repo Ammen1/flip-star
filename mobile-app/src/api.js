@@ -432,9 +432,8 @@ const api = {
   },
 
   async unblockUser(userId) {
-    return this.request('/blocks/unblock/', {
-      method: 'POST',
-      body: JSON.stringify({ blocked_id: userId }),
+    return this.request('/blocks/unblock/?blocked_id=' + userId, {
+      method: 'GET',
     });
   },
 

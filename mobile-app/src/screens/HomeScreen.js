@@ -7,6 +7,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { useBlock } from '../contexts/BlockContext';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
@@ -251,6 +252,7 @@ export default function HomeScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const auth = useAuth();
   const { colors } = useTheme();
+  const { filterBlockedUsers } = useBlock();
   const user = auth?.user ?? null;
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -275,6 +277,7 @@ export default function HomeScreen({ navigation, route }) {
   const [showPostInfoModal, setShowPostInfoModal] = useState(null);
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [localShareCounts, setLocalShareCounts] = useState({}); // Track local share increments
   const [showHorizontalSuggestions, setShowHorizontalSuggestions] = useState(true);
   const [suggestionPositions, setSuggestionPositions] = useState(new Set());
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -389,7 +392,14 @@ export default function HomeScreen({ navigation, route }) {
           });
           finalResults = withSuggestions;
         }
-        setPosts(finalResults);
+        // Preserve local share counts and filter blocked users
+        const updatedFinalResults = finalResults.map(post => ({
+          ...post,
+          shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+        }));
+        // Filter out posts from blocked users
+        const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
+        setPosts(filteredFinalResults);
         setHasMore(results.length === LIMIT);
         setPage(0);
       });
@@ -412,7 +422,14 @@ export default function HomeScreen({ navigation, route }) {
           });
           finalResults = withSuggestions;
         }
-        setPosts(finalResults);
+        // Preserve local share counts and filter blocked users
+        const updatedFinalResults = finalResults.map(post => ({
+          ...post,
+          shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+        }));
+        // Filter out posts from blocked users
+        const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
+        setPosts(filteredFinalResults);
         setHasMore(results.length === LIMIT);
         setPage(0);
         setLoading(false);
@@ -491,6 +508,14 @@ export default function HomeScreen({ navigation, route }) {
     loadGifts();
   }, []);
 
+  // Auto-refresh content when block state changes
+  useEffect(() => {
+    // Refresh the current tab to reflect block/unblock changes
+    if (activeTab === 'For You') {
+      fetchPosts(0, true);
+    }
+  }, [filterBlockedUsers]);
+
   const fetchPosts = async (offset = 0, reset = false) => {
     try {
       if (reset) setLoading(true); else setLoadingMore(true);
@@ -524,7 +549,21 @@ export default function HomeScreen({ navigation, route }) {
         finalResults = withSuggestions;
       }
       
-      setPosts(prev => reset ? finalResults : [...prev, ...results]);
+      // Preserve local share counts and filter blocked users
+      const updatedFinalResults = finalResults.map(post => ({
+        ...post,
+        shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+      }));
+      const updatedResults = results.map(post => ({
+        ...post,
+        shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+      }));
+      
+      // Filter out posts from blocked users
+      const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
+      const filteredResults = filterBlockedUsers(updatedResults);
+      
+      setPosts(prev => reset ? filteredFinalResults : [...prev, ...filteredResults]);
       setHasMore(results.length === LIMIT);
       setPage(offset);
     } catch (e) {
@@ -540,24 +579,48 @@ export default function HomeScreen({ navigation, route }) {
   const onEndReached = useCallback(() => { if (!loadingMore && hasMore && activeTab === 'For You') fetchPosts(page + LIMIT); }, [loadingMore, hasMore, activeTab, page]);
 
   const sharePost = useCallback(async (post) => {
-    const url = `https://uat.flipstar.et/post/${post.id}`;
+    // Use both web URL and app URL for better compatibility
+    const webUrl = `https://uat.flipstar.et/post/${post.id}`;
+    const appUrl = `flipstar://post/${post.id}`;
     const title = post.caption ? post.caption.slice(0, 80) : 'Check out this post on FlipStar';
     
     try {
       await Share.share({
-        message: `${title} ${url}`,
-        url: url,
+        message: `${title}\n\n${webUrl}\n\nOr open in app: ${appUrl}`,
+        url: webUrl,
         title: 'FlipStar Post',
       });
       // Increment share count on backend
-      try { await api.request(`/reels/${post.id}/share/`, { method: 'POST' }); } catch (err) {
-        console.log('Share API error:', err);
+      try { 
+        console.log('HomeScreen share - before - post shares:', post.shares);
+        console.log('HomeScreen share - before - localShareCounts:', localShareCounts[post.id]);
+        
+        await api.request(`/reels/${post.id}/share/`, { method: 'POST' });
+        
+        // Update persistent local share count
+        setLocalShareCounts(prev => {
+          const updated = {
+            ...prev,
+            [post.id]: (prev[post.id] || 0) + 1
+          };
+          console.log('HomeScreen share - updated localShareCounts:', updated[post.id]);
+          return updated;
+        });
+        
+        // Update local share count
+        setPosts(prev => {
+          const updated = prev.map(p => 
+            p.id === post.id ? { ...p, shares: (p.shares || 0) + 1 } : p
+          );
+          console.log('HomeScreen share - updated posts share count for post', post.id);
+          return updated;
+        });
+        
+        console.log('HomeScreen share increment successful');
+      } catch (err) {
+        console.log('HomeScreen share increment failed:', err);
       }
     } catch (error) {
-      if (error.message === 'User did not share') {
-        // User cancelled - this is expected behavior
-        return;
-      }
       console.log('Share error:', error);
     }
   }, []);
@@ -1319,7 +1382,7 @@ export default function HomeScreen({ navigation, route }) {
             {/* Share */}
             <TouchableOpacity style={styles.actionBtn} onPress={() => sharePost(post)}>
               <Ionicons name="share-social-outline" size={22} color={colors.primary} />
-              {post.shares > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.shares}</Text>}
+              {post.shares > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{(post.shares || 0) + (localShareCounts[post.id] || 0)}</Text>}
             </TouchableOpacity>
             
             {/* Gift - only for other people's posts */}

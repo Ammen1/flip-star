@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useBlock } from '../contexts/BlockContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api';
 
@@ -225,9 +226,7 @@ export default function SettingsScreen({ navigation }) {
   const { user, logout } = useAuth();
   const { colors, darkMode, toggleDarkMode } = useTheme();
   const { language, setLanguage, t } = useLanguage();
-  
-    const [blockedUsers, setBlockedUsers] = useState([]);
-  const [loadingBlocked, setLoadingBlocked] = useState(false);
+  const { blockedUsersList, loading: loadingBlocked, unblockUser, refreshBlockedUsers } = useBlock();
   
   const [showPassModal, setShowPassModal] = useState(false);
   const [showLangModal, setShowLangModal] = useState(false);
@@ -240,23 +239,7 @@ export default function SettingsScreen({ navigation }) {
   const [password, setPassword] = useState({ current: '', new: '', confirm: '' });
   const [showPasswords, setShowPasswords] = useState({ current: false, new: false, confirm: false });
 
-  // Load blocked users on mount
-  useEffect(() => {
-    const loadBlockedUsers = async () => {
-      try {
-        setLoadingBlocked(true);
-        const data = await api.getBlockedUsers();
-        const users = Array.isArray(data) ? data : (data.results || []);
-        setBlockedUsers(users.map(b => b.blocked));
-      } catch {
-        // backend may not support this endpoint
-      } finally {
-        setLoadingBlocked(false);
-      }
-    };
-    loadBlockedUsers();
-  }, []);
-
+  
   
   const handleDarkModeToggle = () => {
     toggleDarkMode();
@@ -332,9 +315,12 @@ export default function SettingsScreen({ navigation }) {
   
   const handleUnblockUser = async (userId, username) => {
     try {
-      await api.unblockUser(userId);
-      setBlockedUsers(prev => prev.filter(u => u.id !== userId));
-      Alert.alert('Success', `Unblocked ${username}`);
+      const success = await unblockUser(userId);
+      if (success) {
+        Alert.alert('Success', `Unblocked ${username}`);
+      } else {
+        Alert.alert('Error', 'Failed to unblock user');
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to unblock user');
     }
@@ -359,14 +345,6 @@ export default function SettingsScreen({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Summary */}
         <View style={[styles.profileSummary, { backgroundColor: colors.cardBg }]}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            {user?.profile_photo ? (
-              <Image source={{ uri: user.profile_photo }} style={styles.avatarImage} />
-            ) : (
-              <Text style={[styles.avatarText, { color: darkMode ? '#000' : '#fff' }]}>{user?.username?.[0]?.toUpperCase() || 'U'}</Text>
-            )}
-          </View>
-          <Text style={[styles.username, { color: colors.text }]}>@{user?.username}</Text>
           <Text style={[styles.email, { color: colors.textSecondary }]}>{user?.email}</Text>
         </View>
 
@@ -409,10 +387,10 @@ export default function SettingsScreen({ navigation }) {
             <View style={{ padding: 20, alignItems: 'center' }}>
               <ActivityIndicator color={colors.primary} />
             </View>
-          ) : blockedUsers.length === 0 ? (
+          ) : blockedUsersList.length === 0 ? (
             <Text style={{ color: colors.textSecondary, fontSize: 14, padding: 20 }}>No blocked users</Text>
           ) : (
-            blockedUsers.map(blockedUser => (
+            blockedUsersList.map(blockedUser => (
               <View key={blockedUser.id} style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border + '80' }}>
                 <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.border, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
                   {blockedUser.profile_photo ? (
@@ -894,14 +872,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: BORDER },
   headerTitle: { fontSize: 17, fontWeight: '700', color: TEXT },
   
-  profileSummary: { flexDirection: 'column', alignItems: 'center', padding: 32, backgroundColor: CARD, marginBottom: 16 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center', marginBottom: 16, overflow: 'hidden' },
-  avatarImage: { width: '100%', height: '100%' },
-  avatarText: { fontSize: 32, fontWeight: '800', color: '#000' },
-  username: { fontSize: 18, fontWeight: '800', color: TEXT },
-  email: { fontSize: 13, color: SUB, marginTop: 4 },
+  profileSummary: { flexDirection: 'column', alignItems: 'center', padding: 32, backgroundColor: CARD, marginBottom: 8 },
+  email: { fontSize: 13, color: SUB },
   
-  sectionLabel: { fontSize: 12, fontWeight: '700', color: SUB, textTransform: 'uppercase', letterSpacing: 1.2, marginHorizontal: 20, marginTop: 32, marginBottom: 12 },
+  sectionLabel: { fontSize: 12, fontWeight: '700', color: SUB, textTransform: 'uppercase', letterSpacing: 1.2, marginHorizontal: 20, marginTop: 16, marginBottom: 12 },
   sectionCard: { marginHorizontal: 16, borderRadius: 16, borderWidth: 1, borderColor: BORDER, backgroundColor: CARD, overflow: 'hidden', marginBottom: 8 },
   section: { marginTop: 32, paddingHorizontal: 16 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: SUB, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
