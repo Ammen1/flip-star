@@ -227,9 +227,8 @@ class ReelSerializer(serializers.ModelSerializer):
         return Vote.objects.filter(reel=obj).count()
     
     def get_gift_count(self, obj):
-        # Count gifts received for this reel
-        from .models_gift import GiftTransaction
-        return GiftTransaction.objects.filter(reel=obj).count()
+        # Count gifts received for this reel using the related_name
+        return obj.gifts_received.count()
     
     def get_is_saved(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
