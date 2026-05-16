@@ -392,7 +392,7 @@ def get_leaderboard(request, campaign_id):
     # Get all users who have participated
     from django.contrib.auth import get_user_model
     User = get_user_model()
-    users = User.objects.filter(id__in=user_ids)
+    users = User.objects.select_related('profile').filter(id__in=user_ids)
 
     from .models import Vote, Comment
     from .models_gift import GiftTransaction
@@ -408,10 +408,19 @@ def get_leaderboard(request, campaign_id):
         total_comments = Comment.objects.filter(reel_id__in=reel_ids).count()
         total_shares = 0  # TODO: implement shares tracking
         
+<<<<<<< HEAD
         # Count unique gifters per post (distinct senders)
         total_gifters = 0
         for reel_id in reel_ids:
             total_gifters += GiftTransaction.objects.filter(reel_id=reel_id).values('sender').distinct().count()
+=======
+        # Count shares from Reel.shares field
+        total_shares = user_posts.aggregate(total=Sum('reel__shares'))['total'] or 0
+        
+        # Count gift points (sum of quantity from GiftTransaction)
+        from django.db.models import Sum
+        total_gift_points = GiftTransaction.objects.filter(reel_id__in=reel_ids).aggregate(total=Sum('quantity'))['total'] or 0
+>>>>>>> c9198b2e9a0e4d3aa5da6244244f2a8ea39afb5b
         
         # Calculate score using campaign weights: score = likes*pt + comments*pt + shares*pt + gifts*pt
         calculated_score = (
@@ -421,11 +430,20 @@ def get_leaderboard(request, campaign_id):
             total_gifters * gifts_weight
         )
         
+        # Get profile photo URL
+        profile_photo_url = None
+        if hasattr(user, 'profile') and user.profile and user.profile.profile_photo:
+            try:
+                profile_photo_url = request.build_absolute_uri(user.profile.profile_photo.url)
+            except Exception:
+                profile_photo_url = None
+
         entries_data.append({
             'user_id': user.id,
             'username': user.username,
-            'profile_photo': user.profile.profile_photo if hasattr(user, 'profile') else None,
+            'profile_image': profile_photo_url,
             'total_score': float(calculated_score),
+            'score': float(calculated_score),
             'post_count': len(reel_ids),
             'likes_count': total_likes,
             'comments_count': total_comments,
