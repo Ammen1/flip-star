@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, RefreshControl, ScrollView,
+  Image, ImageBackground,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +29,9 @@ function PodiumCard({ entry, rank }) {
   const medalColor = MEDAL_COLORS[rank];
   const size       = isFirst ? 72 : 56;
   const score      = entry.total_score || entry.score || 0;
+  const profileImage = entry.profile_image;
+  
+  console.log('[PODIUM CARD] Entry:', entry.username, 'Profile image:', profileImage);
 
   return (
     <View style={[styles.podiumCard, isFirst && styles.podiumFirst]}>
@@ -37,9 +41,19 @@ function PodiumCard({ entry, rank }) {
         styles.podiumAvatar,
         { width: size, height: size, borderRadius: size / 2, borderColor: medalColor },
       ]}>
-        <Text style={[styles.podiumAvatarText, { fontSize: isFirst ? 28 : 22 }]}>
-          {entry.username?.[0]?.toUpperCase() || '?'}
-        </Text>
+        {profileImage ? (
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: size, height: size, borderRadius: size / 2 }}
+            resizeMode="cover"
+            onError={(error) => console.log('[PODIUM IMAGE] Error loading image:', error.nativeEvent.error)}
+            onLoad={() => console.log('[PODIUM IMAGE] Successfully loaded image for:', entry.username)}
+          />
+        ) : (
+          <Text style={[styles.podiumAvatarText, { fontSize: isFirst ? 28 : 22 }]}>
+            {entry.username?.[0]?.toUpperCase() || '?'}
+          </Text>
+        )}
       </View>
       <Text style={styles.podiumUsername} numberOfLines={1}>{entry.username || '—'}</Text>
       <Text style={[styles.podiumScore, { color: medalColor, fontSize: isFirst ? 22 : 17 }]}>
@@ -55,6 +69,9 @@ function LeaderboardRow({ item, index, isVoting, onVote }) {
   const rank       = item.rank || index + 1;
   const medalColor = MEDAL_COLORS[rank];
   const score      = item.total_score || item.score || 0;
+  const profileImage = item.profile_image;
+  
+  console.log('[LEADERBOARD ROW] Item:', item.username, 'Profile image:', profileImage);
 
   return (
     <View style={[styles.row, rank === 1 && styles.rowFirst]}>
@@ -68,7 +85,17 @@ function LeaderboardRow({ item, index, isVoting, onVote }) {
 
       {/* Avatar */}
       <View style={[styles.rowAvatar, medalColor && { borderColor: medalColor }]}>
-        <Text style={styles.rowAvatarText}>{item.username?.[0]?.toUpperCase() || '?'}</Text>
+        {profileImage ? (
+          <Image
+            source={{ uri: profileImage }}
+            style={{ width: 44, height: 44, borderRadius: 22 }}
+            resizeMode="cover"
+            onError={(error) => console.log('[ROW IMAGE] Error loading image:', error.nativeEvent.error)}
+            onLoad={() => console.log('[ROW IMAGE] Successfully loaded image for:', item.username)}
+          />
+        ) : (
+          <Text style={styles.rowAvatarText}>{item.username?.[0]?.toUpperCase() || '?'}</Text>
+        )}
       </View>
 
       {/* Name + engagement */}
@@ -138,6 +165,8 @@ export default function LeaderboardScreen({ route, navigation }) {
       const data = await api.request(
         `/campaigns/${campaignId}/leaderboard/?period=${period}`
       );
+      console.log('[LEADERBOARD] API Response:', data);
+      console.log('[LEADERBOARD] First entry profile_image:', data.entries?.[0]?.profile_image);
       setEntries(data.entries || []);
     } catch (err) {
       console.error('Leaderboard error:', err);

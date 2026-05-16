@@ -14,6 +14,22 @@ from .models_campaign_extended import (
     WinnerSelection, SelectedWinner, CampaignBadge
 )
 
+def get_image_url(image_field, request=None):
+    """Get absolute image URL - handles both local files and Cloudinary URLs"""
+    if not image_field:
+        return None
+    try:
+        url = image_field.url
+        if not url:
+            return None
+        if url.startswith('http'):
+            return url  # Already absolute (Cloudinary, S3, etc.)
+        if request:
+            return request.build_absolute_uri(url)
+        return f"https://postworq.onrender.com{url}"
+    except:
+        return None
+
 # ==================== THEME MANAGEMENT ====================
 
 @api_view(['GET', 'POST'])
@@ -421,9 +437,20 @@ def get_leaderboard(request, campaign_id):
             total_gifters * gifts_weight
         )
         
+        # Get user profile image
+        profile_image = None
+        try:
+            if hasattr(user, 'profile'):
+                profile_image = get_image_url(user.profile.profile_photo, request)
+                if not profile_image:
+                    profile_image = get_image_url(user.profile.avatar, request)
+        except:
+            pass
+        
         entries_data.append({
             'user_id': user.id,
             'username': user.username,
+            'profile_image': profile_image,
             'total_score': float(calculated_score),
             'post_count': len(reel_ids),
             'likes_count': total_likes,
