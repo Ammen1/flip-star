@@ -1544,6 +1544,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
                   }}
                 >
                   <Gift size={baseFontSize} color="#8fc441" fill="none" style={{ transition: 'transform 0.15s, fill 0.15s' }} />
+                  <span style={{ fontSize: 'calc(var(--font-size-base) * 0.6875)', color: '#8fc441', fontWeight: 600 }}>{post.gift_count > 0 ? post.gift_count : ''}</span>
                 </button>
               )}
             </div>
