@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CreditCard, TrendingUp, TrendingDown, AlertCircle, CheckCircle, XCircle, Download, RefreshCw, Calendar, Filter, Search, User, Phone, BarChart3, PieChart, DollarSign, Activity } from 'lucide-react';
+import { CreditCard, TrendingUp, TrendingDown, AlertCircle, CheckCircle, XCircle, Download, RefreshCw, Calendar, Filter, Search, User, Phone, BarChart3, PieChart, DollarSign, Activity, Users, Star } from 'lucide-react';
 import api from '../../api';
 
 export function ChargingDashboard({ theme }) {
@@ -32,7 +32,7 @@ export function ChargingDashboard({ theme }) {
   const loadStatistics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/charging/on-demand/statistics/?days=${days}`);
+      const response = await api.request(`/admin/subscriptions/charging/`);
       setStatistics(response);
     } catch (err) {
       setError('Failed to load statistics');
@@ -44,10 +44,7 @@ export function ChargingDashboard({ theme }) {
 
   const loadTransactions = async () => {
     try {
-      const statusParam = statusFilter ? `&status=${statusFilter}` : '';
-      const response = await api.request(
-        `/charging/on-demand/transactions/?days=${days}&page=${page}&page_size=20${statusParam}`
-      );
+      const response = await api.request(`/admin/subscriptions/charging/`);
       setTransactions(response);
     } catch (err) {
       console.error('Failed to load transactions:', err);
@@ -57,8 +54,7 @@ export function ChargingDashboard({ theme }) {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const period = activeTab.replace('analytics_', '');
-      const response = await api.request(`/charging/on-demand/analytics/?period=${period}`);
+      const response = await api.request(`/admin/subscriptions/charging/`);
       setAnalyticsData(response);
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -76,11 +72,16 @@ export function ChargingDashboard({ theme }) {
 
     setSearching(true);
     try {
-      const endpoint = searchType === 'phone'
-        ? `/charging/on-demand/search/?phone=${encodeURIComponent(searchQuery)}`
-        : `/charging/on-demand/search/?user_id=${encodeURIComponent(searchQuery)}`;
-      const response = await api.request(endpoint);
-      setSearchResults(response);
+      const response = await api.request(`/admin/subscriptions/charging/`);
+      // Filter the recent_transactions based on search query
+      const filteredTransactions = response.recent_transactions?.filter(tx => {
+        if (searchType === 'phone') {
+          return tx.user?.toLowerCase().includes(searchQuery.toLowerCase());
+        } else {
+          return tx.user_id?.toString().includes(searchQuery);
+        }
+      }) || [];
+      setSearchResults({ transactions: filteredTransactions });
     } catch (err) {
       console.error('Search failed:', err);
       setError('Search failed');
@@ -90,20 +91,16 @@ export function ChargingDashboard({ theme }) {
   };
 
   const handleExport = () => {
-    const dataToExport = searchResults || transactions;
-    if (!dataToExport.transactions) return;
+    const dataToExport = searchResults || statistics;
+    if (!dataToExport.recent_transactions) return;
 
-    const headers = ['Date', 'User ID', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Error', 'Transaction ID'];
-    const rows = dataToExport.transactions.map(t => [
-      new Date(t.created_at).toLocaleString(),
-      t.user_id || 'N/A',
+    const headers = ['Date', 'User', 'Tier', 'Amount (ETB)', 'Payment Method'];
+    const rows = dataToExport.recent_transactions.map(t => [
+      t.date,
       t.user,
-      t.phone_number,
-      t.subscription_tier || 'N/A',
-      t.amount_etb,
-      t.status,
-      t.error_message || '',
-      t.transaction_id || 'N/A'
+      t.tier,
+      t.amount.toFixed(2),
+      t.payment_method
     ]);
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -111,7 +108,7 @@ export function ChargingDashboard({ theme }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `charging_transactions_${searchQuery ? 'search' : days + 'days'}.csv`;
+    a.download = `charging_transactions_${searchQuery ? 'search' : 'export'}.csv`;
     a.click();
   };
 
@@ -261,51 +258,44 @@ export function ChargingDashboard({ theme }) {
           }}>
             <StatCard
               icon={CreditCard}
-              label="Total Transactions"
-              value={statistics.total_transactions}
+              label="Active Subscriptions"
+              value={statistics.active_subscriptions?.total || 0}
               color={theme.pri}
               theme={theme}
             />
             <StatCard
-              icon={CheckCircle}
-              label="Successful"
-              value={statistics.successful_transactions}
+              icon={TrendingUp}
+              label="MRR"
+              value={`ETB ${statistics.active_subscriptions?.mrr?.toFixed(2) || '0.00'}`}
               color="#10B981"
               theme={theme}
             />
             <StatCard
-              icon={XCircle}
-              label="Failed"
-              value={statistics.failed_transactions}
-              color="#EF4444"
-              theme={theme}
-            />
-            <StatCard
-              icon={AlertCircle}
-              label="Insufficient Balance"
-              value={statistics.insufficient_balance}
-              color="#8fc441"
-              theme={theme}
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Expected Collection"
-              value={`ETB ${statistics.expected_collection?.toFixed(2) || '0.00'}`}
+              icon={DollarSign}
+              label="Today's Revenue"
+              value={`ETB ${statistics.revenue?.today?.total?.toFixed(2) || '0.00'}`}
               color="#3B82F6"
               theme={theme}
             />
             <StatCard
-              icon={TrendingDown}
-              label="Actual Collection"
-              value={`ETB ${statistics.actual_collection?.toFixed(2) || '0.00'}`}
+              icon={Calendar}
+              label="Today's Transactions"
+              value={statistics.revenue?.today?.count || 0}
               color="#8B5CF6"
               theme={theme}
             />
             <StatCard
-              icon={CheckCircle}
-              label="Success Rate"
-              value={`${statistics.success_rate || 0}%`}
-              color="#10B981"
+              icon={TrendingUp}
+              label="Week Revenue"
+              value={`ETB ${statistics.revenue?.week?.total?.toFixed(2) || '0.00'}`}
+              color="#F59E0B"
+              theme={theme}
+            />
+            <StatCard
+              icon={TrendingDown}
+              label="Month Revenue"
+              value={`ETB ${statistics.revenue?.month?.total?.toFixed(2) || '0.00'}`}
+              color="#EF4444"
               theme={theme}
             />
           </div>
@@ -326,44 +316,8 @@ export function ChargingDashboard({ theme }) {
               alignItems: 'center'
             }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: theme.txt }}>
-                Transactions
+                Recent Transactions
               </h2>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <select
-                  value={days}
-                  onChange={(e) => setDays(parseInt(e.target.value))}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 6,
-                    border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 13
-                  }}
-                >
-                  <option value={7}>Last 7 days</option>
-                  <option value={30}>Last 30 days</option>
-                  <option value={90}>Last 90 days</option>
-                </select>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 6,
-                    border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 13
-                  }}
-                >
-                  <option value="">All Status</option>
-                  <option value="success">Success</option>
-                  <option value="failed">Failed</option>
-                  <option value="insufficient_balance">Insufficient Balance</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
@@ -399,15 +353,6 @@ export function ChargingDashboard({ theme }) {
                       color: theme.sub,
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em'
-                    }}>Phone</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
                     }}>Tier</th>
                     <th style={{
                       padding: 12,
@@ -426,102 +371,33 @@ export function ChargingDashboard({ theme }) {
                       color: theme.sub,
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em'
-                    }}>Status</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>Error</th>
+                    }}>Payment Method</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.transactions?.map((t, idx) => {
-                    const StatusIcon = getStatusIcon(t.status);
-                    return (
-                      <tr key={idx} style={{
-                        borderBottom: idx < transactions.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
-                      }}>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {new Date(t.created_at).toLocaleString()}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {t.user}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, fontFamily: 'monospace' }}>
-                          {t.phone_number}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {t.subscription_tier || 'N/A'}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 600 }}>
-                          {t.amount_etb.toFixed(2)}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 13, color: getStatusColor(t.status), display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <StatusIcon size={14} />
-                          {t.status}
-                        </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.sub, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {t.error_message || '-'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {statistics.recent_transactions?.map((t, idx) => (
+                    <tr key={idx} style={{
+                      borderBottom: idx < statistics.recent_transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
+                    }}>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                        {t.date}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                        {t.user}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                        {t.tier}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 600 }}>
+                        {t.amount.toFixed(2)}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                        {t.payment_method}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-            </div>
-
-            {/* Pagination */}
-            <div style={{
-              padding: 16,
-              borderTop: `1px solid ${theme.border}`,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <div style={{ fontSize: 13, color: theme.sub }}>
-                Showing {transactions.transactions?.length || 0} of {transactions.total || 0} transactions
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 6,
-                    border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 13,
-                    cursor: page === 1 ? 'not-allowed' : 'pointer',
-                    opacity: page === 1 ? 0.5 : 1
-                  }}
-                >
-                  Previous
-                </button>
-                <span style={{ padding: '6px 12px', fontSize: 13, color: theme.txt }}>
-                  Page {page}
-                </span>
-                <button
-                  onClick={() => setPage(p => p + 1)}
-                  disabled={!transactions.transactions || transactions.transactions.length < 20}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 6,
-                    border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.txt,
-                    fontSize: 13,
-                    cursor: !transactions.transactions || transactions.transactions.length < 20 ? 'not-allowed' : 'pointer',
-                    opacity: !transactions.transactions || transactions.transactions.length < 20 ? 0.5 : 1
-                  }}
-                >
-                  Next
-                </button>
-              </div>
             </div>
           </div>
         </>
@@ -652,7 +528,7 @@ export function ChargingDashboard({ theme }) {
                         color: theme.sub,
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em'
-                      }}>Phone</th>
+                      }}>Tier</th>
                       <th style={{
                         padding: 12,
                         textAlign: 'left',
@@ -670,35 +546,31 @@ export function ChargingDashboard({ theme }) {
                         color: theme.sub,
                         textTransform: 'uppercase',
                         letterSpacing: '0.05em'
-                      }}>Status</th>
+                      }}>Payment Method</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {searchResults.transactions.map((t, idx) => {
-                      const StatusIcon = getStatusIcon(t.status);
-                      return (
-                        <tr key={idx} style={{
-                          borderBottom: idx < searchResults.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
-                        }}>
-                          <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                            {new Date(t.created_at).toLocaleString()}
-                          </td>
-                          <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                            {t.user}
-                          </td>
-                          <td style={{ padding: 12, fontSize: 13, color: theme.txt, fontFamily: 'monospace' }}>
-                            {t.phone_number}
-                          </td>
-                          <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 600 }}>
-                            {t.amount_etb.toFixed(2)}
-                          </td>
-                          <td style={{ padding: 12, fontSize: 13, color: getStatusColor(t.status), display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <StatusIcon size={14} />
-                            {t.status}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {searchResults.transactions.map((t, idx) => (
+                      <tr key={idx} style={{
+                        borderBottom: idx < searchResults.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
+                      }}>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                          {t.date}
+                        </td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                          {t.user}
+                        </td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                          {t.tier}
+                        </td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 600 }}>
+                          {t.amount.toFixed(2)}
+                        </td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
+                          {t.payment_method}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -708,7 +580,7 @@ export function ChargingDashboard({ theme }) {
       )}
 
       {/* Analytics Tabs */}
-      {activeTab.startsWith('analytics') && (
+      {activeTab.startsWith('analytics') && analyticsData && (
         <div style={{
           background: theme.card,
           borderRadius: 12,
@@ -722,53 +594,40 @@ export function ChargingDashboard({ theme }) {
             {loading && <RefreshCw size={16} className="animate-spin" color={theme.sub} />}
           </div>
 
-          {analyticsData ? (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: 16
-            }}>
-              <StatCard
-                icon={CreditCard}
-                label="Total Transactions"
-                value={analyticsData.total_transactions || 0}
-                color={theme.pri}
-                theme={theme}
-              />
-              <StatCard
-                icon={CheckCircle}
-                label="Successful"
-                value={analyticsData.successful || 0}
-                color="#10B981"
-                theme={theme}
-              />
-              <StatCard
-                icon={XCircle}
-                label="Failed"
-                value={analyticsData.failed || 0}
-                color="#EF4444"
-                theme={theme}
-              />
-              <StatCard
-                icon={DollarSign}
-                label="Total Revenue"
-                value={`ETB ${analyticsData.total_revenue?.toFixed(2) || '0.00'}`}
-                color="#8B5CF6"
-                theme={theme}
-              />
-              <StatCard
-                icon={Activity}
-                label="Success Rate"
-                value={`${analyticsData.success_rate || 0}%`}
-                color="#10B981"
-                theme={theme}
-              />
-            </div>
-          ) : (
-            <div style={{ padding: 40, textAlign: 'center', color: theme.sub }}>
-              {loading ? 'Loading analytics...' : 'No analytics data available'}
-            </div>
-          )}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 16
+          }}>
+            <StatCard
+              icon={CreditCard}
+              label="Active Subscriptions"
+              value={analyticsData.active_subscriptions?.total || 0}
+              color={theme.pri}
+              theme={theme}
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="MRR"
+              value={`ETB ${analyticsData.active_subscriptions?.mrr?.toFixed(2) || '0.00'}`}
+              color="#10B981"
+              theme={theme}
+            />
+            <StatCard
+              icon={DollarSign}
+              label="Today's Revenue"
+              value={`ETB ${analyticsData.revenue?.today?.total?.toFixed(2) || '0.00'}`}
+              color="#8B5CF6"
+              theme={theme}
+            />
+            <StatCard
+              icon={Activity}
+              label="Today's Transactions"
+              value={analyticsData.revenue?.today?.count || 0}
+              color="#10B981"
+              theme={theme}
+            />
+          </div>
         </div>
       )}
     </div>
