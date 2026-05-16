@@ -387,7 +387,7 @@ def get_leaderboard(request, campaign_id):
     # Get all users who have participated
     from django.contrib.auth import get_user_model
     User = get_user_model()
-    users = User.objects.filter(id__in=user_ids)
+    users = User.objects.select_related('profile').filter(id__in=user_ids)
 
     from .models import Vote, Comment
     from .models_gift import GiftTransaction
@@ -424,12 +424,14 @@ def get_leaderboard(request, campaign_id):
         entries_data.append({
             'user_id': user.id,
             'username': user.username,
+            'profile_photo': user.profile.profile_photo if hasattr(user, 'profile') and user.profile else None,
             'total_score': float(calculated_score),
+            'score': float(calculated_score),
             'post_count': len(reel_ids),
             'likes_count': total_likes,
             'comments_count': total_comments,
             'shares_count': total_shares,
-            'gift_points_count': total_gift_points,
+            'gifts_count': total_gift_points,
             'weights': {
                 'likes': likes_weight,
                 'comments': comments_weight,
