@@ -110,13 +110,17 @@ export function CoinManagementPage({ theme }) {
         purchased_coins_giftable: config.gifting.purchased_coins_giftable,
         earned_coins_withdrawable: config.gifting.earned_coins_withdrawable,
         purchased_coins_withdrawable: config.gifting.purchased_coins_withdrawable,
+        gift_min_points_per_transaction: config.gifting.min_points_per_transaction || 10,
+        gift_max_points_per_transaction: config.gifting.max_points_per_transaction || 5000,
+        gift_max_points_to_recipient_per_day: config.gifting.max_points_to_recipient_per_day || 5000,
+        gift_max_total_points_sent_per_day: config.gifting.max_total_points_sent_per_day || 10000,
         min_balance_to_post: config.thresholds.min_balance_to_post,
         min_balance_to_join_campaign: config.thresholds.min_balance_to_join_campaign,
         earned_coins_expire_days: config.expiry.earned_coins_expire_days,
         coins_to_points_conversion: config.points?.coins_to_points_conversion ?? 1,
         points_per_birr: config.points?.points_per_birr ?? 10,
-        withdrawal_min_points: config.points?.withdrawal_min_points ?? 100,
-        withdrawal_max_points_per_request: config.points?.withdrawal_max_points_per_request ?? 10000,
+        withdrawal_min_points: config.points?.withdrawal_min_points ?? 1000,
+        withdrawal_max_points_per_request: config.points?.withdrawal_max_points_per_request ?? 50000,
         daily_winner_points: config.points?.daily_winner_points ?? 500,
         weekly_winner_points: config.points?.weekly_winner_points ?? 2000,
         monthly_winner_points: config.points?.monthly_winner_points ?? 10000,
@@ -489,8 +493,8 @@ function PointsSubTab({ theme: T, config, updateField }) {
         </div>
         <FieldRow theme={T} label="Coins to Points Conversion (1 point per X coins)" value={config.points?.coins_to_points_conversion || 1} onChange={(v) => updateField('points', 'coins_to_points_conversion', parseInt(v) || 1)} />
         <FieldRow theme={T} label="Points per Birr" value={config.points?.points_per_birr || 10} onChange={(v) => updateField('points', 'points_per_birr', parseInt(v) || 10)} />
-        <FieldRow theme={T} label="Min Points to Withdraw" value={config.points?.withdrawal_min_points || 100} onChange={(v) => updateField('points', 'withdrawal_min_points', parseInt(v) || 100)} />
-        <FieldRow theme={T} label="Max Points per Request" value={config.points?.withdrawal_max_points_per_request || 10000} onChange={(v) => updateField('points', 'withdrawal_max_points_per_request', parseInt(v) || 10000)} />
+        <FieldRow theme={T} label="Min Points to Withdraw" value={config.points?.withdrawal_min_points || 1000} onChange={(v) => updateField('points', 'withdrawal_min_points', parseInt(v) || 1000)} />
+        <FieldRow theme={T} label="Max Points per Request" value={config.points?.withdrawal_max_points_per_request || 50000} onChange={(v) => updateField('points', 'withdrawal_max_points_per_request', parseInt(v) || 50000)} />
       </SectionCard>
 
       <SectionCard theme={T} title="Campaign Winner Point Rewards" icon={<Trophy size={20} color="#8fc441" />}>
@@ -519,6 +523,16 @@ function GiftingSubTab({ theme: T, config, updateField }) {
         <ToggleField label="Purchased Coins Giftable" checked={config.gifting.purchased_coins_giftable} onChange={(v) => updateField('gifting', 'purchased_coins_giftable', v)} theme={T} />
         <ToggleField label="Earned Coins Withdrawable" checked={config.gifting.earned_coins_withdrawable} onChange={(v) => updateField('gifting', 'earned_coins_withdrawable', v)} theme={T} />
         <ToggleField label="Purchased Coins Withdrawable" checked={config.gifting.purchased_coins_withdrawable} onChange={(v) => updateField('gifting', 'purchased_coins_withdrawable', v)} theme={T} />
+      </SectionCard>
+
+      <SectionCard theme={T} title="Gift Transfer Restrictions (Points)" icon={<Trophy size={20} color="#8fc441" />}>
+        <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
+          Limits for gift/point transfers between users
+        </div>
+        <FieldRow theme={T} label="Min Points per Transaction" value={config.gifting.min_points_per_transaction || 10} onChange={(v) => updateField('gifting', 'min_points_per_transaction', parseInt(v) || 10)} />
+        <FieldRow theme={T} label="Max Points per Transaction" value={config.gifting.max_points_per_transaction || 5000} onChange={(v) => updateField('gifting', 'max_points_per_transaction', parseInt(v) || 5000)} />
+        <FieldRow theme={T} label="Max Points to One Creator/Day" value={config.gifting.max_points_to_recipient_per_day || 5000} onChange={(v) => updateField('gifting', 'max_points_to_recipient_per_day', parseInt(v) || 5000)} />
+        <FieldRow theme={T} label="Max Total Points Sent/Day" value={config.gifting.max_total_points_sent_per_day || 10000} onChange={(v) => updateField('gifting', 'max_total_points_sent_per_day', parseInt(v) || 10000)} />
       </SectionCard>
     </div>
   );
@@ -1311,16 +1325,20 @@ function SectionCard({ theme: T, title, icon, children }) {
 function FieldRow({ label, value, onChange, type = 'number', theme: T }) {
   const theme = T || defaultTheme();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <span style={{ fontSize: 13, color: theme.sub, minWidth: 140 }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+      <span style={{ fontSize: 13, color: theme.txt, minWidth: 140, fontWeight: 500 }}>{label}</span>
       <input
         type={type}
-        value={value ?? ''}
+        value={value !== undefined && value !== null ? value : ''}
         onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
         style={{
-          flex: 1, padding: 8, borderRadius: 6, border: `1px solid ${theme.border}`,
-          background: theme.bg, color: theme.txt, fontSize: 14,
+          flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${theme.border}`,
+          background: theme.card, color: theme.txt, fontSize: 14, fontWeight: 500,
+          outline: 'none', transition: 'border-color 0.2s',
         }}
+        onFocus={(e) => e.target.style.borderColor = theme.pri}
+        onBlur={(e) => e.target.style.borderColor = theme.border}
       />
     </div>
   );
