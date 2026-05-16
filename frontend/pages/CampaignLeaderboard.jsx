@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import config from '../config';
 import { ArrowLeft, Trophy, Medal, TrendingUp, Crown, Heart, MessageCircle, Share2, Gift } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+
+const BACKEND = config.API_BASE_URL.replace('/api', '');
+
+function mediaUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return BACKEND + url;
+}
 
 const PERIODS = [
   { id: 'daily', label: 'Today' },
@@ -145,8 +154,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 26, fontWeight: 800, color: '#fff',
                         border: '3px solid #A8A8A8',
+                        overflow: 'hidden',
                       }}>
-                        {top3[1].username?.[0]?.toUpperCase()}
+                        {top3[1].profile_photo ? (
+                          <img src={mediaUrl(top3[1].profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          top3[1].username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <Medal size={18} color="#A8A8A8" style={{ marginBottom: 4 }} />
                       <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 2 }}>{top3[1].username}</div>
@@ -165,8 +179,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         fontSize: 32, fontWeight: 800, color: '#fff',
                         border: `4px solid ${T.pri}`,
                         boxShadow: `0 8px 24px ${T.pri}50`,
+                        overflow: 'hidden',
                       }}>
-                        {top3[0].username?.[0]?.toUpperCase()}
+                        {top3[0].profile_photo ? (
+                          <img src={mediaUrl(top3[0].profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          top3[0].username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: T.txt, marginBottom: 2 }}>{top3[0].username}</div>
                       <div style={{ fontSize: 22, fontWeight: 900, color: '#fff' }}>{top3[0].total_score || top3[0].score}</div>
@@ -182,8 +201,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 26, fontWeight: 800, color: '#fff',
                         border: '3px solid #CD7F32',
+                        overflow: 'hidden',
                       }}>
-                        {top3[2].username?.[0]?.toUpperCase()}
+                        {top3[2].profile_photo ? (
+                          <img src={mediaUrl(top3[2].profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          top3[2].username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <Medal size={18} color="#CD7F32" style={{ marginBottom: 4 }} />
                       <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 2 }}>{top3[2].username}</div>
@@ -229,8 +253,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                           : `linear-gradient(135deg, ${T.pri}60, #8fc44160)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontSize: 15, fontWeight: 800,
+                        overflow: 'hidden',
                       }}>
-                        {entry.username?.[0]?.toUpperCase()}
+                        {entry.profile_photo ? (
+                          <img src={mediaUrl(entry.profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          entry.username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       {/* Name */}
                       <div style={{ flex: 1, minWidth: 0 }}>
