@@ -637,12 +637,15 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
 
       {/* Gift Modal */}
       {showGiftModal && (
-        <GiftPage
-          username={post.user?.username}
-          reelId={post.id}
-          onClose={() => setShowGiftModal(false)}
-          onShowWallet={() => setShowGiftModal(false)}
-        />
+        <>
+          {console.log('[HomePage] Rendering GiftPage with reelId:', post.id)}
+          <GiftPage
+            username={post.user?.username}
+            reelId={post.id}
+            onClose={() => setShowGiftModal(false)}
+            onShowWallet={() => setShowGiftModal(false)}
+          />
+        </>
       )}
     </div>
   );
@@ -1681,12 +1684,15 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
 
       {/* Gift Modal */}
       {showGiftModal && (
-        <GiftPage
-          username={post.user?.username}
-          reelId={post.id}
-          onClose={() => setShowGiftModal(false)}
-          onShowWallet={onShowWallet}
-        />
+        <>
+          {console.log('[HomePage PostCard] Rendering GiftPage with reelId:', post.id)}
+          <GiftPage
+            username={post.user?.username}
+            reelId={post.id}
+            onClose={() => setShowGiftModal(false)}
+            onShowWallet={onShowWallet}
+          />
+        </>
       )}
     </>
   );
