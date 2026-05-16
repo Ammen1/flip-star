@@ -230,6 +230,9 @@ class ReelSerializer(serializers.ModelSerializer):
         # Query GiftTransaction directly to count gifts for this reel
         from .models_gift import GiftTransaction
         from django.db.models import Sum
+        # Check if any transactions exist for this reel
+        tx_count = GiftTransaction.objects.filter(reel_id=obj.id).count()
+        print(f'[GIFT_COUNT] Reel {obj.id}: tx_count = {tx_count}')
         result = GiftTransaction.objects.filter(reel_id=obj.id).aggregate(total=Sum('quantity'))['total']
         print(f'[GIFT_COUNT] Reel {obj.id}: gift_count = {result}')
         return result or 0
