@@ -200,6 +200,8 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         quantity = data['quantity']
         message = data.get('message', '')
         
+        print(f'[GIFT_SEND] reel_id from request: {reel_id}')
+        
         # Validate gift
         try:
             gift = Gift.objects.get(id=gift_id, is_active=True)
