@@ -421,10 +421,18 @@ def get_leaderboard(request, campaign_id):
             total_gift_points * gifts_weight
         )
         
+        # Get profile photo URL
+        profile_photo_url = None
+        if hasattr(user, 'profile') and user.profile and user.profile.profile_photo:
+            try:
+                profile_photo_url = request.build_absolute_uri(user.profile.profile_photo.url)
+            except Exception:
+                profile_photo_url = None
+
         entries_data.append({
             'user_id': user.id,
             'username': user.username,
-            'profile_photo': user.profile.profile_photo if hasattr(user, 'profile') and user.profile else None,
+            'profile_photo': profile_photo_url,
             'total_score': float(calculated_score),
             'score': float(calculated_score),
             'post_count': len(reel_ids),
