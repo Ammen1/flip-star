@@ -292,7 +292,7 @@ export const TikTokLayout = memo(function TikTokLayout({
           hashtags: reel.hashtags_list || [],
           likes: reel.votes || 0,
           comments: reel.comment_count || 0,
-          shares: 0,
+          shares: reel.shares,
           imageUrl: (() => {
             const url = reel.media || reel.image;
             if (!url) return null;
@@ -1282,7 +1282,7 @@ export const TikTokLayout = memo(function TikTokLayout({
         hashtags: reel.hashtags_list || [],
         likes: reel.votes || 0,
         comments: reel.comment_count || 0,
-        shares: 0,
+        shares: reel.shares || 0,
         imageUrl: reel.media || reel.image,
         liked: reel.is_liked || false,
         saved: reel.is_saved || false,
