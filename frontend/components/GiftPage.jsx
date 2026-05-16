@@ -20,7 +20,6 @@ const RARITY_COLORS = {
 };
 
 export default function GiftPage({ username, reelId, onClose, onShowWallet }) {
-  console.log('[GiftPage] Received reelId:', reelId);
   const { colors: T } = useTheme();
   const [gifts, setGifts] = useState([
     { id: 1, name: 'Rose', description: 'A beautiful red rose', coin_value: 10, rarity: 'common', category: 'flowers' },
@@ -120,7 +119,6 @@ export default function GiftPage({ username, reelId, onClose, onShowWallet }) {
 
     setLoading(true);
     try {
-      console.log('[GiftPage] Sending gift with reelId:', reelId);
       await api.request('/gifts/send/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
