@@ -200,6 +200,8 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         quantity = data['quantity']
         message = data.get('message', '')
         
+        print(f'[GIFT_SEND] reel_id from request: {reel_id}')
+        
         # Validate gift
         try:
             gift = Gift.objects.get(id=gift_id, is_active=True)
@@ -230,11 +232,15 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         if reel_id:
             try:
                 reel = Reel.objects.get(id=reel_id)
+                print(f'[GIFT_SEND] Reel found: {reel.id}')
             except Reel.DoesNotExist:
+                print(f'[GIFT_SEND] Reel not found for id: {reel_id}')
                 return Response(
                     {'error': 'Reel not found'}, 
                     status=status.HTTP_404_NOT_FOUND
                 )
+        else:
+            print(f'[GIFT_SEND] No reel_id provided in request')
         
         # Check wallet config for gifting policy
         wallet_config = WalletConfig.get_config()
