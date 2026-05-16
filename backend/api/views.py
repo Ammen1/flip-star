@@ -1177,6 +1177,7 @@ class ReelViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         try:
             from .models import Comment
+            from .models_gift import GiftTransaction
             # Prefetch recent comments to avoid N+1 queries in serializer
             recent_comments_prefetch = Prefetch(
                 'comments',
@@ -1187,10 +1188,12 @@ class ReelViewSet(viewsets.ModelViewSet):
             queryset = Reel.objects.select_related(
                 'user', 'user__profile'
             ).prefetch_related(
-                recent_comments_prefetch
+                recent_comments_prefetch,
+                'gifts_received'
             ).annotate(
                 comment_count_db=Count('comments', distinct=True),
                 votes_count_db=Count('reel_votes', distinct=True),
+                gift_count_db=Count('gifts_received', distinct=True),
             ).order_by('-created_at')
             
             # Skip NotInterested filter to prevent crashes - it's causing performance issues
