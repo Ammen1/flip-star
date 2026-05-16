@@ -231,6 +231,7 @@ class ReelSerializer(serializers.ModelSerializer):
         from .models_gift import GiftTransaction
         from django.db.models import Sum
         result = GiftTransaction.objects.filter(reel_id=obj.id).aggregate(total=Sum('quantity'))['total']
+        print(f'[GIFT_COUNT] Reel {obj.id}: gift_count = {result}')
         return result or 0
     
     def get_is_saved(self, obj):
