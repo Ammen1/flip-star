@@ -33,7 +33,7 @@ const overlayCSS = (ov) => {
 
 const LONG_PRESS_MS = 500;
 
-export function VideoCard({ video, onLike, onComment, onShare }) {
+export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
   const T = useLegacyT();
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -197,7 +197,7 @@ export function VideoCard({ video, onLike, onComment, onShare }) {
             </button>
             {/* Gift */}
             <button
-              onClick={handleShare}
+              onClick={onGift}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 padding: '4px 6px', borderRadius: 8,

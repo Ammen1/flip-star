@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Play,
   Pause,
+  Gift,
 } from 'lucide-react';
 import api from '../api';
 import config from '../config';
@@ -28,6 +29,7 @@ import { LikeButton } from './LikeButton';
 import { SearchBar } from './SearchBar';
 import { UserSuggestions } from './UserSuggestions';
 import { AlertModal } from './AlertModal';
+import GiftPage from './GiftPage';
 import { getRelativeTime } from '../utils/timeUtils';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -149,6 +151,8 @@ export const TikTokLayout = memo(function TikTokLayout({
   const [showMenu, setShowMenu] = useState(null);
   const [showReportModal, setShowReportModal] = useState(null);
   const [showComments, setShowComments] = useState(null);
+  const [showGiftModal, setShowGiftModal] = useState(null);
+  const [giftReelId, setGiftReelId] = useState(null);
   const [playingVideos, setPlayingVideos] = useState({});
   const [showPauseIcon, setShowPauseIcon] = useState({});
   const [manuallyPaused, setManuallyPaused] = useState({}); // Track user-paused videos
@@ -2696,6 +2700,46 @@ export const TikTokLayout = memo(function TikTokLayout({
                       </div>
                     </div>
 
+                    {/* Gift Button */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          if (!user) {
+                            onRequireAuth();
+                            return;
+                          }
+                          setGiftReelId(video.id);
+                          setShowGiftModal(video.user?.username);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        <Gift size={32} color="#8fc441" fill="#8fc441" />
+                      </button>
+                      <div
+                        className="feed-action-label"
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: '#8fc441',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {video.gift_count === 0 ? '' : video.gift_count}
+                      </div>
+                    </div>
+
                     {/* Save Button */}
                     <div
                       style={{
@@ -2782,11 +2826,27 @@ export const TikTokLayout = memo(function TikTokLayout({
             onClose={() => setShowComments(null)}
             onCommentPosted={handleCommentPosted}
             onShowProfile={(userId) => {
-              setShowComments(null);
-              onShowProfile?.(userId);
+              handleShowProfile(userId);
             }}
           />
         </div>
+      )}
+
+      {/* Gift Modal */}
+      {showGiftModal && (
+        <GiftPage
+          username={showGiftModal}
+          reelId={giftReelId}
+          onClose={() => {
+            setShowGiftModal(null);
+            setGiftReelId(null);
+          }}
+          onShowWallet={() => {
+            setShowGiftModal(null);
+            setGiftReelId(null);
+            onShowWallet();
+          }}
+        />
       )}
 
       {/* Report Category Modal */}
