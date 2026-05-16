@@ -403,7 +403,7 @@ def get_leaderboard(request, campaign_id):
         total_comments = Comment.objects.filter(reel_id__in=reel_ids).count()
         
         # Count shares from Reel.shares field
-        total_shares = user_posts.aggregate(total=models.Sum('reel__shares'))['total'] or 0
+        total_shares = user_posts.aggregate(total=Sum('reel__shares'))['total'] or 0
         
         # Count gift points (total_coins from GiftTransaction converted to points)
         total_gift_points = 0
