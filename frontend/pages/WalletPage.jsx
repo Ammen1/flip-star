@@ -982,8 +982,15 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
           <input
             type="number"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            min="1"
+            onChange={(e) => {
+              const value = parseInt(e.target.value);
+              if (isNaN(value) || value < 0) {
+                setAmount(0);
+              } else {
+                setAmount(value);
+              }
+            }}
+            min="0"
             max={availablePoints}
             style={modalInput(T)}
           />

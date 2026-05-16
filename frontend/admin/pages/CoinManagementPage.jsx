@@ -724,7 +724,7 @@ function WithdrawalCard({ w, theme: T, onAction }) {
 
 function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState('phone'); // phone, id, username
+  const [searchType, setSearchType] = useState('both'); // both, id
   const [searching, setSearching] = useState(false);
   const [userData, setUserData] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -748,39 +748,29 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
         const data = await api.request(`/admin/users/${searchQuery}/`);
         user = data;
       } else {
-        // For phone and username, use the search parameter
-        // Try different phone number formats if searching by phone
-        let searchQueryFormatted = searchQuery;
-        if (searchType === 'phone') {
-          // Try original, with +251, with 251, and without leading 0
-          const variants = [
-            searchQuery,
-            searchQuery.startsWith('0') ? '+251' + searchQuery.substring(1) : searchQuery,
-            searchQuery.startsWith('0') ? '251' + searchQuery.substring(1) : searchQuery,
-            searchQuery.startsWith('+251') ? searchQuery.substring(4) : searchQuery,
-            searchQuery.startsWith('251') ? searchQuery.substring(3) : searchQuery,
-          ];
-          
-          // Try each variant until we find a result
-          for (const variant of variants) {
-            console.log('Trying phone variant:', variant);
-            const data = await api.request(`/admin/users/?search=${variant}`);
-            console.log('Search results for variant:', variant, data);
-            if (data.users && data.users.length > 0) {
-              user = data.users[0];
-              break;
-            }
+        // For both phone and username, try phone variants first, then username
+        const variants = [
+          searchQuery,
+          searchQuery.startsWith('0') ? '+251' + searchQuery.substring(1) : searchQuery,
+          searchQuery.startsWith('0') ? '251' + searchQuery.substring(1) : searchQuery,
+          searchQuery.startsWith('+251') ? searchQuery.substring(4) : searchQuery,
+          searchQuery.startsWith('251') ? searchQuery.substring(3) : searchQuery,
+        ];
+        
+        // Try phone number variants
+        for (const variant of variants) {
+          const data = await api.request(`/admin/users/?search=${variant}`);
+          console.log('Search results for variant:', variant, data);
+          if (data.users && data.users.length > 0) {
+            user = data.users[0];
+            break;
           }
-          
-          if (!user) {
-            // If no variant worked, try the original search
-            const data = await api.request(`/admin/users/?search=${searchQuery}`);
-            user = data.users?.[0] || data;
-          }
-        } else {
-          // Username search
+        }
+        
+        // If not found by phone, try username search
+        if (!user) {
           const data = await api.request(`/admin/users/?search=${searchQuery}`);
-          console.log('Search results:', data);
+          console.log('Search results by username:', data);
           user = data.users?.[0] || data;
         }
       }
@@ -889,24 +879,21 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
           {/* Search Type Tabs */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {[
-              { id: 'phone', label: 'Phone' },
+              { id: 'both', label: 'Phone/Username' },
               { id: 'id', label: 'User ID' },
-              { id: 'username', label: 'Username' },
             ].map((type) => (
               <button
                 key={type.id}
                 onClick={() => setSearchType(type.id)}
                 style={{
-                  flex: 1,
-                  padding: '10px 16px',
-                  background: searchType === type.id ? T.pri : T.bg,
-                  border: searchType === type.id ? 'none' : `1px solid ${T.border}`,
+                  padding: '8px 16px',
                   borderRadius: 8,
-                  color: searchType === type.id ? '#fff' : T.txt,
-                  fontSize: 13,
+                  border: `1px solid ${searchType === type.id ? T.pri : T.border}`,
+                  background: searchType === type.id ? `${T.pri}22` : T.bg,
+                  color: searchType === type.id ? T.pri : T.txt,
+                  fontSize: 14,
                   fontWeight: 600,
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
                 }}
               >
                 {type.label}
@@ -920,7 +907,7 @@ function AdjustTab({ theme: T, form, setForm, onSubmit, result, setResult }) {
               type={searchType === 'id' ? 'number' : 'text'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={searchType === 'phone' ? 'Enter phone number (e.g., 0912345678)' : searchType === 'id' ? 'Enter user ID' : 'Enter username'}
+              placeholder={searchType === 'id' ? 'Enter user ID' : 'Enter phone number or username'}
               onKeyPress={(e) => e.key === 'Enter' && searchUser()}
               style={{
                 flex: 1,
