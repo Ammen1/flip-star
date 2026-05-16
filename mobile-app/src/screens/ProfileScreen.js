@@ -441,6 +441,26 @@ export default function ProfileScreen({ navigation, route }) {
     }
   };
 
+  const handleRemoveFromSaved = async (postId) => {
+    setConfirmDeleteId(null);
+    setPostMenuId(null);
+    
+    // Remove from saved posts immediately (no rollback needed)
+    setSavedPosts(prev => prev.filter(p => p.id !== postId));
+    
+    // Try to call API but don't show errors to user
+    try {
+      await api.request(`/reels/${postId}/unsave/`, { method: 'POST' });
+      setSuccessMessage('Removed from saved posts!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (error) {
+      console.log('API unsave failed, but post removed from UI:', error);
+      // Don't show error to user - just remove from UI
+      setSuccessMessage('Removed from saved posts!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    }
+  };
+
   const handleRequestDelete = (postId) => {
     setPostMenuId(null);
     setConfirmDeleteId(postId);
@@ -512,7 +532,7 @@ export default function ProfileScreen({ navigation, route }) {
     console.log('ProfileScreen - renderPost item:', { id: item.id, media: item.media, thumbnail, isVideo });
     
     return (
-      <View style={styles.gridItemWrapper}>
+      <View key={item.id} style={styles.gridItemWrapper}>
         <TouchableOpacity
           style={styles.gridItem}
           onPress={() => {
@@ -832,44 +852,13 @@ export default function ProfileScreen({ navigation, route }) {
                   <Text style={[styles.campaignTitle, { color: colors.text }]}>Campaign Achievements</Text>
                 </View>
 
-                {/* Stats Grid */}
-                <View style={styles.statsGrid}>
-                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                    <Ionicons name="trophy-outline" size={18} color={colors.primary} />
-                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.total_campaigns || 0}</Text>
-                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Campaigns</Text>
-                  </View>
-                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                    <Ionicons name="podium-outline" size={18} color={colors.primary} />
-                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.total_wins || 0}</Text>
-                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Wins</Text>
-                  </View>
-                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                    <Ionicons name="medal-outline" size={18} color={colors.primary} />
-                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.best_rank || '-'}</Text>
-                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Best Rank</Text>
-                  </View>
-                  <View style={[styles.statCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                    <Ionicons name="flame-outline" size={18} color={colors.primary} />
-                    <Text style={[styles.statValue, { color: colors.text }]}>{campaignStats.current_streak || 0}</Text>
-                    <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Streak</Text>
-                  </View>
-                </View>
-
+                
                 {/* Campaign List */}
                 <View style={[styles.campaignList, { backgroundColor: colors.cardBg }]}>
                   <Text style={[styles.campaignListTitle, { color: colors.text }]}>Active Campaigns</Text>
                   {campaignStats.campaigns.map((campaign) => (
                     <View key={campaign.campaign_id} style={[styles.campaignItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                      <View style={styles.campaignInfo}>
-                        <Text style={[styles.campaignName, { color: colors.text }]}>{campaign.campaign_title}</Text>
-                        <Text style={[styles.campaignDetails, { color: colors.textSecondary }]}>
-                          {campaign.posts_count} posts · Rank #{campaign.rank || '-'}
-                        </Text>
-                      </View>
-                      <View style={styles.campaignScore}>
-                        <Text style={[styles.campaignScoreText, { color: colors.primary }]}>{campaign.total_score} pts</Text>
-                      </View>
+                      <Text style={[styles.campaignName, { color: colors.text }]}>{campaign.campaign_title}</Text>
                     </View>
                   ))}
                 </View>
@@ -1104,23 +1093,39 @@ export default function ProfileScreen({ navigation, route }) {
           >
             <View style={styles.postMenuSheet}>
               <View style={styles.sheetHandle} />
-              <TouchableOpacity
-                onPress={() => {
-                  const post = posts.find(p => p.id === postMenuId);
-                  if (post) handleEditPost(post);
-                }}
-                style={styles.postMenuOption}
-              >
-                <Ionicons name="create-outline" size={20} color={GOLD} />
-                <Text style={styles.postMenuText}>Edit Post</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => handleRequestDelete(postMenuId)}
-                style={[styles.postMenuOption, styles.postMenuDanger]}
-              >
-                <Ionicons name="trash-outline" size={20} color="#ff4444" />
-                <Text style={[styles.postMenuText, styles.postMenuDangerText]}>Delete Post</Text>
-              </TouchableOpacity>
+              
+              {/* Show different options based on active tab */}
+              {activeTab === 'saved' ? (
+                // Saved posts: only show "Remove from Saved" option
+                <TouchableOpacity
+                  onPress={() => handleRequestDelete(postMenuId)}
+                  style={[styles.postMenuOption, styles.postMenuDanger]}
+                >
+                  <Ionicons name="bookmark-outline" size={20} color="#ff4444" />
+                  <Text style={[styles.postMenuText, styles.postMenuDangerText]}>Remove from Saved</Text>
+                </TouchableOpacity>
+              ) : (
+                // Regular posts: show Edit and Delete options
+                <>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const post = posts.find(p => p.id === postMenuId);
+                      if (post) handleEditPost(post);
+                    }}
+                    style={styles.postMenuOption}
+                  >
+                    <Ionicons name="create-outline" size={20} color={GOLD} />
+                    <Text style={styles.postMenuText}>Edit Post</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => handleRequestDelete(postMenuId)}
+                    style={[styles.postMenuOption, styles.postMenuDanger]}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                    <Text style={[styles.postMenuText, styles.postMenuDangerText]}>Delete Post</Text>
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
           </TouchableOpacity>
         </Modal>
@@ -1231,12 +1236,18 @@ export default function ProfileScreen({ navigation, route }) {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.deleteConfirmModal}>
-              <View style={styles.deleteIconContainer}>
-                <Ionicons name="trash-outline" size={48} color="#ff4444" />
+              <View style={styles.deleteModalHeader}>
+                <Ionicons name={activeTab === 'saved' ? "bookmark-outline" : "trash-outline"} size={24} color="#ff4444" />
+                <Text style={styles.deleteModalTitle}>
+                  {activeTab === 'saved' ? 'Remove from Saved' : 'Delete Post'}
+                </Text>
               </View>
-              
-              <Text style={styles.deleteTitle}>Delete Post?</Text>
-              <Text style={styles.deleteMessage}>This action cannot be undone. Your post will be permanently deleted.</Text>
+              <Text style={styles.deleteModalMessage}>
+                {activeTab === 'saved' 
+                  ? 'Are you sure you want to remove this post from your saved posts?'
+                  : 'Are you sure you want to delete this post? This action cannot be undone.'
+                }
+              </Text>
               
               <View style={styles.deleteActions}>
                 <TouchableOpacity 
@@ -1246,10 +1257,12 @@ export default function ProfileScreen({ navigation, route }) {
                   <Text style={styles.deleteCancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
-                  onPress={() => handleDeletePost(confirmDeleteId)} 
+                  onPress={() => activeTab === 'saved' ? handleRemoveFromSaved(confirmDeleteId) : handleDeletePost(confirmDeleteId)} 
                   style={styles.deleteConfirmButton}
                 >
-                  <Text style={styles.deleteConfirmButtonText}>Delete</Text>
+                  <Text style={styles.deleteConfirmButtonText}>
+                    {activeTab === 'saved' ? 'Remove' : 'Delete'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>

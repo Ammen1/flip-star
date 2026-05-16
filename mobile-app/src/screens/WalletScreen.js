@@ -41,16 +41,36 @@ export default function WalletScreen({ navigation }) {
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [phone, setPhone] = useState('');
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { 
+    loadAll(); 
+    
+    // Add focus listener to refresh data when screen comes into focus
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadAll(true); // Silent refresh on focus
+    });
+    
+    // Add periodic refresh to keep data fresh
+    const refreshInterval = setInterval(() => {
+      loadAll(true); // Silent refresh every 30 seconds
+    }, 30000);
+    
+    return () => {
+      unsubscribe();
+      clearInterval(refreshInterval);
+    };
+  }, [navigation]);
 
   const loadAll = async (silent = false) => {
     try {
       if (!silent) setLoading(true); else setRefreshing(true);
+      
+      // Add timestamp to prevent caching issues
+      const timestamp = Date.now();
       const [s, c, pkgs, profile] = await Promise.all([
-        api.request('/wallet/'),
-        api.request('/wallet/config/').catch(() => ({})),
-        api.request('/coins/packages/').catch(() => []),
-        api.request('/profile/me/').catch(() => ({})),
+        api.request(`/wallet/?_t=${timestamp}`),
+        api.request(`/wallet/config/?_t=${timestamp}`).catch(() => ({})),
+        api.request(`/coins/packages/?_t=${timestamp}`).catch(() => []),
+        api.request(`/profile/me/?_t=${timestamp}`).catch(() => ({})),
       ]);
       console.log('Wallet data:', s);
       console.log('Profile data:', profile);
@@ -58,13 +78,8 @@ export default function WalletScreen({ navigation }) {
       setConfig(c);
       setPackages(Array.isArray(pkgs) ? pkgs : (pkgs.results || []));
       
-      // Always load all transactions to match website behavior
-      if (!transactions.length) {
-        loadTransactions();
-      } else if (silent) {
-        // If refreshing silently, still load all transactions to get latest
-        loadTransactions();
-      }
+      // Always load transactions to get latest data
+      loadTransactions();
     } catch (e) { 
       console.error('Wallet load error:', e);
       Alert.alert('Error', 'Failed to load wallet'); 
@@ -85,9 +100,12 @@ export default function WalletScreen({ navigation }) {
       let hasMore = true;
       let consecutiveEmptyPages = 0;
       
+      // Add timestamp to prevent caching
+      const timestamp = Date.now();
+      
       while (hasMore && consecutiveEmptyPages < 3) {
         try {
-          const data = await api.request(`/wallet/transactions/?page=${page}&page_size=100`);
+          const data = await api.request(`/wallet/transactions/?page=${page}&page_size=100&_t=${timestamp}`);
           const pageTransactions = data.results || [];
           
           if (pageTransactions.length > 0) {

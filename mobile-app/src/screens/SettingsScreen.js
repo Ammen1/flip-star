@@ -226,23 +226,7 @@ export default function SettingsScreen({ navigation }) {
   const { colors, darkMode, toggleDarkMode } = useTheme();
   const { language, setLanguage, t } = useLanguage();
   
-  const [notifications, setNotifications] = useState(() => {
-    return {
-      likes: true,
-      comments: true,
-      follows: true,
-      messages: true,
-    };
-  });
-  
-  const [privacy, setPrivacy] = useState(() => {
-    return {
-      privateAccount: false,
-      showActivity: true,
-      allowMessages: true,
-    };
-  });
-  const [blockedUsers, setBlockedUsers] = useState([]);
+    const [blockedUsers, setBlockedUsers] = useState([]);
   const [loadingBlocked, setLoadingBlocked] = useState(false);
   
   const [showPassModal, setShowPassModal] = useState(false);
@@ -256,47 +240,8 @@ export default function SettingsScreen({ navigation }) {
   const [password, setPassword] = useState({ current: '', new: '', confirm: '' });
   const [showPasswords, setShowPasswords] = useState({ current: false, new: false, confirm: false });
 
-  // Load settings from AsyncStorage and backend on mount
+  // Load blocked users on mount
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        // Load notification settings from backend
-        try {
-          const notifData = await api.getNotificationSettings();
-          if (notifData) {
-            setNotifications({
-              likes: notifData.likes ?? true,
-              comments: notifData.comments ?? true,
-              follows: notifData.follows ?? true,
-              messages: notifData.messages ?? true,
-            });
-          }
-        } catch (e) {
-          // Fallback to AsyncStorage if backend fails
-          const notifData = await AsyncStorage.getItem('notifications');
-          if (notifData) setNotifications(JSON.parse(notifData));
-        }
-        
-        // Load privacy settings from backend
-        try {
-          const privacyData = await api.getPrivacySettings();
-          if (privacyData) {
-            setPrivacy({
-              privateAccount: privacyData.private_account ?? false,
-              showActivity: privacyData.show_activity_status ?? true,
-              allowMessages: privacyData.allow_messages_from_anyone ?? true,
-            });
-          }
-        } catch (e) {
-          // Fallback to AsyncStorage if backend fails
-          const privacyData = await AsyncStorage.getItem('privacy');
-          if (privacyData) setPrivacy(JSON.parse(privacyData));
-        }
-      } catch {}
-    };
-    loadSettings();
-
-    // Load blocked users
     const loadBlockedUsers = async () => {
       try {
         setLoadingBlocked(true);
@@ -312,54 +257,7 @@ export default function SettingsScreen({ navigation }) {
     loadBlockedUsers();
   }, []);
 
-  // Save settings to AsyncStorage whenever they change
-  useEffect(() => {
-    AsyncStorage.setItem('notifications', JSON.stringify(notifications)).catch(() => {});
-  }, [notifications]);
-
-  useEffect(() => {
-    AsyncStorage.setItem('privacy', JSON.stringify(privacy)).catch(() => {});
-  }, [privacy]);
-
-  const handleNotificationToggle = async (key) => {
-    const newVal = !notifications[key];
-    const next = { ...notifications, [key]: newVal };
-    setNotifications(next);
-    
-    // Sync with backend
-    try {
-      await api.updateNotificationSettings({ [key]: newVal });
-      console.log(`Updated ${key} notification setting to:`, newVal);
-    } catch (error) {
-      console.error('Failed to update notification settings:', error);
-      // Revert on error
-      setNotifications({ ...notifications, [key]: !newVal });
-      Alert.alert('Error', 'Failed to update notification settings');
-    }
-  };
-
-  const handlePrivacyToggle = async (key) => {
-    const newVal = !privacy[key];
-    const next = { ...privacy, [key]: newVal };
-    setPrivacy(next);
-    
-    // Map frontend keys to backend keys
-    const backendKeyMap = {
-      privateAccount: 'private_account',
-      showActivity: 'show_activity_status', 
-      allowMessages: 'allow_messages_from_anyone',
-    };
-    
-    // Sync with backend
-    try {
-      await api.updatePrivacySettings({ [backendKeyMap[key]]: newVal });
-    } catch (error) {
-      // Revert on error
-      setPrivacy({ ...privacy, [key]: !newVal });
-      Alert.alert('Error', 'Failed to update privacy settings');
-    }
-  };
-
+  
   const handleDarkModeToggle = () => {
     toggleDarkMode();
   };
@@ -481,30 +379,13 @@ export default function SettingsScreen({ navigation }) {
           <SettingRow icon="lock-closed-outline" label={t('changePassword')} onPress={() => setShowPassModal(true)} colors={colors} />
         </SectionCard>
 
-        {/* Notifications */}
-        <SectionLabel colors={colors}>{t('notifications')}</SectionLabel>
-        <SectionCard colors={colors}>
-          <SettingRow icon="heart-outline" label={t('likes')} isSwitch switchValue={notifications.likes} onSwitch={() => handleNotificationToggle('likes')} colors={colors} />
-          <SettingRow icon="chatbubble-outline" label={t('comments')} isSwitch switchValue={notifications.comments} onSwitch={() => handleNotificationToggle('comments')} colors={colors} />
-          <SettingRow icon="people-outline" label={t('follows')} isSwitch switchValue={notifications.follows} onSwitch={() => handleNotificationToggle('follows')} colors={colors} />
-          <SettingRow icon="mail-outline" label={t('messages')} isSwitch switchValue={notifications.messages} onSwitch={() => handleNotificationToggle('messages')} colors={colors} />
-        </SectionCard>
-
-        {/* Privacy */}
-        <SectionLabel colors={colors}>{t('privacy')}</SectionLabel>
-        <SectionCard colors={colors}>
-          <SettingRow icon="eye-off-outline" label={t('privateAccount')} subtitle="Only followers can see your posts" isSwitch switchValue={privacy.privateAccount} onSwitch={() => handlePrivacyToggle('privateAccount')} colors={colors} />
-          <SettingRow icon="pulse-outline" label={t('showActivity')} subtitle="Show your activity status" isSwitch switchValue={privacy.showActivity} onSwitch={() => handlePrivacyToggle('showActivity')} colors={colors} />
-          <SettingRow icon="mail-outline" label={t('allowMessages')} subtitle="Receive messages from anyone" isSwitch switchValue={privacy.allowMessages} onSwitch={() => handlePrivacyToggle('allowMessages')} colors={colors} />
-          <SettingRow icon="refresh-outline" label={t('resetSuggestions')} subtitle="Clear your recommendation history" onPress={handleResetSuggestions} colors={colors} />
-        </SectionCard>
-
+        
+        
         {/* Appearance */}
         <SectionLabel colors={colors}>{t('appearance')}</SectionLabel>
         <SectionCard colors={colors}>
           <SettingRow icon={darkMode ? "moon-outline" : "sunny-outline"} label={t('darkMode')} isSwitch switchValue={darkMode} onSwitch={handleDarkModeToggle} colors={colors} />
           <SettingRow icon="globe-outline" label={t('language')} subtitle="English" onPress={() => setShowLangModal(true)} colors={colors} />
-          <SettingRow icon="ios-notifications-outline" label="Notification Sound" subtitle="Choose a notification sound" onPress={() => console.log('Notification Sound')} colors={colors} />
         </SectionCard>
 
         {/* FAQ */}

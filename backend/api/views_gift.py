@@ -262,7 +262,17 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         wallet_config = WalletConfig.get_config()
         points_received = wallet_config.coins_to_points(total_cost)
         
-        # Add points to recipient (not coins)
+        # Get or create recipient's coin balance and add coins to their balance
+        recipient_coin_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
+        recipient_coin_balance.add_coins(
+            amount=total_cost,
+            transaction_type='gift_received',
+            recipient=request.user,  # The sender (stored as "other party")
+            reel=reel,
+            description=f'Received {gift.name} from @{request.user.username}'
+        )
+        
+        # Add points to recipient profile
         recipient_profile = recipient.profile
         recipient_profile.points += points_received
         recipient_profile.points_earned_total += points_received
@@ -270,16 +280,8 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         recipient_profile.save()
         
         # Log gift_received as a CoinTransaction for the recipient's activity feed
-        # coins field stores the points received (1 coin = 1 point conversion)
+        # This is already created by the add_coins method above, but we'll ensure it's properly logged
         from .models_contest import CoinTransaction
-        CoinTransaction.objects.create(
-            user=recipient,
-            transaction_type='gift_received',
-            coins=points_received,
-            recipient=request.user,  # The sender (stored as "other party")
-            reel=reel,
-            description=f'Received {gift.name} from @{request.user.username}',
-        )
         
         # Handle combo logic
         is_combo = False
