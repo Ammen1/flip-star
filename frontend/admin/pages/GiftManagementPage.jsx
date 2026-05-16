@@ -44,8 +44,14 @@ export function GiftManagementPage({ theme }) {
   const loadRestrictions = async () => {
     try {
       const response = await api.request('/admin/wallet/config/');
-      if (response.config && response.config.gifting && response.config.gifting.restrictions) {
-        setRestrictions(response.config.gifting.restrictions);
+      const config = response.config || response;
+      if (config && config.gifting) {
+        setRestrictions({
+          min_points_per_transaction: config.gifting.min_points_per_transaction || 10,
+          max_points_per_transaction: config.gifting.max_points_per_transaction || 5000,
+          max_points_to_recipient_per_day: config.gifting.max_points_to_recipient_per_day || 5000,
+          max_total_points_sent_per_day: config.gifting.max_total_points_sent_per_day || 10000,
+        });
       }
     } catch (error) {
       console.error('Error loading restrictions:', error);
@@ -574,9 +580,10 @@ export function GiftManagementPage({ theme }) {
                   padding: '12px',
                   borderRadius: '8px',
                   border: `1px solid ${theme.border}`,
-                  background: theme.bg,
-                  color: theme.text,
+                  background: '#FFFFFF',
+                  color: '#000000',
                   fontSize: '14px',
+                  fontWeight: 500,
                 }}
               />
               <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
@@ -604,9 +611,10 @@ export function GiftManagementPage({ theme }) {
                   padding: '12px',
                   borderRadius: '8px',
                   border: `1px solid ${theme.border}`,
-                  background: theme.bg,
-                  color: theme.text,
+                  background: '#FFFFFF',
+                  color: '#000000',
                   fontSize: '14px',
+                  fontWeight: 500,
                 }}
               />
               <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
@@ -634,9 +642,10 @@ export function GiftManagementPage({ theme }) {
                   padding: '12px',
                   borderRadius: '8px',
                   border: `1px solid ${theme.border}`,
-                  background: theme.bg,
-                  color: theme.text,
+                  background: '#FFFFFF',
+                  color: '#000000',
                   fontSize: '14px',
+                  fontWeight: 500,
                 }}
               />
               <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
@@ -664,9 +673,10 @@ export function GiftManagementPage({ theme }) {
                   padding: '12px',
                   borderRadius: '8px',
                   border: `1px solid ${theme.border}`,
-                  background: theme.bg,
-                  color: theme.text,
+                  background: '#FFFFFF',
+                  color: '#000000',
                   fontSize: '14px',
+                  fontWeight: 500,
                 }}
               />
               <p style={{ color: theme.sub, fontSize: '12px', marginTop: '4px' }}>
@@ -774,9 +784,10 @@ export function GiftManagementPage({ theme }) {
                     padding: '12px',
                     borderRadius: '8px',
                     border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.text,
+                    background: '#FFFFFF',
+                    color: '#000000',
                     fontSize: '14px',
+                    fontWeight: 500,
                   }}
                   placeholder="e.g., Rose, Diamond Heart"
                 />
@@ -801,9 +812,10 @@ export function GiftManagementPage({ theme }) {
                     padding: '12px',
                     borderRadius: '8px',
                     border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.text,
+                    background: '#FFFFFF',
+                    color: '#000000',
                     fontSize: '14px',
+                    fontWeight: 500,
                     resize: 'vertical',
                   }}
                   placeholder="Gift description"
@@ -832,9 +844,10 @@ export function GiftManagementPage({ theme }) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
+                      background: '#FFFFFF',
+                      color: '#000000',
                       fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   />
                 </div>
@@ -859,9 +872,10 @@ export function GiftManagementPage({ theme }) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
+                      background: '#FFFFFF',
+                      color: '#000000',
                       fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   />
                 </div>
@@ -886,9 +900,10 @@ export function GiftManagementPage({ theme }) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
+                      background: '#FFFFFF',
+                      color: '#000000',
                       fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   >
                     <option value="common">Common</option>
@@ -916,9 +931,10 @@ export function GiftManagementPage({ theme }) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
+                      background: '#FFFFFF',
+                      color: '#000000',
                       fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   >
                     <option value="special">Special</option>
@@ -951,9 +967,10 @@ export function GiftManagementPage({ theme }) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
+                      background: '#FFFFFF',
+                      color: '#000000',
                       fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   />
                 </div>
@@ -978,9 +995,10 @@ export function GiftManagementPage({ theme }) {
                       padding: '12px',
                       borderRadius: '8px',
                       border: `1px solid ${theme.border}`,
-                      background: theme.bg,
-                      color: theme.text,
+                      background: '#FFFFFF',
+                      color: '#000000',
                       fontSize: '14px',
+                      fontWeight: 500,
                     }}
                   />
                 </div>
@@ -1005,9 +1023,10 @@ export function GiftManagementPage({ theme }) {
                     padding: '12px',
                     borderRadius: '8px',
                     border: `1px solid ${theme.border}`,
-                    background: theme.bg,
-                    color: theme.text,
+                    background: '#FFFFFF',
+                    color: '#000000',
                     fontSize: '14px',
+                    fontWeight: 500,
                   }}
                   placeholder="e.g., particle, bounce, pulse"
                 />
