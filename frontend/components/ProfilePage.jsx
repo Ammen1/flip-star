@@ -1338,12 +1338,13 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
         >
           <div
             style={{
-              width: '100%', maxWidth: 560,
-              maxHeight: '75vh',
+              width: '100%', maxWidth: 420,
+              maxHeight: '70vh',
               background: T.cardBg || '#1A1A1A',
               borderTopLeftRadius: 20,
               borderTopRightRadius: 20,
               padding: 20,
+              paddingBottom: 28,
               boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
             }}
             onClick={(e) => e.stopPropagation()}
