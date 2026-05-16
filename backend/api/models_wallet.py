@@ -66,8 +66,8 @@ class WalletConfig(models.Model):
     # Points are separate from coins and can only be withdrawn/transferred as birr
     coins_to_points_conversion = models.PositiveIntegerField(default=1, help_text='How many coins = 1 point (gift conversion)')
     points_per_birr = models.PositiveIntegerField(default=10, help_text='How many points = 1 ETB (withdrawal)')
-    withdrawal_min_points = models.PositiveIntegerField(default=100, help_text='Minimum points required to withdraw')
-    withdrawal_max_points_per_request = models.PositiveIntegerField(default=10000, help_text='Maximum points that can be withdrawn per request')
+    withdrawal_min_points = models.PositiveIntegerField(default=1000, help_text='Minimum points required to withdraw')
+    withdrawal_max_points_per_request = models.PositiveIntegerField(default=50000, help_text='Maximum points that can be withdrawn per request')
 
     # ============ CAMPAIGN WINNER POINT REWARDS ============
     daily_winner_points = models.PositiveIntegerField(default=500, help_text='Points awarded to daily campaign winners')

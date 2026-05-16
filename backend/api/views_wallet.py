@@ -534,6 +534,10 @@ def public_wallet_config(request):
         'gifting': {
             'earned_coins_giftable': config.earned_coins_giftable,
             'purchased_coins_giftable': config.purchased_coins_giftable,
+            'min_points_per_transaction': config.gift_min_points_per_transaction,
+            'max_points_per_transaction': config.gift_max_points_per_transaction,
+            'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
+            'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
         },
         'packages': packages,
     })
