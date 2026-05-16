@@ -293,6 +293,7 @@ export const TikTokLayout = memo(function TikTokLayout({
           likes: reel.votes || 0,
           comments: reel.comment_count || 0,
           shares: reel.shares,
+          gift_count: reel.gift_count || 0,
           imageUrl: (() => {
             const url = reel.media || reel.image;
             if (!url) return null;
@@ -1283,6 +1284,7 @@ export const TikTokLayout = memo(function TikTokLayout({
         likes: reel.votes || 0,
         comments: reel.comment_count || 0,
         shares: reel.shares || 0,
+        gift_count: reel.gift_count || 0,
         imageUrl: reel.media || reel.image,
         liked: reel.is_liked || false,
         saved: reel.is_saved || false,
