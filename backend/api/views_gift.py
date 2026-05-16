@@ -105,17 +105,44 @@ class PublicGiftViewSet(viewsets.ReadOnlyModelViewSet):
         
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def send(self, request):
-        """Send a gift to another user by username"""
+        """Send a gift to another user by username or phone number"""
         gift_id = request.data.get('gift_id')
         recipient_username = request.data.get('recipient_username')
+        phone_number = request.data.get('phone_number')
         quantity = request.data.get('quantity', 1)
         message = request.data.get('message', '')
-        
-        try:
-            recipient = User.objects.get(username=recipient_username)
-        except User.DoesNotExist:
-            return Response({'error': 'Recipient not found'}, status=status.HTTP_404_NOT_FOUND)
-            
+
+        # Validate that at least one identifier is provided
+        if not recipient_username and not phone_number:
+            return Response(
+                {'error': 'Either recipient_username or phone_number is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Look up recipient by phone number if provided
+        if phone_number:
+            # Normalize phone number
+            phone_number = phone_number.replace(' ', '').replace('-', '').replace('+', '')
+            if not phone_number.startswith('251'):
+                phone_number = '251' + phone_number
+
+            try:
+                recipient = User.objects.get(profile__phone_number=phone_number)
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'User with this phone number not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # Look up recipient by username
+            try:
+                recipient = User.objects.get(username=recipient_username)
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'Recipient not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
         data = {
             'gift_id': gift_id,
             'recipient_id': recipient.id,
