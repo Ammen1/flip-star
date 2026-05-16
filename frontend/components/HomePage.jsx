@@ -639,6 +639,7 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
       {showGiftModal && (
         <GiftPage
           username={post.user?.username}
+          reelId={post.id}
           onClose={() => setShowGiftModal(false)}
           onShowWallet={() => setShowGiftModal(false)}
         />
@@ -1682,6 +1683,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
       {showGiftModal && (
         <GiftPage
           username={post.user?.username}
+          reelId={post.id}
           onClose={() => setShowGiftModal(false)}
           onShowWallet={onShowWallet}
         />
