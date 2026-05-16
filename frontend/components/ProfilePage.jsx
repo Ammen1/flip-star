@@ -1400,7 +1400,7 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
                     const cur = streakData.login_streak.current ?? 0;
                     return days.map((day, i) => {
                       const daysFromEnd = 6 - i;
-                      const active = daysFromEnd < cur && daysFromEnd > 0;
+                      const active = daysFromEnd < cur;
                       const isToday = day.isToday;
                       const canClaim = isToday && streakData.login_streak.bonus_available && !claimed;
                       return (
