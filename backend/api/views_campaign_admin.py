@@ -391,6 +391,7 @@ def get_leaderboard(request, campaign_id):
 
     from .models import Vote, Comment
     from .models_gift import GiftTransaction
+    from django.db.models import Sum
 
     entries_data = []
     for user in users:
@@ -406,7 +407,6 @@ def get_leaderboard(request, campaign_id):
         total_shares = user_posts.aggregate(total=Sum('reel__shares'))['total'] or 0
         
         # Count gift points (sum of quantity from GiftTransaction)
-        from django.db.models import Sum
         total_gift_points = GiftTransaction.objects.filter(reel_id__in=reel_ids).aggregate(total=Sum('quantity'))['total'] or 0
         
         # Calculate score using campaign weights: score = likes*pt + comments*pt + shares*pt + gifts*pt
