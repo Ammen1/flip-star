@@ -111,6 +111,7 @@ class PublicGiftViewSet(viewsets.ReadOnlyModelViewSet):
         phone_number = request.data.get('phone_number')
         quantity = request.data.get('quantity', 1)
         message = request.data.get('message', '')
+        reel_id = request.data.get('reel_id')
 
         # Validate that at least one identifier is provided
         if not recipient_username and not phone_number:
@@ -148,6 +149,7 @@ class PublicGiftViewSet(viewsets.ReadOnlyModelViewSet):
             'recipient_id': recipient.id,
             'quantity': quantity,
             'message': message,
+            'reel_id': reel_id,
         }
         
         # Instantiate GiftTransactionViewSet to reuse send_gift logic
