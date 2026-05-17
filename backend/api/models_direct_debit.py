@@ -80,6 +80,18 @@ class DirectDebitMandate(models.Model):
     originator_conversation_id = models.CharField(max_length=100, blank=True, help_text='Originator conversation ID')
     conversation_id = models.CharField(max_length=100, blank=True, help_text='Telebirr conversation ID')
     
+    # Subscription tier the mandate was created for (set at create time so
+    # activation can build the SubscriptionPlan even before subscription_plan
+    # is linked).
+    tier = models.ForeignKey(
+        'api.SubscriptionTier',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='direct_debit_mandates',
+        help_text='Subscription tier this mandate was created for'
+    )
+
     # Linked subscription
     subscription_plan = models.ForeignKey(
         'api.SubscriptionPlan',
