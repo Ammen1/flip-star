@@ -974,9 +974,30 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
     }
   };
 
+  const ACCENT = '#8fc441';        // brand green
+  const ACCENT_DARK = '#6fa730';
+  const SOFT_BG = T.mode === 'dark' ? '#1F2A1A' : '#F4FBEB';
+  const SOFT_BORDER = T.mode === 'dark' ? '#2E3D24' : '#D8ECC0';
+
   return (
     <Modal onClose={onClose} theme={T} title="Re-invest Points to Coins">
       <div>
+        {/* Conversion banner */}
+        <div style={{
+          background: `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DARK} 100%)`,
+          borderRadius: 14, padding: '14px 16px', marginBottom: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          color: '#fff', boxShadow: '0 4px 14px rgba(143,196,65,0.25)',
+        }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, opacity: 0.85, letterSpacing: 0.5 }}>RATE</div>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>1 Point → 1 Coin</div>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.9 }}>
+            {availablePoints.toLocaleString()} pts available
+          </div>
+        </div>
+
         <div style={{ marginBottom: 16 }}>
           <label style={modalLabel(T)}>Points to convert</label>
           <input
@@ -992,21 +1013,18 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
             }}
             min="0"
             max={availablePoints}
-            style={modalInput(T)}
+            style={{
+              ...modalInput(T),
+              borderColor: SOFT_BORDER,
+            }}
           />
-          <div style={{ fontSize: 12, color: T.sub, marginTop: 4 }}>
-            Available: {availablePoints.toLocaleString()} points
-          </div>
         </div>
 
         <div style={{
-          background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+          background: SOFT_BG, border: `1px solid ${SOFT_BORDER}`, borderRadius: 12,
           padding: 14, marginBottom: 16,
         }}>
           <Row label="You will receive" value={`${amount.toLocaleString()} coins`} theme={T} bold />
-          <div style={{ fontSize: 11, color: T.sub, marginTop: 8 }}>
-            1 Point = 1 Coin
-          </div>
         </div>
 
         {error && (
@@ -1019,9 +1037,9 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
           <button onClick={onClose} disabled={submitting} style={{
             flex: 1,
             padding: '12px 16px',
-            borderRadius: 8,
+            borderRadius: 10,
             border: `1px solid ${T.border}`,
-            background: T.bg,
+            background: 'transparent',
             color: T.txt,
             fontSize: 14,
             fontWeight: 600,
@@ -1029,7 +1047,24 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
           }}>
             Cancel
           </button>
-          <button onClick={handleReinvest} disabled={submitting || amount < 1 || amount > availablePoints} style={{ ...btnPrimary(T), flex: 1 }}>
+          <button
+            onClick={handleReinvest}
+            disabled={submitting || amount < 1 || amount > availablePoints}
+            style={{
+              flex: 1,
+              padding: '12px 16px',
+              borderRadius: 10,
+              border: 'none',
+              background: (submitting || amount < 1 || amount > availablePoints)
+                ? '#9CA3AF'
+                : `linear-gradient(135deg, ${ACCENT} 0%, ${ACCENT_DARK} 100%)`,
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 700,
+              cursor: (submitting || amount < 1 || amount > availablePoints) ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 12px rgba(143,196,65,0.3)',
+            }}
+          >
             {submitting ? 'Converting...' : 'Confirm'}
           </button>
         </div>
@@ -1132,7 +1167,6 @@ const styles = {
   header: {
     display: 'flex', alignItems: 'center', gap: 8,
     padding: '12px 16px', borderBottom: '1px solid',
-    position: 'sticky', top: 0, zIndex: 10,
   },
   backBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 4 },
   iconBtn: { background: 'none', border: 'none', cursor: 'pointer', padding: 6 },
