@@ -1385,14 +1385,17 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
                 {/* 7-day progress - real calendar days */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, padding: '0 4px' }}>
                   {(() => {
-                    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    const today = new Date();
+                    // Locale-aware short weekday (e.g., 'Sun'). Normalised to local midnight
+                    // so DST / late-night clock drift never shifts the label.
+                    const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+                    const todayMidnight = new Date();
+                    todayMidnight.setHours(0, 0, 0, 0);
                     const days = [];
                     for (let i = 6; i >= 0; i--) {
-                      const d = new Date(today);
-                      d.setDate(today.getDate() - i);
+                      const d = new Date(todayMidnight);
+                      d.setDate(todayMidnight.getDate() - i);
                       days.push({
-                        name: dayNames[d.getDay()],
+                        name: weekdayFmt.format(d),
                         date: d.getDate(),
                         isToday: i === 0,
                         isPast: i > 0,

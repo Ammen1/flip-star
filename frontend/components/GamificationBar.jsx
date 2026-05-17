@@ -102,16 +102,18 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose, theme 
   const [claiming, setClaiming] = useState(false);
   const cur = streak?.current ?? 0;
 
-  // Get real calendar days starting from today going back 6 days
+  // Get real calendar days starting from today going back 6 days.
+  // Locale-aware short weekday + normalised to local midnight to avoid DST/late-night drift.
   const getRealDays = () => {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date();
+    const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
     const days = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
+      const d = new Date(todayMidnight);
+      d.setDate(todayMidnight.getDate() - i);
       days.push({
-        name: dayNames[d.getDay()],
+        name: weekdayFmt.format(d),
         date: d.getDate(),
         isToday: i === 0,
         isPast: i > 0,
