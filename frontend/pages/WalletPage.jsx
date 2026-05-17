@@ -1039,10 +1039,10 @@ function ReinvestModal({ theme: T, points, onClose, onSuccess }) {
             padding: '12px 16px',
             borderRadius: 10,
             border: `1px solid ${T.border}`,
-            background: 'transparent',
+            background: T.bg,
             color: T.txt,
             fontSize: 14,
-            fontWeight: 600,
+            fontWeight: 700,
             cursor: submitting ? 'not-allowed' : 'pointer',
           }}>
             Cancel
@@ -1090,7 +1090,8 @@ function Modal({ children, onClose, theme: T, title }) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: T.mode === 'dark' ? '#1a1a1a' : '#ffffff',
+          background: T.card || (T.mode === 'dark' ? '#1a1a1a' : '#ffffff'),
+          border: `1px solid ${T.border}`,
           borderRadius: 18, padding: 20,
           width: '100%', maxWidth: 460, maxHeight: '90vh', overflow: 'auto',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
@@ -1098,8 +1099,19 @@ function Modal({ children, onClose, theme: T, title }) {
       >
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, flex: 1, fontSize: 18, fontWeight: 700, color: T.txt }}>{title}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-            <X size={20} color={T.sub} />
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              background: T.bg,
+              border: `1px solid ${T.border}`,
+              borderRadius: 999,
+              cursor: 'pointer',
+              padding: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={18} color={T.txt} />
           </button>
         </div>
         {children}
