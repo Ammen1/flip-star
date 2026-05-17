@@ -39,6 +39,129 @@ const FAQ_ITEMS = [
   { q: "How do I contact support?", a: "In-App: Profile → Help & Support • Email: support@flipstar.et • SMS: 8994 • WhatsApp: +251 99 400 0000 • Telegram: t.me/ethio_telecom • Web: ethiotelecom.et" },
 ];
 
+const SUPPORT_CATEGORIES = [
+  { value: 'account', label: 'Account' },
+  { value: 'payment', label: 'Payment / Wallet' },
+  { value: 'technical', label: 'Technical Issue' },
+  { value: 'content', label: 'Content / Post' },
+  { value: 'abuse', label: 'Abuse / Report' },
+  { value: 'suggestion', label: 'Suggestion / Feedback' },
+  { value: 'other', label: 'Other' },
+];
+
+const STATUS_STYLES = {
+  received: { color: '#3B82F6', bg: '#DBEAFE', label: 'Received' },
+  pending: { color: '#8fc441', bg: '#FEF3C7', label: 'Pending' },
+  in_progress: { color: '#8B5CF6', bg: '#EDE9FE', label: 'In Progress' },
+  solved: { color: '#10B981', bg: '#D1FAE5', label: 'Solved' },
+  closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
+};
+
+const SupportSection = ({ compact = false, T, supportForm, setSupportForm, supportSubmitting, handleSubmitSupport, supportRequests }) => (
+  <div>
+    {/* Submit new request */}
+    <div style={{
+      background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+      padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 12 }}>Submit a Request</div>
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Category</label>
+      <select
+        value={supportForm.category}
+        onChange={(e) => setSupportForm(f => ({ ...f, category: e.target.value }))}
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+          marginBottom: 10, fontSize: 14,
+        }}
+      >
+        {SUPPORT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+      </select>
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Subject</label>
+      <input
+        type="text"
+        maxLength={200}
+        value={supportForm.subject}
+        onChange={(e) => setSupportForm(f => ({ ...f, subject: e.target.value }))}
+        placeholder="Brief summary of your issue"
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+          marginBottom: 10, fontSize: 14, boxSizing: 'border-box',
+        }}
+      />
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Message</label>
+      <textarea
+        rows={compact ? 4 : 5}
+        maxLength={5000}
+        value={supportForm.message}
+        onChange={(e) => setSupportForm(f => ({ ...f, message: e.target.value }))}
+        placeholder="Describe your issue or request in detail"
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+          marginBottom: 12, fontSize: 14, boxSizing: 'border-box', resize: 'vertical',
+        }}
+      />
+
+      <button
+        onClick={handleSubmitSupport}
+        disabled={supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim()}
+        style={{
+          width: '100%', padding: '12px 16px', borderRadius: 12, border: 'none',
+          background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
+          cursor: supportSubmitting ? 'not-allowed' : 'pointer',
+          opacity: supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim() ? 0.6 : 1,
+        }}
+      >
+        {supportSubmitting ? 'Submitting...' : 'Submit Request'}
+      </button>
+    </div>
+
+    {/* My requests */}
+    <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 10 }}>My Requests</div>
+    {supportRequests.length === 0 ? (
+      <div style={{ padding: 20, textAlign: 'center', color: T.sub, fontSize: 13 }}>
+        You haven't submitted any requests yet.
+      </div>
+    ) : (
+      supportRequests.map(req => {
+        const s = STATUS_STYLES[req.status] || STATUS_STYLES.received;
+        return (
+          <div key={req.id} style={{
+            background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+            padding: 14, marginBottom: 10,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1 }}>{req.subject}</div>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
+                background: s.bg, color: s.color,
+              }}>{s.label}</span>
+            </div>
+            <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>
+              {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
+            </div>
+            <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
+            {req.admin_response && (
+              <div style={{
+                marginTop: 10, padding: 10, background: '#0F172A10',
+                border: `1px dashed ${T.border}`, borderRadius: 8,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
+                <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
+              </div>
+            )}
+          </div>
+        );
+      })
+    )}
+  </div>
+);
+
 export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubscription, onShowEditProfile }) {
   const { darkMode, toggleDarkMode, colors: T } = useTheme();
   const { language, changeLanguage, t } = useLanguage();
@@ -144,24 +267,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
   const [supportForm, setSupportForm] = useState({ category: 'other', subject: '', message: '' });
   const [supportSubmitting, setSupportSubmitting] = useState(false);
 
-  const SUPPORT_CATEGORIES = [
-    { value: 'account', label: 'Account' },
-    { value: 'payment', label: 'Payment / Wallet' },
-    { value: 'technical', label: 'Technical Issue' },
-    { value: 'content', label: 'Content / Post' },
-    { value: 'abuse', label: 'Abuse / Report' },
-    { value: 'suggestion', label: 'Suggestion / Feedback' },
-    { value: 'other', label: 'Other' },
-  ];
-
-  const STATUS_STYLES = {
-    received: { color: '#3B82F6', bg: '#DBEAFE', label: 'Received' },
-    pending: { color: '#8fc441', bg: '#FEF3C7', label: 'Pending' },
-    in_progress: { color: '#8B5CF6', bg: '#EDE9FE', label: 'In Progress' },
-    solved: { color: '#10B981', bg: '#D1FAE5', label: 'Solved' },
-    closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
-  };
-
   const loadSupportRequests = async () => {
     try {
       const data = await api.getMySupportRequests();
@@ -194,111 +299,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
       setSupportSubmitting(false);
     }
   };
-
-  const SupportSection = ({ compact = false }) => (
-    <div>
-      {/* Submit new request */}
-      <div style={{
-        background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
-        padding: 16, marginBottom: 16,
-      }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 12 }}>Submit a Request</div>
-
-        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Category</label>
-        <select
-          value={supportForm.category}
-          onChange={(e) => setSupportForm(f => ({ ...f, category: e.target.value }))}
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-            marginBottom: 10, fontSize: 14,
-          }}
-        >
-          {SUPPORT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-
-        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Subject</label>
-        <input
-          type="text"
-          maxLength={200}
-          value={supportForm.subject}
-          onChange={(e) => setSupportForm(f => ({ ...f, subject: e.target.value }))}
-          placeholder="Brief summary of your issue"
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-            marginBottom: 10, fontSize: 14, boxSizing: 'border-box',
-          }}
-        />
-
-        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Message</label>
-        <textarea
-          rows={compact ? 4 : 5}
-          maxLength={5000}
-          value={supportForm.message}
-          onChange={(e) => setSupportForm(f => ({ ...f, message: e.target.value }))}
-          placeholder="Describe your issue or request in detail"
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-            marginBottom: 12, fontSize: 14, boxSizing: 'border-box', resize: 'vertical',
-          }}
-        />
-
-        <button
-          onClick={handleSubmitSupport}
-          disabled={supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim()}
-          style={{
-            width: '100%', padding: '12px 16px', borderRadius: 12, border: 'none',
-            background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
-            cursor: supportSubmitting ? 'not-allowed' : 'pointer',
-            opacity: supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim() ? 0.6 : 1,
-          }}
-        >
-          {supportSubmitting ? 'Submitting...' : 'Submit Request'}
-        </button>
-      </div>
-
-      {/* My requests */}
-      <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 10 }}>My Requests</div>
-      {supportRequests.length === 0 ? (
-        <div style={{ padding: 20, textAlign: 'center', color: T.sub, fontSize: 13 }}>
-          You haven't submitted any requests yet.
-        </div>
-      ) : (
-        supportRequests.map(req => {
-          const s = STATUS_STYLES[req.status] || STATUS_STYLES.received;
-          return (
-            <div key={req.id} style={{
-              background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
-              padding: 14, marginBottom: 10,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1 }}>{req.subject}</div>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
-                  background: s.bg, color: s.color,
-                }}>{s.label}</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>
-                {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
-              </div>
-              <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
-              {req.admin_response && (
-                <div style={{
-                  marginTop: 10, padding: 10, background: '#0F172A10',
-                  border: `1px dashed ${T.border}`, borderRadius: 8,
-                }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
-                  <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
-                </div>
-              )}
-            </div>
-          );
-        })
-      )}
-    </div>
-  );
 
   // FAQ Modal Component
   const FaqModal = () => {
@@ -625,7 +625,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           {/* Help & Support */}
           <SectionLabel>{t('help')}</SectionLabel>
           <div style={{ background: T.cardBg, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-            <SupportSection compact />
+            <SupportSection compact T={T} supportForm={supportForm} setSupportForm={setSupportForm} supportSubmitting={supportSubmitting} handleSubmitSupport={handleSubmitSupport} supportRequests={supportRequests} />
           </div>
           <SectionCard>
             <Row icon={HelpCircle} title="Frequently Asked Questions" onPress={() => setShowFaqModal(true)} />
@@ -1247,7 +1247,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
               <h2 style={{ fontSize: isSmallMobile ? 18 : 24, fontWeight: 700, marginBottom: 8, color: T.txt }}>{t('help')}</h2>
               <p style={{ fontSize: isSmallMobile ? 12 : 14, color: T.sub, marginBottom: isSmallMobile ? 20 : 24 }}>{t('getHelp')}</p>
 
-              <SupportSection />
+              <SupportSection T={T} supportForm={supportForm} setSupportForm={setSupportForm} supportSubmitting={supportSubmitting} handleSubmitSupport={handleSubmitSupport} supportRequests={supportRequests} />
 
               <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
                 <button onClick={() => window.open('/legal/terms-of-service', '_blank')} style={{

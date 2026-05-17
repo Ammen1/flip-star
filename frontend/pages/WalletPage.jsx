@@ -162,7 +162,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
   const withdrawal = summary?.withdrawal || {};
 
   return (
-    <div style={{ ...styles.container, background: T.bg }}>
+    <div style={{ ...styles.container, background: T.bg, position: 'fixed', inset: 0, zIndex: 50, overflowY: 'auto' }}>
       {/* Header */}
       <div style={{ ...styles.header, background: T.card, borderColor: T.border }}>
         {onBack && (

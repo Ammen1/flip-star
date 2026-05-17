@@ -93,6 +93,8 @@ export function CoinManagementPage({ theme }) {
         cost_post_create: config.costs.post_create,
         cost_like: config.costs.like,
         cost_comment: config.costs.comment,
+        cost_share: config.costs.share,
+        cost_gift: config.costs.gift,
         cost_join_campaign: config.costs.join_campaign,
         cost_extra_campaign_entry: config.costs.extra_campaign_entry,
         cost_boost_1hr: config.costs.boost_1hr,
@@ -444,6 +446,8 @@ function ActionCostsSubTab({ theme: T, config, updateField }) {
         <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create} onChange={(v) => updateField('costs', 'post_create', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Like Cost" value={config.costs.like} onChange={(v) => updateField('costs', 'like', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Share Cost" value={config.costs.share} onChange={(v) => updateField('costs', 'share', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Gift Cost" value={config.costs.gift} onChange={(v) => updateField('costs', 'gift', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Join Campaign Cost" value={config.costs.join_campaign} onChange={(v) => updateField('costs', 'join_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Extra Entry Cost" value={config.costs.extra_campaign_entry} onChange={(v) => updateField('costs', 'extra_campaign_entry', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Boost 1hr Cost" value={config.costs.boost_1hr} onChange={(v) => updateField('costs', 'boost_1hr', parseInt(v) || 0)} />
