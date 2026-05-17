@@ -1415,7 +1415,7 @@ export default function WerqRoot() {
         onTabChange={(tab) => {
           const feedTabs = ['home', 'reels', 'messages', 'following', 'bookmarks', 'search'];
           if (feedTabs.includes(tab)) resetAllPages();
-          else setShowWallet(false); // always close wallet when switching tabs
+          setShowWallet(false); // always close wallet when switching tabs
           startTransition(() => {
             setActiveTab(tab);
             // Clear videoDetailId when switching tabs UNLESS we're intentionally navigating to a specific video
