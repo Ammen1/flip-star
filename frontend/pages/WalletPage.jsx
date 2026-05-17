@@ -38,7 +38,14 @@ function writeCache(summary, config) {
 
 export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase }) {
   const T = theme || defaultTheme();
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth > 1024);
   const [activeTab, setActiveTab] = useState('overview'); // overview | transactions | withdrawals
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth > 1024);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Seed from cache instantly — no loading flash on revisit
   const cached = readCache();
@@ -162,7 +169,7 @@ export function WalletPage({ theme, onBack, showTopUpOnMount, onShowCoinPurchase
   const withdrawal = summary?.withdrawal || {};
 
   return (
-    <div style={{ ...styles.container, background: T.bg, position: 'fixed', inset: 0, zIndex: 50, overflowY: 'auto' }}>
+    <div style={{ ...styles.container, background: T.bg, position: 'fixed', inset: 0, zIndex: 50, overflowY: 'auto', left: isDesktop ? 260 : 0 }}>
       {/* Header */}
       <div style={{ ...styles.header, background: T.card, borderColor: T.border }}>
         {onBack && (
