@@ -453,7 +453,23 @@ class GiftTransactionViewSet(viewsets.ModelViewSet):
         if xp_reward > 0:
             sender_profile.xp += xp_reward
             sender_profile.save()
-        
+
+        # Charge admin-configurable extra coin cost when gifting on a campaign post
+        # (separate from gift coin_value; default 0). Deducts from earned + purchased.
+        if reel and reel.is_campaign_post and reel.user != request.user:
+            extra_cost = wallet_config.cost_gift
+            if extra_cost and extra_cost > 0:
+                try:
+                    sender_coin_balance.spend_coins(
+                        extra_cost,
+                        'campaign_gift_fee',
+                        reel=reel,
+                        description=f'Campaign gift fee on post #{reel.id}',
+                    )
+                except ValueError as e:
+                    # Surface the error but do not roll back the gift (transaction already recorded)
+                    print(f'[CAMPAIGN_GIFT_FEE] Could not charge fee: {e}')
+
         serializer = GiftTransactionSerializer(transaction, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     

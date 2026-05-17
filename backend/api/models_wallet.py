@@ -40,8 +40,10 @@ class WalletConfig(models.Model):
 
     # ============ ACTION COSTS ============
     cost_post_create = models.PositiveIntegerField(default=0, help_text='Cost to create a post (0 = free)')
-    cost_like = models.PositiveIntegerField(default=0)
-    cost_comment = models.PositiveIntegerField(default=0)
+    cost_like = models.PositiveIntegerField(default=0, help_text='Coins charged when liking a campaign post (0 = free)')
+    cost_comment = models.PositiveIntegerField(default=0, help_text='Coins charged when commenting on a campaign post (0 = free)')
+    cost_share = models.PositiveIntegerField(default=0, help_text='Coins charged when sharing a campaign post (0 = free)')
+    cost_gift = models.PositiveIntegerField(default=0, help_text='Extra coins charged on top of gift value when gifting on a campaign post (0 = free)')
     cost_join_campaign = models.PositiveIntegerField(default=50)
     cost_extra_campaign_entry = models.PositiveIntegerField(default=100)
     cost_boost_1hr = models.PositiveIntegerField(default=100, help_text='Cost to boost post for 1 hour')

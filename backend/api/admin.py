@@ -636,9 +636,11 @@ class WalletConfigAdmin(admin.ModelAdmin):
                 'profile_complete_reward', 'referral_reward', 'campaign_winner_reward',
             )
         }),
-        ('Action Costs', {
+        ('Action Costs (campaign posts only)', {
+            'description': 'Coins deducted from the user (earned + purchased) when they perform these actions on a campaign post. Set to 0 to make free.',
             'fields': (
-                ('cost_post_create', 'cost_like', 'cost_comment'),
+                ('cost_like', 'cost_comment', 'cost_share', 'cost_gift'),
+                ('cost_post_create',),
                 ('cost_join_campaign', 'cost_extra_campaign_entry'),
                 ('cost_boost_2hr', 'cost_boost_24hr'),
             )

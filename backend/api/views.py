@@ -1375,10 +1375,25 @@ class ReelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def vote(self, request, pk=None):
         from .models import Notification
+        from .models_wallet import WalletConfig
+        from .models_contest import UserCoinBalance
         reel = self.get_object()
         vote, created = Vote.objects.get_or_create(user=request.user, reel=reel)
         
         if created:
+            # Charge coin cost if this is a campaign post (admin-configurable, default 0)
+            if reel.is_campaign_post and reel.user != request.user:
+                cost = WalletConfig.get_config().cost_like
+                if cost and cost > 0:
+                    balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+                    try:
+                        balance.spend_coins(cost, 'campaign_like', reel=reel,
+                                            description=f'Like on campaign post #{reel.id}')
+                    except ValueError as e:
+                        # Roll back the vote since payment failed
+                        vote.delete()
+                        return Response({'error': str(e), 'required_coins': cost},
+                                        status=status.HTTP_400_BAD_REQUEST)
             reel.votes += 1
             reel.save()
             
@@ -1423,7 +1438,21 @@ class ReelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def share(self, request, pk=None):
         """Increment share count for a reel"""
+        from .models_wallet import WalletConfig
+        from .models_contest import UserCoinBalance
         reel = self.get_object()
+
+        # Charge coin cost if this is a campaign post (admin-configurable, default 0)
+        if reel.is_campaign_post and request.user.is_authenticated and reel.user != request.user:
+            cost = WalletConfig.get_config().cost_share
+            if cost and cost > 0:
+                balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+                try:
+                    balance.spend_coins(cost, 'campaign_share', reel=reel,
+                                        description=f'Share on campaign post #{reel.id}')
+                except ValueError as e:
+                    return Response({'error': str(e), 'required_coins': cost},
+                                    status=status.HTTP_400_BAD_REQUEST)
         reel.shares += 1
         reel.save()
         return Response({'shares': reel.shares})
@@ -1443,7 +1472,21 @@ class ReelViewSet(viewsets.ModelViewSet):
             text = request.data.get('text', '').strip()
             if not text:
                 return Response({'error': 'Comment text is required'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
+            # Charge coin cost if this is a campaign post (admin-configurable, default 0)
+            if reel.is_campaign_post and reel.user != request.user:
+                from .models_wallet import WalletConfig
+                from .models_contest import UserCoinBalance
+                cost = WalletConfig.get_config().cost_comment
+                if cost and cost > 0:
+                    balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+                    try:
+                        balance.spend_coins(cost, 'campaign_comment', reel=reel,
+                                            description=f'Comment on campaign post #{reel.id}')
+                    except ValueError as e:
+                        return Response({'error': str(e), 'required_coins': cost},
+                                        status=status.HTTP_400_BAD_REQUEST)
+
             comment = Comment.objects.create(
                 user=request.user,
                 reel=reel,
