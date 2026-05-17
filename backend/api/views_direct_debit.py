@@ -17,9 +17,46 @@ from django.utils import timezone
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+import logging
+import re
+
 from .models_direct_debit import DirectDebitMandate, DirectDebitTransaction
 from .models_subscription import SubscriptionTier, SubscriptionPlan, SubscriptionPayment
 from .telebirr_direct_debit_service import telebirr_direct_debit_service
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_telebirr_soap_result(raw_body):
+    """Extract the fields we care about from a Telebirr SOAP Result envelope.
+
+    Telebirr sends ``Content-Type: text/xml`` with an ``<api:Result>`` SOAP
+    envelope. DRF's ``request.data`` cannot parse this so we operate on the
+    raw bytes/string with regex (the schema is fixed and small).
+    """
+    if isinstance(raw_body, (bytes, bytearray)):
+        try:
+            raw_body = raw_body.decode('utf-8', errors='replace')
+        except Exception:
+            raw_body = str(raw_body)
+    text = raw_body or ''
+
+    def _find(tag):
+        m = re.search(
+            r'<(?:[a-zA-Z]+:)?{0}>([^<]*)</(?:[a-zA-Z]+:)?{0}>'.format(tag),
+            text,
+        )
+        return m.group(1).strip() if m else None
+
+    return {
+        'ResultType': _find('ResultType'),
+        'ResultCode': _find('ResultCode'),
+        'ResultDesc': _find('ResultDesc'),
+        'ConversationID': _find('ConversationID'),
+        'OriginatorConversationID': _find('OriginatorConversationID'),
+        'TransactionID': _find('TransactionID'),
+        'MandateID': _find('MandateID'),
+    }
 
 
 @api_view(['POST'])
@@ -370,52 +407,85 @@ def list_user_mandates(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])  # Telebirr calls this webhook
 def telebirr_direct_debit_webhook(request):
+    """Webhook endpoint for Telebirr async Result envelopes.
+
+    Telebirr POSTs a SOAP Result envelope (``Content-Type: text/xml``). The
+    previous version read ``request.data`` (JSON-only) which silently 400'd
+    every real callback. We now parse the raw XML body and correlate by
+    ``OriginatorConversationID``. We always return HTTP 200 so Telebirr
+    does not retry-storm us; processing errors are logged.
     """
-    Webhook endpoint for Telebirr async results
-    
-    Request Body: SOAP Result envelope
-    """
+    raw_body = request.body or b''
+    logger.warning(
+        'Telebirr webhook hit: ct=%s len=%d body=%s',
+        request.META.get('CONTENT_TYPE'),
+        len(raw_body),
+        raw_body[:4000],
+    )
+
     try:
-        callback_data = request.data
-        
-        # Process callback
-        result = telebirr_direct_debit_service.process_callback(callback_data)
-        
-        if not result.get('success'):
-            return Response(
-                {'error': result.get('error')},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Find mandate by originator_conversation_id
-        originator_conversation_id = result.get('originator_conversation_id')
+        # XML first (real Telebirr); JSON fallback for manual tests.
+        parsed = _parse_telebirr_soap_result(raw_body)
+        if not parsed.get('OriginatorConversationID') and isinstance(request.data, dict):
+            tx = request.data.get('TransactionResult') or {}
+            parsed = {
+                'ResultType': request.data.get('ResultType'),
+                'ResultCode': request.data.get('ResultCode'),
+                'ResultDesc': request.data.get('ResultDesc'),
+                'ConversationID': request.data.get('ConversationID'),
+                'OriginatorConversationID': request.data.get('OriginatorConversationID'),
+                'TransactionID': tx.get('TransactionID') if isinstance(tx, dict) else request.data.get('TransactionID'),
+                'MandateID': request.data.get('MandateID'),
+            }
+
+        logger.info('Telebirr webhook parsed: %s', parsed)
+
+        originator_conversation_id = parsed.get('OriginatorConversationID')
+        result_code = parsed.get('ResultCode')
+        result_type = parsed.get('ResultType')
+        result_desc = parsed.get('ResultDesc') or ''
+        # Telebirr returns the new MandateID either in <MandateID> or, for
+        # InitTrans, the transaction id in <TransactionID>.
+        new_mandate_id = parsed.get('MandateID') or parsed.get('TransactionID')
+
+        if not originator_conversation_id:
+            logger.warning('Telebirr webhook: no OriginatorConversationID found, ignoring')
+            return Response({'success': True})
+
         mandate = DirectDebitMandate.objects.filter(
             originator_conversation_id=originator_conversation_id
         ).first()
-        
-        if mandate:
-            # Update mandate based on result
-            if result.get('result_code') == '0':
-                # Success
-                if mandate.status == 'pending_created':
-                    mandate.status = 'pending_active'
-                    mandate.mandate_id = result.get('transaction_id') or mandate.payer_reference_number
-                    mandate.save()
-                elif mandate.status == 'pending_active':
-                    mandate.activate()
-                    mandate.mandate_id = result.get('transaction_id') or mandate.mandate_id
-                    mandate.save()
+
+        if not mandate:
+            logger.warning(
+                'Telebirr webhook: no mandate matched OriginatorConversationID=%s',
+                originator_conversation_id,
+            )
+            return Response({'success': True})
+
+        is_success = result_code == '0' and (result_type == '0' or result_type is None)
+
+        if is_success:
+            # Persist the real MandateID as soon as we get it (max 18 bytes).
+            if new_mandate_id and not mandate.mandate_id:
+                mandate.mandate_id = new_mandate_id[:18]
+
+            if mandate.status == 'pending_created':
+                mandate.status = 'pending_active'
+                mandate.save()
+            elif mandate.status == 'pending_active':
+                mandate.activate()  # also sets activated_at and saves
             else:
-                # Failure
-                mandate.mark_failed(result.get('result_desc'))
-        
+                mandate.save()
+        else:
+            mandate.mark_failed(result_desc or f'ResultCode={result_code}')
+
         return Response({'success': True})
-        
+
     except Exception as e:
-        return Response(
-            {'error': f'Webhook processing failed: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        # Don't bubble 500s back to Telebirr; just log and ack.
+        logger.exception('Telebirr webhook processing failed: %s', e)
+        return Response({'success': True})
 
 
 @api_view(['POST'])
