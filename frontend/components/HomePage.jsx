@@ -376,8 +376,10 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
       setLoading(true);
     }
     
-    // Fetch comments directly from the reel's endpoint
-    api.request(`/reels/${post.id}/comments/?include_replies=true&depth=2`)
+    // Fetch comments directly from the reel's endpoint. skipCache so opening
+    // the sheet always shows the latest server state (edits/deletes from
+    // another session or a previous open are reflected immediately).
+    api.request(`/reels/${post.id}/comments/?include_replies=true&depth=2`, { skipCache: true })
       .then(d => {
         if (cancelled) return;
         const full = Array.isArray(d) ? d : (d?.results || []);
