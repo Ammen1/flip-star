@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { Heart, Trophy, MessageCircle, Share2, Bookmark, MoreHorizontal, Eye, CheckCircle, Play, X, Send, Info, Link2, Download, Flag, Trash2, User, Gift, AtSign, Search } from 'lucide-react';
+import { Heart, Trophy, MessageCircle, Share2, Bookmark, MoreHorizontal, Eye, CheckCircle, Play, X, Send, Info, Link2, Download, Flag, Trash2, User, Gift, AtSign, Search, Edit2, Check } from 'lucide-react';
 import api from '../api';
 import config from '../config';
 import { useTheme } from '../contexts/ThemeContext';
@@ -158,12 +158,28 @@ function buildCommentTree(flatList) {
 }
 
 /* ── Comment Sheet ── */
-const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, api, onLike, onReply, expandedReplies, onToggleReplies }) {
+const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, api, onLike, onReply, expandedReplies, onToggleReplies, currentUser, onEdit, onDelete }) {
   const isReply = depth > 0;
   const avatarSize = isReply ? 28 : 34;
   const hasReplies = comment.replies && comment.replies.length > 0;
   const isExpanded = expandedReplies?.has(comment.id);
   const showRepliesToggle = !isReply && hasReplies;
+  const isOwner = !!currentUser && comment.user && (
+    String(currentUser.id) === String(comment.user.id) ||
+    currentUser.username === comment.user.username
+  );
+  const isPending = String(comment.id).startsWith('temp-');
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.text || '');
+
+  useEffect(() => { if (!editing) setEditText(comment.text || ''); }, [comment.text, editing]);
+
+  const submitEdit = async () => {
+    const next = editText.trim();
+    if (!next || next === comment.text) { setEditing(false); return; }
+    await onEdit?.(comment, next, isReply);
+    setEditing(false);
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -181,13 +197,32 @@ const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 700, fontSize: isReply ? 12 : 13, color: '#fff' }}>{comment.user?.username}</span>
-            <span style={{ fontSize: isReply ? 12 : 13, color: '#fff', wordBreak: 'break-word', lineHeight: 1.4 }}>
-              {comment.text}
-            </span>
+            {editing ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 200 }}>
+                <input
+                  autoFocus
+                  type="text"
+                  value={editText}
+                  onChange={e => setEditText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitEdit(); if (e.key === 'Escape') setEditing(false); }}
+                  style={{ flex: 1, background: '#111', border: `1px solid ${T?.border || '#333'}`, color: '#fff', borderRadius: 8, padding: '6px 10px', fontSize: isReply ? 12 : 13 }}
+                />
+                <button onClick={submitEdit} title="Save" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#8fc441' }}>
+                  <Check size={14} />
+                </button>
+                <button onClick={() => setEditing(false)} title="Cancel" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: T?.sub || '#888' }}>
+                  <X size={14} />
+                </button>
+              </span>
+            ) : (
+              <span style={{ fontSize: isReply ? 12 : 13, color: '#fff', wordBreak: 'break-word', lineHeight: 1.4 }}>
+                {comment.text}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
             <span style={{ fontSize: 10, color: '#8fc441' }}>{timeAgo(comment.created_at)}</span>
-            {api.hasToken() && (
+            {api.hasToken() && !editing && (
               <>
                 <button
                   onClick={() => onLike(comment, isReply)}
@@ -202,6 +237,24 @@ const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, 
                 >
                   Reply
                 </button>
+                {isOwner && !isPending && (
+                  <>
+                    <button
+                      onClick={() => setEditing(true)}
+                      title="Edit"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: T?.sub || '#888', display: 'flex', alignItems: 'center' }}
+                    >
+                      <Edit2 size={13} />
+                    </button>
+                    <button
+                      onClick={() => onDelete?.(comment, isReply)}
+                      title="Delete"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#EF4444', display: 'flex', alignItems: 'center' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -248,6 +301,9 @@ const CommentItem = memo(function CommentItem({ comment, T, depth = 0, timeAgo, 
               onReply={onReply}
               expandedReplies={expandedReplies}
               onToggleReplies={onToggleReplies}
+              currentUser={currentUser}
+              onEdit={onEdit}
+              onDelete={onDelete}
             />
           ))}
         </div>
@@ -491,6 +547,54 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
     setReplyingTo(null);
   };
 
+  // Edit a comment or reply in-place. No wallet movement: edits never charge,
+  // so this is safe for campaign posts.
+  const handleEditComment = async (comment, newText, isReply) => {
+    if (!api.hasToken()) return;
+    if (String(comment.id).startsWith('temp-')) return;
+
+    // Optimistic text update
+    const updateTextDeep = (list) => list.map(c => {
+      if (String(c.id) === String(comment.id)) return { ...c, text: newText, edited_at: new Date().toISOString() };
+      if (c.replies && c.replies.length) return { ...c, replies: updateTextDeep(c.replies) };
+      return c;
+    });
+    const prevSnapshot = comments;
+    setComments(prev => updateTextDeep(prev));
+
+    try {
+      if (isReply) await api.editReply(comment.id, newText);
+      else await api.editComment(comment.id, newText);
+    } catch (err) {
+      console.error('[Comment] edit failed:', err);
+      setComments(prevSnapshot);
+      alert(err?.message || 'Failed to edit. Edit window may have expired.');
+    }
+  };
+
+  // Delete a comment or reply. No wallet refund: the spent coin (if any) is
+  // not returned, matching campaign-post policy.
+  const handleDeleteComment = async (comment, isReply) => {
+    if (!api.hasToken()) return;
+    if (String(comment.id).startsWith('temp-')) return;
+    if (!window.confirm('Delete this ' + (isReply ? 'reply' : 'comment') + '?')) return;
+
+    const removeDeep = (list) => list
+      .filter(c => String(c.id) !== String(comment.id))
+      .map(c => ({ ...c, replies: c.replies ? removeDeep(c.replies) : [] }));
+    const prevSnapshot = comments;
+    setComments(prev => removeDeep(prev));
+
+    try {
+      if (isReply) await api.deleteReply(comment.id);
+      else await api.deleteComment(comment.id);
+    } catch (err) {
+      console.error('[Comment] delete failed:', err);
+      setComments(prevSnapshot);
+      alert(err?.message || 'Failed to delete.');
+    }
+  };
+
   const handleSelectMention = (username) => {
     const match = text.match(/@(\w*)$/);
     if (match) {
@@ -560,6 +664,9 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
                   }}
                   expandedReplies={expandedReplies}
                   onToggleReplies={toggleReplies}
+                  currentUser={currentUser}
+                  onEdit={handleEditComment}
+                  onDelete={handleDeleteComment}
                 />
               ))}
             </div>

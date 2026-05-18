@@ -559,6 +559,28 @@ const api = {
       ),
     }),
 
+  editComment: (commentId, text) =>
+    api.request(`/comments/${commentId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ text }),
+    }),
+
+  deleteComment: (commentId) =>
+    api.request(`/comments/${commentId}/`, {
+      method: 'DELETE',
+    }),
+
+  editReply: (replyId, text) =>
+    api.request(`/comment-replies/${replyId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ text }),
+    }),
+
+  deleteReply: (replyId) =>
+    api.request(`/comment-replies/${replyId}/`, {
+      method: 'DELETE',
+    }),
+
   // Saved posts
   getSavedPosts: () => api.request('/saved/'),
 
