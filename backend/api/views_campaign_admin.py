@@ -441,10 +441,19 @@ def get_leaderboard(request, campaign_id):
         profile_image = None
         try:
             if hasattr(user, 'profile'):
-                profile_image = get_image_url(user.profile.profile_photo, request)
-                if not profile_image:
+                print(f"[DEBUG] User {user.username} has profile object")
+                if user.profile.profile_photo:
+                    profile_image = get_image_url(user.profile.profile_photo, request)
+                    print(f"[DEBUG] Profile photo URL: {profile_image}")
+                if not profile_image and user.profile.avatar:
                     profile_image = get_image_url(user.profile.avatar, request)
-        except:
+                    print(f"[DEBUG] Avatar URL: {profile_image}")
+                if not profile_image:
+                    print(f"[DEBUG] No profile image found for {user.username}")
+            else:
+                print(f"[DEBUG] User {user.username} has no profile")
+        except Exception as e:
+            print(f"[DEBUG] Error getting profile image for {user.username}: {e}")
             pass
         
         entries_data.append({

@@ -7,6 +7,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../api';
+import config from '../config';
+
+const BACKEND = config.API_BASE_URL.replace('/api', '');
+
+function mediaUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return BACKEND + url;
+}
 
 const GOLD       = '#C8B56A';
 const LIGHT_GOLD = '#F9E08B';
@@ -29,7 +38,7 @@ function PodiumCard({ entry, rank }) {
   const medalColor = MEDAL_COLORS[rank];
   const size       = isFirst ? 72 : 56;
   const score      = entry.total_score || entry.score || 0;
-  const profileImage = entry.profile_image;
+  const profileImage = mediaUrl(entry.profile_image);
   
   console.log('[PODIUM CARD] Entry:', entry.username, 'Profile image:', profileImage);
 
@@ -69,7 +78,7 @@ function LeaderboardRow({ item, index, isVoting, onVote }) {
   const rank       = item.rank || index + 1;
   const medalColor = MEDAL_COLORS[rank];
   const score      = item.total_score || item.score || 0;
-  const profileImage = item.profile_image;
+  const profileImage = mediaUrl(item.profile_image);
   
   console.log('[LEADERBOARD ROW] Item:', item.username, 'Profile image:', profileImage);
 

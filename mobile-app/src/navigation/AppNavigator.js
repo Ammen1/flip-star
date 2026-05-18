@@ -64,7 +64,7 @@ const linking = {
 };
 
 // ReelsDetail wrapper to avoid navigation conflicts
-function ReelsDetailWrapper({ route }) {
+function ReelsDetailWrapper({ route, navigation }) {
   const { id, initialVideoId } = route.params || {};
   const videoId = initialVideoId || id;
   console.log('ReelsDetailWrapper - received params:', route.params);
@@ -76,7 +76,7 @@ function ReelsDetailWrapper({ route }) {
     return <HomeScreen />;
   }
   
-  return <ReelsScreen route={{ params: { initialVideoId: videoId, fromDeepLink: true } }} />;
+  return <ReelsScreen navigation={navigation} route={{ params: { initialVideoId: videoId, fromDeepLink: true } }} />;
 }
 
 const GOLD = '#C8B56A';

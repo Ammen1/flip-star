@@ -225,7 +225,7 @@ const ReelItem = React.memo(function ReelItem({
     
     // Like the video if not already liked
     if (!item.is_liked) {
-      handleLike();
+      onLike();
     }
   };
 
