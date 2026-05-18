@@ -134,36 +134,76 @@ export function SupportRequestsPage({ theme }) {
       </div>
 
       {/* List */}
-      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: selected ? 'minmax(320px, 1fr) 1.2fr' : '1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
           {loading ? (
             <div style={{ padding: 40, textAlign: 'center', color: SUB }}>Loading...</div>
           ) : items.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: SUB }}>No support requests.</div>
           ) : (
-            items.map(req => {
+            items.map((req, idx) => {
               const s = STATUS_COLORS[req.status] || STATUS_COLORS.received;
               const isSelected = selected?.id === req.id;
               return (
                 <div
                   key={req.id}
                   onClick={() => setSelected({ ...req })}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#1F1F1F'; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                   style={{
-                    padding: 14, borderBottom: `1px solid ${BORDER}`, cursor: 'pointer',
+                    padding: '14px 16px',
+                    borderBottom: idx === items.length - 1 ? 'none' : `1px solid ${BORDER}`,
+                    cursor: 'pointer',
                     background: isSelected ? '#262626' : 'transparent',
+                    borderLeft: isSelected ? `3px solid ${PRI}` : '3px solid transparent',
+                    transition: 'background 0.15s ease, border-color 0.15s ease',
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'flex-start',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: TXT, flex: 1 }}>{req.subject}</div>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999,
-                      background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: 0.5,
-                    }}>{req.status_display}</span>
+                  {/* Avatar circle */}
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: `${PRI}26`, color: PRI,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, fontWeight: 700, flexShrink: 0,
+                    textTransform: 'uppercase',
+                  }}>
+                    {(req.user?.username || '?').charAt(0)}
                   </div>
-                  <div style={{ fontSize: 12, color: SUB, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <span><UserIcon size={11} style={{ verticalAlign: 'middle' }} /> @{req.user?.username}</span>
-                    <span>{req.category_display}</span>
-                    <span><Clock size={11} style={{ verticalAlign: 'middle' }} /> {new Date(req.created_at).toLocaleString()}</span>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                      <div style={{
+                        fontSize: 14, fontWeight: 700, color: TXT, flex: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+                        lineHeight: 1.35,
+                      }}>{req.subject}</div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999,
+                        background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: 0.5,
+                        flexShrink: 0, whiteSpace: 'nowrap',
+                      }}>{req.status_display}</span>
+                    </div>
+
+                    <div style={{
+                      fontSize: 12, color: SUB,
+                      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <UserIcon size={11} /> @{req.user?.username}
+                      </span>
+                      <span style={{
+                        padding: '2px 7px', borderRadius: 6, background: '#262626',
+                        fontSize: 10, fontWeight: 600, color: SUB, textTransform: 'uppercase', letterSpacing: 0.4,
+                      }}>{req.category_display}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Clock size={11} /> {new Date(req.created_at).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
