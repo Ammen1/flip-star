@@ -2588,6 +2588,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                         count={video.likes === 0 ? '' : video.likes}
                         onLike={() => handleLike(video.id)}
                         size={32}
+                        isCampaign={!!(video.is_campaign_post || video.campaign_id || video.campaign)}
                       />
                     </div>
 
@@ -2654,7 +2655,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           padding: 0,
                         }}
                       >
-                        <MessageCircle size={32} color="#8fc441" fill="#8fc441" />
+                        <MessageCircle size={32} color="#8fc441" fill="none" strokeWidth={2} />
                       </button>
                       <div
                         className="feed-action-label"
@@ -2727,7 +2728,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           padding: 0,
                         }}
                       >
-                        <Gift size={32} color="#8fc441" fill="#8fc441" />
+                        <Gift size={32} color="#8fc441" fill="none" strokeWidth={2} />
                       </button>
                       <div
                         className="feed-action-label"
