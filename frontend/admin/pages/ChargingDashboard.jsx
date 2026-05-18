@@ -32,7 +32,7 @@ export function ChargingDashboard({ theme }) {
   const loadStatistics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/admin/subscriptions/charging/`);
+      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
       setStatistics(response);
     } catch (err) {
       setError('Failed to load statistics');
@@ -44,7 +44,7 @@ export function ChargingDashboard({ theme }) {
 
   const loadTransactions = async () => {
     try {
-      const response = await api.request(`/admin/subscriptions/charging/`);
+      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
       setTransactions(response);
     } catch (err) {
       console.error('Failed to load transactions:', err);
@@ -54,7 +54,7 @@ export function ChargingDashboard({ theme }) {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/admin/subscriptions/charging/`);
+      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
       setAnalyticsData(response);
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -72,7 +72,7 @@ export function ChargingDashboard({ theme }) {
 
     setSearching(true);
     try {
-      const response = await api.request(`/admin/subscriptions/charging/`);
+      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
       // Filter the recent_transactions based on search query
       const filteredTransactions = response.recent_transactions?.filter(tx => {
         if (searchType === 'phone') {

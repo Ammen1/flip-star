@@ -1266,30 +1266,60 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         
         return UserSubscription.objects.all()
     
+    def _type_filter(self, request):
+        """Build queryset filters from ?type= query param.
+
+        type=ondemand     -> only OnDemand tiers
+        type=subscription -> only recurring tiers (daily/weekly/monthly)
+        (none)            -> no filter
+        Returns dict with `sub_filter` (for UserSubscription / SubscriptionPayment via subscription__) and `tier_filter` (for SubscriptionTier).
+        """
+        t = (request.query_params.get('type') or '').lower()
+        if t == 'ondemand':
+            return {
+                'sub_filter': {'tier__duration_type': 'ondemand'},
+                'pay_filter': {'subscription__tier__duration_type': 'ondemand'},
+                'tier_filter': {'duration_type': 'ondemand'},
+            }
+        if t == 'subscription':
+            recurring = ['daily', 'weekly', 'monthly']
+            return {
+                'sub_filter': {'tier__duration_type__in': recurring},
+                'pay_filter': {'subscription__tier__duration_type__in': recurring},
+                'tier_filter': {'duration_type__in': recurring},
+            }
+        return {'sub_filter': {}, 'pay_filter': {}, 'tier_filter': {}}
+
     @action(detail=False, methods=['get'])
     def analytics(self, request):
-        """Get subscription analytics"""
+        """Get subscription analytics. Optional ?type=subscription|ondemand to scope."""
         if not self._is_admin(request):
             return Response({'error': 'Unauthorized'}, status=403)
-        
-        total_subscriptions = UserSubscription.objects.count()
-        active_subscriptions = UserSubscription.objects.filter(status='active').count()
-        expired_subscriptions = UserSubscription.objects.filter(status='expired').count()
-        
+
+        f = self._type_filter(request)
+
+        sub_qs = UserSubscription.objects.filter(**f['sub_filter'])
+        pay_qs = SubscriptionPayment.objects.filter(status='completed', **f['pay_filter'])
+
+        total_subscriptions = sub_qs.count()
+        active_subscriptions = sub_qs.filter(status='active').count()
+        expired_subscriptions = sub_qs.filter(status='expired').count()
+
         # Revenue calculation
-        total_revenue = sum(
-            p.amount for p in SubscriptionPayment.objects.filter(status='completed')
-        )
-        
-        # Trial users
-        trial_users = UserProfile.objects.filter(is_trial_user=True).count()
-        
+        total_revenue = sum(p.amount for p in pay_qs)
+
+        # Trial users (only meaningful for the subscription view)
+        if not f['tier_filter'] or f['tier_filter'].get('duration_type') != 'ondemand':
+            trial_users = UserProfile.objects.filter(is_trial_user=True).count()
+        else:
+            trial_users = 0
+
         # Tier distribution
         tier_distribution = {}
-        for tier in SubscriptionTier.objects.all():
-            count = UserSubscription.objects.filter(tier=tier, status='active').count()
+        for tier in SubscriptionTier.objects.filter(**f['tier_filter']):
+            count = sub_qs.filter(tier=tier, status='active').count()
             tier_distribution[tier.name] = count
-        
+
         data = {
             'total_subscriptions': total_subscriptions,
             'active_subscriptions': active_subscriptions,
@@ -1298,71 +1328,83 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
             'trial_users': trial_users,
             'tier_distribution': tier_distribution,
         }
-        
+
         return Response(data)
     
     @action(detail=False, methods=['get'])
     def charging_analytics(self, request):
-        """Get real-time charging analytics"""
+        """Get real-time charging analytics. Optional ?type=subscription|ondemand."""
         if not self._is_admin(request):
             return Response({'error': 'Unauthorized'}, status=403)
         
         from django.db.models import Sum, Count
         from datetime import datetime, timedelta
-        
+
+        f = self._type_filter(request)
+        sub_filter = f['sub_filter']
+        pay_filter = f['pay_filter']
+
         # Get time ranges
         today = timezone.now().date()
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
-        
+
         # Active subscriptions by tier
         active_by_tier = UserSubscription.objects.filter(
-            status='active'
+            status='active', **sub_filter
         ).values('tier__name').annotate(
             count=Count('id'),
             total_revenue=Sum('tier__price_etb')
         ).order_by('-total_revenue')
-        
+
         # Today's revenue
         today_payments = SubscriptionPayment.objects.filter(
             status='completed',
-            period_start__date=today
+            period_start__date=today,
+            **pay_filter,
         ).aggregate(
             total=Sum('amount'),
             count=Count('id')
         )
-        
+
         # This week's revenue
         week_payments = SubscriptionPayment.objects.filter(
             status='completed',
-            period_start__date__gte=week_ago
+            period_start__date__gte=week_ago,
+            **pay_filter,
         ).aggregate(
             total=Sum('amount'),
             count=Count('id')
         )
-        
+
         # This month's revenue
         month_payments = SubscriptionPayment.objects.filter(
             status='completed',
-            period_start__date__gte=month_ago
+            period_start__date__gte=month_ago,
+            **pay_filter,
         ).aggregate(
             total=Sum('amount'),
             count=Count('id')
         )
-        
-        # Cancellations this month
-        month_cancellations = SubscriptionHistory.objects.filter(
+
+        # Cancellations this month (scoped by tier filter when provided)
+        cancel_qs = SubscriptionHistory.objects.filter(
             action='cancelled',
-            created_at__date__gte=month_ago
-        ).count()
-        
+            created_at__date__gte=month_ago,
+        )
+        if sub_filter:
+            # SubscriptionHistory has its own tier FK
+            tier_only = {k.replace('tier__', 'tier__'): v for k, v in sub_filter.items()}
+            cancel_qs = cancel_qs.filter(**tier_only)
+        month_cancellations = cancel_qs.count()
+
         # Expected monthly recurring revenue (MRR)
-        active_subs = UserSubscription.objects.filter(status='active')
+        active_subs = UserSubscription.objects.filter(status='active', **sub_filter)
         mrr = sum([sub.tier.price_etb for sub in active_subs if sub.tier])
-        
+
         # Recent transactions
         recent_transactions = SubscriptionPayment.objects.filter(
-            status='completed'
+            status='completed', **pay_filter,
         ).order_by('-created_at')[:20]
         
         recent_data = []

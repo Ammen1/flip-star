@@ -31,13 +31,15 @@ export function SubscriptionManagement({ theme }) {
     if (silent) setRefreshing(true); else setLoading(true);
     try {
       const [analyticsData, chargingData, tiersData] = await Promise.all([
-        api.request('/admin/subscriptions/analytics/').catch(() => null),
-        api.request('/admin/subscriptions/charging/').catch(() => null),
+        api.request('/admin/subscriptions/analytics/?type=subscription').catch(() => null),
+        api.request('/admin/subscriptions/charging/?type=subscription').catch(() => null),
         api.request('/subscriptions/tiers/active/').catch(() => []),
       ]);
       setAnalytics(analyticsData);
       setChargingAnalytics(chargingData);
-      setTiers(Array.isArray(tiersData) ? tiersData : (tiersData?.results || []));
+      // Filter out ondemand tiers — those belong on the On-Demand Charging page
+      const allTiers = Array.isArray(tiersData) ? tiersData : (tiersData?.results || []);
+      setTiers(allTiers.filter(t => t.duration_type !== 'ondemand'));
     } catch (error) {
       console.error('Failed to load subscription data:', error);
     } finally {
