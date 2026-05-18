@@ -157,8 +157,6 @@ class TelebirrDirectDebitService:
           <req:DirectDebitMandateInfo>
             <com:PayerReferenceNumber>{payer_reference_number}</com:PayerReferenceNumber>
             <com:AgreedTC>1</com:AgreedTC>
-            <com:PayeeAccountName>{payee_account_name}</com:PayeeAccountName>
-            <com:PayerAccountName></com:PayerAccountName>
             <com:FirstPaymentDate>{first_payment_date}</com:FirstPaymentDate>
             <com:Frequency>{frequency}</com:Frequency>
             <com:StartRangeOfDays>{start_range_of_days}</com:StartRangeOfDays>
