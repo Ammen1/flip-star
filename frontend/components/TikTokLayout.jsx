@@ -2533,11 +2533,11 @@ export const TikTokLayout = memo(function TikTokLayout({
                           onClick={() => handleFollow(video.user?.id)}
                           style={{
                             background: (followStates[video.user?.id] ?? video.user?.is_following)
-                              ? 'rgba(249,224,139,0.15)'
-                              : '#F9E08B',
-                            color: (followStates[video.user?.id] ?? video.user?.is_following) ? '#F9E08B' : '#000',
+                              ? `${T.pri}26`
+                              : T.pri,
+                            color: (followStates[video.user?.id] ?? video.user?.is_following) ? T.pri : '#000',
                             border: (followStates[video.user?.id] ?? video.user?.is_following)
-                              ? '1.5px solid rgba(249,224,139,0.6)'
+                              ? `1.5px solid ${T.pri}99`
                               : 'none',
                             borderRadius: 14,
                             padding: '2px 10px',
