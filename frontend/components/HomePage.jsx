@@ -367,8 +367,16 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
     try {
       let res;
       if (replyTarget) {
-        // Use dedicated reply endpoint
-        res = await api.replyToComment(replyTarget.id, draft);
+        // Determine if replyTarget is a top-level comment or a nested reply.
+        // findRootId returns the root comment id; if it differs from the target
+        // id, the target is itself a reply and we need to pass parent_reply.
+        const rootId = findRootId(comments, replyTarget.id);
+        const isNested = rootId != null && String(rootId) !== String(replyTarget.id);
+        res = await api.replyToComment(
+          isNested ? rootId : replyTarget.id,
+          draft,
+          isNested ? replyTarget.id : null,
+        );
       } else {
         // Use dedicated post comment endpoint
         res = await api.postComment(post.id, draft);
@@ -377,9 +385,20 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
       // Ensure response has replies array for mapping
       if (res && !res.replies) res.replies = [];
 
-      // Swap temp for real server row
+      // Swap temp for real server row — MERGE so optimistic fields (user, text)
+      // are preserved if the server response omits them. Also preserve any
+      // locally-added replies that may have been attached to the temp node.
       const swapDeep = (list) => list.map(c => {
-        if (String(c.id) === String(tempId)) return res;
+        if (String(c.id) === String(tempId)) {
+          return {
+            ...c,
+            ...res,
+            user: res?.user || c.user,
+            text: res?.text || c.text,
+            replies: (c.replies && c.replies.length) ? c.replies : (res?.replies || []),
+            pending: false,
+          };
+        }
         if (c.replies && c.replies.length) {
           return { ...c, replies: swapDeep(c.replies) };
         }

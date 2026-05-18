@@ -549,10 +549,14 @@ const api = {
       method: 'POST',
     }),
 
-  replyToComment: (commentId, text) =>
+  replyToComment: (commentId, text, parentReplyId = null) =>
     api.request('/comment-replies/', {
       method: 'POST',
-      body: JSON.stringify({ comment: commentId, text }),
+      body: JSON.stringify(
+        parentReplyId
+          ? { comment: commentId, text, parent_reply: parentReplyId }
+          : { comment: commentId, text }
+      ),
     }),
 
   // Saved posts
