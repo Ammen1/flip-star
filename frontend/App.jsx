@@ -1415,7 +1415,7 @@ export default function WerqRoot() {
         onTabChange={(tab) => {
           const feedTabs = ['home', 'reels', 'messages', 'following', 'bookmarks', 'search'];
           if (feedTabs.includes(tab)) resetAllPages();
-          else setShowWallet(false); // always close wallet when switching tabs
+          setShowWallet(false); // always close wallet when switching tabs
           startTransition(() => {
             setActiveTab(tab);
             // Clear videoDetailId when switching tabs UNLESS we're intentionally navigating to a specific video
@@ -1699,7 +1699,7 @@ export default function WerqRoot() {
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
-        {screen === 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showPostPage && !showVideoDetail && !showExplorer && (
+        {screen === 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showCampaignLeaderboard && !showCampaignFeed && !showPostPage && !showVideoDetail && !showExplorer && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
               <LandingPage
@@ -1710,7 +1710,7 @@ export default function WerqRoot() {
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
-        {screen !== 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showPostPage && !showVideoDetail && !showExplorer && activeTab === 'home' && (
+        {screen !== 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showCampaignLeaderboard && !showCampaignFeed && !showPostPage && !showVideoDetail && !showExplorer && activeTab === 'home' && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
               <HomePage
@@ -1726,7 +1726,7 @@ export default function WerqRoot() {
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
-        {screen !== 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showPostPage && !showVideoDetail && !showExplorer && activeTab === 'messages' && (
+        {screen !== 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showCampaignLeaderboard && !showCampaignFeed && !showPostPage && !showVideoDetail && !showExplorer && activeTab === 'messages' && (
           <LazyLoadErrorBoundary>
             <Suspense fallback={<PageSkeleton />}>
               <MessagesPage
@@ -1737,7 +1737,7 @@ export default function WerqRoot() {
             </Suspense>
           </LazyLoadErrorBoundary>
         )}
-        {screen !== 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showPostPage && !showVideoDetail && !showExplorer && activeTab === 'reels' && (
+        {screen !== 'landing' && !showWallet && !showSettings && !showNotifications && !showEditProfile && !showFollowersList && !showProfile && !showCampaignDetail && !showCampaigns && !showCampaignLeaderboard && !showCampaignFeed && !showPostPage && !showVideoDetail && !showExplorer && activeTab === 'reels' && (
           <TikTokLayout
             user={authUser}
             activeTab={activeTab}

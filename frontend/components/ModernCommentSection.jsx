@@ -831,6 +831,7 @@ export function ModernCommentSection({ reelId, user, onClose, onCommentPosted, o
       {showGiftModal && (
         <GiftPage
           username={reelUsername}
+          reelId={reelId}
           onClose={() => setShowGiftModal(false)}
           onShowWallet={() => setShowGiftModal(false)}
         />

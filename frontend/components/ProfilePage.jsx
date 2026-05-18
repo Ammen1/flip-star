@@ -1,6 +1,5 @@
 import { useState, useEffect, memo } from "react";
-import { Grid, Film, Bookmark, Settings, ChevronLeft, UserPlus, UserCheck, Edit, Trash2, Edit2, MoreVertical, Trophy, Flag, Share2, Wallet, Gem, X, Crown, Coins } from "lucide-react";
-import { GamificationBar } from "./GamificationBar";
+import { Grid, Film, Bookmark, Settings, ChevronLeft, UserPlus, UserCheck, Edit, Trash2, Edit2, MoreVertical, Trophy, Flag, Share2, Wallet, X, Crown, Coins, Flame } from "lucide-react";
 import api from "../api";
 import config from "../config";
 import { getRelativeTime } from "../utils/timeUtils";
@@ -59,10 +58,29 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
   const { colors: T } = useTheme();
   const { t } = useLanguage();
   const isOwnProfile = !userId || userId === user?.id;
-  const [showGamModal, setShowGamModal] = useState(false);
+  const [showStreakModal, setShowStreakModal] = useState(false);
+  const [streakData, setStreakData] = useState(null);
+  const [claimed, setClaimed] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const [showProfileZoom, setShowProfileZoom] = useState(false);
   const targetUserId = userId || user?.id;
   const [mounted, setMounted] = useState(false); // Prevent flash on initial load
+
+  // Fetch streak data
+  useEffect(() => {
+    if (isOwnProfile) {
+      loadStreakData();
+    }
+  }, [isOwnProfile]);
+
+  const loadStreakData = async () => {
+    try {
+      const response = await api.request('/gamification/status/');
+      setStreakData(response);
+    } catch (error) {
+      console.error('Failed to load streak data:', error);
+    }
+  };
 
   // For own profile, initialize immediately from cache so no loading screen
   const cachedUser = isOwnProfile ? (() => {
@@ -169,6 +187,22 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
     setEditHashtags(post.hashtags || '');
     setEditMediaFile(null);
     setEditMediaPreview(null);
+  };
+
+  const handleRemoveFromSaved = async (postId) => {
+    try {
+      await api.request(`/saved/${postId}/`, { method: 'DELETE' });
+      setSuccessMsg('Removed from saved');
+      setTimeout(() => setSuccessMsg(''), 2500);
+      setPostMenuId(null);
+      // Refresh posts to update the saved list
+      const targetUserId = userId || user?.id;
+      const raw = await api.getSavedPosts();
+      setPosts(Array.isArray(raw) ? raw : (raw.results || []));
+    } catch (error) {
+      console.error('Failed to remove from saved:', error);
+      alert('Failed to remove from saved. Please try again.');
+    }
   };
 
   const handleEditMediaChange = (e) => {
@@ -490,17 +524,25 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
               </div>
               {isOwnProfile && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {/* Treasure chest — opens gamification modal */}
+                  {/* Daily Streak Icon */}
                   <button
-                    onClick={() => setShowGamModal(true)}
+                    onClick={() => setShowStreakModal(true)}
                     style={{
                       background: 'none', border: 'none', cursor: 'pointer',
-                      padding: 8, display: 'flex', alignItems: 'center', color: T.pri,
+                      padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', color: T.pri,
                       position: 'relative',
                     }}
-                    title="Rewards"
+                    title="Daily Streak"
                   >
-                    <Gem size={24} />
+                    <Flame size={24} />
+                    {streakData?.login_streak?.current > 0 && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, color: T.pri, marginTop: -2,
+                        textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                      }}>
+                        {streakData.login_streak.current}d
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={onShowCoinPurchase}
@@ -1021,26 +1063,41 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
             }}
           >
             <div style={{ width: 36, height: 4, background: '#E7E5E4', borderRadius: 4, margin: '12px auto 20px' }} />
-            <button
-              onClick={() => { const p = posts.find(p => p.id === postMenuId); handleEditPost(p); }}
-              style={{
-                width: '100%', padding: '16px 24px', background: 'none', border: 'none',
-                textAlign: 'left', fontSize: 16, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 14, color: '#8fc441',
-              }}
-            >
-              <Edit2 size={20} style={{ color: T.pri }} /> Edit Caption
-            </button>
-            <button
-              onClick={() => { setConfirmDeleteId(postMenuId); setPostMenuId(null); }}
-              style={{
-                width: '100%', padding: '16px 24px', background: 'none', border: 'none',
-                textAlign: 'left', fontSize: 16, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: 14, color: '#EF4444',
-              }}
-            >
-              <Trash2 size={20} /> Delete Post
-            </button>
+            {activeTab === 'saved' ? (
+              <button
+                onClick={() => handleRemoveFromSaved(postMenuId)}
+                style={{
+                  width: '100%', padding: '16px 24px', background: 'none', border: 'none',
+                  textAlign: 'left', fontSize: 16, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 14, color: '#EF4444',
+                }}
+              >
+                <Bookmark size={20} /> Remove from Saved
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => { const p = posts.find(p => p.id === postMenuId); handleEditPost(p); }}
+                  style={{
+                    width: '100%', padding: '16px 24px', background: 'none', border: 'none',
+                    textAlign: 'left', fontSize: 16, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 14, color: '#8fc441',
+                  }}
+                >
+                  <Edit2 size={20} style={{ color: T.pri }} /> Edit Caption
+                </button>
+                <button
+                  onClick={() => { setConfirmDeleteId(postMenuId); setPostMenuId(null); }}
+                  style={{
+                    width: '100%', padding: '16px 24px', background: 'none', border: 'none',
+                    textAlign: 'left', fontSize: 16, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 14, color: '#EF4444',
+                  }}
+                >
+                  <Trash2 size={20} /> Delete Post
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1273,45 +1330,136 @@ export function ProfilePage({ user, userId, onBack, onEditProfile, onShowFollowe
         </>
       )}
 
-      {/* ── Gamification bottom-sheet modal ── */}
-      {showGamModal && (
+      {/* ── Streak Modal ── */}
+      {showStreakModal && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', zIndex: 4000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={() => setShowGamModal(false)}
+          onClick={() => setShowStreakModal(false)}
         >
           <div
             style={{
-              width: '100%', maxWidth: 560,
-              maxHeight: '75vh',
+              width: '100%', maxWidth: 420,
+              maxHeight: '70vh',
               background: T.cardBg || '#1A1A1A',
-              borderRadius: '24px 24px 0 0',
-              paddingBottom: 'calc(60px + env(safe-area-inset-bottom, 0px))',
-              boxSizing: 'border-box',
-              border: `1px solid ${T.border}`,
-              borderBottom: 'none',
-              boxShadow: '0 -8px 40px rgba(0,0,0,0.5)',
-              animation: 'slideUp 0.28s cubic-bezier(0.32,0.72,0,1)',
-              overflowY: 'auto',
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              padding: 20,
+              paddingBottom: 28,
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.6)',
             }}
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            <style>{`@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
-            {/* handle + header */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px 8px' }}>
-              <div style={{ width: 36, height: 4, background: T.border, borderRadius: 4, margin: '0 auto', position: 'absolute', left: '50%', transform: 'translateX(-50%)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, paddingTop: 8 }}>
-                <Gem size={20} color={T.pri} />
-                <span style={{ fontSize: 17, fontWeight: 700, color: '#8fc441' }}>My Rewards</span>
+                <Flame size={20} color={T.pri} />
+                <span style={{ fontSize: 17, fontWeight: 700, color: '#8fc441' }}>Daily Streak</span>
               </div>
               <button
-                onClick={() => setShowGamModal(false)}
+                onClick={() => setShowStreakModal(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8fc441', padding: 4, paddingTop: 12 }}
               >
                 <X size={20} />
               </button>
             </div>
-            {/* Bar itself */}
-            <GamificationBar userId={userId || user?.id} theme={T} onShowWallet={() => { setShowGamModal(false); onShowWallet?.(); }} />
+
+            {streakData?.login_streak ? (
+              <>
+                <div style={{
+                  background: 'linear-gradient(135deg,#8fc441,#F59E0B)',
+                  borderRadius: 20,
+                  padding: '28px 20px',
+                  textAlign: 'center',
+                  marginBottom: 20,
+                  boxShadow: '0 8px 32px rgba(249,224,139,0.3)'
+                }}>
+                  <div style={{ fontSize: 52, marginBottom: 4 }}>🔥</div>
+                  <div style={{ fontSize: 44, fontWeight: 900, color: '#000', lineHeight: 1 }}>
+                    {streakData.login_streak.current}
+                  </div>
+                  <div style={{ fontSize: 14, color: 'rgba(0,0,0,.75)', marginTop: 4, fontWeight: 600 }}>Day Streak</div>
+                  {(streakData.login_streak.longest ?? 0) > 0 && (
+                    <div style={{ fontSize: 12, color: 'rgba(0,0,0,.65)', marginTop: 6 }}>Best: {streakData.login_streak.longest} days 🏆</div>
+                  )}
+                </div>
+
+                {/* 7-day progress - real calendar days */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, padding: '0 4px' }}>
+                  {(() => {
+                    // Locale-aware short weekday (e.g., 'Sun'). Normalised to local midnight
+                    // so DST / late-night clock drift never shifts the label.
+                    const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+                    const todayMidnight = new Date();
+                    todayMidnight.setHours(0, 0, 0, 0);
+                    const days = [];
+                    for (let i = 6; i >= 0; i--) {
+                      const d = new Date(todayMidnight);
+                      d.setDate(todayMidnight.getDate() - i);
+                      days.push({
+                        name: weekdayFmt.format(d),
+                        date: d.getDate(),
+                        isToday: i === 0,
+                        isPast: i > 0,
+                      });
+                    }
+                    const cur = streakData.login_streak.current ?? 0;
+                    return days.map((day, i) => {
+                      const daysFromEnd = 6 - i;
+                      const active = daysFromEnd < cur;
+                      const isToday = day.isToday;
+                      const canClaim = isToday && streakData.login_streak.bonus_available && !claimed;
+                      return (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          <div
+                            onClick={async () => {
+                              if (!canClaim || claiming) return;
+                              setClaiming(true);
+                              try {
+                                await api.request('/gamification/login-bonus/', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({})
+                                });
+                                setClaimed(true);
+                                await loadStreakData();
+                              } catch (error) {
+                                console.error('Failed to claim bonus:', error);
+                              } finally {
+                                setClaiming(false);
+                              }
+                            }}
+                            style={{
+                              width: 36, height: 36, borderRadius: '50%',
+                              background: active ? 'linear-gradient(135deg,#8fc441,#F59E0B)' : isToday && canClaim ? 'rgba(249,224,139,0.1)' : isToday ? 'rgba(249,224,139,0.1)' : '#F5F5F4',
+                              border: isToday ? '2.5px solid #8fc441' : active ? 'none' : '2px solid transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: isToday ? 12 : 14,
+                              fontWeight: 700,
+                              color: active ? '#000' : isToday ? '#8fc441' : '#A8A29E',
+                              boxShadow: active ? '0 2px 8px rgba(249,224,139,.35)' : isToday && canClaim ? '0 2px 8px rgba(249,224,139,.2)' : 'none',
+                              cursor: canClaim ? 'pointer' : 'default',
+                              opacity: claiming && canClaim ? 0.6 : 1
+                            }}
+                          >
+                            {active ? '✓' : claiming && canClaim ? '...' : day.date}
+                          </div>
+                          <span style={{ fontSize: 10, color: active || isToday ? '#8fc441' : '#A8A29E', fontWeight: 600 }}>{day.name}</span>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {claimed && (
+                  <div style={{ textAlign: 'center', padding: '16px', background: '#ECFDF5', borderRadius: 14, color: '#10B981', fontWeight: 700 }}>
+                    ✅ Bonus Claimed!
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: '#78716C' }}>
+                Loading streak data...
+              </div>
+            )}
           </div>
         </div>
       )}

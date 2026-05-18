@@ -191,33 +191,6 @@ export function AppShell({
             zIndex: 100,
           }}
         >
-          <div style={{ 
-            padding: '8px 0', 
-            marginBottom: 8,
-            marginLeft: -12,
-            marginRight: -12,
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'flex-start',
-            minHeight: 80
-          }}>
-            <img 
-              src="/static/images/flipstar-logo.png" 
-              alt="FlipStar" 
-              style={{ 
-                height: 80, 
-                width: 'auto',
-                objectFit: 'contain',
-                display: 'block',
-              }}
-              onError={(e) => {
-                console.error('Flip logo failed to load');
-                e.target.style.display = 'none';
-              }}
-              onLoad={() => console.log('Flip logo loaded successfully')}
-            />
-          </div>
-
           <nav
             style={{
               flex: 1,
@@ -226,6 +199,31 @@ export function AppShell({
               gap: 4,
             }}
           >
+            {/* Logo above home menu */}
+            <div style={{
+              padding: '8px 16px',
+              marginBottom: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <img
+                src="/static/images/flipstar-logo.png"
+                alt="FlipStar"
+                style={{
+                  height: 80,
+                  width: 'auto',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+                onError={(e) => {
+                  console.error('Flipstar logo failed to load');
+                  e.target.style.display = 'none';
+                }}
+                onLoad={() => console.log('Flipstar logo loaded successfully')}
+              />
+            </div>
+
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;

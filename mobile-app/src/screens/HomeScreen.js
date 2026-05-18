@@ -877,8 +877,11 @@ export default function HomeScreen({ navigation, route }) {
     }
   }, []);
 
-  const openGiftModal = (postUser) => {
+  const [giftReelId, setGiftReelId] = useState(null);
+
+  const openGiftModal = (postUser, reelId = null) => {
     setGiftRecipient(postUser?.username || '');
+    setGiftReelId(reelId);
     setSelectedGift(null);
     setGiftQuantity(1);
     setGiftMessage('');
@@ -923,11 +926,19 @@ export default function HomeScreen({ navigation, route }) {
           recipient_username: giftRecipient,
           quantity: giftQuantity,
           message: giftMessage,
+          reel_id: giftReelId,
         }),
       });
       setGiftSent(true);
       setUserCoins(prev => prev - totalCost);
       setGiftsSentToday(prev => prev + 1);
+
+      // Optimistically bump gift_count on the relevant post
+      if (giftReelId) {
+        setPosts(prev => prev.map(p => p.id === giftReelId
+          ? { ...p, gift_count: (p.gift_count || 0) + giftQuantity }
+          : p));
+      }
       
       // Play coin sound for successful gift
       SoundManager.playCoinSound();
@@ -1387,8 +1398,9 @@ export default function HomeScreen({ navigation, route }) {
             
             {/* Gift - only for other people's posts */}
             {post.user?.username !== user?.username && (
-              <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post.user)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post.user, post.id)}>
                 <Ionicons name="gift-outline" size={22} color={colors.primary} />
+                {(post.gift_count || 0) > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.gift_count || 0}</Text>}
               </TouchableOpacity>
             )}
           </View>

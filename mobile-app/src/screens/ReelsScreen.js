@@ -225,7 +225,7 @@ const ReelItem = React.memo(function ReelItem({
     
     // Like the video if not already liked
     if (!item.is_liked) {
-      handleLike();
+      onLike();
     }
   };
 
@@ -697,9 +697,10 @@ const ReelItem = React.memo(function ReelItem({
         </TouchableOpacity>
 
         {/* Gift Button */}
-        <TouchableOpacity style={styles.actionItem} onPress={() => onOpenGiftModal(item.user)}>
+        <TouchableOpacity style={styles.actionItem} onPress={() => onOpenGiftModal(item.user, item.id)}>
           <View style={styles.actionIconRow}>
             <Ionicons name="gift-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
+            <Text style={styles.actionLabelInline}>{item.gift_count || 0}</Text>
           </View>
         </TouchableOpacity>
 
@@ -972,7 +973,11 @@ const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose, o
             multiline
           />
           <TouchableOpacity 
+<<<<<<< HEAD
             onPress={() => onOpenGiftModal && onOpenGiftModal(reel.user)} 
+=======
+            onPress={() => onOpenGiftModal(item.user, item.id)} 
+>>>>>>> 1fe7cf27917a7ae6e6d3d5537d2edadedcabd9f4
             style={{ marginRight: 8 }}
           >
             <Ionicons 
@@ -1208,8 +1213,10 @@ export default function ReelsScreen({ navigation, route }) {
   }, [user]);
 
   // Gift modal handler
-  const openGiftModal = (postUser) => {
+  const [giftReelId, setGiftReelId] = useState(null);
+  const openGiftModal = (postUser, reelId = null) => {
     setGiftRecipient(postUser?.username || '');
+    setGiftReelId(reelId);
     setSelectedGift(null);
     setGiftQuantity(1);
     setGiftMessage('');
@@ -1299,6 +1306,7 @@ export default function ReelsScreen({ navigation, route }) {
         recipient_username: giftRecipient,
         quantity: giftQuantity,
         message: giftMessage,
+        reel_id: giftReelId,
       });
       
       const response = await api.request('/gifts/send/', {
@@ -1309,8 +1317,16 @@ export default function ReelsScreen({ navigation, route }) {
           recipient_username: giftRecipient,
           quantity: giftQuantity,
           message: giftMessage,
+          reel_id: giftReelId,
         }),
       });
+
+      // Optimistically bump gift_count on the reel
+      if (giftReelId) {
+        setReels(prev => prev.map(r => r.id === giftReelId
+          ? { ...r, gift_count: (r.gift_count || 0) + giftQuantity }
+          : r));
+      }
 
       console.log('Gift send response:', response);
 

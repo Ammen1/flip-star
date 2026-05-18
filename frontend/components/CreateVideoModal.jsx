@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useLegacyT } from "../contexts/ThemeContext";
+import api from "../api";
 
 export function CreateVideoModal({ onClose, onVideoCreated }) {
   const T = useLegacyT();
@@ -11,10 +12,25 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
   const [err, setErr] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordedChunks, setRecordedChunks] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [categories, setCategories] = useState([]);
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  async function loadCategories() {
+    try {
+      const data = await api.request('/categories/');
+      setCategories(data.filter(c => c.is_active));
+    } catch (e) {
+      console.error('Failed to load categories:', e);
+    }
+  }
 
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0];
@@ -86,25 +102,22 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
 
     setLoading(true);
     try {
-      // Create a mock video object
-      const mockVideo = {
-        id: Math.floor(Math.random() * 10000),
-        creator: "You",
-        handle: "yourhandle",
-        avatar: "👤",
-        caption: caption,
-        likes: 0,
-        comments: 0,
-        shares: 0,
-        image: preview,
-        liked: false,
-        bookmarked: false
-      };
+      const formData = new FormData();
+      formData.append('file', image);
+      formData.append('caption', caption);
+      if (selectedCategory) {
+        formData.append('category', selectedCategory);
+      }
 
-      console.log("Video created:", mockVideo);
+      const response = await api.request('/reels/', {
+        method: 'POST',
+        body: formData,
+      });
+
+      console.log("Video created:", response);
       
       // Call the callback with the new video
-      onVideoCreated?.(mockVideo);
+      onVideoCreated?.(response);
       
       // Close modal
       onClose();
@@ -133,7 +146,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
         background: "#fff",
         borderRadius: 16,
         padding: 24,
-        maxWidth: 500,
+        maxWidth: 600,
         width: "90%",
         maxHeight: "90vh",
         overflowY: "auto",
@@ -298,6 +311,36 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
           />
         </div>
 
+        {/* Category Selector */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: "#666", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+            Category (Optional)
+          </label>
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "12px",
+              border: `1.5px solid #d0d0d0`,
+              borderRadius: 12,
+              fontSize: 14,
+              fontFamily: "inherit",
+              outline: "none",
+              background: "#fff",
+              color: "#1a1a1a",
+              cursor: "pointer",
+            }}
+          >
+            <option value="">Select a category...</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Error Message */}
         {err && (
           <div style={{
@@ -323,7 +366,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
             }}
             style={{
               flex: 1,
-              minWidth: 100,
+              minWidth: 0,
               padding: 12,
               background: "#f0f0f0",
               border: "1px solid #d0d0d0",
@@ -341,7 +384,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
               onClick={startRecording}
               style={{
                 flex: 1,
-                minWidth: 100,
+                minWidth: 0,
                 padding: 12,
                 background: T.pri,
                 border: "none",
@@ -360,7 +403,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
               onClick={stopRecording}
               style={{
                 flex: 1,
-                minWidth: 100,
+                minWidth: 0,
                 padding: 12,
                 background: "#EF4444",
                 border: "none",
@@ -379,7 +422,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
             disabled={loading || !image || !caption.trim() || isRecording}
             style={{
               flex: 1,
-              minWidth: 100,
+              minWidth: 0,
               padding: 12,
               background: loading ? "#ccc" : T.pri,
               border: "none",
