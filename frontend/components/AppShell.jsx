@@ -211,7 +211,7 @@ export function AppShell({
                 src="/static/images/flipstar-logo.png"
                 alt="FlipStar"
                 style={{
-                  height: 60,
+                  height: 80,
                   width: 'auto',
                   objectFit: 'contain',
                   display: 'block',
