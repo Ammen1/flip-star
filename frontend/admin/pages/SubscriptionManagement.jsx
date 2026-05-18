@@ -1,78 +1,85 @@
 import { useState, useEffect } from 'react';
-import { Crown, Zap, Star, TrendingUp, DollarSign, Users, Clock } from 'lucide-react';
+import { Crown, Zap, Star, TrendingUp, DollarSign, Users, Clock, RefreshCw, Calendar, CalendarDays, CalendarRange, Coins } from 'lucide-react';
 import api from '../../api';
 
+// Map duration_type → icon, fallback color
+const DURATION_ICON = {
+  daily: Calendar,
+  weekly: CalendarDays,
+  monthly: CalendarRange,
+  ondemand: Coins,
+};
+const DURATION_LABEL = {
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  ondemand: 'On-Demand',
+};
+
 export function SubscriptionManagement({ theme }) {
-  const [stats, setStats] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
   const [chargingAnalytics, setChargingAnalytics] = useState(null);
+  const [tiers, setTiers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadStats();
-    loadChargingAnalytics();
+    loadAll();
   }, []);
 
-  const loadStats = async () => {
+  const loadAll = async ({ silent = false } = {}) => {
+    if (silent) setRefreshing(true); else setLoading(true);
     try {
-      const response = await api.request('/admin/dashboard/');
-      setStats(response);
+      const [analyticsData, chargingData, tiersData] = await Promise.all([
+        api.request('/admin/subscriptions/analytics/').catch(() => null),
+        api.request('/admin/subscriptions/charging/').catch(() => null),
+        api.request('/subscriptions/tiers/active/').catch(() => []),
+      ]);
+      setAnalytics(analyticsData);
+      setChargingAnalytics(chargingData);
+      setTiers(Array.isArray(tiersData) ? tiersData : (tiersData?.results || []));
     } catch (error) {
-      console.error('Failed to load stats:', error);
+      console.error('Failed to load subscription data:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const loadChargingAnalytics = async () => {
-    try {
-      const response = await api.request('/admin/subscriptions/charging/');
-      setChargingAnalytics(response);
-    } catch (error) {
-      console.error('Failed to load charging analytics:', error);
-    }
-  };
+  // Build display plans from real backend tiers
+  const tierColors = [theme.pri, theme.blue, theme.green, theme.sub, '#F59E0B', '#8B5CF6'];
+  const plans = (tiers || []).map((tier, idx) => {
+    const Icon = DURATION_ICON[tier.duration_type] || Star;
+    const color = tierColors[idx % tierColors.length];
+    const count = analytics?.tier_distribution?.[tier.name] || 0;
 
-  const plans = [
-    {
-      name: 'Free',
-      icon: Star,
-      color: theme.sub,
-      features: [
-        'Basic posting',
-        'Standard engagement',
-        'Community access',
-        'Limited analytics'
-      ],
-      count: stats?.subscriptions?.find(s => s.plan === 'free')?.count || 0
-    },
-    {
-      name: 'Pro',
-      icon: Zap,
-      color: theme.blue,
-      features: [
-        'Unlimited posting',
-        'Priority support',
-        'Advanced analytics',
-        'Custom profile badge',
-        'No ads'
-      ],
-      count: stats?.subscriptions?.find(s => s.plan === 'pro')?.count || 0
-    },
-    {
-      name: 'Premium',
-      icon: Crown,
-      color: theme.pri,
-      features: [
-        'Everything in Pro',
-        'Verified badge',
-        'Early feature access',
-        'Dedicated support',
-        'Custom themes',
-        'API access'
-      ],
-      count: stats?.subscriptions?.find(s => s.plan === 'premium')?.count || 0
-    },
-  ];
+    // Build feature list from tier flags + features array
+    const flagFeatures = [];
+    if (tier.priority_support) flagFeatures.push('Priority support');
+    if (tier.custom_themes) flagFeatures.push('Custom themes');
+    if (tier.analytics_access) flagFeatures.push('Advanced analytics');
+    if (tier.api_access) flagFeatures.push('API access');
+    if (tier.ad_free) flagFeatures.push('Ad-free');
+    if (tier.watermark_free) flagFeatures.push('No watermark');
+    if (tier.hd_quality) flagFeatures.push('HD quality');
+    if (tier.download_videos) flagFeatures.push('Download videos');
+    const explicitFeatures = Array.isArray(tier.features) ? tier.features : [];
+    const features = [...explicitFeatures, ...flagFeatures];
+
+    return {
+      id: tier.id,
+      name: tier.name,
+      description: tier.description,
+      icon: Icon,
+      color,
+      duration: DURATION_LABEL[tier.duration_type] || tier.duration_type,
+      durationDays: tier.duration_days,
+      price: Number(tier.price_etb || 0),
+      priceCoins: tier.price_coins,
+      features,
+      count,
+    };
+  });
 
   if (loading) {
     return (
@@ -82,32 +89,54 @@ export function SubscriptionManagement({ theme }) {
     );
   }
 
-  const totalSubscribers = stats?.total_subscriptions || 0;
-  const activeSubscriptions = stats?.active_subscriptions || 0;
-  const expiredSubscriptions = stats?.expired_subscriptions || 0;
-  const trialUsers = stats?.trial_users || 0;
-  const totalRevenue = stats?.total_revenue || 0;
+  const totalSubscribers = analytics?.total_subscriptions || 0;
+  const activeSubscriptions = analytics?.active_subscriptions || 0;
+  const expiredSubscriptions = analytics?.expired_subscriptions || 0;
+  const trialUsers = analytics?.trial_users || 0;
+  const totalRevenue = Number(analytics?.total_revenue || 0);
 
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{
-          margin: 0,
-          fontSize: 32,
-          fontWeight: 700,
-          color: theme.txt,
-          marginBottom: 8,
-        }}>
-          Subscription Management
-        </h1>
-        <p style={{
-          margin: 0,
-          fontSize: 16,
-          color: theme.sub,
-        }}>
-          Monitor subscription plans and revenue
-        </p>
+      <div style={{ marginBottom: 32, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{
+            margin: 0,
+            fontSize: 32,
+            fontWeight: 700,
+            color: theme.txt,
+            marginBottom: 8,
+          }}>
+            Subscription Management
+          </h1>
+          <p style={{
+            margin: 0,
+            fontSize: 16,
+            color: theme.sub,
+          }}>
+            Monitor subscription plans and revenue
+          </p>
+        </div>
+        <button
+          onClick={() => loadAll({ silent: true })}
+          disabled={refreshing}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '10px 16px', borderRadius: 10,
+            background: theme.card, color: theme.txt,
+            border: `1px solid ${theme.border}`,
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            fontSize: 13, fontWeight: 600,
+            opacity: refreshing ? 0.7 : 1,
+          }}
+        >
+          <RefreshCw
+            size={14}
+            style={{ animation: refreshing ? 'sub-spin 0.9s linear infinite' : 'none' }}
+          />
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+        <style>{`@keyframes sub-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
 
       {/* Revenue Stats */}
@@ -210,15 +239,29 @@ export function SubscriptionManagement({ theme }) {
         </div>
       </div>
 
-      {/* Subscription Plans */}
+      {/* Subscription Plans header */}
+      <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, marginBottom: 16 }}>
+        Subscription Tiers ({plans.length})
+      </h3>
+
+      {plans.length === 0 ? (
+        <div style={{
+          background: theme.card, border: `1px solid ${theme.border}`,
+          borderRadius: 12, padding: 32, textAlign: 'center', color: theme.sub,
+          marginBottom: 32,
+        }}>
+          No subscription tiers configured. Create tiers in the Django admin to see them here.
+        </div>
+      ) : (
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: 24,
+        marginBottom: 32,
       }}>
         {plans.map((plan) => {
           const Icon = plan.icon;
-          const percentage = totalSubscribers > 0 ? ((plan.count / totalSubscribers) * 100).toFixed(1) : 0;
+          const percentage = activeSubscriptions > 0 ? ((plan.count / activeSubscriptions) * 100).toFixed(1) : 0;
           
           return (
             <div
@@ -353,6 +396,7 @@ export function SubscriptionManagement({ theme }) {
           );
         })}
       </div>
+      )}
 
       {/* Charging Analytics */}
       {chargingAnalytics && (

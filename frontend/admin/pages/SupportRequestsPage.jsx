@@ -35,15 +35,16 @@ export function SupportRequestsPage({ theme }) {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (silent) setRefreshing(true); else setLoading(true);
       const params = {};
       if (filterStatus) params.status = filterStatus;
       if (filterCategory) params.category = filterCategory;
@@ -54,6 +55,7 @@ export function SupportRequestsPage({ theme }) {
       console.error('Failed to load support requests', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -70,7 +72,7 @@ export function SupportRequestsPage({ theme }) {
       });
       console.log('[Support] Updated response:', updated);
       setSelected(updated?.request || null);
-      await load();
+      await load({ silent: true });
       setShowSuccessModal(true);
     } catch (e) {
       console.error('[Support] Save error:', e);
@@ -95,16 +97,25 @@ export function SupportRequestsPage({ theme }) {
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Support Requests</h1>
         </div>
         <button
-          onClick={load}
+          onClick={() => load({ silent: true })}
+          disabled={refreshing || loading}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 14px', borderRadius: 10,
             background: CARD, color: TXT, border: `1px solid ${BORDER}`,
-            cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            cursor: (refreshing || loading) ? 'not-allowed' : 'pointer',
+            fontSize: 13, fontWeight: 600,
+            opacity: (refreshing || loading) ? 0.7 : 1,
           }}
         >
-          <RefreshCw size={14} /> Refresh
+          <RefreshCw
+            size={14}
+            style={{
+              animation: refreshing ? 'support-spin 0.9s linear infinite' : 'none',
+            }}
+          /> {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
+        <style>{`@keyframes support-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
 
       {/* Summary cards */}
