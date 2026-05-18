@@ -78,6 +78,7 @@ export function SearchBar({ onUserClick, onHashtagClick, onPostClick }) {
             fontSize: 14,
             outline: "none",
             background: T.bg,
+            color: T.txt,
             transition: "all 0.2s",
           }}
         />
