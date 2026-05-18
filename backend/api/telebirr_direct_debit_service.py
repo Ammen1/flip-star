@@ -62,6 +62,10 @@ class TelebirrDirectDebitService:
         conversation_id = self._generate_conversation_id()
         timestamp = self._generate_timestamp()
         
+        shortcode_xml = ""
+        if 'ShortCode' in initiator and initiator['ShortCode']:
+            shortcode_xml = f"\n            <req:ShortCode>{initiator['ShortCode']}</req:ShortCode>"
+            
         soap_envelope = f'''<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:api="http://cps.huawei.com/cpsinterface/api_requestmgr" xmlns:req="http://cps.huawei.com/cpsinterface/request" xmlns:com="http://cps.huawei.com/cpsinterface/common">
   <soapenv:Header/>
@@ -86,7 +90,7 @@ class TelebirrDirectDebitService:
           <req:Initiator>
             <req:IdentifierType>{initiator['IdentifierType']}</req:IdentifierType>
             <req:Identifier>{initiator['Identifier']}</req:Identifier>
-            <req:SecurityCredential>{initiator['SecurityCredential']}</req:SecurityCredential>
+            <req:SecurityCredential>{initiator['SecurityCredential']}</req:SecurityCredential>{shortcode_xml}
           </req:Initiator>
           <req:ReceiverParty>
             <req:IdentifierType>{receiver_party['IdentifierType']}</req:IdentifierType>
