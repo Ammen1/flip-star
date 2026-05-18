@@ -457,21 +457,22 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
   return (
     <div
       onClick={onClose}
-      style={{ 
-        position: 'fixed', 
-        top: 0, 
-        left: window.innerWidth <= 1024 ? 0 : 260, 
-        right: 0, 
-        bottom: window.innerWidth <= 1024 ? 68 : 0, 
-        background: 'rgba(0,0,0,0.5)', 
-        zIndex: 9500, 
-        display: 'flex', 
-        alignItems: 'flex-end' 
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: window.innerWidth <= 1024 ? 68 : 0,
+        background: 'rgba(0,0,0,0.5)',
+        zIndex: 9500,
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center'
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 560, margin: '0 auto', background: T?.cardBg || '#1A1A1A', borderRadius: '20px 20px 0 0', maxHeight: '75vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '1.5px solid rgba(226,179,85,0.3)' }}
+        style={{ width: '100%', maxWidth: 560, background: T?.cardBg || '#1A1A1A', borderRadius: '20px 20px 0 0', maxHeight: '75vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '1.5px solid rgba(226,179,85,0.3)' }}
       >
         {/* Handle bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px', borderBottom: `1px solid ${T?.border || '#e0e0e0'}` }}>
