@@ -266,7 +266,6 @@ class TelebirrDirectDebitService:
             body_xml = f'''<req:ActivateDirectDebitMandateRequest>
           <req:MandateID>{mandate_id}</req:MandateID>
           <req:AgreedTC>{'1' if agreed_tc else '0'}</req:AgreedTC>
-          <req:PayerAccountName>{payer_account_name}</req:PayerAccountName>
         </req:ActivateDirectDebitMandateRequest>'''
             
             # Build SOAP envelope
