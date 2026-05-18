@@ -141,10 +141,11 @@ class ReelSerializer(serializers.ModelSerializer):
     blurhash = serializers.CharField(read_only=True)
     duration = serializers.FloatField(read_only=True)
     processed = serializers.BooleanField(read_only=True)
+    gifts_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title']
+        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'shares', 'view_count', 'comment_count', 'gifts_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title']
     
     def _build_url(self, field, request):
         """Build absolute URL for a file field, handling both local and Cloudinary storage."""
@@ -235,6 +236,13 @@ class ReelSerializer(serializers.ModelSerializer):
             return SavedPost.objects.filter(user=request.user, reel=obj).exists()
         return False
     
+    def get_gifts_count(self, obj):
+        try:
+            from .models_gift import GiftTransaction
+            return GiftTransaction.objects.filter(reel=obj).count()
+        except Exception:
+            return 0
+
     def get_recent_comments(self, obj):
         # Use prefetched comments if available (set by ReelViewSet.get_queryset with prefetch_related)
         if hasattr(obj, 'prefetched_comments'):

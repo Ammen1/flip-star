@@ -519,17 +519,8 @@ export default function HomeScreen({ navigation, route }) {
   const fetchPosts = async (offset = 0, reset = false) => {
     try {
       if (reset) setLoading(true); else setLoadingMore(true);
-      const data = await api.request(`/reels/?limit=${LIMIT}&offset=${offset}`);
+      const data = await api.request(`/reels/?limit=${LIMIT}&offset=${offset}`, { skipCache: true });
       const results = Array.isArray(data) ? data : (data.results || []);
-      
-      // Debug logging for first post to see exact structure
-      if (results.length > 0 && offset === 0) {
-        console.log('=== API RESPONSE DEBUG ===');
-        console.log('Full API response:', JSON.stringify(data, null, 2));
-        console.log('First post structure:', JSON.stringify(results[0], null, 2));
-        console.log('First post user:', results[0]?.user);
-        console.log('First post user fields:', Object.keys(results[0]?.user || {}));
-      }
       
       // Insert suggestions at dynamic positions
       let finalResults = results;
@@ -1389,6 +1380,7 @@ export default function HomeScreen({ navigation, route }) {
             {post.user?.username !== user?.username && (
               <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post.user)}>
                 <Ionicons name="gift-outline" size={22} color={colors.primary} />
+                {post.gifts_count > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.gifts_count}</Text>}
               </TouchableOpacity>
             )}
           </View>
