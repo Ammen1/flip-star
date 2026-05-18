@@ -415,7 +415,7 @@ export function MasterCampaignManagementPage({ theme }) {
                     style={{
                       flex: 1,
                       padding: '8px 12px',
-                      background: theme.sub,
+                      background: theme.pri,
                       color: '#fff',
                       border: 'none',
                       borderRadius: 6,

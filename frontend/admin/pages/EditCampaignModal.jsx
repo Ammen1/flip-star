@@ -50,10 +50,10 @@ const Section = ({ icon: Icon, title, color, children }) => (
   </div>
 );
 
-const Field = ({ label, required, children }) => (
+const Field = ({ label, required, children, theme }) => (
   <div style={{ marginBottom: 16 }}>
-    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: '#374151' }}>
-      {label}{required && <span style={{ color: '#EF4444', marginLeft: 3 }}>*</span>}
+    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6, color: theme.txt }}>
+      {label}{required && <span style={{ color: theme.red, marginLeft: 3 }}>*</span>}
     </label>
     {children}
   </div>
@@ -170,7 +170,7 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
     >
       <div
         style={{
-          background: '#fff',
+          background: theme.card,
           borderRadius: 16,
           width: '100%',
           maxWidth: 680,
@@ -186,8 +186,8 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '20px 24px',
-          borderBottom: '1.5px solid #F3F4F6',
-          position: 'sticky', top: 0, background: '#fff', zIndex: 10,
+          borderBottom: `1.5px solid ${theme.border}`,
+          position: 'sticky', top: 0, background: theme.card, zIndex: 10,
           borderRadius: '16px 16px 0 0',
         }}>
           <div>
@@ -202,7 +202,7 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
             onClick={onClose}
             style={{
               width: 36, height: 36, borderRadius: '50%',
-              background: '#F3F4F6', border: 'none', cursor: 'pointer',
+              background: theme.border, border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
@@ -226,13 +226,13 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
 
           <form onSubmit={handleSubmit} id="edit-campaign-form">
             {/* ── BASIC INFO ── */}
-            <Section icon={Type} title="Basic Information" color="#3B82F6">
-              <Field label="Campaign Title" required>
+            <Section icon={Type} title="Basic Information" color={theme.pri}>
+              <Field label="Campaign Title" required theme={theme}>
                 <input type="text" value={formData.title}
                   onChange={e => set('title', e.target.value)} required style={inp} />
               </Field>
 
-              <Field label="Campaign Type" required>
+              <Field label="Campaign Type" required theme={theme}>
                 <select
                   value={formData.campaign_type}
                   onChange={e => set('campaign_type', e.target.value)}
@@ -246,7 +246,7 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
                 </select>
               </Field>
 
-              <Field label="Master Campaign" required>
+              <Field label="Master Campaign" required theme={theme}>
                 <select
                   value={formData.master_campaign}
                   onChange={e => set('master_campaign', e.target.value)}
@@ -271,13 +271,13 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
                 )}
               </Field>
 
-              <Field label="Description" required>
+              <Field label="Description" required theme={theme}>
                 <textarea value={formData.description}
                   onChange={e => set('description', e.target.value)} required rows={3}
                   style={{ ...inp, resize: 'vertical' }} />
               </Field>
 
-              <Field label="Campaign Status" required>
+              <Field label="Campaign Status" required theme={theme}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {STATUS_OPTIONS.map(opt => (
                     <button key={opt.value} type="button"
@@ -285,9 +285,9 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
                       style={{
                         padding: '7px 16px', borderRadius: 20, cursor: 'pointer',
                         fontSize: 13, fontWeight: 600,
-                        background: formData.status === opt.value ? opt.color : '#F9FAFB',
-                        color: formData.status === opt.value ? '#fff' : '#6B7280',
-                        border: `1.5px solid ${formData.status === opt.value ? opt.color : '#E5E7EB'}`,
+                        background: formData.status === opt.value ? opt.color : theme.bg,
+                        color: formData.status === opt.value ? '#fff' : theme.sub,
+                        border: `1.5px solid ${formData.status === opt.value ? opt.color : theme.border}`,
                       }}
                     >{opt.label}</button>
                   ))}
@@ -296,13 +296,13 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
             </Section>
 
           {/* ── BANNER IMAGE ── */}
-          <Section icon={Image} title="Banner Image" color="#8B5CF6">
+          <Section icon={Image} title="Banner Image" color={theme.pri}>
             <div style={{ marginBottom: 16 }}>
               <div
                 style={{
-                  border: `2px dashed ${imagePreview ? '#8B5CF6' : '#E5E7EB'}`,
+                  border: `2px dashed ${imagePreview ? theme.pri : theme.border}`,
                   borderRadius: 10, padding: 16, textAlign: 'center',
-                  cursor: 'pointer', background: imagePreview ? '#F5F3FF' : '#FAFAFA',
+                  cursor: 'pointer', background: imagePreview ? theme.pri + '10' : theme.bg,
                   position: 'relative', transition: 'all 0.2s',
                 }}
                 onClick={() => document.getElementById('edit-img-upload').click()}
@@ -315,7 +315,7 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
                       onClick={e => { e.stopPropagation(); setImageFile(null); setImagePreview(campaign.image || null); }}
                       style={{
                         position: 'absolute', top: 6, right: 6,
-                        background: '#EF4444', color: '#fff', border: 'none',
+                        background: theme.red, color: '#fff', border: 'none',
                         borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 700,
                       }}
                     >Remove</button>
@@ -323,8 +323,8 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
                 ) : (
                   <>
                     <div style={{ fontSize: 32, marginBottom: 6 }}>🖼️</div>
-                    <div style={{ fontSize: 13, color: '#374151', fontWeight: 600 }}>Click to upload banner</div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 2 }}>PNG, JPG up to 10 MB</div>
+                    <div style={{ fontSize: 13, color: theme.txt, fontWeight: 600 }}>Click to upload banner</div>
+                    <div style={{ fontSize: 11, color: theme.sub, marginTop: 2 }}>PNG, JPG up to 10 MB</div>
                   </>
                 )}
                 <input id="edit-img-upload" type="file" accept="image/*"
@@ -334,18 +334,18 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
           </Section>
 
           {/* ── PRIZE ── */}
-          <Section icon={Trophy} title="Prize Details" color="#8fc441">
+          <Section icon={Trophy} title="Prize Details" color={theme.green}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Prize Title" required>
+              <Field label="Prize Title" required theme={theme}>
                 <input type="text" value={formData.prize_title}
                   onChange={e => set('prize_title', e.target.value)} required style={inp} />
               </Field>
-              <Field label="Prize Value (ETB)" required>
+              <Field label="Prize Value (ETB)" required theme={theme}>
                 <input type="number" value={formData.prize_value} min="0" step="0.01"
                   onChange={e => set('prize_value', e.target.value)} required style={inp} />
               </Field>
             </div>
-            <Field label="Prize Description">
+            <Field label="Prize Description" theme={theme}>
               <textarea value={formData.prize_description}
                 onChange={e => set('prize_description', e.target.value)} rows={2}
                 placeholder="Describe the prize in detail..."
@@ -354,21 +354,21 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
           </Section>
 
           {/* ── DATES ── */}
-          <Section icon={Calendar} title="Campaign Timeline" color="#3B82F6">
+          <Section icon={Calendar} title="Campaign Timeline" color={theme.blue}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Field label="Start Date">
+              <Field label="Start Date" theme={theme}>
                 <input type="datetime-local" value={formData.start_date}
                   onChange={e => set('start_date', e.target.value)} style={inp} />
               </Field>
-              <Field label="Entry Deadline">
+              <Field label="Entry Deadline" theme={theme}>
                 <input type="datetime-local" value={formData.entry_deadline}
                   onChange={e => set('entry_deadline', e.target.value)} style={inp} />
               </Field>
-              <Field label="Voting Opens">
+              <Field label="Voting Opens" theme={theme}>
                 <input type="datetime-local" value={formData.voting_start}
                   onChange={e => set('voting_start', e.target.value)} style={inp} />
               </Field>
-              <Field label="Voting Closes">
+              <Field label="Voting Closes" theme={theme}>
                 <input type="datetime-local" value={formData.voting_end}
                   onChange={e => set('voting_end', e.target.value)} style={inp} />
               </Field>
@@ -376,30 +376,30 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
           </Section>
 
           {/* ── REQUIREMENTS ── */}
-          <Section icon={Users} title="Entry Requirements" color="#10B981">
+          <Section icon={Users} title="Entry Requirements" color={theme.green}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              <Field label="Min Followers">
+              <Field label="Min Followers" theme={theme}>
                 <input type="number" value={formData.min_followers} min="0"
                   onChange={e => set('min_followers', parseInt(e.target.value) || 0)} style={inp} />
               </Field>
-              <Field label="Min Level">
+              <Field label="Min Level" theme={theme}>
                 <input type="number" value={formData.min_level} min="1"
                   onChange={e => set('min_level', parseInt(e.target.value) || 1)} style={inp} />
               </Field>
-              <Field label="Min Votes / Reel">
+              <Field label="Min Votes / Reel" theme={theme}>
                 <input type="number" value={formData.min_votes_per_reel} min="0"
                   onChange={e => set('min_votes_per_reel', parseInt(e.target.value) || 0)} style={inp} />
               </Field>
             </div>
-            <Field label="Number of Winners" required>
+            <Field label="Number of Winners" required theme={theme}>
               <input type="number" value={formData.winner_count} min="1"
                 onChange={e => set('winner_count', parseInt(e.target.value) || 1)} required style={{ ...inp, maxWidth: 160 }} />
             </Field>
           </Section>
 
           {/* ── HASHTAGS ── */}
-          <Section icon={Hash} title="Required Hashtags" color="#6B7280">
-            <Field label="Hashtags (comma-separated)">
+          <Section icon={Hash} title="Required Hashtags" color={theme.sub}>
+            <Field label="Hashtags (comma-separated)" theme={theme}>
               <input type="text" value={formData.required_hashtags}
                 placeholder="#contest, #giveaway, #challenge"
                 onChange={e => set('required_hashtags', e.target.value)} style={inp} />
@@ -409,20 +409,20 @@ export function EditCampaignModal({ theme, campaign, onClose, onSuccess, selecte
           {/* Footer */}
           <div style={{
             display: 'flex', gap: 12, padding: '16px 0 24px',
-            position: 'sticky', bottom: 0, background: '#fff',
+            position: 'sticky', bottom: 0, background: theme.card,
           }}>
             <button type="button" onClick={onClose}
               style={{
                 flex: 1, padding: '12px 20px',
-                background: '#F9FAFB', border: '1.5px solid #E5E7EB',
+                background: theme.bg, border: `1.5px solid ${theme.border}`,
                 borderRadius: 10, fontSize: 14, fontWeight: 600,
-                color: '#374151', cursor: 'pointer',
+                color: theme.txt, cursor: 'pointer',
               }}
             >Cancel</button>
             <button type="submit" disabled={saving || saved}
               style={{
                 flex: 2, padding: '12px 20px',
-                background: saved ? '#10B981' : saving ? `${theme.pri}aa` : theme.pri,
+                background: saved ? theme.green : saving ? `${theme.pri}aa` : theme.pri,
                 border: 'none', borderRadius: 10,
                 fontSize: 14, fontWeight: 700,
                 color: '#fff', cursor: saving || saved ? 'not-allowed' : 'pointer',
