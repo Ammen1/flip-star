@@ -1474,8 +1474,16 @@ class ReelViewSet(viewsets.ModelViewSet):
         reel = self.get_object()
         
         if request.method == 'GET':
-            comments = Comment.objects.filter(reel=reel).select_related('user', 'user__profile')
-            serializer = CommentSerializer(comments, many=True, context={'request': request})
+            # Use the extended serializer so nested CommentReply rows come back
+            # with each Comment. Without this, the frontend comment-sheet refetch
+            # drops every reply on re-open.
+            from .serializers_extended import CommentSerializer as ExtendedCommentSerializer
+            comments = (
+                Comment.objects.filter(reel=reel)
+                .select_related('user', 'user__profile')
+                .prefetch_related('replies', 'replies__user', 'replies__user__profile')
+            )
+            serializer = ExtendedCommentSerializer(comments, many=True, context={'request': request})
             return Response(serializer.data)
         elif request.method == 'POST':
             if not request.user.is_authenticated:
