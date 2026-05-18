@@ -92,19 +92,48 @@ function mergeLocalEngagement(posts) {
   });
 }
 
+// Nest a flat list of CommentReply rows under their parent_reply.
+// Replies whose parent_reply is null/missing remain at depth 1.
+function nestReplies(flatReplies) {
+  if (!Array.isArray(flatReplies) || flatReplies.length === 0) return [];
+  const map = {};
+  flatReplies.forEach(r => {
+    map[r.id] = { ...r, replies: [] };
+  });
+  const roots = [];
+  flatReplies.forEach(r => {
+    const node = map[r.id];
+    const parentVal = r.parent_reply;
+    const parentId = (parentVal && typeof parentVal === 'object') ? parentVal.id : parentVal;
+    if (parentId && map[parentId]) {
+      if (!map[parentId].replies.some(x => String(x.id) === String(node.id))) {
+        map[parentId].replies.push(node);
+      }
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
+
 function buildCommentTree(flatList) {
   if (!Array.isArray(flatList)) return [];
   const map = {};
   const roots = [];
   
-  // First pass: Create map and ensure replies array
+  // First pass: Create map and ensure replies array, nesting CommentReply children
   flatList.forEach(c => {
-    map[c.id] = { ...c };
-    if (!map[c.id].replies) map[c.id].replies = [];
+    const copy = { ...c };
+    // If this comment came with a flat list of replies, nest them via parent_reply
+    if (Array.isArray(copy.replies) && copy.replies.length) {
+      copy.replies = nestReplies(copy.replies);
+    } else if (!copy.replies) {
+      copy.replies = [];
+    }
+    map[c.id] = copy;
   });
   
-  // Second pass: Link children to parents
-  // Second pass: Link children to parents
+  // Second pass: Link children to parents (for flat-list inputs that use parent_id)
   flatList.forEach(c => {
     const node = map[c.id];
     // Handle parent as ID or object with string-safe comparison
