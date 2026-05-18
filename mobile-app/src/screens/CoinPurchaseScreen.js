@@ -12,7 +12,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
   const { colors } = useTheme();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loadingAirtime, setLoadingAirtime] = useState(false);
-  const [loadingTelebirr, setLoadingTelebirr] = useState(false);
+  const [loadingtelebirr, setLoadingtelebirr] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [resultSuccess, setResultSuccess] = useState(false);
   const [resultMessage, setResultMessage] = useState('');
@@ -94,7 +94,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
     }
   };
 
-  const handleTelebirrPurchase = async () => {
+  const handletelebirrPurchase = async () => {
     if (!phoneNumber) {
       setResultSuccess(false);
       setResultMessage('Please enter your phone number');
@@ -102,7 +102,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
       return;
     }
 
-    setLoadingTelebirr(true);
+    setLoadingtelebirr(true);
     try {
       const response = await api.request('/wallet/telebirr/initiate/', {
         method: 'POST',
@@ -113,8 +113,8 @@ export default function CoinPurchaseScreen({ navigation, route }) {
       });
 
       if (response.success && response.payment_url) {
-        // Open Telebirr payment URL
-        Alert.alert('Redirecting', 'Opening Telebirr payment...', [
+        // Open telebirr payment URL
+        Alert.alert('Redirecting', 'Opening telebirr payment...', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       } else {
@@ -128,7 +128,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
       setResultMessage('Payment initiation failed. Please try again.');
       setShowResultModal(true);
     } finally {
-      setLoadingTelebirr(false);
+      setLoadingtelebirr(false);
     }
   };
 
@@ -177,7 +177,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
         <TouchableOpacity
           style={[styles.paymentButton, { backgroundColor: colors.primary }]}
           onPress={handleAirtimePurchase}
-          disabled={loadingAirtime || loadingTelebirr}
+          disabled={loadingAirtime || loadingtelebirr}
         >
           {loadingAirtime ? (
             <ActivityIndicator size="small" color="#000" />
@@ -188,13 +188,13 @@ export default function CoinPurchaseScreen({ navigation, route }) {
 
         <TouchableOpacity
           style={[styles.paymentButton, { backgroundColor: colors.primary }]}
-          onPress={handleTelebirrPurchase}
-          disabled={loadingAirtime || loadingTelebirr}
+          onPress={handletelebirrPurchase}
+          disabled={loadingAirtime || loadingtelebirr}
         >
-          {loadingTelebirr ? (
+          {loadingtelebirr ? (
             <ActivityIndicator size="small" color="#000" />
           ) : (
-            <Text style={styles.buttonText}>From Telebirr</Text>
+            <Text style={styles.buttonText}>From telebirr</Text>
           )}
         </TouchableOpacity>
       </View>

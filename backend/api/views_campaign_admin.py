@@ -424,10 +424,8 @@ def get_leaderboard(request, campaign_id):
         total_comments = Comment.objects.filter(reel_id__in=reel_ids).count()
         total_shares = 0  # TODO: implement shares tracking
         
-        # Count unique gifters per post (distinct senders)
-        total_gifters = 0
-        for reel_id in reel_ids:
-            total_gifters += GiftTransaction.objects.filter(reel_id=reel_id).values('sender').distinct().count()
+        # Count total gifts received (all gift transactions)
+        total_gifters = GiftTransaction.objects.filter(reel_id__in=reel_ids).count()
         
         # Calculate score using campaign weights: score = likes*pt + comments*pt + shares*pt + gifts*pt
         calculated_score = (

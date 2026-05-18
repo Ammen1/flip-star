@@ -278,6 +278,9 @@ export default function HomeScreen({ navigation, route }) {
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [localShareCounts, setLocalShareCounts] = useState({}); // Track local share increments
+  const [localGiftCounts, setLocalGiftCounts] = useState({}); // Track local gift count increments
+  const localGiftCountsRef = useRef({}); // Ref so stale closures always read current value
+  const [campaignToast, setCampaignToast] = useState(null); // wallet impact toast for campaign posts
   const [showHorizontalSuggestions, setShowHorizontalSuggestions] = useState(true);
   const [suggestionPositions, setSuggestionPositions] = useState(new Set());
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -285,6 +288,7 @@ export default function HomeScreen({ navigation, route }) {
   const [searchResults, setSearchResults] = useState({ users: [], posts: [], hashtags: [] });
   const [searchLoading, setSearchLoading] = useState(false);
   const searchTimeoutRef = useRef(null);
+  const [giftPost, setGiftPost] = useState(null); // full post object for gift context
   const [giftRecipient, setGiftRecipient] = useState('');
   const [giftMessage, setGiftMessage] = useState('');
   const [sendingGift, setSendingGift] = useState(false);
@@ -392,10 +396,11 @@ export default function HomeScreen({ navigation, route }) {
           });
           finalResults = withSuggestions;
         }
-        // Preserve local share counts and filter blocked users
+        // Preserve local share counts and gift counts, filter blocked users
         const updatedFinalResults = finalResults.map(post => ({
           ...post,
-          shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+          shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
+          gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
         }));
         // Filter out posts from blocked users
         const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
@@ -422,10 +427,11 @@ export default function HomeScreen({ navigation, route }) {
           });
           finalResults = withSuggestions;
         }
-        // Preserve local share counts and filter blocked users
+        // Preserve local share counts and gift counts, filter blocked users
         const updatedFinalResults = finalResults.map(post => ({
           ...post,
-          shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+          shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
+          gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
         }));
         // Filter out posts from blocked users
         const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
@@ -540,14 +546,16 @@ export default function HomeScreen({ navigation, route }) {
         finalResults = withSuggestions;
       }
       
-      // Preserve local share counts and filter blocked users
+      // Preserve local share counts and gift counts, filter blocked users
       const updatedFinalResults = finalResults.map(post => ({
         ...post,
-        shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+        shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
+        gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
       }));
       const updatedResults = results.map(post => ({
         ...post,
-        shares: (post.shares || 0) + (localShareCounts[post.id] || 0)
+        shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
+        gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
       }));
       
       // Filter out posts from blocked users
@@ -570,6 +578,21 @@ export default function HomeScreen({ navigation, route }) {
   const onEndReached = useCallback(() => { if (!loadingMore && hasMore && activeTab === 'For You') fetchPosts(page + LIMIT); }, [loadingMore, hasMore, activeTab, page]);
 
   const sharePost = useCallback(async (post) => {
+    const isCampaign = !!(post.is_campaign_post || post.campaign_id || post.campaign);
+    const SHARE_COST = 5;
+
+    if (isCampaign && userCoins < SHARE_COST) {
+      Alert.alert(
+        'Insufficient Coins',
+        `Sharing a campaign post costs ${SHARE_COST} coins. You have ${userCoins} coin(s).\n\nEarn more coins or purchase to engage with campaign posts.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Get Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+        ]
+      );
+      return;
+    }
+
     // Use both web URL and app URL for better compatibility
     const webUrl = `https://uat.flipstar.et/post/${post.id}`;
     const appUrl = `flipstar://post/${post.id}`;
@@ -608,13 +631,17 @@ export default function HomeScreen({ navigation, route }) {
         });
         
         console.log('HomeScreen share increment successful');
+        if (isCampaign) {
+          setUserCoins(prev => Math.max(0, prev - SHARE_COST));
+          showCampaignToast(`🪙 −${SHARE_COST} coins · +${SHARE_COST} score earned by creator`);
+        }
       } catch (err) {
         console.log('HomeScreen share increment failed:', err);
       }
     } catch (error) {
       console.log('Share error:', error);
     }
-  }, []);
+  }, [userCoins, navigation, showCampaignToast]);
 
   const toggleFollow = useCallback(async (userId) => {
     if (!user) {
@@ -846,17 +873,43 @@ export default function HomeScreen({ navigation, route }) {
     navigation.navigate('ReelsDetail', { initialVideoId: postId });
   }, [navigation]);
 
+  const showCampaignToast = useCallback((message) => {
+    setCampaignToast(message);
+    setTimeout(() => setCampaignToast(null), 2500);
+  }, []);
+
   const toggleLike = useCallback(async (post) => {
     const newLiked = !post.is_liked;
+    const isCampaign = !!(post.is_campaign_post || post.campaign_id || post.campaign);
+    const VOTE_COST = 1;
+
+    if (isCampaign && newLiked) {
+      if (userCoins < VOTE_COST) {
+        Alert.alert(
+          'Insufficient Coins',
+          `Voting on a campaign post costs ${VOTE_COST} coin. You have ${userCoins} coin(s).\n\nEarn more coins or purchase to engage with campaign posts.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Get Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+          ]
+        );
+        return;
+      }
+    }
+
     setPosts(prev => prev.map(p => p.id === post.id
       ? { ...p, is_liked: newLiked, votes: newLiked ? (p.votes + 1) : Math.max(0, p.votes - 1) }
       : p));
     try { 
       await api.request(`/reels/${post.id}/vote/`, { method: 'POST' });
+      if (isCampaign && newLiked) {
+        setUserCoins(prev => Math.max(0, prev - VOTE_COST));
+        showCampaignToast(`🪙 −${VOTE_COST} coin · +${VOTE_COST} score earned by creator`);
+      }
     } catch { 
       setPosts(prev => prev.map(p => p.id === post.id ? { ...p, is_liked: post.is_liked, votes: post.votes } : p));
     }
-  }, []);
+  }, [userCoins, navigation, showCampaignToast]);
 
   const toggleSave = useCallback(async (post) => {
     const newSaved = !post.is_saved;
@@ -868,7 +921,11 @@ export default function HomeScreen({ navigation, route }) {
     }
   }, []);
 
-  const openGiftModal = (postUser) => {
+  const openGiftModal = (postOrUser) => {
+    // Accept either a full post object or just a user object
+    const isPost = postOrUser && ('votes' in postOrUser || 'caption' in postOrUser || 'gifts_count' in postOrUser);
+    const postUser = isPost ? postOrUser.user : postOrUser;
+    setGiftPost(isPost ? postOrUser : null);
     setGiftRecipient(postUser?.username || '');
     setSelectedGift(null);
     setGiftQuantity(1);
@@ -905,20 +962,50 @@ export default function HomeScreen({ navigation, route }) {
     setSendingGift(true);
     setGiftError('');
     try {
-      // Use gifts/send endpoint (web app logic)
-      await api.request('/gifts/send/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          gift_id: selectedGift.id,
-          recipient_username: giftRecipient,
-          quantity: giftQuantity,
-          message: giftMessage,
-        }),
-      });
+      // Use /gift-transactions/ with recipient_id + reel_id so the gift is
+      // associated with the post and gifts_count reflects it in the feed.
+      const recipientId = giftPost?.user?.id;
+      const reelId = giftPost?.id;
+
+      // Always try recipient_id first, fallback to username if unavailable
+      if (recipientId) {
+        await api.request('/gift-transactions/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gift_id: selectedGift.id,
+            recipient_id: recipientId,
+            reel_id: reelId || undefined,
+            quantity: giftQuantity,
+            message: giftMessage,
+          }),
+        });
+      } else {
+        // Fallback: use username endpoint but still pass reel_id if we have it
+        await api.request('/gifts/send/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gift_id: selectedGift.id,
+            recipient_username: giftRecipient,
+            reel_id: reelId || undefined,
+            quantity: giftQuantity,
+            message: giftMessage,
+          }),
+        });
+      }
       setGiftSent(true);
       setUserCoins(prev => prev - totalCost);
       setGiftsSentToday(prev => prev + 1);
+      // Update gifts_count on the post locally and persist across refreshes
+      if (giftPost?.id) {
+        const reelId = giftPost.id;
+        localGiftCountsRef.current = { ...localGiftCountsRef.current, [reelId]: (localGiftCountsRef.current[reelId] || 0) + 1 };
+        setLocalGiftCounts({ ...localGiftCountsRef.current });
+        setPosts(prev => prev.map(p =>
+          p.id === reelId ? { ...p, gifts_count: (p.gifts_count || 0) + 1 } : p
+        ));
+      }
       
       // Play coin sound for successful gift
       SoundManager.playCoinSound();
@@ -1035,6 +1122,13 @@ export default function HomeScreen({ navigation, route }) {
       setReplyingTo(null);
       setPosts(prev => prev.map(p => p.id === commentPost.id
         ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p));
+      // Wallet Impact Matrix: campaign post comment costs 2 coins
+      const isCommentOnCampaign = !!(commentPost?.is_campaign_post || commentPost?.campaign_id || commentPost?.campaign);
+      if (isCommentOnCampaign) {
+        const COMMENT_COST = 2;
+        setUserCoins(prev => Math.max(0, prev - COMMENT_COST));
+        showCampaignToast(`🪙 −${COMMENT_COST} coins · +${COMMENT_COST} score earned by creator`);
+      }
     } catch (e) {
       Alert.alert('Error', 'Failed to post comment');
       // Roll back
@@ -1349,17 +1443,16 @@ export default function HomeScreen({ navigation, route }) {
         {/* Actions */}
         <View style={styles.actions}>
           <View style={styles.leftActions}>
-            {/* Like */}
+            {/* Like / Vote */}
             <TouchableOpacity style={styles.actionBtn} onPress={() => toggleLike(post)}>
               <Ionicons
                 name={
-                  post.is_campaign || post.campaign_id 
+                  isCampaignPost
                     ? (post.is_liked ? 'trophy' : 'trophy-outline')
                     : (post.is_liked ? 'heart' : 'heart-outline')
                 }
                 size={24}
                 color={post.is_liked ? '#8fc441' : colors.text}
-                fill={post.is_liked ? '#8fc441' : 'none'}
               />
               {post.votes > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.votes}</Text>}
             </TouchableOpacity>
@@ -1378,9 +1471,21 @@ export default function HomeScreen({ navigation, route }) {
             
             {/* Gift - only for other people's posts */}
             {post.user?.username !== user?.username && (
-              <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post.user)}>
+              <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post)}>
                 <Ionicons name="gift-outline" size={22} color={colors.primary} />
-                {post.gifts_count > 0 && <Text style={[styles.actionCount, { color: colors.text }]}>{post.gifts_count}</Text>}
+                {(() => {
+                  console.log('=== GIFT COUNT DEBUG ===');
+                  console.log('Post ID:', post.id);
+                  console.log('post.gifts_count:', post.gifts_count);
+                  console.log('localGiftCountsRef.current[post.id]:', localGiftCountsRef.current[post.id]);
+                  console.log('Calculated total:', (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0));
+                  return null;
+                })()}
+                {(post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0) > 0 && (
+                  <Text style={[styles.actionCount, { color: colors.text }]}>
+                    {(post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0)}
+                  </Text>
+                )}
               </TouchableOpacity>
             )}
           </View>
@@ -1446,7 +1551,7 @@ export default function HomeScreen({ navigation, route }) {
         {renderHashtags(post.hashtags_list || post.hashtags)}
       </View>
     );
-  }, [user, followStates, navigation, toggleLike, toggleSave, sharePost, goToReel, openComments, openGiftModal, showPostOptions]);
+  }, [user, followStates, navigation, toggleLike, toggleSave, sharePost, goToReel, openComments, openGiftModal, showPostOptions, showCampaignToast]);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -1647,6 +1752,14 @@ export default function HomeScreen({ navigation, route }) {
       {shareToast !== '' && (
         <View style={styles.toast}>
           <Text style={styles.toastText}>{shareToast}</Text>
+        </View>
+      )}
+
+      {/* Campaign Wallet Impact Toast */}
+      {campaignToast && (
+        <View style={styles.campaignToast}>
+          <Ionicons name="trophy" size={15} color={GOLD} />
+          <Text style={styles.campaignToastText}>{campaignToast}</Text>
         </View>
       )}
 
@@ -2294,6 +2407,58 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   
+  // Campaign Wallet Impact UI
+  campaignBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    backgroundColor: '#1a1800',
+    borderTopWidth: 1,
+    borderTopColor: '#3a3000',
+  },
+  campaignBannerText: {
+    color: '#c8a84b',
+    fontSize: 11,
+    fontWeight: '600',
+    flex: 1,
+  },
+  campaignCostBadge: {
+    fontSize: 10,
+    color: GOLD,
+    fontWeight: '700',
+    marginLeft: 2,
+    opacity: 0.85,
+  },
+  campaignToast: {
+    position: 'absolute',
+    bottom: 90,
+    left: 20,
+    right: 20,
+    backgroundColor: '#1A1400',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: GOLD,
+    zIndex: 999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  campaignToastText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+
   // Actions
   actions: { 
     flexDirection: 'row', 
