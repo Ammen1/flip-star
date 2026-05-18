@@ -7,7 +7,7 @@ from django.urls import path
 from django.shortcuts import render
 from django.utils import timezone
 from datetime import timedelta
-from .models import UserProfile, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification
+from .models import UserProfile, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification, Category
 from .models_campaign import Campaign, CampaignEntry, CampaignVote, CampaignWinner, CampaignNotification
 from .models_campaign_extended import (
     CampaignScoringConfig, CampaignTheme, PostScore, UserCampaignStats, Leaderboard, LeaderboardEntry,
@@ -617,6 +617,21 @@ class UserGiftStatsAdmin(admin.ModelAdmin):
     search_fields = ['user__username']
     readonly_fields = ['updated_at']
     ordering = ['-total_coins_received']
+
+# ============ CONTENT CATEGORIES ============
+@admin.register(Category, site=admin_site)
+class CategoryAdmin(admin.ModelAdmin):
+    """Admin-managed content categories for posts"""
+    list_display = ['name', 'slug', 'icon', 'order', 'is_active', 'reel_count', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['name', 'slug', 'description']
+    list_editable = ['order', 'is_active']
+    readonly_fields = ['created_at', 'updated_at', 'reel_count']
+    prepopulated_fields = {'slug': ('name',)}
+
+    def reel_count(self, obj):
+        return obj.reels.count()
+    reel_count.short_description = 'Posts'
 
 # ============ WALLET / COIN ECONOMY ADMIN ============
 @admin.register(WalletConfig, site=admin_site)

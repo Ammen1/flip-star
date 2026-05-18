@@ -8,7 +8,7 @@ from .views import (
     send_phone_otp, verify_phone_otp, register_with_phone, login_with_phone,
     forgot_password_request, forgot_password_confirm, forgot_password_phone_request, forgot_password_phone_verify,
     login_with_subscription_otp,
-    check_phone_account, dev_create_subscription,
+    check_phone_account, dev_create_subscription, get_categories,
     create_post, search, UserProfileViewSet, ReelViewSet, QuestViewSet,
     SubscriptionViewSet, NotificationPreferenceViewSet, CompetitionViewSet, WinnerViewSet, FollowViewSet, BlockViewSet, UserSearchViewSet,
     get_user_notifications, mark_notifications_read, get_unread_notification_count,
@@ -392,6 +392,7 @@ urlpatterns = [
     path('explorer/trending/', get_trending_reels, name='explorer-trending'),
     path('explorer/trending-hashtags/', get_trending_hashtags, name='explorer-trending-hashtags'),
     path('explorer/hashtag/', get_reels_by_hashtag, name='explorer-hashtag'),
+    path('categories/', get_categories, name='categories'),
     # Contest System - User
     path('subscription/details/', get_user_subscription, name='subscription-details'),
     path('subscription/upgrade/', upgrade_subscription, name='subscription-upgrade'),

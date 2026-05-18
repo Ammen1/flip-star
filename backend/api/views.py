@@ -1283,6 +1283,7 @@ class ReelViewSet(viewsets.ModelViewSet):
             caption      = request.data.get('caption', '')
             hashtags     = request.data.get('hashtags', '')
             overlay_text = request.data.get('overlay_text', '')
+            category_id  = request.data.get('category')
 
             is_video = False
             if upload_file:
@@ -1293,13 +1294,22 @@ class ReelViewSet(viewsets.ModelViewSet):
                 if upload_file.size == 0:
                     return Response({'error': 'Uploaded file is empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Get category if provided
+            category = None
+            if category_id:
+                try:
+                    from .models import Category
+                    category = Category.objects.get(id=category_id, is_active=True)
+                except Category.DoesNotExist:
+                    pass  # Silently ignore invalid category
+
             # Create reel with file - Django S3Boto3Storage handles upload automatically
             if is_video:
                 # Generate thumbnail from video
                 import os
                 import tempfile
                 from django.core.files.uploadedfile import SimpleUploadedFile
-                
+
                 thumbnail_file = None
                 try:
                     # Save uploaded video to temp file
@@ -1307,7 +1317,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                         for chunk in upload_file.chunks():
                             temp_video.write(chunk)
                         temp_video_path = temp_video.name
-                    
+
                     # Generate thumbnail using ffmpeg
                     thumbnail_path = temp_video_path.replace('.mp4', '_thumb.jpg')
                     import ffmpeg
@@ -1318,7 +1328,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                         .overwrite_output()
                         .run(quiet=True)
                     )
-                    
+
                     # Read thumbnail and create Django file
                     with open(thumbnail_path, 'rb') as thumb_file:
                         thumbnail_file = SimpleUploadedFile(
@@ -1326,7 +1336,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                             content=thumb_file.read(),
                             content_type='image/jpeg'
                         )
-                    
+
                     # Clean up temp files
                     os.unlink(temp_video_path)
                     if os.path.exists(thumbnail_path):
@@ -1334,14 +1344,15 @@ class ReelViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     print(f"[REEL CREATE] Thumbnail generation failed: {e}")
                     # Continue without thumbnail if generation fails
-                
+
                 reel = Reel.objects.create(
                     user=request.user,
                     caption=caption,
                     hashtags=hashtags,
                     overlay_text=overlay_text,
                     media=upload_file,
-                    image=thumbnail_file
+                    image=thumbnail_file,
+                    category=category
                 )
             else:
                 reel = Reel.objects.create(
@@ -1349,7 +1360,8 @@ class ReelViewSet(viewsets.ModelViewSet):
                     caption=caption,
                     hashtags=hashtags,
                     overlay_text=overlay_text,
-                    image=upload_file
+                    image=upload_file,
+                    category=category
                 )
             print(f"[REEL CREATE] Reel created with S3 storage: {reel.id}")
 
@@ -2350,28 +2362,35 @@ def get_trending_reels(request):
         queryset = Reel.objects.filter(created_at__gte=time_threshold)
 
         if category != 'all':
-            category_hashtags = {
-                'dance': ['dance', 'dancing', 'dancer', 'choreography', 'ballet', 'hiphop'],
-                'comedy': ['funny', 'comedy', 'humor', 'laugh', 'meme', 'joke', 'hilarious'],
-                'beauty': ['beauty', 'makeup', 'skincare', 'glow', 'cosmetics'],
-                'sports': ['sports', 'fitness', 'workout', 'gym', 'athlete', 'football', 'basketball', 'soccer'],
-                'food': ['food', 'cooking', 'recipe', 'foodie', 'chef', 'delicious', 'yummy', 'eat'],
-                'travel': ['travel', 'adventure', 'explore', 'wanderlust', 'vacation', 'trip', 'tourist'],
-                'music': ['music', 'singing', 'song', 'cover', 'musician', 'singer', 'band'],
-                'art': ['art', 'artist', 'drawing', 'painting', 'creative', 'artwork', 'sketch'],
-                'gaming': ['gaming', 'gamer', 'game', 'videogame', 'esports', 'playstation', 'xbox', 'pc'],
-                'fashion': ['fashion', 'style', 'outfit', 'ootd', 'clothes', 'dress', 'streetwear'],
-                'education': ['education', 'learn', 'learning', 'tutorial', 'howto', 'tips', 'knowledge', 'study'],
-            }
-            tags = category_hashtags.get(category)
-            if tags:
-                hashtag_filter = Q()
-                for tag in tags:
-                    # Drop the '#'-prefix variant — plain icontains covers both
-                    # '#dance' and 'dance' in the stored hashtag string.
-                    hashtag_filter |= Q(hashtags__icontains=tag)
-                    hashtag_filter |= Q(caption__icontains=f'#{tag}')
-                queryset = queryset.filter(hashtag_filter)
+            # Use category field instead of keyword matching
+            from .models import Category
+            try:
+                category_obj = Category.objects.filter(slug=category, is_active=True).first()
+                if category_obj:
+                    queryset = queryset.filter(category=category_obj)
+            except Exception as e:
+                print(f"[TRENDING] Error filtering by category: {e}")
+                # Fallback to keyword matching if category field fails
+                category_hashtags = {
+                    'dance': ['dance', 'dancing', 'dancer', 'choreography', 'ballet', 'hiphop'],
+                    'comedy': ['funny', 'comedy', 'humor', 'laugh', 'meme', 'joke', 'hilarious'],
+                    'beauty': ['beauty', 'makeup', 'skincare', 'glow', 'cosmetics'],
+                    'sports': ['sports', 'fitness', 'workout', 'gym', 'athlete', 'football', 'basketball', 'soccer'],
+                    'food': ['food', 'cooking', 'recipe', 'foodie', 'chef', 'delicious', 'yummy', 'eat'],
+                    'travel': ['travel', 'adventure', 'explore', 'wanderlust', 'vacation', 'trip', 'tourist'],
+                    'music': ['music', 'singing', 'song', 'cover', 'musician', 'singer', 'band'],
+                    'art': ['art', 'artist', 'drawing', 'painting', 'creative', 'artwork', 'sketch'],
+                    'gaming': ['gaming', 'gamer', 'game', 'videogame', 'esports', 'playstation', 'xbox', 'pc'],
+                    'fashion': ['fashion', 'style', 'outfit', 'ootd', 'clothes', 'dress', 'streetwear'],
+                    'education': ['education', 'learn', 'learning', 'tutorial', 'howto', 'tips', 'knowledge', 'study'],
+                }
+                tags = category_hashtags.get(category)
+                if tags:
+                    hashtag_filter = Q()
+                    for tag in tags:
+                        hashtag_filter |= Q(hashtags__icontains=tag)
+                        hashtag_filter |= Q(caption__icontains=f'#{tag}')
+                    queryset = queryset.filter(hashtag_filter)
 
         queryset = queryset.select_related('user', 'user__profile').annotate(
             comment_count_db=Count('comments', distinct=True),
@@ -2394,6 +2413,24 @@ def get_trending_reels(request):
         traceback.print_exc()
         
         # Return empty result as fallback
+        return Response([], status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_categories(request):
+    """Return all active categories for the frontend."""
+    try:
+        from .models import Category
+        from .serializers import CategorySerializer
+
+        categories = Category.objects.filter(is_active=True).order_by('order', 'name')
+        serializer = CategorySerializer(categories, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(f"[CATEGORIES] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response([], status=status.HTTP_200_OK)
 
 

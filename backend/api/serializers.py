@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification, Block
+from .models import UserProfile, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification, Category, Block
 
 
 def build_feed_context(request):
@@ -137,6 +137,9 @@ class ReelSerializer(serializers.ModelSerializer):
     gift_count = serializers.SerializerMethodField()  # Count of gifts received
     campaign_id = serializers.PrimaryKeyRelatedField(source='campaign', read_only=True)
     campaign_title = serializers.CharField(source='campaign.title', read_only=True, default=None)
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True, default=None)
+    category_slug = serializers.CharField(source='category.slug', read_only=True, default=None)
 
     thumbnail = serializers.SerializerMethodField()
     blurhash = serializers.CharField(read_only=True)
@@ -145,7 +148,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'shares', 'gift_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title']
+        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'shares', 'gift_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title', 'category', 'category_name', 'category_slug']
     
     def _build_url(self, field, request):
         """Build absolute URL for a file field, handling both local and Cloudinary storage."""
@@ -383,3 +386,9 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'sender', 'notification_type', 'reel', 'comment', 'message', 'is_read', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug', 'description', 'icon', 'order', 'is_active']
+        read_only_fields = ['slug']
