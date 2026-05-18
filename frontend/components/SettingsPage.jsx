@@ -652,8 +652,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           </div>
           <SectionCard>
             <Row icon={HelpCircle} title="Frequently Asked Questions" onPress={() => setShowFaqModal(true)} />
-            <Row icon={Shield} title={t('privacyPolicy')} onPress={() => window.open('/legal/privacy-policy', '_blank')} />
-            <Row icon={FileText} title={t('termsOfService')} onPress={() => setShowTermsModal(true)} />
           </SectionCard>
 
           {/* Logout */}
