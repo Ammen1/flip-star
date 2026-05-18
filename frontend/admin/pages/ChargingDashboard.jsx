@@ -76,7 +76,9 @@ export function ChargingDashboard({ theme }) {
       // Filter the recent_transactions based on search query
       const filteredTransactions = response.recent_transactions?.filter(tx => {
         if (searchType === 'phone') {
-          return tx.user?.toLowerCase().includes(searchQuery.toLowerCase());
+          const q = searchQuery.toLowerCase();
+          return (tx.phone || '').toLowerCase().includes(q) ||
+                 (tx.user || '').toLowerCase().includes(q);
         } else {
           return tx.user_id?.toString().includes(searchQuery);
         }
@@ -94,13 +96,18 @@ export function ChargingDashboard({ theme }) {
     const dataToExport = searchResults || statistics;
     if (!dataToExport.recent_transactions) return;
 
-    const headers = ['Date', 'User', 'Tier', 'Amount (ETB)', 'Payment Method'];
+    const headers = ['Date', 'Period End', 'User', 'Email', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Payment Method', 'Status'];
     const rows = dataToExport.recent_transactions.map(t => [
       t.date,
+      t.period_end || '',
       t.user,
+      t.email || '',
+      t.phone || '',
       t.tier,
+      `${t.duration_type || ''}${t.duration_days ? ` (${t.duration_days}d)` : ''}`,
       t.amount.toFixed(2),
-      t.payment_method
+      t.payment_method,
+      t.status || ''
     ]);
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -321,78 +328,61 @@ export function ChargingDashboard({ theme }) {
             </div>
 
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                 <thead>
                   <tr style={{
                     background: theme.bg,
                     borderBottom: `1px solid ${theme.border}`
                   }}>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>Date</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>User</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>Tier</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'right',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>Amount (ETB)</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}>Payment Method</th>
+                    {['Date', 'User', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Method', 'Status'].map(h => (
+                      <th key={h} style={{
+                        padding: 12,
+                        textAlign: h === 'Amount (ETB)' ? 'right' : 'left',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: theme.sub,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {statistics.recent_transactions?.map((t, idx) => (
-                    <tr key={idx} style={{
+                  {(!statistics.recent_transactions || statistics.recent_transactions.length === 0) ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
+                        No transactions yet.
+                      </td>
+                    </tr>
+                  ) : statistics.recent_transactions.map((t, idx) => (
+                    <tr key={t.id || idx} style={{
                       borderBottom: idx < statistics.recent_transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                     }}>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                        {t.date}
+                      <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                        <div>{t.date}</div>
+                        {t.period_end && <div style={{ fontSize: 10 }}>ends {t.period_end}</div>}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                        {t.user}
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 600 }}>@{t.user}</div>
+                        {t.email && <div style={{ fontSize: 11, color: theme.sub }}>{t.email}</div>}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                        {t.tier}
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone || '—'}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.tier}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                        {t.duration_type || '—'}{t.duration_days ? ` (${t.duration_days}d)` : ''}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 600 }}>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
                         {t.amount.toFixed(2)}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                        {t.payment_method}
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.payment_method}</td>
+                      <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
+                        <span style={{
+                          padding: '3px 8px', borderRadius: 999,
+                          background: t.status === 'completed' ? '#10B98122' : '#9CA3AF22',
+                          color: t.status === 'completed' ? '#10B981' : theme.sub,
+                          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
+                        }}>{t.status || '—'}</span>
                       </td>
                     </tr>
                   ))}
@@ -496,78 +486,55 @@ export function ChargingDashboard({ theme }) {
                 Found {searchResults.transactions.length} transactions
               </div>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
                   <thead>
                     <tr style={{
                       background: theme.bg,
                       borderBottom: `1px solid ${theme.border}`
                     }}>
-                      <th style={{
-                        padding: 12,
-                        textAlign: 'left',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: theme.sub,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>Date</th>
-                      <th style={{
-                        padding: 12,
-                        textAlign: 'left',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: theme.sub,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>User</th>
-                      <th style={{
-                        padding: 12,
-                        textAlign: 'left',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: theme.sub,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>Tier</th>
-                      <th style={{
-                        padding: 12,
-                        textAlign: 'left',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: theme.sub,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>Amount (ETB)</th>
-                      <th style={{
-                        padding: 12,
-                        textAlign: 'left',
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: theme.sub,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>Payment Method</th>
+                      {['Date', 'User', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Method', 'Status'].map(h => (
+                        <th key={h} style={{
+                          padding: 12,
+                          textAlign: h === 'Amount (ETB)' ? 'right' : 'left',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: theme.sub,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          whiteSpace: 'nowrap',
+                        }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {searchResults.transactions.map((t, idx) => (
-                      <tr key={idx} style={{
+                      <tr key={t.id || idx} style={{
                         borderBottom: idx < searchResults.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                       }}>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {t.date}
+                        <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                          <div>{t.date}</div>
+                          {t.period_end && <div style={{ fontSize: 10 }}>ends {t.period_end}</div>}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {t.user}
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 600 }}>@{t.user}</div>
+                          {t.email && <div style={{ fontSize: 11, color: theme.sub }}>{t.email}</div>}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {t.tier}
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone || '—'}</td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.tier}</td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                          {t.duration_type || '—'}{t.duration_days ? ` (${t.duration_days}d)` : ''}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 600 }}>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
                           {t.amount.toFixed(2)}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt }}>
-                          {t.payment_method}
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.payment_method}</td>
+                        <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
+                          <span style={{
+                            padding: '3px 8px', borderRadius: 999,
+                            background: t.status === 'completed' ? '#10B98122' : '#9CA3AF22',
+                            color: t.status === 'completed' ? '#10B981' : theme.sub,
+                            fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
+                          }}>{t.status || '—'}</span>
                         </td>
                       </tr>
                     ))}

@@ -616,66 +616,74 @@ export function SubscriptionManagement({ theme }) {
               border: `1px solid ${theme.border}`,
               overflow: 'hidden',
             }}>
+              <div style={{ overflowX: 'auto' }}>
               <table style={{
                 width: '100%',
                 borderCollapse: 'collapse',
+                minWidth: 900,
               }}>
                 <thead>
                   <tr style={{
                     background: theme.bg,
                     borderBottom: `1px solid ${theme.border}`,
                   }}>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                    }}>User</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                    }}>Tier</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                    }}>Amount</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                    }}>Method</th>
-                    <th style={{
-                      padding: 12,
-                      textAlign: 'left',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: theme.sub,
-                    }}>Date</th>
+                    {['User', 'Phone', 'Tier', 'Duration', 'Amount', 'Method', 'Status', 'Date'].map(h => (
+                      <th key={h} style={{
+                        padding: 12,
+                        textAlign: 'left',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: theme.sub,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        whiteSpace: 'nowrap',
+                      }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {chargingAnalytics.recent_transactions.map((tx, index) => (
-                    <tr key={index} style={{
+                  {chargingAnalytics.recent_transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
+                        No transactions yet.
+                      </td>
+                    </tr>
+                  ) : chargingAnalytics.recent_transactions.map((tx, index) => (
+                    <tr key={tx.id || index} style={{
                       borderBottom: index < chargingAnalytics.recent_transactions.length - 1 ? `1px solid ${theme.border}` : 'none',
                     }}>
-                      <td style={{ padding: 12, fontSize: 14, color: theme.txt }}>{tx.user}</td>
-                      <td style={{ padding: 12, fontSize: 14, color: theme.txt }}>{tx.tier}</td>
-                      <td style={{ padding: 12, fontSize: 14, fontWeight: 600, color: theme.green }}>{tx.amount.toFixed(2)} ETB</td>
-                      <td style={{ padding: 12, fontSize: 14, color: theme.txt }}>{tx.payment_method}</td>
-                      <td style={{ padding: 12, fontSize: 14, color: theme.sub }}>{tx.date}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 600 }}>@{tx.user}</div>
+                        {tx.email && <div style={{ fontSize: 11, color: theme.sub }}>{tx.email}</div>}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{tx.phone || '—'}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{tx.tier}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                        {tx.duration_type || '—'}{tx.duration_days ? ` (${tx.duration_days}d)` : ''}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, fontWeight: 700, color: theme.green, whiteSpace: 'nowrap' }}>
+                        {tx.amount.toFixed(2)} {tx.currency || 'ETB'}
+                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{tx.payment_method}</td>
+                      <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
+                        <span style={{
+                          padding: '3px 8px', borderRadius: 999,
+                          background: tx.status === 'completed' ? '#10B98122' : '#9CA3AF22',
+                          color: tx.status === 'completed' ? '#10B981' : theme.sub,
+                          fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
+                        }}>{tx.status}</span>
+                      </td>
+                      <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                        <div>{tx.date}</div>
+                        {tx.period_end && (
+                          <div style={{ fontSize: 10, color: theme.sub }}>ends {tx.period_end}</div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         </div>

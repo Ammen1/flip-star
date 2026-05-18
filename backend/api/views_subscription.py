@@ -1409,14 +1409,31 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         
         recent_data = []
         for tx in recent_transactions:
+            sub = tx.subscription
+            tier = sub.tier if sub else None
+            user_obj = (sub.user if sub and sub.user else tx.user) if hasattr(tx, 'user') else (sub.user if sub else None)
+            phone = ''
+            if sub and getattr(sub, 'onevas_phone_number', None):
+                phone = sub.onevas_phone_number
+            elif user_obj and hasattr(user_obj, 'profile') and getattr(user_obj.profile, 'phone_number', None):
+                phone = user_obj.profile.phone_number
+
             recent_data.append({
                 'id': str(tx.id),
                 'amount': float(tx.amount),
+                'currency': tx.currency,
                 'payment_method': tx.payment_method,
-                'tier': tx.subscription.tier.name if tx.subscription and tx.subscription.tier else 'N/A',
-                'user': tx.subscription.user.username if tx.subscription and tx.subscription.user else 'N/A',
-                'date': tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else 'N/A',
-                'status': tx.status
+                'tier': tier.name if tier else 'N/A',
+                'duration_type': tx.duration_type or (tier.duration_type if tier else ''),
+                'duration_days': tier.duration_days if tier else None,
+                'user': user_obj.username if user_obj else 'N/A',
+                'user_id': user_obj.id if user_obj else None,
+                'email': user_obj.email if user_obj else '',
+                'phone': phone,
+                'period_start': tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else '',
+                'period_end': tx.period_end.strftime('%Y-%m-%d %H:%M') if tx.period_end else '',
+                'date': tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else (tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else 'N/A'),
+                'status': tx.status,
             })
         
         return Response({
