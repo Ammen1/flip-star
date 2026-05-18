@@ -57,7 +57,9 @@ const STATUS_STYLES = {
   closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
 };
 
-const SupportSection = ({ compact = false, T, supportForm, setSupportForm, supportSubmitting, handleSubmitSupport, supportRequests }) => (
+const SupportSection = ({ compact = false, T, supportForm, setSupportForm, supportSubmitting, handleSubmitSupport, supportRequests }) => {
+  const [expandedReqId, setExpandedReqId] = useState(null);
+  return (
   <div>
     {/* Submit new request */}
     <div style={{
@@ -130,29 +132,49 @@ const SupportSection = ({ compact = false, T, supportForm, setSupportForm, suppo
     ) : (
       supportRequests.map(req => {
         const s = STATUS_STYLES[req.status] || STATUS_STYLES.received;
+        const isOpen = expandedReqId === req.id;
         return (
           <div key={req.id} style={{
             background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
-            padding: 14, marginBottom: 10,
+            marginBottom: 10, overflow: 'hidden',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1 }}>{req.subject}</div>
-              <span style={{
-                fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
-                background: s.bg, color: s.color,
-              }}>{s.label}</span>
-            </div>
-            <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>
-              {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
-            </div>
-            <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
-            {req.admin_response && (
-              <div style={{
-                marginTop: 10, padding: 10, background: '#0F172A10',
-                border: `1px dashed ${T.border}`, borderRadius: 8,
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
-                <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
+            <button
+              type="button"
+              onClick={() => setExpandedReqId(isOpen ? null : req.id)}
+              style={{
+                width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                padding: 14, textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.subject}</div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
+                    background: s.bg, color: s.color, flexShrink: 0,
+                  }}>{s.label}</span>
+                </div>
+                <div style={{ fontSize: 12, color: T.sub }}>
+                  {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              {isOpen
+                ? <ChevronUp size={16} color={T.sub} style={{ flexShrink: 0 }} />
+                : <ChevronDown size={16} color={T.sub} style={{ flexShrink: 0 }} />}
+            </button>
+            {isOpen && (
+              <div style={{ padding: '0 14px 14px' }}>
+                <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
+                {req.admin_response && (
+                  <div style={{
+                    marginTop: 10, padding: 10, background: '#0F172A10',
+                    border: `1px dashed ${T.border}`, borderRadius: 8,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
+                    <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -160,7 +182,8 @@ const SupportSection = ({ compact = false, T, supportForm, setSupportForm, suppo
       })
     )}
   </div>
-);
+  );
+};
 
 export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubscription, onShowEditProfile }) {
   const { darkMode, toggleDarkMode, colors: T } = useTheme();
