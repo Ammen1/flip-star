@@ -334,13 +334,12 @@ class TelebirrDirectDebitService:
                 'error': f'Mandate activation failed: {str(e)}'
             }
     
-    def initiate_debit(self, mandate_id, payer_reference_number, amount, 
+    def initiate_debit(self, payer_reference_number, amount, 
                       currency='ETB', shortcode=None):
         """
         Initiate Direct Debit Transaction
         
         Args:
-            mandate_id: Telebirr mandate ID
             payer_reference_number: Payer reference number
             amount: Amount to debit
             currency: Currency code (default ETB)
@@ -372,10 +371,6 @@ class TelebirrDirectDebitService:
             body_xml = f'''<req:TransactionRequest>
           <req:Parameters>
             <req:Parameter>
-              <com:Key>MandateID</com:Key>
-              <com:Value>{mandate_id}</com:Value>
-            </req:Parameter>
-            <req:Parameter>
               <com:Key>Amount</com:Key>
               <com:Value>{amount}</com:Value>
             </req:Parameter>
@@ -385,7 +380,7 @@ class TelebirrDirectDebitService:
             </req:Parameter>
           </req:Parameters>
         </req:TransactionRequest>
-        <req:Remark>Direct debit for mandate {mandate_id}</req:Remark>'''
+        <req:Remark>Direct debit for {payer_reference_number}</req:Remark>'''
             
             # Build SOAP envelope
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
