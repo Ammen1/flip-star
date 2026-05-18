@@ -117,7 +117,7 @@ class TelebirrDirectDebitService:
             payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
             payee_account_name: Payee account name (defaults to Flipstar)
             start_range_of_days: Start range of days for payment (default 1)
-            end_range_of_days: End range of days for payment (default 22)
+            end_range_of_days: End range of days for payment (default 31)
             
         Returns:
             dict: Response with success status and mandate details
