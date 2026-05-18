@@ -62,13 +62,16 @@ export function SupportRequestsPage({ theme }) {
     if (!selected) return;
     try {
       setSaving(true);
+      console.log('[Support] Saving request:', selected.id, selected.status, selected.admin_response);
       const updated = await api.adminUpdateSupportRequest(selected.id, {
         status: selected.status,
         admin_response: selected.admin_response || '',
       });
+      console.log('[Support] Updated response:', updated);
       setSelected(updated?.request || null);
       await load();
     } catch (e) {
+      console.error('[Support] Save error:', e);
       alert(e?.message || 'Failed to update request');
     } finally {
       setSaving(false);
