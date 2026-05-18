@@ -133,7 +133,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
         background: "#fff",
         borderRadius: 16,
         padding: 24,
-        maxWidth: 500,
+        maxWidth: 600,
         width: "90%",
         maxHeight: "90vh",
         overflowY: "auto",
@@ -323,7 +323,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
             }}
             style={{
               flex: 1,
-              minWidth: 100,
+              minWidth: 120,
               padding: 12,
               background: "#f0f0f0",
               border: "1px solid #d0d0d0",
@@ -341,7 +341,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
               onClick={startRecording}
               style={{
                 flex: 1,
-                minWidth: 100,
+                minWidth: 120,
                 padding: 12,
                 background: T.pri,
                 border: "none",
@@ -360,7 +360,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
               onClick={stopRecording}
               style={{
                 flex: 1,
-                minWidth: 100,
+                minWidth: 120,
                 padding: 12,
                 background: "#EF4444",
                 border: "none",
@@ -379,7 +379,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
             disabled={loading || !image || !caption.trim() || isRecording}
             style={{
               flex: 1,
-              minWidth: 100,
+              minWidth: 120,
               padding: 12,
               background: loading ? "#ccc" : T.pri,
               border: "none",
