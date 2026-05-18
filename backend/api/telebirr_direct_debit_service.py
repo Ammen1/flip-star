@@ -27,6 +27,8 @@ class TelebirrDirectDebitService:
         self.caller_type = getattr(settings, 'TELEBIRR_CALLER_TYPE', '2')
         self.sp_operator_id = getattr(settings, 'TELEBIRR_SP_OPERATOR_ID', '')
         self.sp_operator_credential = getattr(settings, 'TELEBIRR_SP_OPERATOR_CREDENTIAL', '')
+        self.org_operator_id = getattr(settings, 'TELEBIRR_ORG_OPERATOR_ID', '')
+        self.org_operator_credential = getattr(settings, 'TELEBIRR_ORG_OPERATOR_CREDENTIAL', '')
         
         # No SOAP client initialization needed for raw requests
         self.client = None
@@ -102,7 +104,7 @@ class TelebirrDirectDebitService:
     def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
                       first_payment_date, expiry_date, payee_shortcode=None,
                       payee_account_name=None, start_range_of_days=1, 
-                      end_range_of_days=22):
+                      end_range_of_days=31):
         """
         Create Direct Debit Mandate
         
@@ -357,9 +359,9 @@ class TelebirrDirectDebitService:
             
             # Build initiator (Organization Operator or SP Operator)
             initiator = {
-                'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.third_party_id,
-                'SecurityCredential': self.third_party_password,
+                'IdentifierType': 11,  # Organization Operator
+                'Identifier': self.org_operator_id or self.third_party_id,
+                'SecurityCredential': self.org_operator_credential or self.third_party_password,
                 'ShortCode': shortcode,
             }
             
