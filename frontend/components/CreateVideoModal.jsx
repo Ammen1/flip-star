@@ -356,7 +356,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
         )}
 
         {/* Buttons */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "nowrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <button
             onClick={() => {
               if (streamRef.current) {
