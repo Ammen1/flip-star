@@ -318,6 +318,9 @@ export const TikTokLayout = memo(function TikTokLayout({
             if (!reel.overlay_text) return [];
             try { return JSON.parse(reel.overlay_text); } catch { return []; }
           })(),
+          is_campaign_post: reel.is_campaign_post || false,
+          campaign_id: reel.campaign_id || null,
+          campaign: reel.campaign || null,
         };
       });
       
@@ -438,10 +441,45 @@ export const TikTokLayout = memo(function TikTokLayout({
         try {
           const reel = await api.request(`/reels/${initialVideoId}/`);
           if (!reel || !reel.id) return;
+          // Transform the reel to match the video format with campaign fields
+          const formattedReel = {
+            id: reel.id,
+            user: reel.user,
+            creator: reel.user?.username || 'Unknown User',
+            handle: `@${reel.user?.username || 'unknown'}`,
+            avatar: '👤',
+            caption: reel.caption,
+            hashtags: reel.hashtags_list || [],
+            likes: reel.votes || 0,
+            comments: reel.comment_count || 0,
+            shares: reel.shares,
+            gift_count: reel.gift_count || 0,
+            imageUrl: (() => {
+              const url = reel.media || reel.image;
+              if (!url) return null;
+              if (
+                url.includes('/video/upload/') &&
+                !url.match(/\.(mp4|webm|ogg|mov)(\?|$)/i)
+              ) {
+                return url + '.mp4';
+              }
+              return url;
+            })(),
+            liked: reel.is_liked || false,
+            saved: reel.is_saved || false,
+            created_at: reel.created_at,
+            overlayText: (() => {
+              if (!reel.overlay_text) return [];
+              try { return JSON.parse(reel.overlay_text); } catch { return []; }
+            })(),
+            is_campaign_post: reel.is_campaign_post || false,
+            campaign_id: reel.campaign_id || null,
+            campaign: reel.campaign || null,
+          };
           setVideos((prev) => {
             // Avoid duplicates if it shows up via another path
-            const filtered = prev.filter((v) => String(v.id) !== String(reel.id));
-            return [reel, ...filtered];
+            const filtered = prev.filter((v) => String(v.id) !== String(formattedReel.id));
+            return [formattedReel, ...filtered];
           });
           const scroller = document.querySelector('.feed-container');
           if (scroller) scroller.scrollTop = 0;
@@ -1296,6 +1334,9 @@ export const TikTokLayout = memo(function TikTokLayout({
         saved: reel.is_saved || false,
         created_at: reel.created_at,
         activeTab,
+        is_campaign_post: reel.is_campaign_post || false,
+        campaign_id: reel.campaign_id || null,
+        campaign: reel.campaign || null,
       })); // Refetch when tab changes;
       setVideos(formattedVideos);
       setActiveTab(`hashtag-${hashtag}`);
