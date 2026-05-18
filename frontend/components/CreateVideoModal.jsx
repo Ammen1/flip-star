@@ -313,7 +313,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
         )}
 
         {/* Buttons */}
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 12, flexWrap: "nowrap" }}>
           <button
             onClick={() => {
               if (streamRef.current) {
@@ -323,7 +323,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
             }}
             style={{
               flex: 1,
-              minWidth: 120,
+              minWidth: 0,
               padding: 12,
               background: "#f0f0f0",
               border: "1px solid #d0d0d0",
@@ -341,7 +341,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
               onClick={startRecording}
               style={{
                 flex: 1,
-                minWidth: 120,
+                minWidth: 0,
                 padding: 12,
                 background: T.pri,
                 border: "none",
@@ -360,7 +360,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
               onClick={stopRecording}
               style={{
                 flex: 1,
-                minWidth: 120,
+                minWidth: 0,
                 padding: 12,
                 background: "#EF4444",
                 border: "none",
@@ -379,7 +379,7 @@ export function CreateVideoModal({ onClose, onVideoCreated }) {
             disabled={loading || !image || !caption.trim() || isRecording}
             style={{
               flex: 1,
-              minWidth: 120,
+              minWidth: 0,
               padding: 12,
               background: loading ? "#ccc" : T.pri,
               border: "none",
