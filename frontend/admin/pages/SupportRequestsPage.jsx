@@ -39,6 +39,7 @@ export function SupportRequestsPage({ theme }) {
   const [filterCategory, setFilterCategory] = useState('');
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const load = async () => {
     try {
@@ -70,6 +71,7 @@ export function SupportRequestsPage({ theme }) {
       console.log('[Support] Updated response:', updated);
       setSelected(updated?.request || null);
       await load();
+      setShowSuccessModal(true);
     } catch (e) {
       console.error('[Support] Save error:', e);
       alert(e?.message || 'Failed to update request');
@@ -231,6 +233,75 @@ export function SupportRequestsPage({ theme }) {
             >
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => setShowSuccessModal(false)}
+          >
+            <div
+              style={{
+                background: CARD,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 400,
+                width: '90%',
+                border: `1px solid ${BORDER}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <CheckCircle2 size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: TXT }}>
+                    Response Saved!
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 14, color: SUB }}>
+                    Your response has been successfully saved.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  background: PRI,
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                OK
+              </button>
+            </div>
           </div>
         )}
       </div>
