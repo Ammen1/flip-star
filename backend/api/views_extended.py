@@ -133,14 +133,10 @@ class CommentViewSet(viewsets.ModelViewSet):
         # Only allow editing own comments
         if comment.user != request.user:
             return Response({'error': 'You can only edit your own comments'}, status=status.HTTP_403_FORBIDDEN)
-        # Only allow editing within 15 minutes
-        try:
-            if not comment.is_editable:
-                return Response({'error': 'Edit window has expired (15 minutes)'}, status=status.HTTP_400_BAD_REQUEST)
-        except DatabaseError:
-            # If is_editable property fails due to missing fields, allow editing
-            pass
-        
+        # No time-based edit window — owners may edit their comments at any time.
+        if comment.is_deleted:
+            return Response({'error': 'Cannot edit a deleted comment'}, status=status.HTTP_400_BAD_REQUEST)
+
         text = request.data.get('text', '').strip()
         if not text:
             return Response({'error': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -242,10 +238,10 @@ class CommentReplyViewSet(viewsets.ModelViewSet):
         # Only allow editing own replies
         if reply.user != request.user:
             return Response({'error': 'You can only edit your own replies'}, status=status.HTTP_403_FORBIDDEN)
-        # Only allow editing within 15 minutes
-        if not reply.is_editable:
-            return Response({'error': 'Edit window has expired (15 minutes)'}, status=status.HTTP_400_BAD_REQUEST)
-        
+        # No time-based edit window — owners may edit their replies at any time.
+        if reply.is_deleted:
+            return Response({'error': 'Cannot edit a deleted reply'}, status=status.HTTP_400_BAD_REQUEST)
+
         text = request.data.get('text', '').strip()
         if not text:
             return Response({'error': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
