@@ -91,6 +91,8 @@ export const TikTokLayout = memo(function TikTokLayout({
   onShowCampaigns,
   onShowNotifications,
   onShowVideoDetail,
+  onShowWallet,
+  onShowCoinPurchase,
   unreadNotifCount = 0,
 }) {
   console.log('[TikTokLayout] Component mounted, videosOnly:', videosOnly);
@@ -2828,6 +2830,7 @@ export const TikTokLayout = memo(function TikTokLayout({
             onShowProfile={(userId) => {
               handleShowProfile(userId);
             }}
+            onShowCoinPurchase={onShowCoinPurchase}
           />
         </div>
       )}
@@ -2844,7 +2847,12 @@ export const TikTokLayout = memo(function TikTokLayout({
           onShowWallet={() => {
             setShowGiftModal(null);
             setGiftReelId(null);
-            onShowWallet();
+            onShowWallet?.();
+          }}
+          onShowCoinPurchase={() => {
+            setShowGiftModal(null);
+            setGiftReelId(null);
+            onShowCoinPurchase?.();
           }}
         />
       )}

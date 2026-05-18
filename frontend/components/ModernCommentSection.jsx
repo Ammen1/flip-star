@@ -272,7 +272,7 @@ const CommentItem = ({ comment, T, user, onLike, onReply, onReport, replyTo, rep
   );
 };
 
-export function ModernCommentSection({ reelId, user, onClose, onCommentPosted, onShowProfile }) {
+export function ModernCommentSection({ reelId, user, onClose, onCommentPosted, onShowProfile, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   const { t } = useLanguage();
   const [comments, setComments] = useState([]);
@@ -834,6 +834,10 @@ export function ModernCommentSection({ reelId, user, onClose, onCommentPosted, o
           reelId={reelId}
           onClose={() => setShowGiftModal(false)}
           onShowWallet={() => setShowGiftModal(false)}
+          onShowCoinPurchase={() => {
+            setShowGiftModal(false);
+            onShowCoinPurchase?.();
+          }}
         />
       )}
     </div>

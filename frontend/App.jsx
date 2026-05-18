@@ -1722,6 +1722,7 @@ export default function WerqRoot() {
                 onShowVideoDetail={handleShowVideoDetail}
                 onShowCampaigns={handleShowCampaigns}
                 onShowWallet={handleShowWallet}
+                onShowCoinPurchase={handleShowCoinPurchase}
               />
             </Suspense>
           </LazyLoadErrorBoundary>
@@ -1751,6 +1752,8 @@ export default function WerqRoot() {
             onShowNotifications={handleShowNotifications}
             onShowVideoDetail={handleShowVideoDetail}
             onShowExplorer={handleShowExplorer}
+            onShowWallet={handleShowWallet}
+            onShowCoinPurchase={handleShowCoinPurchase}
             unreadNotifCount={unreadNotifCount}
           />
         )}

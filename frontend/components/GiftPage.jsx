@@ -19,7 +19,7 @@ const RARITY_COLORS = {
   legendary: '#F59E0B',
 };
 
-export default function GiftPage({ username, reelId, onClose, onShowWallet }) {
+export default function GiftPage({ username, reelId, onClose, onShowWallet, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   const [gifts, setGifts] = useState([
     { id: 1, name: 'Rose', description: 'A beautiful red rose', coin_value: 10, rarity: 'common', category: 'flowers' },
@@ -106,14 +106,9 @@ export default function GiftPage({ username, reelId, onClose, onShowWallet }) {
     }
     
     if (totalCost > coinBalance) {
-      // Show recharge dialog with automatic telebirr payment option
-      setRechargeError({
-        needs_recharge: true,
-        required_coins: totalCost,
-        current_purchased_coins: coinBalance,
-        current_earned_coins: 0,
-      });
-      setShowRechargeDialog(true);
+      // Show insufficient message and direct to coin purchasing modal
+      alert('Insufficient coins');
+      onShowCoinPurchase?.();
       return;
     }
 

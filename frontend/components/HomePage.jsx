@@ -800,6 +800,10 @@ const CommentSheet = memo(function CommentSheet({ post, currentUser, onClose, on
           reelId={post.id}
           onClose={() => setShowGiftModal(false)}
           onShowWallet={() => setShowGiftModal(false)}
+          onShowCoinPurchase={() => {
+            setShowGiftModal(false);
+            onShowCoinPurchase?.();
+          }}
         />
       )}
     </div>
@@ -1852,7 +1856,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
 
 const ALL_TABS = ['For You', 'Explore', 'Campaigns'];
 
-export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, onShowExplorer, onShowCampaigns, onShowVideoDetail, onShowWallet }) {
+export function HomePage({ user, onShowProfile, onShowPostPage, onRequireAuth, onShowExplorer, onShowCampaigns, onShowVideoDetail, onShowWallet, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   const [activeTab, setActiveTab] = useState('For You');
   // Seed from cache + merge persisted like/save state so the heart stays
