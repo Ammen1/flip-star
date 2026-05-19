@@ -146,21 +146,17 @@ function TopUpModal({ theme: T, onClose }) {
 
     setLoadingTelebirr(true);
     try {
-      const response = await api.request('/direct-debit/one-off-coin-purchase/', {
+      const response = await api.request('/wallet/telebirr/initiate/', {
         method: 'POST',
         body: JSON.stringify({
-          amount: 10,
-          coins: 100,
+          package_id: 1, // On-demand package ID
+          phone_number: phoneNumber,
         }),
       });
 
-      if (response.success) {
-        setResultSuccess(true);
-        setResultMessage('Payment initiated successfully. Please complete the payment on your phone via Telebirr. Coins will be added after payment confirmation.');
-        setShowResultModal(true);
-        setTimeout(() => {
-          onClose();
-        }, 3000);
+      if (response.success && response.payment_url) {
+        window.open(response.payment_url, '_blank');
+        onClose();
       } else {
         setResultSuccess(false);
         setResultMessage(response.error || 'Payment initiation failed');
