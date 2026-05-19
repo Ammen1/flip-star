@@ -345,7 +345,7 @@ class TelebirrDirectDebitService:
             }
     
     def initiate_debit(self, payer_reference_number, amount, 
-                      currency='ETB', shortcode=None):
+                      currency='ETB', shortcode=None, debug=False):
         """
         Initiate Direct Debit Transaction
         
@@ -354,6 +354,7 @@ class TelebirrDirectDebitService:
             amount: Amount to debit
             currency: Currency code (default ETB)
             shortcode: Shortcode for receiver party (defaults to TELEBIRR_SHORTCODE)
+            debug: If True, print the SOAP envelope for debugging
             
         Returns:
             dict: Response with success status and transaction ID
@@ -401,6 +402,14 @@ class TelebirrDirectDebitService:
                 caller_id=self.org_operator_id,
                 caller_password=self.org_operator_credential
             )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
             
             # Make raw SOAP request
             headers = {
