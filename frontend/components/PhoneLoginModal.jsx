@@ -169,6 +169,25 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
                 Subscribe
               </button>
             </div>
+
+            {/* Footer: FAQ | Terms & Conditions */}
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 14, marginTop: 18, paddingTop: 16, borderTop: "1px solid #262626" }}>
+              <button
+                type="button"
+                onClick={() => setActiveModal('faq')}
+                style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 4 }}
+              >
+                FAQ
+              </button>
+              <span style={{ color: "#444", fontSize: 13 }}>|</span>
+              <button
+                type="button"
+                onClick={() => setActiveModal('terms')}
+                style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 4 }}
+              >
+                Terms & Conditions
+              </button>
+            </div>
           </div>
 
           {/* Close / Back */}
@@ -179,25 +198,6 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
               </button>
             </div>
           )}
-
-          {/* Footer: FAQ | Terms & Conditions */}
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 20, paddingBottom: 8 }}>
-            <button
-              type="button"
-              onClick={() => setActiveModal('faq')}
-              style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-            >
-              FAQ
-            </button>
-            <span style={{ color: "#444", fontSize: 13 }}>|</span>
-            <button
-              type="button"
-              onClick={() => setActiveModal('terms')}
-              style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-            >
-              Terms & Conditions
-            </button>
-          </div>
         </div>
       </div>
 
