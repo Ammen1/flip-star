@@ -480,9 +480,9 @@ class TelebirrDirectDebitService:
             }
     
     def create_one_off_payment(self, payer_msisdn, payer_reference_number, 
-                              amount, first_payment_date=None, 
+                              frequency='01', first_payment_date=None, expiry_date=None,
                               payee_shortcode=None, payee_account_name=None, 
-                              frequency='01', start_range_of_days=1, end_range_of_days=31,
+                              start_range_of_days=1, end_range_of_days=31, 
                               debug=False):
         """
         Create One-Off Payment for Coin Purchasing
@@ -493,11 +493,11 @@ class TelebirrDirectDebitService:
         Args:
             payer_msisdn: Payer phone number (MSISDN)
             payer_reference_number: Payer reference number for payment
-            amount: Payment amount (in ETB)
+            frequency: Debit frequency (default '01' for Once)
             first_payment_date: Payment date (YYYYMMDD format or date object, defaults to today)
+            expiry_date: Mandate expiry date (YYYYMMDD format or date object, defaults to today for one-off)
             payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
             payee_account_name: Payee account name (defaults to Flipstar)
-            frequency: Debit frequency (default '01' for Once)
             start_range_of_days: Start range of days for payment (default 1)
             end_range_of_days: End range of days for payment (default 31)
             debug: If True, print the SOAP envelope for debugging
@@ -506,14 +506,17 @@ class TelebirrDirectDebitService:
             dict: Response with success status and payment details
         """
         try:
-            # Format date - default to today if not provided
+            # Format dates - default to today if not provided
             if first_payment_date is None:
                 first_payment_date = datetime.now().strftime('%Y%m%d')
             elif isinstance(first_payment_date, datetime):
                 first_payment_date = first_payment_date.strftime('%Y%m%d')
             
-            # Expiry date - same as first payment date for one-off
-            expiry_date = first_payment_date
+            # Format expiry date - default to today for one-off if not provided
+            if expiry_date is None:
+                expiry_date = first_payment_date
+            elif isinstance(expiry_date, datetime):
+                expiry_date = expiry_date.strftime('%Y%m%d')
             
             # Use provided frequency (default '01' for one-off payment)
             # Can be overridden for testing other frequencies
@@ -608,8 +611,7 @@ class TelebirrDirectDebitService:
                         'originator_conversation_id': originator_conversation_id,
                         'conversation_id': conversation_id,
                         'message': response_desc or 'One-off payment request accepted successfully',
-                        'response_code': response_code,
-                        'amount': amount
+                        'response_code': response_code
                     }
                 else:
                     return {

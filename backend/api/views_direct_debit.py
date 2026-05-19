@@ -652,7 +652,9 @@ def create_one_off_coin_purchase(request):
         result = telebirr_direct_debit_service.create_one_off_payment(
             payer_msisdn=payer_msisdn,
             payer_reference_number=payer_reference_number,
-            amount=amount
+            frequency='01',
+            first_payment_date=datetime.now().date(),
+            expiry_date=datetime.now().date()
         )
         
         if not result.get('success'):
