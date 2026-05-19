@@ -27,7 +27,7 @@ const FILTERS = [
 ];
 
 // Stage: 'pick' | 'edit' | 'details' | 'uploading'
-export default function CreateScreen({ navigation }) {
+export default function CreateScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { colors } = useTheme();
@@ -38,6 +38,9 @@ export default function CreateScreen({ navigation }) {
   const [filter, setFilter] = useState(FILTERS[0]);
   const [progress, setProgress] = useState(0);
   const videoRef = useRef(null);
+  
+  // Get campaignId from route params if coming from campaign
+  const campaignId = route?.params?.campaignId;
 
   const pickFromLibrary = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -222,13 +225,20 @@ const handlePost = async () => {
       
       fd.append('caption', caption || '');
       if (hashtags) fd.append('hashtags', hashtags);
+      // Add campaignId if posting to a campaign
+      if (campaignId) fd.append('campaign_id', campaignId);
 
       await api.createPost(fd, { onProgress: pct => setProgress(Math.min(pct, 99)) });
       setProgress(100);
       setTimeout(() => {
         setMedia(null); setCaption(''); setHashtags('');
         setFilter(FILTERS[0]); setStage('pick');
-        navigation.navigate('Home');
+        // Navigate back to campaign detail if coming from campaign, otherwise go to Home
+        if (campaignId) {
+          navigation.navigate('CampaignDetail', { campaignId });
+        } else {
+          navigation.navigate('Home');
+        }
       }, 600);
     } catch (err) {
       const msg = typeof err === 'object' ? (err.detail || err.error || err.message || 'Upload failed') : String(err);
@@ -243,7 +253,9 @@ const handlePost = async () => {
       <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
         <StatusBar barStyle={colors.statusBarStyle} backgroundColor={colors.bg} />
         <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>New Post</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>
+            {campaignId ? 'Campaign Entry' : 'New Post'}
+          </Text>
         </View>
         <ScrollView contentContainerStyle={styles.pickBody}>
           {/* Hero */}
@@ -256,8 +268,18 @@ const handlePost = async () => {
               />
               <View style={styles.sparkle}><Text style={{ fontSize: 11 }}>✨</Text></View>
             </View>
-            <Text style={[styles.heroTitle, { color: colors.text }]}>Create Post</Text>
-            <Text style={[styles.heroSub, { color: colors.textSecondary }]}>Choose how you want to create content</Text>
+            <Text style={[styles.heroTitle, { color: colors.text }]}>
+              {campaignId ? 'Create Campaign Entry' : 'Create Your Flip'}
+            </Text>
+            <Text style={[styles.heroSub, { color: colors.textSecondary }]}>
+              {campaignId ? 'Submit your content to win prizes!' : 'Share your moments with the community'}
+            </Text>
+            {campaignId && (
+              <View style={[styles.campaignBadge, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                <Ionicons name="trophy" size={16} color="#000" />
+                <Text style={styles.campaignBadgeText}>Campaign Entry</Text>
+              </View>
+            )}
           </View>
 
           {/* Action cards */}
@@ -419,6 +441,15 @@ const styles = StyleSheet.create({
   },
   heroTitle: { fontSize: 22, fontWeight: '800', color: GOLD, marginBottom: 6 },
   heroSub: { fontSize: 13, color: '#888', textAlign: 'center' },
+  campaignBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 16, borderWidth: 1,
+    marginTop: 12,
+  },
+  campaignBadgeText: {
+    color: '#000', fontSize: 12, fontWeight: '700',
+  },
   actionCards: { gap: 16 },
   actionCard: {
     backgroundColor: CARD, borderRadius: 16, padding: 18,

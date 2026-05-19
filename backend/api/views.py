@@ -913,6 +913,7 @@ def create_post(request):
         caption  = request.data.get('caption', '')
         hashtags = request.data.get('hashtags', '')
         file     = request.FILES.get('file')
+        campaign_id = request.data.get('campaign_id')
 
         if not file:
             return Response({'error': 'File is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -973,19 +974,46 @@ def create_post(request):
                 # Continue without thumbnail if generation fails
             
             # Create reel with video and optional thumbnail
+            campaign = None
+            is_campaign_post = False
+            if campaign_id:
+                from .models_campaign import Campaign
+                try:
+                    campaign = Campaign.objects.get(id=campaign_id)
+                    is_campaign_post = True
+                    print(f"[CREATE_POST] Campaign found: {campaign.id} - {campaign.title}")
+                except Campaign.DoesNotExist:
+                    print(f"[CREATE_POST] Campaign not found for ID: {campaign_id}")
+            
             reel = Reel.objects.create(
                 user=request.user,
                 caption=caption,
                 hashtags=hashtags,
                 media=file,
-                image=thumbnail_file if thumbnail_file else None
+                image=thumbnail_file if thumbnail_file else None,
+                campaign=campaign,
+                is_campaign_post=is_campaign_post
             )
         else:
+            # Handle campaign for image posts
+            campaign = None
+            is_campaign_post = False
+            if campaign_id:
+                from .models_campaign import Campaign
+                try:
+                    campaign = Campaign.objects.get(id=campaign_id)
+                    is_campaign_post = True
+                    print(f"[CREATE_POST] Campaign found: {campaign.id} - {campaign.title}")
+                except Campaign.DoesNotExist:
+                    print(f"[CREATE_POST] Campaign not found for ID: {campaign_id}")
+            
             reel = Reel.objects.create(
                 user=request.user,
                 caption=caption,
                 hashtags=hashtags,
-                image=file
+                image=file,
+                campaign=campaign,
+                is_campaign_post=is_campaign_post
             )
         print(f"[CREATE_POST] Reel created with S3 storage: {reel.id}")
 
