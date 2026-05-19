@@ -392,14 +392,14 @@ class TelebirrDirectDebitService:
         </req:TransactionRequest>
         <req:Remark>Direct debit for {payer_reference_number}</req:Remark>'''
             
-            # Build SOAP envelope with Organization Operator credentials in Caller section
+            # Build SOAP envelope (Caller and Initiator both use Organization Operator credentials per Telebirr request)
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='InitTrans_Initiate Direct Debit Transaction',
                 initiator=initiator,
                 receiver_party=receiver_party,
                 body_xml=body_xml,
-                caller_id=self.org_operator_id or self.third_party_id,
-                caller_password=self.org_operator_credential or self.third_party_password
+                caller_id=self.org_operator_id,
+                caller_password=self.org_operator_credential
             )
             
             # Make raw SOAP request
