@@ -357,11 +357,11 @@ class TelebirrDirectDebitService:
             if shortcode is None:
                 shortcode = self.shortcode
             
-            # Build initiator (Organization Operator or SP Operator)
+            # Build initiator (Organization Operator - no fallback for InitTrans)
             initiator = {
                 'IdentifierType': 11,  # Organization Operator
-                'Identifier': self.org_operator_id or self.third_party_id,
-                'SecurityCredential': self.org_operator_credential or self.third_party_password,
+                'Identifier': self.org_operator_id,
+                'SecurityCredential': self.org_operator_credential,
                 'ShortCode': shortcode,
             }
             
