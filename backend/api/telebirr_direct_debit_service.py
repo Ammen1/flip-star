@@ -470,13 +470,14 @@ class TelebirrDirectDebitService:
                 'error': f'Direct debit initiation failed: {str(e)}'
             }
     
-    def cancel_mandate(self, mandate_id, payer_msisdn):
+    def cancel_mandate(self, mandate_id, payer_msisdn, debug=False):
         """
         Cancel Direct Debit Mandate
         
         Args:
             mandate_id: Telebirr mandate ID
             payer_msisdn: Payer phone number (MSISDN)
+            debug: If True, print the SOAP envelope for debugging
             
         Returns:
             dict: Response with success status
@@ -507,6 +508,14 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
             
             # Make raw SOAP request
             headers = {
