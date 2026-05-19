@@ -566,7 +566,7 @@ export function SubscriptionPage({ user, onBack }) {
               <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>SMS:</strong> Send SMS to <span style={{ color: BRAND_GREEN, fontWeight: 800 }}>9286</span> with code{' '}
               <span style={{ color: '#fff', fontWeight: 700 }}>OK1</span> (Daily),{' '}
               <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
-              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via Ethio Telecom.
+              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via ethio telecom.
             </div>
           </div>
         </div>
