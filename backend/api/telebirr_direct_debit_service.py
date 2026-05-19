@@ -114,20 +114,21 @@ class TelebirrDirectDebitService:
     def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
                       first_payment_date, expiry_date, payee_shortcode=None,
                       payee_account_name=None, start_range_of_days=1, 
-                      end_range_of_days=31):
+                      end_range_of_days=31, debug=False):
         """
         Create Direct Debit Mandate
         
         Args:
             payer_msisdn: Payer phone number (MSISDN)
             payer_reference_number: Payer reference number for mandate
-            frequency: Debit frequency (02=Daily, 03=Weekly, 05=Monthly, etc.)
+            frequency: Debit frequency (02=Daily, 03=Weekly, 04=Bi-Weekly, 05=Monthly, etc.)
             first_payment_date: First payment date (YYYYMMDD format or date object)
             expiry_date: Mandate expiry date (YYYYMMDD format or date object)
             payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
             payee_account_name: Payee account name (defaults to Flipstar)
             start_range_of_days: Start range of days for payment (default 1)
             end_range_of_days: End range of days for payment (default 31)
+            debug: If True, print the SOAP envelope for debugging
             
         Returns:
             dict: Response with success status and mandate details
@@ -182,6 +183,14 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
             
             # Make raw SOAP request
             headers = {
