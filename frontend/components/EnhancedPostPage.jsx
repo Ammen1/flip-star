@@ -1322,6 +1322,8 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
             <div style={{
               flex: 1, display: 'flex', flexDirection: 'column',
               height: '100%',
+              overflowY: 'auto',
+              paddingBottom: 24,
               background: 'linear-gradient(160deg, #0D0A06 0%, #0D0D0D 60%, #0A0806 100%)',
             }}>
 
@@ -1346,7 +1348,7 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
               </div>
 
               {/* Hero icon + title */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 48, paddingBottom: 8, position: 'relative', zIndex: 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 20, paddingBottom: 4, position: 'relative', zIndex: 1 }}>
                 <div style={{ position: 'relative', marginBottom: 14 }}>
                   <img
                     src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23D99B2A'%3E%3Cpath d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z'/%3E%3C/svg%3E"
@@ -1368,8 +1370,8 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
               <div style={{ 
                 display: 'flex', 
                 flexDirection: 'column', 
-                gap: 22, 
-                padding: '28px 20px', 
+                gap: 14, 
+                padding: '16px 20px 24px', 
                 position: 'relative', 
                 zIndex: 1, 
                 alignItems: 'center', 
