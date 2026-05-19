@@ -27,6 +27,8 @@ class TelebirrDirectDebitService:
         self.caller_type = getattr(settings, 'TELEBIRR_CALLER_TYPE', '2')
         self.sp_operator_id = getattr(settings, 'TELEBIRR_SP_OPERATOR_ID', '')
         self.sp_operator_credential = getattr(settings, 'TELEBIRR_SP_OPERATOR_CREDENTIAL', '')
+        self.org_operator_id = getattr(settings, 'TELEBIRR_ORG_OPERATOR_ID', '')
+        self.org_operator_credential = getattr(settings, 'TELEBIRR_ORG_OPERATOR_CREDENTIAL', '')
         
         # No SOAP client initialization needed for raw requests
         self.client = None
@@ -43,7 +45,7 @@ class TelebirrDirectDebitService:
         """Generate timestamp in YYYYMMDDHHMMSS format"""
         return datetime.now().strftime('%Y%m%d%H%M%S')
     
-    def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml):
+    def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml, caller_id=None, caller_password=None):
         """
         Build SOAP envelope for Telebirr Direct Debit API
         
@@ -52,6 +54,8 @@ class TelebirrDirectDebitService:
             initiator: Initiator identifier dict (IdentifierType, Identifier, SecurityCredential)
             receiver_party: Receiver party dict (IdentifierType, Identifier)
             body_xml: Body XML string specific to the operation
+            caller_id: Optional caller ID (defaults to third_party_id)
+            caller_password: Optional caller password (defaults to third_party_password)
             
         Returns:
             str: Complete SOAP envelope XML
@@ -60,6 +64,14 @@ class TelebirrDirectDebitService:
         conversation_id = self._generate_conversation_id()
         timestamp = self._generate_timestamp()
         
+        # Use provided caller credentials or default to third_party
+        caller_third_party_id = caller_id or self.third_party_id
+        caller_password = caller_password or self.third_party_password
+        
+        shortcode_xml = ""
+        if 'ShortCode' in initiator and initiator['ShortCode']:
+            shortcode_xml = f"\n            <req:ShortCode>{initiator['ShortCode']}</req:ShortCode>"
+            
         soap_envelope = f'''<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:api="http://cps.huawei.com/cpsinterface/api_requestmgr" xmlns:req="http://cps.huawei.com/cpsinterface/request" xmlns:com="http://cps.huawei.com/cpsinterface/common">
   <soapenv:Header/>
@@ -72,8 +84,8 @@ class TelebirrDirectDebitService:
         <req:ConversationID>{conversation_id}</req:ConversationID>
         <req:Caller>
           <req:CallerType>{self.caller_type}</req:CallerType>
-          <req:ThirdPartyID>{self.third_party_id}</req:ThirdPartyID>
-          <req:Password>{self.third_party_password}</req:Password>
+          <req:ThirdPartyID>{caller_third_party_id}</req:ThirdPartyID>
+          <req:Password>{caller_password}</req:Password>
           <req:ResultURL>{self.result_url}</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
@@ -84,7 +96,7 @@ class TelebirrDirectDebitService:
           <req:Initiator>
             <req:IdentifierType>{initiator['IdentifierType']}</req:IdentifierType>
             <req:Identifier>{initiator['Identifier']}</req:Identifier>
-            <req:SecurityCredential>{initiator['SecurityCredential']}</req:SecurityCredential>
+            <req:SecurityCredential>{initiator['SecurityCredential']}</req:SecurityCredential>{shortcode_xml}
           </req:Initiator>
           <req:ReceiverParty>
             <req:IdentifierType>{receiver_party['IdentifierType']}</req:IdentifierType>
@@ -102,7 +114,7 @@ class TelebirrDirectDebitService:
     def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
                       first_payment_date, expiry_date, payee_shortcode=None,
                       payee_account_name=None, start_range_of_days=1, 
-                      end_range_of_days=22):
+                      end_range_of_days=31):
         """
         Create Direct Debit Mandate
         
@@ -115,7 +127,7 @@ class TelebirrDirectDebitService:
             payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
             payee_account_name: Payee account name (defaults to Flipstar)
             start_range_of_days: Start range of days for payment (default 1)
-            end_range_of_days: End range of days for payment (default 22)
+            end_range_of_days: End range of days for payment (default 31)
             
         Returns:
             dict: Response with success status and mandate details
@@ -155,8 +167,6 @@ class TelebirrDirectDebitService:
           <req:DirectDebitMandateInfo>
             <com:PayerReferenceNumber>{payer_reference_number}</com:PayerReferenceNumber>
             <com:AgreedTC>1</com:AgreedTC>
-            <com:PayeeAccountName>{payee_account_name}</com:PayeeAccountName>
-            <com:PayerAccountName></com:PayerAccountName>
             <com:FirstPaymentDate>{first_payment_date}</com:FirstPaymentDate>
             <com:Frequency>{frequency}</com:Frequency>
             <com:StartRangeOfDays>{start_range_of_days}</com:StartRangeOfDays>
@@ -266,7 +276,6 @@ class TelebirrDirectDebitService:
             body_xml = f'''<req:ActivateDirectDebitMandateRequest>
           <req:MandateID>{mandate_id}</req:MandateID>
           <req:AgreedTC>{'1' if agreed_tc else '0'}</req:AgreedTC>
-          <req:PayerAccountName>{payer_account_name}</req:PayerAccountName>
         </req:ActivateDirectDebitMandateRequest>'''
             
             # Build SOAP envelope
@@ -335,17 +344,17 @@ class TelebirrDirectDebitService:
                 'error': f'Mandate activation failed: {str(e)}'
             }
     
-    def initiate_debit(self, mandate_id, payer_reference_number, amount, 
-                      currency='ETB', shortcode=None):
+    def initiate_debit(self, payer_reference_number, amount, 
+                      currency='ETB', shortcode=None, debug=False):
         """
         Initiate Direct Debit Transaction
         
         Args:
-            mandate_id: Telebirr mandate ID
             payer_reference_number: Payer reference number
             amount: Amount to debit
             currency: Currency code (default ETB)
             shortcode: Shortcode for receiver party (defaults to TELEBIRR_SHORTCODE)
+            debug: If True, print the SOAP envelope for debugging
             
         Returns:
             dict: Response with success status and transaction ID
@@ -357,9 +366,9 @@ class TelebirrDirectDebitService:
             
             # Build initiator (Organization Operator or SP Operator)
             initiator = {
-                'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.third_party_id,
-                'SecurityCredential': self.third_party_password,
+                'IdentifierType': 11,  # Organization Operator
+                'Identifier': self.org_operator_id or self.third_party_id,
+                'SecurityCredential': self.org_operator_credential or self.third_party_password,
                 'ShortCode': shortcode,
             }
             
@@ -373,10 +382,6 @@ class TelebirrDirectDebitService:
             body_xml = f'''<req:TransactionRequest>
           <req:Parameters>
             <req:Parameter>
-              <com:Key>MandateID</com:Key>
-              <com:Value>{mandate_id}</com:Value>
-            </req:Parameter>
-            <req:Parameter>
               <com:Key>Amount</com:Key>
               <com:Value>{amount}</com:Value>
             </req:Parameter>
@@ -386,15 +391,23 @@ class TelebirrDirectDebitService:
             </req:Parameter>
           </req:Parameters>
         </req:TransactionRequest>
-        <req:Remark>Direct debit for mandate {mandate_id}</req:Remark>'''
+        <req:Remark>Direct debit for {payer_reference_number}</req:Remark>'''
             
-            # Build SOAP envelope
+            # Build SOAP envelope (Caller uses ThirdParty credentials, Initiator uses Organization Operator)
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='InitTrans_Initiate Direct Debit Transaction',
                 initiator=initiator,
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
             
             # Make raw SOAP request
             headers = {
@@ -457,13 +470,14 @@ class TelebirrDirectDebitService:
                 'error': f'Direct debit initiation failed: {str(e)}'
             }
     
-    def cancel_mandate(self, mandate_id, payer_msisdn):
+    def cancel_mandate(self, mandate_id, payer_msisdn, debug=False):
         """
         Cancel Direct Debit Mandate
         
         Args:
             mandate_id: Telebirr mandate ID
             payer_msisdn: Payer phone number (MSISDN)
+            debug: If True, print the SOAP envelope for debugging
             
         Returns:
             dict: Response with success status
@@ -494,6 +508,14 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
             
             # Make raw SOAP request
             headers = {

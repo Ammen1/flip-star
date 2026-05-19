@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification, Block
+from .models import UserProfile, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification, Category, Block
 
 
 def build_feed_context(request):
@@ -134,18 +134,21 @@ class ReelSerializer(serializers.ModelSerializer):
     media = serializers.SerializerMethodField()
     recent_comments = serializers.SerializerMethodField()
     votes = serializers.SerializerMethodField()  # Calculate dynamically from Vote table
+    gift_count = serializers.SerializerMethodField()  # Count of gifts received
     campaign_id = serializers.PrimaryKeyRelatedField(source='campaign', read_only=True)
     campaign_title = serializers.CharField(source='campaign.title', read_only=True, default=None)
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True, default=None)
+    category_slug = serializers.CharField(source='category.slug', read_only=True, default=None)
 
     thumbnail = serializers.SerializerMethodField()
     blurhash = serializers.CharField(read_only=True)
     duration = serializers.FloatField(read_only=True)
     processed = serializers.BooleanField(read_only=True)
-    gifts_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'shares', 'view_count', 'comment_count', 'gifts_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title']
+        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'shares', 'gift_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title', 'category', 'category_name', 'category_slug']
     
     def _build_url(self, field, request):
         """Build absolute URL for a file field, handling both local and Cloudinary storage."""
@@ -226,6 +229,13 @@ class ReelSerializer(serializers.ModelSerializer):
         from .models import Vote
         return Vote.objects.filter(reel=obj).count()
     
+    def get_gift_count(self, obj):
+        # Query GiftTransaction directly to count gifts for this reel
+        from .models_gift import GiftTransaction
+        from django.db.models import Sum
+        result = GiftTransaction.objects.filter(reel_id=obj.id).aggregate(total=Sum('quantity'))['total']
+        return result or 0
+    
     def get_is_saved(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
         if hasattr(obj, 'is_saved_db'):
@@ -236,13 +246,6 @@ class ReelSerializer(serializers.ModelSerializer):
             return SavedPost.objects.filter(user=request.user, reel=obj).exists()
         return False
     
-    def get_gifts_count(self, obj):
-        try:
-            from .models_gift import GiftTransaction
-            return GiftTransaction.objects.filter(reel=obj).count()
-        except Exception:
-            return 0
-
     def get_recent_comments(self, obj):
         # Use prefetched comments if available (set by ReelViewSet.get_queryset with prefetch_related)
         if hasattr(obj, 'prefetched_comments'):
@@ -383,3 +386,9 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'sender', 'notification_type', 'reel', 'comment', 'message', 'is_read', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = ['id', 'name', 'slug', 'description', 'icon', 'order', 'is_active']
+        read_only_fields = ['slug']

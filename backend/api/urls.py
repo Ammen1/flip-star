@@ -8,7 +8,7 @@ from .views import (
     send_phone_otp, verify_phone_otp, register_with_phone, login_with_phone,
     forgot_password_request, forgot_password_confirm, forgot_password_phone_request, forgot_password_phone_verify,
     login_with_subscription_otp,
-    check_phone_account, dev_create_subscription,
+    check_phone_account, dev_create_subscription, get_categories,
     create_post, search, UserProfileViewSet, ReelViewSet, QuestViewSet,
     SubscriptionViewSet, NotificationPreferenceViewSet, CompetitionViewSet, WinnerViewSet, FollowViewSet, BlockViewSet, UserSearchViewSet,
     get_user_notifications, mark_notifications_read, get_unread_notification_count,
@@ -32,7 +32,7 @@ from .views_messaging import (
 )
 from .views_charging import (
     initiate_on_demand_charging, get_charging_statistics, get_charging_transactions,
-    purchase_coins_on_demand,
+    purchase_coins_on_demand, search_charging_transactions, get_charging_analytics,
 )
 from .views_push import push_public_key, push_subscribe, push_unsubscribe
 from .views_support import (
@@ -205,9 +205,9 @@ from .views_legal import (
 from .views_gift import GiftViewSet, PublicGiftViewSet, GiftTransactionViewSet, UserGiftStatsViewSet
 from .views_wallet import (
     wallet_summary, wallet_transactions, withdrawal_info, request_withdrawal,
-    my_withdrawals, cancel_withdrawal, public_wallet_config,
+    my_withdrawals, cancel_withdrawal, public_wallet_config, reinvest_points,
     admin_wallet_config, admin_withdrawals_list, admin_withdrawal_action, admin_adjust_balance,
-    admin_user_wallet, admin_user_transactions,
+    admin_user_wallet, admin_user_transactions, admin_all_coin_transactions,
     telebirr_initiate_payment, telebirr_callback,
 )
 
@@ -392,6 +392,7 @@ urlpatterns = [
     path('explorer/trending/', get_trending_reels, name='explorer-trending'),
     path('explorer/trending-hashtags/', get_trending_hashtags, name='explorer-trending-hashtags'),
     path('explorer/hashtag/', get_reels_by_hashtag, name='explorer-hashtag'),
+    path('categories/', get_categories, name='categories'),
     # Contest System - User
     path('subscription/details/', get_user_subscription, name='subscription-details'),
     path('subscription/upgrade/', upgrade_subscription, name='subscription-upgrade'),
@@ -434,12 +435,14 @@ urlpatterns = [
     path('wallet/withdraw/', request_withdrawal, name='wallet-withdraw'),
     path('wallet/withdrawals/', my_withdrawals, name='wallet-my-withdrawals'),
     path('wallet/withdrawals/<int:withdrawal_id>/cancel/', cancel_withdrawal, name='wallet-cancel-withdrawal'),
+    path('wallet/reinvest/', reinvest_points, name='wallet-reinvest'),
     path('wallet/telebirr/initiate/', telebirr_initiate_payment, name='telebirr-initiate'),
     path('wallet/telebirr-callback/', telebirr_callback, name='telebirr-callback'),
     # ============ WALLET (Admin) ============
     path('admin/wallet/config/', admin_wallet_config, name='admin-wallet-config'),
     path('admin/wallet/user/<int:user_id>/', admin_user_wallet, name='admin-user-wallet'),
     path('admin/wallet/transactions/', admin_user_transactions, name='admin-user-transactions'),
+    path('admin/wallet/all-transactions/', admin_all_coin_transactions, name='admin-all-transactions'),
     path('admin/wallet/adjust-balance/', admin_adjust_balance, name='admin-adjust-balance'),
     path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-withdrawals-list'),
     path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-withdrawal-action'),
@@ -484,6 +487,8 @@ urlpatterns = [
     path('charging/on-demand/', initiate_on_demand_charging, name='on-demand-charging'),
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
     path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
+    path('charging/on-demand/search/', search_charging_transactions, name='charging-search'),
+    path('charging/on-demand/analytics/', get_charging_analytics, name='charging-analytics'),
     path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),

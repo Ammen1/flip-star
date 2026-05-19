@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import config from '../config';
 import { ArrowLeft, Trophy, Medal, TrendingUp, Crown, Heart, MessageCircle, Share2, Gift } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+
+const BACKEND = config.API_BASE_URL.replace('/api', '');
+
+function mediaUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return BACKEND + url;
+}
 
 const PERIODS = [
   { id: 'daily', label: 'Today' },
@@ -45,7 +54,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
       {/* Header */}
       <div style={{
         background: T.card, borderBottom: `1px solid ${T.border}`,
-        padding: '16px 24px', position: 'sticky', top: 0, zIndex: 100,
+        padding: '16px 24px',
       }}>
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
           <button
@@ -145,8 +154,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 26, fontWeight: 800, color: '#fff',
                         border: '3px solid #A8A8A8',
+                        overflow: 'hidden',
                       }}>
-                        {top3[1].username?.[0]?.toUpperCase()}
+                        {top3[1].profile_photo ? (
+                          <img src={mediaUrl(top3[1].profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          top3[1].username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <Medal size={18} color="#A8A8A8" style={{ marginBottom: 4 }} />
                       <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 2 }}>{top3[1].username}</div>
@@ -165,11 +179,16 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         fontSize: 32, fontWeight: 800, color: '#fff',
                         border: `4px solid ${T.pri}`,
                         boxShadow: `0 8px 24px ${T.pri}50`,
+                        overflow: 'hidden',
                       }}>
-                        {top3[0].username?.[0]?.toUpperCase()}
+                        {top3[0].profile_photo ? (
+                          <img src={mediaUrl(top3[0].profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          top3[0].username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: T.txt, marginBottom: 2 }}>{top3[0].username}</div>
-                      <div style={{ fontSize: 22, fontWeight: 900, color: T.pri }}>{top3[0].total_score || top3[0].score}</div>
+                      <div style={{ fontSize: 22, fontWeight: 900, color: '#fff' }}>{top3[0].total_score || top3[0].score}</div>
                       <div style={{ fontSize: 11, color: T.sub }}>pts · Champion</div>
                     </div>
                   )}
@@ -182,8 +201,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 26, fontWeight: 800, color: '#fff',
                         border: '3px solid #CD7F32',
+                        overflow: 'hidden',
                       }}>
-                        {top3[2].username?.[0]?.toUpperCase()}
+                        {top3[2].profile_photo ? (
+                          <img src={mediaUrl(top3[2].profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          top3[2].username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       <Medal size={18} color="#CD7F32" style={{ marginBottom: 4 }} />
                       <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, marginBottom: 2 }}>{top3[2].username}</div>
@@ -229,8 +253,13 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                           : `linear-gradient(135deg, ${T.pri}60, #8fc44160)`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#fff', fontSize: 15, fontWeight: 800,
+                        overflow: 'hidden',
                       }}>
-                        {entry.username?.[0]?.toUpperCase()}
+                        {entry.profile_photo ? (
+                          <img src={mediaUrl(entry.profile_photo)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          entry.username?.[0]?.toUpperCase()
+                        )}
                       </div>
                       {/* Name */}
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -240,19 +269,19 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                         <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Heart size={11} color="#EF4444" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.likes_count === 0 ? 1 : entry.likes_count}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.likes_count || 0}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <MessageCircle size={11} color="#888" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.comments_count === 0 ? 1 : entry.comments_count}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.comments_count || 0}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Share2 size={11} color="#3B82F6" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.shares_count === 0 ? 1 : entry.shares_count}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.shares_count || 0}</span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <Gift size={11} color="#8fc441" />
-                            <span style={{ fontSize: 12, color: T.sub }}>{entry.gifts_count === 0 ? 1 : entry.gifts_count}</span>
+                            <span style={{ fontSize: 12, color: T.sub }}>{entry.gifts_count || 0}</span>
                           </div>
                           {entry.post_count > 0 && (
                             <span style={{ fontSize: 12, color: T.sub }}>{entry.post_count} posts</span>
@@ -262,7 +291,7 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
                       {/* Score */}
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
                         <div style={{ fontSize: 18, fontWeight: 800, color: rank <= 3 ? T.pri : T.txt }}>
-                          {(entry.total_score || entry.score) === 0 ? 1 : (entry.total_score || entry.score)}
+                          {entry.total_score ?? entry.score ?? 0}
                         </div>
                         <div style={{ fontSize: 11, color: T.sub }}>points</div>
                       </div>
@@ -279,7 +308,3 @@ const CampaignLeaderboard = ({ campaignId, onBack }) => {
 };
 
 export default CampaignLeaderboard;
-
-
-
-

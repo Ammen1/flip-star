@@ -35,14 +35,16 @@ export function SupportRequestsPage({ theme }) {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (silent) setRefreshing(true); else setLoading(true);
       const params = {};
       if (filterStatus) params.status = filterStatus;
       if (filterCategory) params.category = filterCategory;
@@ -53,6 +55,7 @@ export function SupportRequestsPage({ theme }) {
       console.error('Failed to load support requests', e);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -62,13 +65,17 @@ export function SupportRequestsPage({ theme }) {
     if (!selected) return;
     try {
       setSaving(true);
+      console.log('[Support] Saving request:', selected.id, selected.status, selected.admin_response);
       const updated = await api.adminUpdateSupportRequest(selected.id, {
         status: selected.status,
         admin_response: selected.admin_response || '',
       });
+      console.log('[Support] Updated response:', updated);
       setSelected(updated?.request || null);
-      await load();
+      await load({ silent: true });
+      setShowSuccessModal(true);
     } catch (e) {
+      console.error('[Support] Save error:', e);
       alert(e?.message || 'Failed to update request');
     } finally {
       setSaving(false);
@@ -90,16 +97,25 @@ export function SupportRequestsPage({ theme }) {
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Support Requests</h1>
         </div>
         <button
-          onClick={load}
+          onClick={() => load({ silent: true })}
+          disabled={refreshing || loading}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             padding: '8px 14px', borderRadius: 10,
             background: CARD, color: TXT, border: `1px solid ${BORDER}`,
-            cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            cursor: (refreshing || loading) ? 'not-allowed' : 'pointer',
+            fontSize: 13, fontWeight: 600,
+            opacity: (refreshing || loading) ? 0.7 : 1,
           }}
         >
-          <RefreshCw size={14} /> Refresh
+          <RefreshCw
+            size={14}
+            style={{
+              animation: refreshing ? 'support-spin 0.9s linear infinite' : 'none',
+            }}
+          /> {refreshing ? 'Refreshing...' : 'Refresh'}
         </button>
+        <style>{`@keyframes support-spin { to { transform: rotate(360deg); } }`}</style>
       </div>
 
       {/* Summary cards */}
@@ -129,36 +145,76 @@ export function SupportRequestsPage({ theme }) {
       </div>
 
       {/* List */}
-      <div style={{ display: 'grid', gridTemplateColumns: selected ? '1fr 1fr' : '1fr', gap: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: selected ? 'minmax(320px, 1fr) 1.2fr' : '1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden' }}>
           {loading ? (
             <div style={{ padding: 40, textAlign: 'center', color: SUB }}>Loading...</div>
           ) : items.length === 0 ? (
             <div style={{ padding: 40, textAlign: 'center', color: SUB }}>No support requests.</div>
           ) : (
-            items.map(req => {
+            items.map((req, idx) => {
               const s = STATUS_COLORS[req.status] || STATUS_COLORS.received;
               const isSelected = selected?.id === req.id;
               return (
                 <div
                   key={req.id}
                   onClick={() => setSelected({ ...req })}
+                  onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = '#1F1F1F'; }}
+                  onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
                   style={{
-                    padding: 14, borderBottom: `1px solid ${BORDER}`, cursor: 'pointer',
+                    padding: '14px 16px',
+                    borderBottom: idx === items.length - 1 ? 'none' : `1px solid ${BORDER}`,
+                    cursor: 'pointer',
                     background: isSelected ? '#262626' : 'transparent',
+                    borderLeft: isSelected ? `3px solid ${PRI}` : '3px solid transparent',
+                    transition: 'background 0.15s ease, border-color 0.15s ease',
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'flex-start',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: TXT, flex: 1 }}>{req.subject}</div>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999,
-                      background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: 0.5,
-                    }}>{req.status_display}</span>
+                  {/* Avatar circle */}
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: `${PRI}26`, color: PRI,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 14, fontWeight: 700, flexShrink: 0,
+                    textTransform: 'uppercase',
+                  }}>
+                    {(req.user?.username || '?').charAt(0)}
                   </div>
-                  <div style={{ fontSize: 12, color: SUB, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <span><UserIcon size={11} style={{ verticalAlign: 'middle' }} /> @{req.user?.username}</span>
-                    <span>{req.category_display}</span>
-                    <span><Clock size={11} style={{ verticalAlign: 'middle' }} /> {new Date(req.created_at).toLocaleString()}</span>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+                      <div style={{
+                        fontSize: 14, fontWeight: 700, color: TXT, flex: 1,
+                        overflow: 'hidden', textOverflow: 'ellipsis',
+                        display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+                        lineHeight: 1.35,
+                      }}>{req.subject}</div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 999,
+                        background: s.bg, color: s.color, textTransform: 'uppercase', letterSpacing: 0.5,
+                        flexShrink: 0, whiteSpace: 'nowrap',
+                      }}>{req.status_display}</span>
+                    </div>
+
+                    <div style={{
+                      fontSize: 12, color: SUB,
+                      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <UserIcon size={11} /> @{req.user?.username}
+                      </span>
+                      <span style={{
+                        padding: '2px 7px', borderRadius: 6, background: '#262626',
+                        fontSize: 10, fontWeight: 600, color: SUB, textTransform: 'uppercase', letterSpacing: 0.4,
+                      }}>{req.category_display}</span>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Clock size={11} /> {new Date(req.created_at).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
@@ -228,6 +284,75 @@ export function SupportRequestsPage({ theme }) {
             >
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
+          </div>
+        )}
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
+            }}
+            onClick={() => setShowSuccessModal(false)}
+          >
+            <div
+              style={{
+                background: CARD,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 400,
+                width: '90%',
+                border: `1px solid ${BORDER}`,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                <div style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  background: '#10B981',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <CheckCircle2 size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: TXT }}>
+                    Response Saved!
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 14, color: SUB }}>
+                    Your response has been successfully saved.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  background: PRI,
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                OK
+              </button>
+            </div>
           </div>
         )}
       </div>

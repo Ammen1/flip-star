@@ -175,8 +175,8 @@ export function SubscriptionPage({ user, onBack }) {
         showToast('error', response.error || 'Failed to create mandate');
       }
     } catch (error) {
-      console.error('Telebirr subscription error:', error);
-      showToast('error', 'Failed to process Telebirr subscription');
+      console.error('telebirr subscription error:', error);
+      showToast('error', 'Failed to process telebirr subscription');
     } finally {
       setProcessing(false);
       setProcessingTierId(null);
@@ -232,11 +232,11 @@ export function SubscriptionPage({ user, onBack }) {
 
   const handleCancelTelebirrSubscription = async () => {
     if (!currentSubscription?.mandate_id) {
-      showToast('error', 'No Telebirr mandate found');
+      showToast('error', 'No telebirr mandate found');
       return;
     }
 
-    if (confirm('Are you sure you want to cancel your Telebirr subscription?')) {
+    if (confirm('Are you sure you want to cancel your telebirr subscription?')) {
       setProcessing(true);
       try {
         const response = await api.request('/direct-debit/cancel/', {
@@ -247,14 +247,14 @@ export function SubscriptionPage({ user, onBack }) {
         });
 
         if (response.success) {
-          showToast('success', 'Telebirr subscription cancelled successfully');
+          showToast('success', 'telebirr subscription cancelled successfully');
           loadSubscriptionData();
         } else {
-          showToast('error', response.error || 'Failed to cancel Telebirr subscription');
+          showToast('error', response.error || 'Failed to cancel telebirr subscription');
         }
       } catch (error) {
-        console.error('Cancel Telebirr subscription error:', error);
-        showToast('error', 'Failed to cancel Telebirr subscription');
+        console.error('Cancel telebirr subscription error:', error);
+        showToast('error', 'Failed to cancel telebirr subscription');
       } finally {
         setProcessing(false);
       }
@@ -361,7 +361,7 @@ export function SubscriptionPage({ user, onBack }) {
                     opacity: processing ? 0.7 : 1,
                   }}
                 >
-                  Cancel Telebirr Subscription
+                  Cancel telebirr Subscription
                 </button>
               )}
             </div>
@@ -495,7 +495,7 @@ export function SubscriptionPage({ user, onBack }) {
                       }}
                     >
                       <Trophy size={16} color={isProcessingThis ? '#666' : '#000'} />
-                      {isProcessingThis ? 'Processing…' : 'Subscribe via Telebirr'}
+                      {isProcessingThis ? 'Processing…' : 'Subscribe via telebirr'}
                     </button>
                     <button
                       onClick={() => handleSubscribe(tier)}
@@ -560,101 +560,159 @@ export function SubscriptionPage({ user, onBack }) {
           <Info size={20} color={BRAND_GREEN} style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ flex: 1, fontSize: 13, color: '#ccc', lineHeight: 1.6 }}>
             <div style={{ marginBottom: 8 }}>
-              <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>Telebirr:</strong> One-tap subscription via Telebirr app. Auto-renew enabled.
+              <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>telebirr:</strong> One-tap subscription via telebirr app. Auto-renew enabled.
             </div>
             <div>
               <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>SMS:</strong> Send SMS to <span style={{ color: BRAND_GREEN, fontWeight: 800 }}>9286</span> with code{' '}
               <span style={{ color: '#fff', fontWeight: 700 }}>OK1</span> (Daily),{' '}
               <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
-              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via Ethio Telecom.
+              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via ethio telecom.
             </div>
           </div>
         </div>
 
-        {/* Telebirr Modal */}
-        {telebirrModalOpen && (
+        {/* telebirr Receipt Modal — shown when user clicks "Subscribe via telebirr" */}
+        {telebirrModalOpen && selectedTierForTelebirr && (
           <div style={{
             position: 'fixed',
             top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.85)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
             zIndex: 1000,
-            padding: 16,
           }}>
             <div style={{
-              background: '#1a1a1a',
-              borderRadius: 16,
+              background: '#F5F5F5',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
               padding: 24,
               width: '100%',
-              maxWidth: 400,
-              border: '1px solid #333',
+              maxWidth: 480,
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.4)',
             }}>
-              <div style={{
-                fontSize: 18, fontWeight: 700, color: '#fff',
-                marginBottom: 16, textAlign: 'center',
-              }}>
-                Subscribe via Telebirr
-              </div>
-              <div style={{ marginBottom: 20 }}>
-                <label style={{
-                  display: 'block', fontSize: 13, fontWeight: 600,
-                  color: '#aaa', marginBottom: 8,
-                }}>
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  value={telebirrPhone}
-                  readOnly
-                  placeholder="2519XXXXXXXX"
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    background: '#1a1a1a',
-                    border: '1px solid #444',
-                    borderRadius: 8,
-                    color: '#888',
-                    fontSize: 14,
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <div style={{ fontSize: 11, color: '#666', marginTop: 6 }}>
-                  Phone number from your profile
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 12 }}>
+              {/* Close button */}
+              <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 4 }}>
                 <button
                   onClick={() => setTelebirrModalOpen(false)}
+                  aria-label="Close"
                   style={{
-                    flex: 1,
-                    padding: '12px',
-                    background: '#333',
+                    background: 'transparent',
                     border: 'none',
-                    borderRadius: 8,
-                    color: '#fff',
-                    fontSize: 14, fontWeight: 600,
                     cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleTelebirrProceed}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    background: '#8fc441',
-                    border: 'none',
-                    borderRadius: 8,
+                    padding: 4,
                     color: '#000',
-                    fontSize: 14, fontWeight: 700,
-                    cursor: 'pointer',
+                    fontSize: 22,
+                    lineHeight: 1,
                   }}
                 >
-                  Proceed
+                  <X size={22} color="#000" />
                 </button>
               </div>
+
+              {/* Title */}
+              <div style={{
+                textAlign: 'center',
+                fontSize: 14,
+                color: '#333',
+                marginBottom: 4,
+              }}>
+                Subscribe to FlipStar {selectedTierForTelebirr.name}
+              </div>
+
+              {/* Total amount big */}
+              <div style={{
+                textAlign: 'center',
+                fontSize: 36,
+                fontWeight: 900,
+                color: '#000',
+                marginBottom: 20,
+              }}>
+                {selectedTierForTelebirr.price_etb}.00
+                <span style={{ fontSize: 14, fontWeight: 700, marginLeft: 4 }}>ETB</span>
+              </div>
+
+              {/* Receipt details card */}
+              <div style={{
+                background: '#fff',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 12,
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <span style={{ fontSize: 14, color: '#333' }}>Plan</span>
+                  <span style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>
+                    {selectedTierForTelebirr.name}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <span style={{ fontSize: 14, color: '#333' }}>
+                    {selectedTierForTelebirr.duration_type === 'daily' ? 'Daily Amount' :
+                     selectedTierForTelebirr.duration_type === 'weekly' ? 'Weekly Amount' :
+                     selectedTierForTelebirr.duration_type === 'monthly' ? 'Monthly Amount' : 'Amount'}
+                  </span>
+                  <span style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>
+                    {selectedTierForTelebirr.price_etb}.00 ETB
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <span style={{ fontSize: 14, color: '#333' }}>Date</span>
+                  <span style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>
+                    {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 14, color: '#333' }}>Phone Number</span>
+                  <span style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>
+                    {telebirrPhone || 'N/A'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment method card */}
+              <div style={{
+                background: '#fff',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 8,
+                  background: '#8fc441',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}>
+                  <Crown size={18} color="#fff" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>telebirr</div>
+                  <div style={{ fontSize: 12, color: '#888' }}>
+                    Direct debit from your telebirr balance
+                  </div>
+                </div>
+                <Check size={20} color="#10B981" />
+              </div>
+
+              {/* Proceed button */}
+              <button
+                onClick={handleTelebirrProceed}
+                disabled={processing}
+                style={{
+                  width: '100%',
+                  padding: '16px',
+                  background: processing ? '#9CB870' : '#8fc441',
+                  border: 'none',
+                  borderRadius: 12,
+                  color: '#fff',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  cursor: processing ? 'wait' : 'pointer',
+                  boxShadow: '0 4px 16px rgba(143,196,65,0.3)',
+                }}
+              >
+                {processing ? 'Processing…' : 'Proceed'}
+              </button>
             </div>
           </div>
         )}

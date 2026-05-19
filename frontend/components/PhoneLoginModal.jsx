@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Phone, Lock, Eye, EyeOff, Loader, X, ChevronLeft } from "lucide-react";
 import api from "../api";
 import { ForgotPasswordPhone } from "./ForgotPasswordPhone";
+import { FaqModal, TermsModal } from "./LoginFaqTermsModals";
 
 const GOLD = "linear-gradient(to bottom, #8fc441 0%, #b5dd8f 50%, #6ba835 100%)";
 
@@ -27,6 +28,7 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
   const [showForgot, setShowForgot] = useState(false);
   const [focusPhone, setFocusPhone] = useState(false);
   const [focusPwd, setFocusPwd] = useState(false);
+  const [activeModal, setActiveModal] = useState(null); // 'faq' | 'terms'
 
   // Notify parent when forgot password modal state changes
   useEffect(() => {
@@ -71,6 +73,8 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
   return (
     <>
       {showForgot && <ForgotPasswordPhone onClose={() => setShowForgot(false)} onSuccess={() => setShowForgot(false)} />}
+      {activeModal === 'faq' && <FaqModal onClose={() => setActiveModal(null)} />}
+      {activeModal === 'terms' && <TermsModal onClose={() => setActiveModal(null)} />}
 
       <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
@@ -85,9 +89,9 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
             overflow: "hidden",
             position: "relative"
           }}>
-<div style={{ width: "50%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
-            <div style={{ width: "50%", backgroundColor: "#000000", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
-            <img src="/assets/green-logo.jpg" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain", position: "relative", zIndex: 1, border: "1px solid #8fc441", borderRadius: 12, padding: 8 }} />
+<div style={{ width: "55%", backgroundColor: "#FFFFFF", height: "100%", position: "absolute", left: 0, top: 0 }}></div>
+            <div style={{ width: "45%", backgroundColor: "#000000", height: "100%", position: "absolute", right: 0, top: 0 }}></div>
+            <img src="/assets/logoG.png" alt="Logo" style={{ width: 420, height: 90, objectFit: "contain", position: "relative", zIndex: 1 }} />
           </div>
 
           {/* Card */}
@@ -163,6 +167,25 @@ export function PhoneLoginModal({ onSuccess, onSignUp, onClose, onForgotPassword
               Don't have an account?{" "}
               <button type="button" onClick={onSignUp} style={{ background: "none", border: "none", color: "#8fc441", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
                 Subscribe
+              </button>
+            </div>
+
+            {/* Footer: FAQ | Terms & Conditions */}
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 14, marginTop: 18, paddingTop: 16, borderTop: "1px solid #262626" }}>
+              <button
+                type="button"
+                onClick={() => setActiveModal('faq')}
+                style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 4 }}
+              >
+                FAQ
+              </button>
+              <span style={{ color: "#444", fontSize: 13 }}>|</span>
+              <button
+                type="button"
+                onClick={() => setActiveModal('terms')}
+                style={{ background: "none", border: "none", color: "#8fc441", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 4 }}
+              >
+                Terms & Conditions
               </button>
             </div>
           </div>

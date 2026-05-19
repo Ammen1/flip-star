@@ -19,7 +19,7 @@ const RARITY_COLORS = {
   legendary: '#F59E0B',
 };
 
-export default function GiftPage({ username, onClose, onShowWallet }) {
+export default function GiftPage({ username, reelId, onClose, onShowWallet, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   const [gifts, setGifts] = useState([
     { id: 1, name: 'Rose', description: 'A beautiful red rose', coin_value: 10, rarity: 'common', category: 'flowers' },
@@ -39,10 +39,12 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
   const [rechargeError, setRechargeError] = useState(null);
   const [showtelebirrPayment, setShowtelebirrPayment] = useState(false);
   const [telebirrPaymentUrl, settelebirrPaymentUrl] = useState(null);
+  const [walletConfig, setWalletConfig] = useState(null);
 
   useEffect(() => {
     loadGifts();
     loadCoinBalance();
+    loadWalletConfig();
   }, []);
 
   const loadGifts = async () => {
@@ -66,6 +68,15 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
     }
   };
 
+  const loadWalletConfig = async () => {
+    try {
+      const response = await api.request('/wallet/config/');
+      setWalletConfig(response);
+    } catch (error) {
+      console.error('Error loading wallet config:', error);
+    }
+  };
+
   const categories = ['all', ...new Set(gifts.map(g => g.category))];
   
   const filteredGifts = selectedCategory === 'all' 
@@ -76,15 +87,28 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
     if (!username || !selectedGift) return;
 
     const totalCost = selectedGift.coin_value * quantity;
+    
+    // Validate against wallet config limits
+    if (walletConfig?.gifting) {
+      const pointsCost = Math.floor(totalCost / (walletConfig.coins_to_points_conversion || 1));
+      
+      // Check minimum points per transaction
+      if (pointsCost < walletConfig.gifting.min_points_per_transaction) {
+        alert(`Minimum ${walletConfig.gifting.min_points_per_transaction} points required per transaction`);
+        return;
+      }
+      
+      // Check maximum points per transaction
+      if (pointsCost > walletConfig.gifting.max_points_per_transaction) {
+        alert(`Maximum ${walletConfig.gifting.max_points_per_transaction} points allowed per transaction`);
+        return;
+      }
+    }
+    
     if (totalCost > coinBalance) {
-      // Show recharge dialog with automatic telebirr payment option
-      setRechargeError({
-        needs_recharge: true,
-        required_coins: totalCost,
-        current_purchased_coins: coinBalance,
-        current_earned_coins: 0,
-      });
-      setShowRechargeDialog(true);
+      // Show insufficient message and direct to coin purchasing modal
+      alert('Insufficient coins');
+      onShowCoinPurchase?.();
       return;
     }
 
@@ -98,6 +122,7 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
           recipient_username: username,
           quantity: quantity,
           message: message,
+          reel_id: reelId,
         }),
       });
       setSuccess(true);
@@ -265,7 +290,20 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <button onClick={() => setQuantity(Math.max(1, quantity - 1))} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${border}`, background: card, color: txt, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>−</button>
                   <div style={{ minWidth: 20, textAlign: 'center', fontSize: 14, fontWeight: 700, color: txt }}>{quantity}</div>
-                  <button onClick={() => setQuantity(quantity + 1)} style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${border}`, background: card, color: txt, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>+</button>
+                  <button 
+                    onClick={() => {
+                      const newQuantity = quantity + 1;
+                      const totalCost = selectedGift.coin_value * newQuantity;
+                      const pointsCost = Math.floor(totalCost / (walletConfig?.coins_to_points_conversion || 1));
+                      const maxPoints = walletConfig?.gifting?.max_points_per_transaction || 5000;
+                      if (pointsCost <= maxPoints) {
+                        setQuantity(newQuantity);
+                      } else {
+                        alert(`Maximum ${maxPoints} points allowed per transaction`);
+                      }
+                    }}
+                    style={{ width: 28, height: 28, borderRadius: 6, border: `1px solid ${border}`, background: card, color: txt, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+                  >+</button>
                 </div>
               </div>
             )}
@@ -278,6 +316,17 @@ export default function GiftPage({ username, onClose, onShowWallet }) {
               placeholder="Add a message (optional)..."
               style={{ ...inputStyle, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}
             />
+
+            {/* Transfer Rules Info */}
+            {walletConfig?.gifting && (
+              <div style={{ fontSize: 11, color: sub, marginBottom: 10, padding: '8px 12px', background: `${border}22`, borderRadius: 8, border: `1px solid ${border}` }}>
+                <div style={{ fontWeight: 600, marginBottom: 4, color: txt }}>Transfer Rules:</div>
+                <div>• Min: {walletConfig.gifting.min_points_per_transaction} pts per transaction</div>
+                <div>• Max: {walletConfig.gifting.max_points_per_transaction} pts per transaction</div>
+                <div>• Max to one creator: {walletConfig.gifting.max_points_to_recipient_per_day} pts/day</div>
+                <div>• Max total sent: {walletConfig.gifting.max_total_points_sent_per_day} pts/day</div>
+              </div>
+            )}
 
             {/* Send Button */}
             <button

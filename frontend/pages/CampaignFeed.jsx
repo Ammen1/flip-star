@@ -190,9 +190,6 @@ const CampaignFeed = ({ campaignId, onBack }) => {
         background: T.card,
         borderBottom: `1px solid ${T.border}`,
         padding: '16px 24px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
       }}>
         <div style={{ maxWidth: 760, margin: '0 auto' }}>
           <button
@@ -264,6 +261,7 @@ const CampaignFeed = ({ campaignId, onBack }) => {
 };
 
 const PostCard = ({ post, rank, onVote, campaignType, isVotingOpen }) => {
+  const { colors: T } = useTheme();
   const [showScores, setShowScores] = useState(false);
 
   const totalScore = post.scores?.total ?? post.total_score ?? 0;

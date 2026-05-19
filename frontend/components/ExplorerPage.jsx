@@ -12,16 +12,6 @@ import { TikTokPostViewer } from './TikTokPostViewer';
 // ── Constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = [
   { id: 'all',     label: 'Trending',  icon: Flame,    emoji: '🔥' },
-  { id: 'dance',   label: 'Dance',     icon: Music,    emoji: '💃' },
-  { id: 'comedy',  label: 'Comedy',    icon: Laugh,    emoji: '😂' },
-  { id: 'sports',  label: 'Sports',    icon: Dumbbell, emoji: '⚽' },
-  { id: 'food',    label: 'Food',      icon: Utensils, emoji: '🍕' },
-  { id: 'travel',  label: 'Travel',    icon: Plane,    emoji: '✈️' },
-  { id: 'art',     label: 'Art',       icon: Palette,  emoji: '🎨' },
-  { id: 'gaming',  label: 'Gaming',    icon: Gamepad2, emoji: '🎮' },
-  { id: 'beauty',  label: 'Beauty',    icon: Sparkles, emoji: '✨' },
-  { id: 'fashion', label: 'Fashion',   icon: Shirt,    emoji: '👗' },
-  { id: 'education', label: 'Learn',   icon: BookOpen, emoji: '📚' },
 ];
 
 const TIME_RANGES = [

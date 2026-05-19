@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import { AppAlert } from '../components/AppAlert';
 
-const BRAND_GREEN = '#8fc441';
+const GOLD = '#C8B56A';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
@@ -130,7 +130,7 @@ export default function EditProfileScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
         <TouchableOpacity onPress={save} disabled={saving}>
-          {saving ? <ActivityIndicator size="small" color={BRAND_GREEN} /> : <Text style={styles.saveBtn}>Save</Text>}
+          {saving ? <ActivityIndicator size="small" color={GOLD} /> : <Text style={styles.saveBtn}>Save</Text>}
         </TouchableOpacity>
       </View>
 
@@ -139,7 +139,7 @@ export default function EditProfileScreen({ navigation }) {
         <TouchableOpacity style={styles.avatarContainer} onPress={pickPhoto}>
           {photo
             ? <Image source={{ uri: photo }} style={styles.avatar} />
-            : <View style={[styles.avatar, { backgroundColor: BRAND_GREEN, justifyContent: 'center', alignItems: 'center' }]}>
+            : <View style={[styles.avatar, { backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center' }]}>
                 <Text style={{ color: '#000', fontSize: 32, fontWeight: '700' }}>{(form.username || '?')[0].toUpperCase()}</Text>
               </View>}
           <View style={styles.editPhotoOverlay}>
@@ -189,13 +189,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: BORDER },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
-  saveBtn: { color: BRAND_GREEN, fontSize: 15, fontWeight: '700' },
+  saveBtn: { color: GOLD, fontSize: 15, fontWeight: '700' },
   avatarContainer: { alignSelf: 'center', marginBottom: 12, position: 'relative' },
-  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: BRAND_GREEN },
-  editPhotoOverlay: { position: 'absolute', bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: BRAND_GREEN, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: BG },
-  changePhotoText: { textAlign: 'center', color: BRAND_GREEN, fontSize: 14, fontWeight: '600', marginBottom: 28 },
+  avatar: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: GOLD },
+  editPhotoOverlay: { position: 'absolute', bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: BG },
+  changePhotoText: { textAlign: 'center', color: GOLD, fontSize: 14, fontWeight: '600', marginBottom: 28 },
   field: { marginBottom: 20 },
-  label: { fontSize: 13, fontWeight: '600', color: BRAND_GREEN, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  label: { fontSize: 13, fontWeight: '600', color: GOLD, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { backgroundColor: CARD, borderRadius: 12, borderWidth: 1.5, borderColor: BORDER, paddingHorizontal: 16, paddingVertical: 14, color: '#fff', fontSize: 16 },
   charCount: { fontSize: 12, color: '#666', textAlign: 'right', marginTop: 6 },
 });

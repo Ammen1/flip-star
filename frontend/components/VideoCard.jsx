@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Gift } from "lucide-react";
 import config from "../config";
 import { useLegacyT } from "../contexts/ThemeContext";
 
@@ -33,7 +33,7 @@ const overlayCSS = (ov) => {
 
 const LONG_PRESS_MS = 500;
 
-export function VideoCard({ video, onLike, onComment, onShare }) {
+export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
   const T = useLegacyT();
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -194,6 +194,18 @@ export function VideoCard({ video, onLike, onComment, onShare }) {
             >
               <Share2 size={16} color={T?.priFallback || '#8fc441'} />
               <span style={{ fontSize: 11, color: T?.priFallback || '#8fc441', fontWeight: 600 }}>{video?.shares || 0}</span>
+            </button>
+            {/* Gift */}
+            <button
+              onClick={onGift}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '4px 6px', borderRadius: 8,
+                display: 'flex', alignItems: 'center', gap: 3,
+              }}
+            >
+              <Gift size={16} color={T?.priFallback || '#8fc441'} />
+              <span style={{ fontSize: 11, color: T?.priFallback || '#8fc441', fontWeight: 600 }}>{video?.gift_count || 0}</span>
             </button>
           </div>
           {/* Save */}

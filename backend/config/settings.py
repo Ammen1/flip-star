@@ -341,10 +341,18 @@ TELEBIRR_SOAP_URL = config('TELEBIRR_SOAP_URL', default='http://10.180.79.13:300
 TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='TestMer')
 TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=')
 TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='232323')
-TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://uat.flipstar.et/api/webhooks/telebirr-direct-debit')
+TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/')
 TELEBIRR_PAYEE_ACCOUNT_NAME = config('TELEBIRR_PAYEE_ACCOUNT_NAME', default='Flipstar')
 TELEBIRR_CALLER_TYPE = config('TELEBIRR_CALLER_TYPE', default='2')  # 2 = Third Party
 
 # SP Operator credentials for SOAP API
 TELEBIRR_SP_OPERATOR_ID = config('TELEBIRR_SP_OPERATOR_ID', default='TestSPOperAPI')
 TELEBIRR_SP_OPERATOR_CREDENTIAL = config('TELEBIRR_SP_OPERATOR_CREDENTIAL', default='2JKSrKYlLAVvKWuIUXcexc3GHiT0+lEKzeVb6JRcZUM=')
+
+# Organization Operator credentials for SOAP API (InitTrans)
+TELEBIRR_ORG_OPERATOR_ID = config('TELEBIRR_ORG_OPERATOR_ID', default='TestAPI')
+TELEBIRR_ORG_OPERATOR_CREDENTIAL = config('TELEBIRR_ORG_OPERATOR_CREDENTIAL', default='w6byUD48WhFJzIqacTA1i/SBhBhzSbfRdQMvkEzOs6M=')
+
+# ─── Onevas SMS Configuration ─────────────────────────────────────────────────────
+ONEVAS_APPLICATION_KEY = config('ONEVAS_APPLICATION_KEY', default='UPJG5ZM3X6C9LLDSKKCME4MA86UQRKWV')
+ONEVAS_PRODUCT_NUMBER = config('ONEVAS_PRODUCT_NUMBER', default='10000302850')

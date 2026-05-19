@@ -78,6 +78,7 @@ export function SearchBar({ onUserClick, onHashtagClick, onPostClick }) {
             fontSize: 14,
             outline: "none",
             background: T.bg,
+            color: T.txt,
             transition: "all 0.2s",
           }}
         />
@@ -109,7 +110,7 @@ export function SearchBar({ onUserClick, onHashtagClick, onPostClick }) {
           top: "calc(100% + 8px)",
           left: 0,
           right: 0,
-          background: "#fff",
+          background: T.card,
           borderRadius: 12,
           boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
           maxHeight: 400,

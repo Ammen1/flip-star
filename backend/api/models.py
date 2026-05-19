@@ -28,6 +28,24 @@ from .models_subscription import (
 # Import direct debit models
 from .models_direct_debit import DirectDebitMandate, DirectDebitTransaction
 
+class Category(models.Model):
+    """Content categories for posts - admin-managed"""
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=50, blank=True, help_text='Icon name (e.g., dance, comedy, etc.)')
+    order = models.IntegerField(default=0, help_text='Display order')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order', 'name']
+        verbose_name_plural = 'Categories'
+
+    def __str__(self):
+        return self.name
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     profile_photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
@@ -109,7 +127,10 @@ class Reel(models.Model):
     votes = models.IntegerField(default=0)
     view_count = models.PositiveBigIntegerField(default=0)
     shares = models.IntegerField(default=0)
-    
+
+    # Category
+    category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True, related_name='reels')
+
     # Campaign integration
     campaign = models.ForeignKey('Campaign', on_delete=models.SET_NULL, null=True, blank=True, related_name='campaign_posts')
     theme = models.ForeignKey('CampaignTheme', on_delete=models.SET_NULL, null=True, blank=True, related_name='theme_posts')

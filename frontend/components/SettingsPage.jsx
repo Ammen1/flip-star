@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   X, User, Bell, Lock, Globe, HelpCircle, LogOut, ChevronRight, Moon, Sun, Wallet,
   ChevronLeft, MessageCircle, Heart, Users as UsersIcon, Mail, Eye, EyeOff, Activity,
-  Trash2, Shield, FileText, Check, Crown, ChevronUp, ChevronDown
+  Trash2, Check, Crown, ChevronUp, ChevronDown
 } from "lucide-react";
 import api from "../api";
 import config from "../config";
@@ -38,6 +38,152 @@ const FAQ_ITEMS = [
   { q: "Can Ethio Telecom change the Terms or cancel the service?", a: "Yes. Ethio Telecom reserves the right to modify, suspend, or terminate the FlipStar service at any time in accordance with Ethiopian laws. Changes will be published at https://flipstar.et. Continued use after changes take effect constitutes acceptance." },
   { q: "How do I contact support?", a: "In-App: Profile → Help & Support • Email: support@flipstar.et • SMS: 8994 • WhatsApp: +251 99 400 0000 • Telegram: t.me/ethio_telecom • Web: ethiotelecom.et" },
 ];
+
+const SUPPORT_CATEGORIES = [
+  { value: 'account', label: 'Account' },
+  { value: 'payment', label: 'Payment / Wallet' },
+  { value: 'technical', label: 'Technical Issue' },
+  { value: 'content', label: 'Content / Post' },
+  { value: 'abuse', label: 'Abuse / Report' },
+  { value: 'suggestion', label: 'Suggestion / Feedback' },
+  { value: 'other', label: 'Other' },
+];
+
+const STATUS_STYLES = {
+  received: { color: '#3B82F6', bg: '#DBEAFE', label: 'Received' },
+  pending: { color: '#8fc441', bg: '#FEF3C7', label: 'Pending' },
+  in_progress: { color: '#8B5CF6', bg: '#EDE9FE', label: 'In Progress' },
+  solved: { color: '#10B981', bg: '#D1FAE5', label: 'Solved' },
+  closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
+};
+
+const SupportSection = ({ compact = false, T, supportForm, setSupportForm, supportSubmitting, handleSubmitSupport, supportRequests }) => {
+  const [expandedReqId, setExpandedReqId] = useState(null);
+  return (
+  <div>
+    {/* Submit new request */}
+    <div style={{
+      background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+      padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 12 }}>Submit a Request</div>
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Category</label>
+      <select
+        value={supportForm.category}
+        onChange={(e) => setSupportForm(f => ({ ...f, category: e.target.value }))}
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+          marginBottom: 10, fontSize: 14,
+        }}
+      >
+        {SUPPORT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+      </select>
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Subject</label>
+      <input
+        type="text"
+        maxLength={200}
+        value={supportForm.subject}
+        onChange={(e) => setSupportForm(f => ({ ...f, subject: e.target.value }))}
+        placeholder="Brief summary of your issue"
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+          marginBottom: 10, fontSize: 14, boxSizing: 'border-box',
+        }}
+      />
+
+      <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Message</label>
+      <textarea
+        rows={compact ? 4 : 5}
+        maxLength={5000}
+        value={supportForm.message}
+        onChange={(e) => setSupportForm(f => ({ ...f, message: e.target.value }))}
+        placeholder="Describe your issue or request in detail"
+        style={{
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
+          marginBottom: 12, fontSize: 14, boxSizing: 'border-box', resize: 'vertical',
+        }}
+      />
+
+      <button
+        onClick={handleSubmitSupport}
+        disabled={supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim()}
+        style={{
+          width: '100%', padding: '12px 16px', borderRadius: 12, border: 'none',
+          background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
+          cursor: supportSubmitting ? 'not-allowed' : 'pointer',
+          opacity: supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim() ? 0.6 : 1,
+        }}
+      >
+        {supportSubmitting ? 'Submitting...' : 'Submit Request'}
+      </button>
+    </div>
+
+    {/* My requests */}
+    <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 10 }}>My Requests</div>
+    {supportRequests.length === 0 ? (
+      <div style={{ padding: 20, textAlign: 'center', color: T.sub, fontSize: 13 }}>
+        You haven't submitted any requests yet.
+      </div>
+    ) : (
+      supportRequests.map(req => {
+        const s = STATUS_STYLES[req.status] || STATUS_STYLES.received;
+        const isOpen = expandedReqId === req.id;
+        return (
+          <div key={req.id} style={{
+            background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
+            marginBottom: 10, overflow: 'hidden',
+          }}>
+            <button
+              type="button"
+              onClick={() => setExpandedReqId(isOpen ? null : req.id)}
+              style={{
+                width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                padding: 14, textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.subject}</div>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
+                    background: s.bg, color: s.color, flexShrink: 0,
+                  }}>{s.label}</span>
+                </div>
+                <div style={{ fontSize: 12, color: T.sub }}>
+                  {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
+                </div>
+              </div>
+              {isOpen
+                ? <ChevronUp size={16} color={T.sub} style={{ flexShrink: 0 }} />
+                : <ChevronDown size={16} color={T.sub} style={{ flexShrink: 0 }} />}
+            </button>
+            {isOpen && (
+              <div style={{ padding: '0 14px 14px' }}>
+                <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
+                {req.admin_response && (
+                  <div style={{
+                    marginTop: 10, padding: 10, background: '#0F172A10',
+                    border: `1px dashed ${T.border}`, borderRadius: 8,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
+                    <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })
+    )}
+  </div>
+  );
+};
 
 export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubscription, onShowEditProfile }) {
   const { darkMode, toggleDarkMode, colors: T } = useTheme();
@@ -136,31 +282,12 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
   const [blockedUsers, setBlockedUsers] = useState([]);
   const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
   const [showFaqModal, setShowFaqModal] = useState(false);
-  const [showTermsModal, setShowTermsModal] = useState(false);
   const [faqOpen, setFaqOpen] = useState(null);
 
   // Support / help requests
   const [supportRequests, setSupportRequests] = useState([]);
   const [supportForm, setSupportForm] = useState({ category: 'other', subject: '', message: '' });
   const [supportSubmitting, setSupportSubmitting] = useState(false);
-
-  const SUPPORT_CATEGORIES = [
-    { value: 'account', label: 'Account' },
-    { value: 'payment', label: 'Payment / Wallet' },
-    { value: 'technical', label: 'Technical Issue' },
-    { value: 'content', label: 'Content / Post' },
-    { value: 'abuse', label: 'Abuse / Report' },
-    { value: 'suggestion', label: 'Suggestion / Feedback' },
-    { value: 'other', label: 'Other' },
-  ];
-
-  const STATUS_STYLES = {
-    received: { color: '#3B82F6', bg: '#DBEAFE', label: 'Received' },
-    pending: { color: '#8fc441', bg: '#FEF3C7', label: 'Pending' },
-    in_progress: { color: '#8B5CF6', bg: '#EDE9FE', label: 'In Progress' },
-    solved: { color: '#10B981', bg: '#D1FAE5', label: 'Solved' },
-    closed: { color: '#6B7280', bg: '#E5E7EB', label: 'Closed' },
-  };
 
   const loadSupportRequests = async () => {
     try {
@@ -195,111 +322,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
     }
   };
 
-  const SupportSection = ({ compact = false }) => (
-    <div>
-      {/* Submit new request */}
-      <div style={{
-        background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
-        padding: 16, marginBottom: 16,
-      }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 12 }}>Submit a Request</div>
-
-        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Category</label>
-        <select
-          value={supportForm.category}
-          onChange={(e) => setSupportForm(f => ({ ...f, category: e.target.value }))}
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-            marginBottom: 10, fontSize: 14,
-          }}
-        >
-          {SUPPORT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-
-        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Subject</label>
-        <input
-          type="text"
-          maxLength={200}
-          value={supportForm.subject}
-          onChange={(e) => setSupportForm(f => ({ ...f, subject: e.target.value }))}
-          placeholder="Brief summary of your issue"
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-            marginBottom: 10, fontSize: 14, boxSizing: 'border-box',
-          }}
-        />
-
-        <label style={{ fontSize: 12, fontWeight: 600, color: T.sub, display: 'block', marginBottom: 6 }}>Message</label>
-        <textarea
-          rows={compact ? 4 : 5}
-          maxLength={5000}
-          value={supportForm.message}
-          onChange={(e) => setSupportForm(f => ({ ...f, message: e.target.value }))}
-          placeholder="Describe your issue or request in detail"
-          style={{
-            width: '100%', padding: '10px 12px', borderRadius: 10,
-            border: `1px solid ${T.border}`, background: T.bg, color: T.txt,
-            marginBottom: 12, fontSize: 14, boxSizing: 'border-box', resize: 'vertical',
-          }}
-        />
-
-        <button
-          onClick={handleSubmitSupport}
-          disabled={supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim()}
-          style={{
-            width: '100%', padding: '12px 16px', borderRadius: 12, border: 'none',
-            background: T.pri, color: '#000', fontSize: 14, fontWeight: 700,
-            cursor: supportSubmitting ? 'not-allowed' : 'pointer',
-            opacity: supportSubmitting || !supportForm.subject.trim() || !supportForm.message.trim() ? 0.6 : 1,
-          }}
-        >
-          {supportSubmitting ? 'Submitting...' : 'Submit Request'}
-        </button>
-      </div>
-
-      {/* My requests */}
-      <div style={{ fontSize: 15, fontWeight: 700, color: T.txt, marginBottom: 10 }}>My Requests</div>
-      {supportRequests.length === 0 ? (
-        <div style={{ padding: 20, textAlign: 'center', color: T.sub, fontSize: 13 }}>
-          You haven't submitted any requests yet.
-        </div>
-      ) : (
-        supportRequests.map(req => {
-          const s = STATUS_STYLES[req.status] || STATUS_STYLES.received;
-          return (
-            <div key={req.id} style={{
-              background: T.cardBg || T.bg, border: `1px solid ${T.border}`, borderRadius: 12,
-              padding: 14, marginBottom: 10,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.txt, flex: 1 }}>{req.subject}</div>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
-                  background: s.bg, color: s.color,
-                }}>{s.label}</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.sub, marginBottom: 6 }}>
-                {req.category_display} • {new Date(req.created_at).toLocaleDateString()}
-              </div>
-              <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.message}</div>
-              {req.admin_response && (
-                <div style={{
-                  marginTop: 10, padding: 10, background: '#0F172A10',
-                  border: `1px dashed ${T.border}`, borderRadius: 8,
-                }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T.sub, marginBottom: 4 }}>Admin Response</div>
-                  <div style={{ fontSize: 13, color: T.txt, whiteSpace: 'pre-wrap' }}>{req.admin_response}</div>
-                </div>
-              )}
-            </div>
-          );
-        })
-      )}
-    </div>
-  );
-
   // FAQ Modal Component
   const FaqModal = () => {
     if (!showFaqModal) return null;
@@ -321,76 +343,6 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
               {faqOpen === i && <div style={{ fontSize: 13, color: "#ccc", paddingBottom: 14, lineHeight: 1.6 }}>{item.a}</div>}
             </div>
           ))}
-        </div>
-      </div>
-    );
-  };
-
-  // Terms Modal Component
-  const TermsModal = () => {
-    if (!showTermsModal) return null;
-    
-    const sec  = { fontSize: 14, fontWeight: 800, color: "#8fc441", marginTop: 20, marginBottom: 8 };
-    const sub  = { fontSize: 13, fontWeight: 700, color: "#ddd", marginTop: 12, marginBottom: 6 };
-    const para = { fontSize: 12, color: "#ccc", lineHeight: 1.7, marginBottom: 8 };
-    const bul  = { fontSize: 12, color: "#bbb", lineHeight: 1.7, marginBottom: 4, paddingLeft: 8 };
-    
-    return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.97)", zIndex: 9999, overflowY: "auto" }}>
-        <div style={{ background: T.cardBg || "#111", minHeight: "100vh", width: "100%", maxWidth: 640, margin: "0 auto", padding: "48px 24px 60px" }}>
-          {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441" }}>Terms &amp; Conditions</div>
-            <button onClick={() => setShowTermsModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}><X size={24} /></button>
-          </div>
-
-          {/* Preamble */}
-          <p style={para}>Please read these Terms and Conditions ("Terms") carefully before using the FlipStar service ("FlipStar", "the Service") provided by Ethio Telecom and SkykinTechnologies PLC ("the Providers"). These Terms apply to all visitors, users, and others who access or use the Service via the FlipStar mobile application (Android and iOS) or web portal at https://flipstar.et.</p>
-          <p style={para}>By subscribing, downloading, installing, or otherwise accessing FlipStar, you acknowledge that you have read, understood, and agree to be bound by these Terms. If you do not agree, do not use the Service.</p>
-
-          {/* 1 */}
-          <div style={sec}>1. Introduction</div>
-          <p style={para}>FlipStar is a premium, subscription-based gamified social media platform developed for Ethio Telecom customers. The platform enables users to create, share, and discover short-form videos and photos ('Flips'), participate in competitive campaigns, earn rewards, and engage in a digital creator economy powered by the telebirr wallet.</p>
-          <p style={para}>FlipStar is accessible via:</p>
-          <p style={bul}>• Web Portal: https://flipstar.et</p>
-          <p style={bul}>• Android App: Available on Google Play Store (search: FlipStar)</p>
-          <p style={bul}>• iOS App: Available on Apple App Store (search: FlipStar)</p>
-
-          {/* 2 */}
-          <div style={sec}>2. Service Overview</div>
-          <p style={bul}>• FlipStar is available to all active Ethio Telecom prepaid, postpaid, and hybrid mobile customers with a smartphone device (Android, iOS, or any HTML5-capable browser for web access).</p>
-          <p style={bul}>• The Service allows users to upload short-form videos (15–120 seconds depending on user tier) and photos, interact with content, participate in daily, weekly, monthly, and grand prize competitions, and earn and spend digital coins.</p>
-          <p style={bul}>• To subscribe via SMS: send 'OK' to the FlipStar shortcode. To unsubscribe: send 'STOP' to the same shortcode.</p>
-          <p style={bul}>• To subscribe via app or web: download the FlipStar app or visit https://flipstar.et, select Sign Up, and follow the on-screen registration flow.</p>
-
-          {/* 3 */}
-          <div style={sec}>3. Subscription and Billing</div>
-          <div style={sub}>3.1 Subscription Plans</div>
-          <p style={bul}>• Flip Daily: 3 ETB per 24 hours</p>
-          <p style={bul}>• Flip Weekly: 20 ETB per 7 days</p>
-          <p style={bul}>• Flip Monthly: 70 ETB per 30 days</p>
-          <p style={bul}>• Flip On-Demand: 10 ETB for 100 Coins (one-time purchase)</p>
-          
-          <div style={sub}>3.2 Eligibility</div>
-          <p style={bul}>• All active prepaid, postpaid, and hybrid Ethio Telecom mobile customers are eligible to subscribe.</p>
-          <p style={bul}>• The subscriber's service number must be in 'Active' status at the time of subscription.</p>
-          <p style={bul}>• Users must be at least 13 years old to use the service.</p>
-
-          {/* Add more sections as needed */}
-          <div style={sec}>4. User Conduct</div>
-          <p style={bul}>• Users must not upload content that is unlawful, harmful, threatening, abusive, defamatory, or otherwise objectionable under Ethiopian law.</p>
-          <p style={bul}>• Botting, automated engagement, self-gifting, vote manipulation, or any attempt to artificially inflate scores or leaderboard rankings is strictly prohibited.</p>
-          <p style={bul}>• A single user may contribute a maximum of 5,000 Score Points per day to any one specific creator to prevent pay-to-win manipulation.</p>
-
-          <div style={sec}>5. Privacy and Data Protection</div>
-          <p style={bul}>• FlipStar is hosted on Ethio Telecom InfraCloud within Ethiopia.</p>
-          <p style={bul}>• Your phone number is encrypted and never displayed publicly.</p>
-          <p style={bul}>• All personal metadata is removed from uploads.</p>
-
-          <div style={sec}>6. Service Modifications</div>
-          <p style={bul}>• Ethio Telecom reserves the right to modify, suspend, or terminate the FlipStar service at any time.</p>
-          <p style={bul}>• Changes will be published at https://flipstar.et.</p>
-          <p style={bul}>• Continued use after changes take effect constitutes acceptance.</p>
         </div>
       </div>
     );
@@ -625,12 +577,10 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           {/* Help & Support */}
           <SectionLabel>{t('help')}</SectionLabel>
           <div style={{ background: T.cardBg, borderRadius: 16, padding: 16, marginBottom: 16 }}>
-            <SupportSection compact />
+            <SupportSection compact T={T} supportForm={supportForm} setSupportForm={setSupportForm} supportSubmitting={supportSubmitting} handleSubmitSupport={handleSubmitSupport} supportRequests={supportRequests} />
           </div>
           <SectionCard>
             <Row icon={HelpCircle} title="Frequently Asked Questions" onPress={() => setShowFaqModal(true)} />
-            <Row icon={Shield} title={t('privacyPolicy')} onPress={() => window.open('/legal/privacy-policy', '_blank')} />
-            <Row icon={FileText} title={t('termsOfService')} onPress={() => setShowTermsModal(true)} />
           </SectionCard>
 
           {/* Logout */}
@@ -1247,18 +1197,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
               <h2 style={{ fontSize: isSmallMobile ? 18 : 24, fontWeight: 700, marginBottom: 8, color: T.txt }}>{t('help')}</h2>
               <p style={{ fontSize: isSmallMobile ? 12 : 14, color: T.sub, marginBottom: isSmallMobile ? 20 : 24 }}>{t('getHelp')}</p>
 
-              <SupportSection />
-
-              <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
-                <button onClick={() => window.open('/legal/terms-of-service', '_blank')} style={{
-                  padding: '10px 14px', background: T.bg, border: `1px solid ${T.border}`,
-                  borderRadius: 10, cursor: 'pointer', color: T.txt, fontSize: 13, fontWeight: 600,
-                }}>{t('termsOfService')}</button>
-                <button onClick={() => window.open('/legal/privacy-policy', '_blank')} style={{
-                  padding: '10px 14px', background: T.bg, border: `1px solid ${T.border}`,
-                  borderRadius: 10, cursor: 'pointer', color: T.txt, fontSize: 13, fontWeight: 600,
-                }}>{t('privacyPolicy')}</button>
-              </div>
+              <SupportSection T={T} supportForm={supportForm} setSupportForm={setSupportForm} supportSubmitting={supportSubmitting} handleSubmitSupport={handleSubmitSupport} supportRequests={supportRequests} />
 
               <div style={{ marginTop: 20, padding: 16, background: T.bg, borderRadius: 12, textAlign: 'center' }}>
                 <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>{t('version')}</div>
@@ -1351,10 +1290,9 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
           </div>
         </div>
       )}
-      
-      {/* FAQ and Terms Modals */}
+
+      {/* FAQ Modal */}
       <FaqModal />
-      <TermsModal />
     </div>
   );
 }

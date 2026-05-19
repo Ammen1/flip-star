@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { Heart } from "lucide-react";
+import { Heart, Trophy } from "lucide-react";
 
 // Static styles injected once, not per render
 let stylesInjected = false;
@@ -20,7 +20,7 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
-export function LikeButton({ liked, count, onLike, size = 24 }) {
+export function LikeButton({ liked, count, onLike, size = 24, isCampaign = false }) {
   const [burstKey, setBurstKey] = useState(0);
   const [popping, setPopping] = useState(false);
   const btnRef = useRef(null);
@@ -38,6 +38,8 @@ export function LikeButton({ liked, count, onLike, size = 24 }) {
     onLike();
   }, [liked, onLike]);
 
+  const IconComponent = isCampaign ? Trophy : Heart;
+
   return (
     <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
       <button
@@ -46,9 +48,9 @@ export function LikeButton({ liked, count, onLike, size = 24 }) {
         onClick={handleClick}
         onAnimationEnd={() => setPopping(false)}
       >
-        <Heart
+        <IconComponent
           size={size}
-          fill={liked ? "#8fc441" : "none"}
+          fill="none"
           stroke={liked ? "#8fc441" : "#fff"}
           strokeWidth={2}
         />
@@ -58,7 +60,7 @@ export function LikeButton({ liked, count, onLike, size = 24 }) {
         key={burstKey}
         className={`like-burst${burstKey > 0 ? ' active' : ''}`}
       >
-        <Heart size={size * 1.8} fill="#8fc441" stroke="none" />
+        <IconComponent size={size * 1.8} fill="#8fc441" stroke="none" />
       </div>
 
       <div style={{ fontSize: 12, fontWeight: 700, color: "#fff", textAlign: "center" }}>{count}</div>

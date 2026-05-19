@@ -233,18 +233,18 @@ class OnevasWebhookView(APIView):
             tier = subscriptions[0].tier
             # Map duration type to resubscribe keyword and stop keyword
             resubscribe_keywords = {
-                'daily': 'A',
-                'weekly': 'B',
-                'monthly': 'C',
-                'ondemand': 'D'
+                'daily': 'OK1',
+                'weekly': 'OK2',
+                'monthly': 'OK3',
+                'ondemand': 'OK4'
             }
             stop_keywords = {
-                'daily': 'STOP',
+                'daily': 'STOP1',
                 'weekly': 'STOP2',
                 'monthly': 'STOP3',
                 'ondemand': 'STOP'
             }
-            resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, 'A')
+            resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, 'OK1')
             cancel_keyword = stop_keywords.get(tier.duration_type, 'STOP')
             cancellation_message = f"You have successfully unsubscribed from the {tier.name} service. To subscribe again, send {resubscribe_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending cancellation SMS to {phone_number}")
@@ -753,7 +753,8 @@ class OnevasWebhookView(APIView):
                         subscription_source='app',
                         end_date=timezone.now() + timedelta(days=total_duration_days),
                         setup_otp=otp_code,  # Set OTP for account login
-                        free_trial_days=free_trial_days  # Track free trial days granted
+                        free_trial_days=free_trial_days,  # Track free trial days granted
+                        payment_method='onevas'  # Onevas webhook always uses onevas payment method
                     )
                     print(f"[SUBSCRIPTION DEBUG] New subscription created: ID {subscription.id}, setup_otp: {subscription.setup_otp}, free_trial_days: {free_trial_days}")
                 
@@ -1265,30 +1266,60 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         
         return UserSubscription.objects.all()
     
+    def _type_filter(self, request):
+        """Build queryset filters from ?type= query param.
+
+        type=ondemand     -> only OnDemand tiers
+        type=subscription -> only recurring tiers (daily/weekly/monthly)
+        (none)            -> no filter
+        Returns dict with `sub_filter` (for UserSubscription / SubscriptionPayment via subscription__) and `tier_filter` (for SubscriptionTier).
+        """
+        t = (request.query_params.get('type') or '').lower()
+        if t == 'ondemand':
+            return {
+                'sub_filter': {'tier__duration_type': 'ondemand'},
+                'pay_filter': {'subscription__tier__duration_type': 'ondemand'},
+                'tier_filter': {'duration_type': 'ondemand'},
+            }
+        if t == 'subscription':
+            recurring = ['daily', 'weekly', 'monthly']
+            return {
+                'sub_filter': {'tier__duration_type__in': recurring},
+                'pay_filter': {'subscription__tier__duration_type__in': recurring},
+                'tier_filter': {'duration_type__in': recurring},
+            }
+        return {'sub_filter': {}, 'pay_filter': {}, 'tier_filter': {}}
+
     @action(detail=False, methods=['get'])
     def analytics(self, request):
-        """Get subscription analytics"""
+        """Get subscription analytics. Optional ?type=subscription|ondemand to scope."""
         if not self._is_admin(request):
             return Response({'error': 'Unauthorized'}, status=403)
-        
-        total_subscriptions = UserSubscription.objects.count()
-        active_subscriptions = UserSubscription.objects.filter(status='active').count()
-        expired_subscriptions = UserSubscription.objects.filter(status='expired').count()
-        
+
+        f = self._type_filter(request)
+
+        sub_qs = UserSubscription.objects.filter(**f['sub_filter'])
+        pay_qs = SubscriptionPayment.objects.filter(status='completed', **f['pay_filter'])
+
+        total_subscriptions = sub_qs.count()
+        active_subscriptions = sub_qs.filter(status='active').count()
+        expired_subscriptions = sub_qs.filter(status='expired').count()
+
         # Revenue calculation
-        total_revenue = sum(
-            p.amount for p in SubscriptionPayment.objects.filter(status='completed')
-        )
-        
-        # Trial users
-        trial_users = UserProfile.objects.filter(is_trial_user=True).count()
-        
+        total_revenue = sum(p.amount for p in pay_qs)
+
+        # Trial users (only meaningful for the subscription view)
+        if not f['tier_filter'] or f['tier_filter'].get('duration_type') != 'ondemand':
+            trial_users = UserProfile.objects.filter(is_trial_user=True).count()
+        else:
+            trial_users = 0
+
         # Tier distribution
         tier_distribution = {}
-        for tier in SubscriptionTier.objects.all():
-            count = UserSubscription.objects.filter(tier=tier, status='active').count()
+        for tier in SubscriptionTier.objects.filter(**f['tier_filter']):
+            count = sub_qs.filter(tier=tier, status='active').count()
             tier_distribution[tier.name] = count
-        
+
         data = {
             'total_subscriptions': total_subscriptions,
             'active_subscriptions': active_subscriptions,
@@ -1297,83 +1328,112 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
             'trial_users': trial_users,
             'tier_distribution': tier_distribution,
         }
-        
+
         return Response(data)
     
     @action(detail=False, methods=['get'])
     def charging_analytics(self, request):
-        """Get real-time charging analytics"""
+        """Get real-time charging analytics. Optional ?type=subscription|ondemand."""
         if not self._is_admin(request):
             return Response({'error': 'Unauthorized'}, status=403)
         
         from django.db.models import Sum, Count
         from datetime import datetime, timedelta
-        
+
+        f = self._type_filter(request)
+        sub_filter = f['sub_filter']
+        pay_filter = f['pay_filter']
+
         # Get time ranges
         today = timezone.now().date()
         week_ago = today - timedelta(days=7)
         month_ago = today - timedelta(days=30)
-        
+
         # Active subscriptions by tier
         active_by_tier = UserSubscription.objects.filter(
-            status='active'
+            status='active', **sub_filter
         ).values('tier__name').annotate(
             count=Count('id'),
             total_revenue=Sum('tier__price_etb')
         ).order_by('-total_revenue')
-        
+
         # Today's revenue
         today_payments = SubscriptionPayment.objects.filter(
             status='completed',
-            period_start__date=today
+            period_start__date=today,
+            **pay_filter,
         ).aggregate(
             total=Sum('amount'),
             count=Count('id')
         )
-        
+
         # This week's revenue
         week_payments = SubscriptionPayment.objects.filter(
             status='completed',
-            period_start__date__gte=week_ago
+            period_start__date__gte=week_ago,
+            **pay_filter,
         ).aggregate(
             total=Sum('amount'),
             count=Count('id')
         )
-        
+
         # This month's revenue
         month_payments = SubscriptionPayment.objects.filter(
             status='completed',
-            period_start__date__gte=month_ago
+            period_start__date__gte=month_ago,
+            **pay_filter,
         ).aggregate(
             total=Sum('amount'),
             count=Count('id')
         )
-        
-        # Cancellations this month
-        month_cancellations = SubscriptionHistory.objects.filter(
+
+        # Cancellations this month (scoped by tier filter when provided)
+        cancel_qs = SubscriptionHistory.objects.filter(
             action='cancelled',
-            created_at__date__gte=month_ago
-        ).count()
-        
+            created_at__date__gte=month_ago,
+        )
+        if sub_filter:
+            # SubscriptionHistory has its own tier FK
+            tier_only = {k.replace('tier__', 'tier__'): v for k, v in sub_filter.items()}
+            cancel_qs = cancel_qs.filter(**tier_only)
+        month_cancellations = cancel_qs.count()
+
         # Expected monthly recurring revenue (MRR)
-        active_subs = UserSubscription.objects.filter(status='active')
+        active_subs = UserSubscription.objects.filter(status='active', **sub_filter)
         mrr = sum([sub.tier.price_etb for sub in active_subs if sub.tier])
-        
+
         # Recent transactions
         recent_transactions = SubscriptionPayment.objects.filter(
-            status='completed'
+            status='completed', **pay_filter,
         ).order_by('-created_at')[:20]
         
         recent_data = []
         for tx in recent_transactions:
+            sub = tx.subscription
+            tier = sub.tier if sub else None
+            user_obj = (sub.user if sub and sub.user else tx.user) if hasattr(tx, 'user') else (sub.user if sub else None)
+            phone = ''
+            if sub and getattr(sub, 'onevas_phone_number', None):
+                phone = sub.onevas_phone_number
+            elif user_obj and hasattr(user_obj, 'profile') and getattr(user_obj.profile, 'phone_number', None):
+                phone = user_obj.profile.phone_number
+
             recent_data.append({
                 'id': str(tx.id),
                 'amount': float(tx.amount),
+                'currency': tx.currency,
                 'payment_method': tx.payment_method,
-                'tier': tx.subscription.tier.name if tx.subscription and tx.subscription.tier else 'N/A',
-                'user': tx.subscription.user.username if tx.subscription and tx.subscription.user else 'N/A',
-                'date': tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else 'N/A',
-                'status': tx.status
+                'tier': tier.name if tier else 'N/A',
+                'duration_type': tx.duration_type or (tier.duration_type if tier else ''),
+                'duration_days': tier.duration_days if tier else None,
+                'user': user_obj.username if user_obj else 'N/A',
+                'user_id': user_obj.id if user_obj else None,
+                'email': user_obj.email if user_obj else '',
+                'phone': phone,
+                'period_start': tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else '',
+                'period_end': tx.period_end.strftime('%Y-%m-%d %H:%M') if tx.period_end else '',
+                'date': tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else (tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else 'N/A'),
+                'status': tx.status,
             })
         
         return Response({

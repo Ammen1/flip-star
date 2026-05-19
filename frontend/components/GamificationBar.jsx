@@ -102,16 +102,18 @@ const StreakModal = memo(function StreakModal({ streak, onClaim, onClose, theme 
   const [claiming, setClaiming] = useState(false);
   const cur = streak?.current ?? 0;
 
-  // Get real calendar days starting from today going back 6 days
+  // Get real calendar days starting from today going back 6 days.
+  // Locale-aware short weekday + normalised to local midnight to avoid DST/late-night drift.
   const getRealDays = () => {
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const today = new Date();
+    const weekdayFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short' });
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
     const days = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(today.getDate() - i);
+      const d = new Date(todayMidnight);
+      d.setDate(todayMidnight.getDate() - i);
       days.push({
-        name: dayNames[d.getDay()],
+        name: weekdayFmt.format(d),
         date: d.getDate(),
         isToday: i === 0,
         isPast: i > 0,
@@ -318,39 +320,133 @@ const SpinModal = memo(function SpinModal({ spin, onSpin, onClose, theme }) {
 
 /* ─── GIFT MODAL ─────────────────────────────── */
 const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWallet, theme }) {
-  const [recipientId, setRecipientId] = useState('');
-  const [amount, setAmount] = useState(10);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [username, setUsername] = useState('');
+  const [selectedGift, setSelectedGift] = useState(null);
+  const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null);
   const [error, setError] = useState('');
+  const [gifts, setGifts] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [walletConfig, setWalletConfig] = useState(null);
+  const [showRechargeDialog, setShowRechargeDialog] = useState(false);
+  const [rechargeError, setRechargeError] = useState(null);
+
+  const CATEGORY_ICONS = {
+    flowers: '🌹',
+    hearts: '❤️',
+    gems: '💎',
+    special: '⭐',
+    animals: '🐻',
+    vehicles: '🚗',
+  };
+
+  useEffect(() => {
+    loadGifts();
+    loadWalletConfig();
+  }, []);
+
+  const loadGifts = async () => {
+    try {
+      const response = await api.request('/gifts/');
+      const giftsData = response.results || response;
+      setGifts(giftsData);
+    } catch (error) {
+      console.error('Error loading gifts:', error);
+    }
+  };
+
+  const loadWalletConfig = async () => {
+    try {
+      const response = await api.request('/wallet/config/');
+      setWalletConfig(response);
+    } catch (error) {
+      console.error('Error loading wallet config:', error);
+    }
+  };
+
+  const categories = ['all', ...new Set(gifts.map(g => g.category))];
+  const filteredGifts = selectedCategory === 'all' ? gifts : gifts.filter(g => g.category === selectedCategory);
 
   const send = async () => {
-    if (!recipientId.trim()) { setError('Enter a recipient username or ID'); return; }
-    if (amount < 1 || amount > (coins?.balance ?? 0)) { setError('Invalid amount'); return; }
+    if (!phoneNumber.trim() && !username.trim()) { setError('Enter a phone number or username'); return; }
+    if (!selectedGift) { setError('Select a gift'); return; }
+
+    const totalCost = selectedGift.coin_value * quantity;
+
+    // Validate against wallet config limits
+    if (walletConfig?.gifting) {
+      const pointsCost = Math.floor(totalCost / (walletConfig.coins_to_points_conversion || 1));
+
+      // Check minimum points per transaction
+      if (pointsCost < walletConfig.gifting.min_points_per_transaction) {
+        setError(`Minimum ${walletConfig.gifting.min_points_per_transaction} points required per transaction`);
+        return;
+      }
+
+      // Check maximum points per transaction
+      if (pointsCost > walletConfig.gifting.max_points_per_transaction) {
+        setError(`Maximum ${walletConfig.gifting.max_points_per_transaction} points allowed per transaction`);
+        return;
+      }
+    }
+
+    if (totalCost > (coins?.balance ?? 0)) {
+      setRechargeError({
+        needs_recharge: true,
+        required_coins: totalCost,
+        current_purchased_coins: coins?.balance ?? 0,
+        current_earned_coins: 0,
+      });
+      setShowRechargeDialog(true);
+      return;
+    }
+
     setSending(true); setError('');
     try {
-      const res = await api.request('/gamification/gift/', {
+      const payload = {
+        gift_id: selectedGift.id,
+        quantity: quantity,
+        message: message,
+      };
+
+      // Use phone number if provided, otherwise use username
+      if (phoneNumber.trim()) {
+        payload.phone_number = phoneNumber;
+      } else {
+        payload.recipient_username = username;
+      }
+
+      const res = await api.request('/gifts/send/', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ recipient_username: recipientId, amount, message })
+        body: JSON.stringify(payload)
       });
       setDone(res);
       onRefresh();
-    } catch(e) { setError(e.message || 'Failed to send gift'); }
-    finally { setSending(false); }
+    } catch(e) {
+      const errorData = e?.response?.data || e;
+      if (errorData.needs_recharge) {
+        setRechargeError(errorData);
+        setShowRechargeDialog(true);
+      } else {
+        setError(errorData.error || e.message || 'Failed to send gift');
+      }
+    } finally { setSending(false); }
   };
 
   return (
     <Modal onClose={onClose} theme={theme}>
-      <ModalHeader title="🎁 Send Coin Gift" onClose={onClose} theme={theme}/>
+      <ModalHeader title="🎁 Send Gift" onClose={onClose} theme={theme}/>
       <div style={{padding:'8px 20px 20px', maxHeight:'70vh', display:'flex', flexDirection:'column'}}>
         {done ? (
           <div style={{textAlign:'center',padding:'24px 0'}}>
             <div style={{fontSize:64,marginBottom:12}}>🎉</div>
             <div style={{fontSize:20,fontWeight:800,color:'#8fc441',marginBottom:4}}>Gift Sent!</div>
             <div style={{fontSize:14,color:'#78716C',marginBottom:24}}>
-              You sent <b style={{color:'#8fc441'}}>{done.amount} coins</b> to <b>@{done.recipient?.username}</b>
+              You sent <b style={{color:'#8fc441'}}>{selectedGift?.name}</b> × {quantity} to <b>@{done.recipient?.username || phoneNumber}</b>
             </div>
             <button onClick={onClose} style={{width:'100%',padding:'16px',borderRadius:14,border:'none',background:'#8fc441',color:'#000',fontSize:16,fontWeight:700,cursor:'pointer',boxShadow:'0 4px 16px rgba(249,224,139,0.4)'}}>
               Done 🎊
@@ -365,41 +461,113 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
             </div>
 
             <div style={{overflowY:'auto', flex: 1, marginBottom: 16, minHeight: 0}}>
-              <label style={{fontSize:13,fontWeight:600,color:'#78716C',display:'block',marginBottom:6}}>Recipient Username</label>
-              <input value={recipientId} onChange={e=>setRecipientId(e.target.value)}
+              {/* Recipient inputs */}
+              <label style={{fontSize:13,fontWeight:600,color:'#78716C',display:'block',marginBottom:6}}>Phone Number (optional)</label>
+              <input value={phoneNumber} onChange={e=>setPhoneNumber(e.target.value)}
+                placeholder="+251 9xx xxx xxx"
+                style={{width:'100%',padding:'13px 14px',borderRadius:12,border:'1.5px solid rgba(249,224,139,0.3)',fontSize:15,marginBottom:14,boxSizing:'border-box',outline:'none'}}
+              />
+
+              <label style={{fontSize:13,fontWeight:600,color:'#78716C',display:'block',marginBottom:6}}>Username (optional)</label>
+              <input value={username} onChange={e=>setUsername(e.target.value)}
                 placeholder="e.g. johndoe"
                 style={{width:'100%',padding:'13px 14px',borderRadius:12,border:'1.5px solid rgba(249,224,139,0.3)',fontSize:15,marginBottom:14,boxSizing:'border-box',outline:'none'}}
               />
 
-              <label style={{fontSize:13,fontWeight:600,color:'#78716C',display:'block',marginBottom:8}}>Amount</label>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-                <button onClick={()=>setAmount(a=>Math.max(1,a-5))}
-                  style={{width:40,height:40,borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#8fc441'}}>
-                  −
-                </button>
-                <div style={{flex:1,textAlign:'center',fontSize:28,fontWeight:800,color:'#8fc441'}}>
-                  🪙 {amount}
-                </div>
-                <button onClick={()=>setAmount(a=>Math.min(coins?.balance??100,a+5))}
-                  style={{width:40,height:40,borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,color:'#8fc441'}}>
-                  +
-                </button>
-              </div>
-              {/* quick amounts */}
-              <div style={{display:'flex',gap:8,marginBottom:14}}>
-                {[10,25,50,100].map(v=>(
-                  <button key={v} onClick={()=>setAmount(Math.min(v,coins?.balance??0))}
-                    style={{flex:1,padding:'8px 0',borderRadius:8,border:`1.5px solid ${amount===v?'#8fc441':'rgba(249,224,139,0.3)'}`,background:amount===v?'rgba(249,224,139,0.15)':'#fff',color:amount===v?'#8fc441':'#78716C',fontWeight:600,cursor:'pointer',fontSize:13}}>
-                    {v}
+              {/* Category Filter */}
+              <div style={{display:'flex',gap:6,overflowX:'auto',marginBottom:10,paddingBottom:2}}>
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    style={{
+                      padding:'5px 10px',
+                      borderRadius:14,
+                      border:`1px solid ${selectedCategory === cat ? '#8fc441' : 'rgba(249,224,139,0.3)'}`,
+                      background:selectedCategory === cat ? 'rgba(249,224,139,0.15)' : '#fff',
+                      color:selectedCategory === cat ? '#8fc441' : '#78716C',
+                      fontSize:11,
+                      fontWeight:600,
+                      cursor:'pointer',
+                      whiteSpace:'nowrap',
+                      flexShrink:0,
+                    }}
+                  >
+                    {cat !== 'all' && CATEGORY_ICONS[cat]} {cat.charAt(0).toUpperCase() + cat.slice(1)}
                   </button>
                 ))}
               </div>
 
+              {/* Gift Selection Grid */}
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:12}}>
+                {filteredGifts.map(gift => (
+                  <button
+                    key={gift.id}
+                    onClick={() => { setSelectedGift(gift); setQuantity(1); }}
+                    style={{
+                      padding:'8px 4px',
+                      borderRadius:10,
+                      border:`1.5px solid ${selectedGift?.id === gift.id ? '#8fc441' : 'rgba(249,224,139,0.3)'}`,
+                      background:selectedGift?.id === gift.id ? 'rgba(249,224,139,0.15)' : '#fff',
+                      cursor:'pointer',
+                      display:'flex',
+                      flexDirection:'column',
+                      alignItems:'center',
+                      gap:2,
+                    }}
+                  >
+                    <div style={{fontSize:24,height:32,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {gift.image_url ? (
+                        <img src={gift.image_url} alt={gift.name} style={{width:28,height:28,objectFit:'contain'}} />
+                      ) : (
+                        CATEGORY_ICONS[gift.category] || '🎁'
+                      )}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:700,color:'#8fc441'}}>{gift.coin_value}🪙</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Quantity selector when gift selected */}
+              {selectedGift && (
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,marginBottom:10,padding:'8px 12px',background:'rgba(249,224,139,0.1)',borderRadius:10,border:'1px solid rgba(249,224,139,0.2)'}}>
+                  <div style={{fontSize:13,color:'#78716C',fontWeight:600}}>{selectedGift.name}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <button onClick={() => setQuantity(Math.max(1,quantity-1))} style={{width:28,height:28,borderRadius:6,border:'1px solid rgba(249,224,139,0.3)',background:'#fff',color:'#8fc441',fontSize:16,fontWeight:700,cursor:'pointer'}}>−</button>
+                    <div style={{minWidth:20,textAlign:'center',fontSize:14,fontWeight:700,color:'#8fc441'}}>{quantity}</div>
+                    <button 
+                      onClick={() => {
+                        const newQuantity = quantity + 1;
+                        const totalCost = selectedGift.coin_value * newQuantity;
+                        const pointsCost = Math.floor(totalCost / (walletConfig?.coins_to_points_conversion || 1));
+                        const maxPoints = walletConfig?.gifting?.max_points_per_transaction || 5000;
+                        if (pointsCost <= maxPoints) {
+                          setQuantity(newQuantity);
+                        } else {
+                          setError(`Maximum ${maxPoints} points allowed per transaction`);
+                        }
+                      }}
+                      style={{width:28,height:28,borderRadius:6,border:'1px solid rgba(249,224,139,0.3)',background:'#fff',color:'#8fc441',fontSize:16,fontWeight:700,cursor:'pointer'}}
+                    >+</button>
+                  </div>
+                </div>
+              )}
+
+              {/* Message */}
               <label style={{fontSize:13,fontWeight:600,color:'#78716C',display:'block',marginBottom:6}}>Message (optional)</label>
               <input value={message} onChange={e=>setMessage(e.target.value)}
                 placeholder="Say something nice ✨"
                 style={{width:'100%',padding:'13px 14px',borderRadius:12,border:'1.5px solid rgba(249,224,139,0.3)',fontSize:15,marginBottom:16,boxSizing:'border-box',outline:'none'}}
               />
+
+              {/* Transfer Rules Info */}
+              {walletConfig?.gifting && (
+                <div style={{fontSize:11,color:'#78716C',marginBottom:10,padding:'8px 12px',background:'rgba(249,224,139,0.08)',borderRadius:8,border:'1px solid rgba(249,224,139,0.2)'}}>
+                  <div style={{fontWeight:600,marginBottom:4,color:'#8fc441'}}>Transfer Rules:</div>
+                  <div>• Min: {walletConfig.gifting.min_points_per_transaction} pts per transaction</div>
+                  <div>• Max: {walletConfig.gifting.max_points_per_transaction} pts per transaction</div>
+                </div>
+              )}
 
               {error && <div style={{color:'#EF4444',fontSize:13,marginBottom:12,padding:'10px 14px',background:'#FEF2F2',borderRadius:10}}>{error}</div>}
             </div>
@@ -408,10 +576,37 @@ const GiftModal = memo(function GiftModal({ coins, onClose, onRefresh, onShowWal
               style={{width:'100%',padding:'16px',borderRadius:14,border:'none',
                 background: sending ? 'rgba(249,224,139,0.5)' : '#8fc441',
                 color: '#000',fontSize:16,fontWeight:700,cursor:sending?'not-allowed':'pointer',
-                boxShadow: sending?'none':'0 4px 20px rgba(249,224,139,.4)', flexShrink: 0}}>
-              {sending ? 'Sending...' : `🎁 Send ${amount} Coins`}
+                boxShadow:sending?'none':'0 4px 20px rgba(249,224,139,.4)', flexShrink:0}}>
+              {sending ? 'Sending...' : `🎁 Send ${selectedGift ? `${selectedGift.name} × ${quantity}` : 'Gift'}`}
             </button>
           </>
+        )}
+
+        {/* Recharge Dialog */}
+        {showRechargeDialog && rechargeError && (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.82)',zIndex:20000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+            <div style={{background:theme?.card||'#1A1A1A',borderRadius:16,padding:18,maxWidth:380,width:'100%',boxShadow:'0 24px 64px rgba(0,0,0,0.7)',border:'1px solid rgba(249,224,139,0.2)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+                <div style={{fontSize:28}}>💰</div>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:'#fff'}}>Insufficient Coins</div>
+                  <div style={{fontSize:12,color:'#78716C'}}>Need 🪙 {rechargeError.required_coins} · Have 🪙 {rechargeError.current_purchased_coins}</div>
+                </div>
+              </div>
+
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={() => setShowRechargeDialog(false)} style={{flex:1,padding:'10px',borderRadius:10,border:'1.5px solid rgba(249,224,139,0.3)',background:'rgba(249,224,139,0.1)',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowRechargeDialog(false); onShowWallet?.(); }}
+                  style={{flex:1,padding:'10px',borderRadius:10,border:'none',background:'#8fc441',color:'#000',fontSize:13,fontWeight:700,cursor:'pointer'}}
+                >
+                  Open Wallet
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </Modal>

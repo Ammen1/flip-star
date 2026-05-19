@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Play,
   Pause,
+  Gift,
 } from 'lucide-react';
 import api from '../api';
 import config from '../config';
@@ -28,6 +29,7 @@ import { LikeButton } from './LikeButton';
 import { SearchBar } from './SearchBar';
 import { UserSuggestions } from './UserSuggestions';
 import { AlertModal } from './AlertModal';
+import GiftPage from './GiftPage';
 import { getRelativeTime } from '../utils/timeUtils';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -89,6 +91,8 @@ export const TikTokLayout = memo(function TikTokLayout({
   onShowCampaigns,
   onShowNotifications,
   onShowVideoDetail,
+  onShowWallet,
+  onShowCoinPurchase,
   unreadNotifCount = 0,
 }) {
   console.log('[TikTokLayout] Component mounted, videosOnly:', videosOnly);
@@ -149,6 +153,8 @@ export const TikTokLayout = memo(function TikTokLayout({
   const [showMenu, setShowMenu] = useState(null);
   const [showReportModal, setShowReportModal] = useState(null);
   const [showComments, setShowComments] = useState(null);
+  const [showGiftModal, setShowGiftModal] = useState(null);
+  const [giftReelId, setGiftReelId] = useState(null);
   const [playingVideos, setPlayingVideos] = useState({});
   const [showPauseIcon, setShowPauseIcon] = useState({});
   const [manuallyPaused, setManuallyPaused] = useState({}); // Track user-paused videos
@@ -292,7 +298,8 @@ export const TikTokLayout = memo(function TikTokLayout({
           hashtags: reel.hashtags_list || [],
           likes: reel.votes || 0,
           comments: reel.comment_count || 0,
-          shares: 0,
+          shares: reel.shares,
+          gift_count: reel.gift_count || 0,
           imageUrl: (() => {
             const url = reel.media || reel.image;
             if (!url) return null;
@@ -311,6 +318,9 @@ export const TikTokLayout = memo(function TikTokLayout({
             if (!reel.overlay_text) return [];
             try { return JSON.parse(reel.overlay_text); } catch { return []; }
           })(),
+          is_campaign_post: reel.is_campaign_post || false,
+          campaign_id: reel.campaign_id || null,
+          campaign: reel.campaign || null,
         };
       });
       
@@ -431,10 +441,45 @@ export const TikTokLayout = memo(function TikTokLayout({
         try {
           const reel = await api.request(`/reels/${initialVideoId}/`);
           if (!reel || !reel.id) return;
+          // Transform the reel to match the video format with campaign fields
+          const formattedReel = {
+            id: reel.id,
+            user: reel.user,
+            creator: reel.user?.username || 'Unknown User',
+            handle: `@${reel.user?.username || 'unknown'}`,
+            avatar: '👤',
+            caption: reel.caption,
+            hashtags: reel.hashtags_list || [],
+            likes: reel.votes || 0,
+            comments: reel.comment_count || 0,
+            shares: reel.shares,
+            gift_count: reel.gift_count || 0,
+            imageUrl: (() => {
+              const url = reel.media || reel.image;
+              if (!url) return null;
+              if (
+                url.includes('/video/upload/') &&
+                !url.match(/\.(mp4|webm|ogg|mov)(\?|$)/i)
+              ) {
+                return url + '.mp4';
+              }
+              return url;
+            })(),
+            liked: reel.is_liked || false,
+            saved: reel.is_saved || false,
+            created_at: reel.created_at,
+            overlayText: (() => {
+              if (!reel.overlay_text) return [];
+              try { return JSON.parse(reel.overlay_text); } catch { return []; }
+            })(),
+            is_campaign_post: reel.is_campaign_post || false,
+            campaign_id: reel.campaign_id || null,
+            campaign: reel.campaign || null,
+          };
           setVideos((prev) => {
             // Avoid duplicates if it shows up via another path
-            const filtered = prev.filter((v) => String(v.id) !== String(reel.id));
-            return [reel, ...filtered];
+            const filtered = prev.filter((v) => String(v.id) !== String(formattedReel.id));
+            return [formattedReel, ...filtered];
           });
           const scroller = document.querySelector('.feed-container');
           if (scroller) scroller.scrollTop = 0;
@@ -1282,12 +1327,16 @@ export const TikTokLayout = memo(function TikTokLayout({
         hashtags: reel.hashtags_list || [],
         likes: reel.votes || 0,
         comments: reel.comment_count || 0,
-        shares: 0,
+        shares: reel.shares || 0,
+        gift_count: reel.gift_count || 0,
         imageUrl: reel.media || reel.image,
         liked: reel.is_liked || false,
         saved: reel.is_saved || false,
         created_at: reel.created_at,
         activeTab,
+        is_campaign_post: reel.is_campaign_post || false,
+        campaign_id: reel.campaign_id || null,
+        campaign: reel.campaign || null,
       })); // Refetch when tab changes;
       setVideos(formattedVideos);
       setActiveTab(`hashtag-${hashtag}`);
@@ -2484,11 +2533,11 @@ export const TikTokLayout = memo(function TikTokLayout({
                           onClick={() => handleFollow(video.user?.id)}
                           style={{
                             background: (followStates[video.user?.id] ?? video.user?.is_following)
-                              ? 'rgba(249,224,139,0.15)'
-                              : '#F9E08B',
-                            color: (followStates[video.user?.id] ?? video.user?.is_following) ? '#F9E08B' : '#000',
+                              ? `${T.pri}26`
+                              : T.pri,
+                            color: (followStates[video.user?.id] ?? video.user?.is_following) ? T.pri : '#000',
                             border: (followStates[video.user?.id] ?? video.user?.is_following)
-                              ? '1.5px solid rgba(249,224,139,0.6)'
+                              ? `1.5px solid ${T.pri}99`
                               : 'none',
                             borderRadius: 14,
                             padding: '2px 10px',
@@ -2580,6 +2629,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                         count={video.likes === 0 ? '' : video.likes}
                         onLike={() => handleLike(video.id)}
                         size={32}
+                        isCampaign={!!(video.is_campaign_post || video.campaign_id || video.campaign)}
                       />
                     </div>
 
@@ -2646,7 +2696,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                           padding: 0,
                         }}
                       >
-                        <MessageCircle size={32} color="#8fc441" fill="#8fc441" />
+                        <MessageCircle size={32} color="#8fc441" fill="none" strokeWidth={2} />
                       </button>
                       <div
                         className="feed-action-label"
@@ -2691,6 +2741,46 @@ export const TikTokLayout = memo(function TikTokLayout({
                         }}
                       >
                         {video.shares === 0 ? '' : video.shares}
+                      </div>
+                    </div>
+
+                    {/* Gift Button */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <button
+                        onClick={() => {
+                          if (!user) {
+                            onRequireAuth();
+                            return;
+                          }
+                          setGiftReelId(video.id);
+                          setShowGiftModal(video.user?.username);
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                        }}
+                      >
+                        <Gift size={32} color="#8fc441" fill="none" strokeWidth={2} />
+                      </button>
+                      <div
+                        className="feed-action-label"
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: '#8fc441',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {video.gift_count === 0 ? '' : video.gift_count}
                       </div>
                     </div>
 
@@ -2780,11 +2870,33 @@ export const TikTokLayout = memo(function TikTokLayout({
             onClose={() => setShowComments(null)}
             onCommentPosted={handleCommentPosted}
             onShowProfile={(userId) => {
-              setShowComments(null);
-              onShowProfile?.(userId);
+              handleShowProfile(userId);
             }}
+            onShowCoinPurchase={onShowCoinPurchase}
           />
         </div>
+      )}
+
+      {/* Gift Modal */}
+      {showGiftModal && (
+        <GiftPage
+          username={showGiftModal}
+          reelId={giftReelId}
+          onClose={() => {
+            setShowGiftModal(null);
+            setGiftReelId(null);
+          }}
+          onShowWallet={() => {
+            setShowGiftModal(null);
+            setGiftReelId(null);
+            onShowWallet?.();
+          }}
+          onShowCoinPurchase={() => {
+            setShowGiftModal(null);
+            setGiftReelId(null);
+            onShowCoinPurchase?.();
+          }}
+        />
       )}
 
       {/* Report Category Modal */}

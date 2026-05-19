@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import api from '../../api';
+import TelebirrReceiptModal from '../../components/TelebirrReceiptModal';
 
 const GOLD = '#C8B56A';
 const BG = '#0D0D0D';
@@ -59,6 +60,8 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
   const [pollCount, setPollCount] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentTier, setPaymentTier] = useState(null);
+  const [showTelebirrReceipt, setShowTelebirrReceipt] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('sms');
   
   const pollRef = useRef(null);
   const POLL_INTERVAL = 5000;
@@ -115,7 +118,28 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
   };
 
   const handleSubscribe = async (tier) => {
-    // All tiers use SMS directly
+    setSelectedTier(tier);
+    setSelectedPaymentMethod('sms');
+    setShowPaymentModal(true);
+    setPaymentTier(tier);
+  };
+
+  const handlePaymentMethodSelect = (method) => {
+    setSelectedPaymentMethod(method);
+    if (method === 'telebirr') {
+      setShowPaymentModal(false);
+      setShowTelebirrReceipt(true);
+    } else {
+      // SMS payment
+      proceedWithSms();
+    }
+  };
+
+  const proceedWithSms = () => {
+    setShowPaymentModal(false);
+    const tier = paymentTier || selectedTier;
+    if (!tier) return;
+
     const tierCode = tier.duration_type === 'daily' ? 'OK1' :
                      tier.duration_type === 'weekly' ? 'OK2' :
                      tier.duration_type === 'monthly' ? 'OK3' : 'OK1';
@@ -137,6 +161,21 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
       setConfirmed(false);
       if (user) startPolling(tier);
     }, 1500);
+  };
+
+  const handleTelebirrProceed = () => {
+    setShowTelebirrReceipt(false);
+    // Here you would initiate the Telebirr payment flow
+    // For now, show the pending screen similar to SMS
+    const tier = selectedTier;
+    if (tier) {
+      setPendingTier(tier);
+      setSmsSent(true);
+      setSelectedTier(tier);
+      setPollCount(0);
+      setConfirmed(false);
+      if (user) startPolling(tier);
+    }
   };
 
 
@@ -276,15 +315,95 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
   }
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <StatusBar barStyle="light-content" />
-        
-        <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            
-            
-            <View style={s.contentContainer}>
+    <>
+      {/* Payment Method Selection Modal */}
+      <Modal visible={showPaymentModal} animationType="slide" transparent onRequestClose={() => setShowPaymentModal(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <StatusBar barStyle="light-content" />
+          <View style={s.paymentOverlay}>
+            <View style={s.paymentModal}>
+              <View style={s.pmHandle} />
+              <View style={s.pmIconWrap}>
+                <View style={s.pmIconCircle}>
+                  <Ionicons name="wallet" size={28} color="#8B5CF6" />
+                </View>
+              </View>
+              <Text style={s.paymentTitle}>Choose Payment Method</Text>
+              <Text style={s.paymentDesc}>Select how you want to pay for your subscription</Text>
+              
+              <View style={s.pmPriceRow}>
+                <View style={s.pmChip}>
+                  <Ionicons name="pricetag" size={14} color={GOLD} />
+                  <Text style={s.pmChipText}>{paymentTier?.price_etb} ETB</Text>
+                </View>
+                <View style={s.pmChip}>
+                  <Ionicons name="time" size={14} color={GOLD} />
+                  <Text style={s.pmChipText}>{paymentTier?.duration_type}</Text>
+                </View>
+              </View>
+              
+              <View style={s.pmDivider} />
+              
+              {/* SMS Payment Option */}
+              <TouchableOpacity
+                style={[s.pmMethodBtn, selectedPaymentMethod === 'sms' && { borderColor: GOLD, borderWidth: 2 }]}
+                onPress={() => handlePaymentMethodSelect('sms')}
+              >
+                <View style={[s.pmMethodIcon, { backgroundColor: '#3B82F620' }]}>
+                  <Ionicons name="chatbubble-outline" size={22} color="#3B82F6" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.pmMethodTitle}>SMS Payment</Text>
+                  <Text style={s.pmMethodSub}>Pay via Ethiotelecom SMS</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={selectedPaymentMethod === 'sms' ? GOLD : '#666'} />
+              </TouchableOpacity>
+              
+              {/* Telebirr Payment Option */}
+              <TouchableOpacity
+                style={[s.pmMethodBtn, selectedPaymentMethod === 'telebirr' && { borderColor: GOLD, borderWidth: 2 }]}
+                onPress={() => handlePaymentMethodSelect('telebirr')}
+              >
+                <View style={[s.pmMethodIcon, { backgroundColor: '#C8B56A20' }]}>
+                  <Ionicons name="card" size={22} color={GOLD} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.pmMethodTitle}>Telebirr</Text>
+                  <Text style={s.pmMethodSub}>Pay via Telebirr mobile money</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={selectedPaymentMethod === 'telebirr' ? GOLD : '#666'} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={s.paymentCancelBtn}
+                onPress={() => setShowPaymentModal(false)}
+              >
+                <Text style={s.paymentCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Telebirr Receipt Modal */}
+      <TelebirrReceiptModal
+        visible={showTelebirrReceipt}
+        onClose={() => setShowTelebirrReceipt(false)}
+        onProceed={handleTelebirrProceed}
+        tier={selectedTier}
+        phoneNumber={user?.phone || user?.username || ''}
+      />
+
+      {/* Main Subscription Plans Modal */}
+      <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <StatusBar barStyle="light-content" />
+          
+          <View style={s.modalOverlay}>
+            <View style={s.modalContent}>
+              
+              
+              <View style={s.contentContainer}>
               {/* Header with Back Button */}
               <View style={s.topHeader}>
                 <TouchableOpacity style={s.topBackButton} onPress={onClose}>
@@ -353,6 +472,7 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
       </KeyboardAvoidingView>
 
     </Modal>
+    </>
   );
 }
 

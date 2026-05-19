@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api';
 
-const BRAND_GREEN = '#8fc441';
+const GOLD = '#C8B56A';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
@@ -123,7 +123,7 @@ export default React.memo(function HorizontalUserSuggestions({ onUserClick, onDi
                 <Ionicons 
                   name={isFollowing ? "checkmark" : "person-add"} 
                   size={14} 
-                  color={isFollowing ? BRAND_GREEN : '#000'} 
+                  color={isFollowing ? GOLD : '#000'} 
                 />
                 <Text style={[
                   styles.followBtnText,
@@ -221,12 +221,12 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 7,
     borderRadius: 8,
-    backgroundColor: BRAND_GREEN,
+    backgroundColor: GOLD,
   },
   followingBtn: {
-    backgroundColor: 'rgba(143, 196, 65, 0.15)',
+    backgroundColor: 'rgba(200, 181, 106, 0.15)',
     borderWidth: 1.5,
-    borderColor: 'rgba(143, 196, 65, 0.6)',
+    borderColor: 'rgba(200, 181, 106, 0.6)',
   },
   followBtnText: {
     fontSize: 12,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   followingBtnText: {
-    color: BRAND_GREEN,
+    color: GOLD,
   },
   notInterestedBtn: {
     position: 'absolute',

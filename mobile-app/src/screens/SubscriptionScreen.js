@@ -6,13 +6,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import { Linking } from 'react-native';
 
-const BRAND_GREEN = '#8fc441';
+const GOLD = '#C8B56A';
 const BG = '#0B0B0C';
 const CARD = '#161616';
 const BORDER = '#242424';
 
 const PLAN_ICONS = { daily: 'flash', weekly: 'star', monthly: 'trophy', ondemand: 'diamond' };
-const PLAN_COLORS = { daily: '#F59E0B', weekly: '#8B5CF6', monthly: BRAND_GREEN, ondemand: '#3B82F6' };
+const PLAN_COLORS = { daily: '#F59E0B', weekly: '#8B5CF6', monthly: '#C8B56A', ondemand: '#3B82F6' };
 
 const FALLBACK_TIERS = [
   { id: 1, name: 'Daily', duration_type: 'daily',    price_etb: 3,  description: '24 hours of full access', features: ['Ad-free videos', 'HD quality', 'All content'] },
@@ -190,7 +190,7 @@ export default function SubscriptionScreen({ navigation }) {
               {visibleTiers.map((tier, i) => {
                 const isSelected = selectedTier?.id === tier.id;
                 const isCurrent = currentSub?.tier?.id === tier.id && isActive;
-                const color = PLAN_COLORS[tier.duration_type] || BRAND_GREEN;
+                const color = PLAN_COLORS[tier.duration_type] || GOLD;
                 const icon = PLAN_ICONS[tier.duration_type] || 'star';
 
                 return (
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
   currentSubDetails: { gap: 8 },
   currentPlanName: { fontSize: 16, fontWeight: '800', color: '#fff' },
   currentPlanDesc: { fontSize: 14, color: '#666', marginBottom: 8 },
-  currentPlanPrice: { fontSize: 20, fontWeight: '900', color: BRAND_GREEN },
+  currentPlanPrice: { fontSize: 20, fontWeight: '900', color: GOLD },
   currentPlanExpiry: { fontSize: 12, color: '#666' },
   planCard: { marginHorizontal: 16, marginBottom: 14, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: BORDER },
   planCardCurrent: { borderColor: '#10B98150', backgroundColor: '#0D2D1A18' },
