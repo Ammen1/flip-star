@@ -239,7 +239,7 @@ class OnevasWebhookView(APIView):
                 'ondemand': 'OK4'
             }
             stop_keywords = {
-                'daily': 'STOP',
+                'daily': 'STOP1',
                 'weekly': 'STOP2',
                 'monthly': 'STOP3',
                 'ondemand': 'STOP'

@@ -175,8 +175,8 @@ export function SubscriptionPage({ user, onBack }) {
         showToast('error', response.error || 'Failed to create mandate');
       }
     } catch (error) {
-      console.error('Telebirr subscription error:', error);
-      showToast('error', 'Failed to process Telebirr subscription');
+      console.error('telebirr subscription error:', error);
+      showToast('error', 'Failed to process telebirr subscription');
     } finally {
       setProcessing(false);
       setProcessingTierId(null);
@@ -232,11 +232,11 @@ export function SubscriptionPage({ user, onBack }) {
 
   const handleCancelTelebirrSubscription = async () => {
     if (!currentSubscription?.mandate_id) {
-      showToast('error', 'No Telebirr mandate found');
+      showToast('error', 'No telebirr mandate found');
       return;
     }
 
-    if (confirm('Are you sure you want to cancel your Telebirr subscription?')) {
+    if (confirm('Are you sure you want to cancel your telebirr subscription?')) {
       setProcessing(true);
       try {
         const response = await api.request('/direct-debit/cancel/', {
@@ -247,14 +247,14 @@ export function SubscriptionPage({ user, onBack }) {
         });
 
         if (response.success) {
-          showToast('success', 'Telebirr subscription cancelled successfully');
+          showToast('success', 'telebirr subscription cancelled successfully');
           loadSubscriptionData();
         } else {
-          showToast('error', response.error || 'Failed to cancel Telebirr subscription');
+          showToast('error', response.error || 'Failed to cancel telebirr subscription');
         }
       } catch (error) {
-        console.error('Cancel Telebirr subscription error:', error);
-        showToast('error', 'Failed to cancel Telebirr subscription');
+        console.error('Cancel telebirr subscription error:', error);
+        showToast('error', 'Failed to cancel telebirr subscription');
       } finally {
         setProcessing(false);
       }
@@ -361,7 +361,7 @@ export function SubscriptionPage({ user, onBack }) {
                     opacity: processing ? 0.7 : 1,
                   }}
                 >
-                  Cancel Telebirr Subscription
+                  Cancel telebirr Subscription
                 </button>
               )}
             </div>
@@ -495,7 +495,7 @@ export function SubscriptionPage({ user, onBack }) {
                       }}
                     >
                       <Trophy size={16} color={isProcessingThis ? '#666' : '#000'} />
-                      {isProcessingThis ? 'Processing…' : 'Subscribe via Telebirr'}
+                      {isProcessingThis ? 'Processing…' : 'Subscribe via telebirr'}
                     </button>
                     <button
                       onClick={() => handleSubscribe(tier)}
@@ -560,7 +560,7 @@ export function SubscriptionPage({ user, onBack }) {
           <Info size={20} color={BRAND_GREEN} style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ flex: 1, fontSize: 13, color: '#ccc', lineHeight: 1.6 }}>
             <div style={{ marginBottom: 8 }}>
-              <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>Telebirr:</strong> One-tap subscription via Telebirr app. Auto-renew enabled.
+              <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>telebirr:</strong> One-tap subscription via telebirr app. Auto-renew enabled.
             </div>
             <div>
               <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>SMS:</strong> Send SMS to <span style={{ color: BRAND_GREEN, fontWeight: 800 }}>9286</span> with code{' '}
@@ -571,7 +571,7 @@ export function SubscriptionPage({ user, onBack }) {
           </div>
         </div>
 
-        {/* Telebirr Receipt Modal — shown when user clicks "Subscribe via Telebirr" */}
+        {/* telebirr Receipt Modal — shown when user clicks "Subscribe via telebirr" */}
         {telebirrModalOpen && selectedTierForTelebirr && (
           <div style={{
             position: 'fixed',
@@ -686,9 +686,9 @@ export function SubscriptionPage({ user, onBack }) {
                   <Crown size={18} color="#fff" />
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>Telebirr</div>
+                  <div style={{ fontSize: 14, color: '#000', fontWeight: 700 }}>telebirr</div>
                   <div style={{ fontSize: 12, color: '#888' }}>
-                    Direct debit from your Telebirr balance
+                    Direct debit from your telebirr balance
                   </div>
                 </div>
                 <Check size={20} color="#10B981" />
