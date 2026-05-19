@@ -479,6 +479,143 @@ class TelebirrDirectDebitService:
                 'error': f'Direct debit initiation failed: {str(e)}'
             }
     
+    def create_one_off_payment(self, payer_msisdn, payer_reference_number, 
+                              amount, first_payment_date=None, 
+                              payee_shortcode=None, payee_account_name=None, 
+                              debug=False):
+        """
+        Create One-Off Payment for Coin Purchasing
+        
+        This method creates a one-off payment using frequency '01' (Once)
+        for coin purchases. The payment is processed via Telebirr Direct Debit.
+        
+        Args:
+            payer_msisdn: Payer phone number (MSISDN)
+            payer_reference_number: Payer reference number for payment
+            amount: Payment amount (in ETB)
+            first_payment_date: Payment date (YYYYMMDD format or date object, defaults to today)
+            payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
+            payee_account_name: Payee account name (defaults to Flipstar)
+            debug: If True, print the SOAP envelope for debugging
+            
+        Returns:
+            dict: Response with success status and payment details
+        """
+        try:
+            # Format date - default to today if not provided
+            if first_payment_date is None:
+                first_payment_date = datetime.now().strftime('%Y%m%d')
+            elif isinstance(first_payment_date, datetime):
+                first_payment_date = first_payment_date.strftime('%Y%m%d')
+            
+            # Expiry date - same as first payment date for one-off
+            expiry_date = first_payment_date
+            
+            # Frequency '01' for one-off payment
+            frequency = '01'
+            
+            # Set defaults
+            if payee_shortcode is None:
+                payee_shortcode = self.shortcode
+            if payee_account_name is None:
+                payee_account_name = self.payee_account_name
+            
+            # Build initiator (SP Operator)
+            initiator = {
+                'IdentifierType': 14,  # SP Operator Username
+                'Identifier': self.sp_operator_id or self.third_party_id,
+                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
+            }
+            
+            # Build receiver party (Payer MSISDN)
+            receiver_party = {
+                'IdentifierType': 1,  # MSISDN
+                'Identifier': payer_msisdn,
+            }
+            
+            # Build body XML for one-off payment
+            body_xml = f'''<req:CreateDirectDebitMandateByPayerRequest>
+          <req:Payee> 
+            <com:IdentifierType>4</com:IdentifierType>
+            <com:IdentifierValue>{payee_shortcode}</com:IdentifierValue>
+          </req:Payee>
+          <req:DirectDebitMandateInfo>
+            <com:PayerReferenceNumber>{payer_reference_number}</com:PayerReferenceNumber>
+            <com:AgreedTC>1</com:AgreedTC>
+            <com:FirstPaymentDate>{first_payment_date}</com:FirstPaymentDate>
+            <com:Frequency>{frequency}</com:Frequency>
+            <com:StartRangeOfDays>1</com:StartRangeOfDays>
+            <com:EndRangeOfDays>31</com:EndRangeOfDays>
+            <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
+          </req:DirectDebitMandateInfo>
+        </req:CreateDirectDebitMandateByPayerRequest>'''
+            
+            # Build SOAP envelope
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
+                command_id='CreateDirectDebitMandateByCustomer',
+                initiator=initiator,
+                receiver_party=receiver_party,
+                body_xml=body_xml
+            )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR (ONE-OFF PAYMENT):")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
+            
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'CreateDirectDebitMandateByCustomer'
+            }
+            
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                # Check for SOAP fault
+                if 'soapenv:Fault' in response.text:
+                    return {
+                        'success': False,
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
+                    }
+                
+                # Parse ResponseCode and ResponseDesc
+                response_code = self._extract_xml_value(response.text, 'ResponseCode')
+                response_desc = self._extract_xml_value(response.text, 'ResponseDesc')
+                
+                if response_code == '0':
+                    return {
+                        'success': True,
+                        'originator_conversation_id': originator_conversation_id,
+                        'conversation_id': conversation_id,
+                        'message': response_desc or 'One-off payment request accepted successfully',
+                        'response_code': response_code,
+                        'amount': amount
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': response_desc or 'One-off payment request failed',
+                        'response_code': response_code,
+                        'response_text': response.text[:500]
+                    }
+            else:
+                return {
+                    'success': False,
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
+                }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'One-off payment request failed: {str(e)}'
+            }
+    
     def cancel_mandate(self, mandate_id, payer_msisdn, debug=False):
         """
         Cancel Direct Debit Mandate

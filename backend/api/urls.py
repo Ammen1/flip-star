@@ -45,6 +45,7 @@ from .views_direct_debit import (
     list_user_mandates,
     telebirr_direct_debit_webhook,
     initiate_direct_debit,
+    create_one_off_coin_purchase,
 )
 
 @api_view(['GET', 'HEAD'])
@@ -466,6 +467,7 @@ urlpatterns = [
     path('direct-debit/cancel/', cancel_direct_debit_mandate, name='direct-debit-cancel'),
     path('direct-debit/mandates/', list_user_mandates, name='direct-debit-mandates'),
     path('direct-debit/initiate/', initiate_direct_debit, name='direct-debit-initiate'),
+    path('direct-debit/one-off-coin-purchase/', create_one_off_coin_purchase, name='one-off-coin-purchase'),
     path('webhooks/telebirr-direct-debit/', telebirr_direct_debit_webhook, name='telebirr-direct-debit-webhook'),
     # Coin Transactions
     path('coins/transactions/', CoinTransactionViewSet.as_view({'get': 'list'}), name='coin-transactions'),
