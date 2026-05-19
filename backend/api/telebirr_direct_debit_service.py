@@ -482,11 +482,12 @@ class TelebirrDirectDebitService:
     def create_one_off_payment(self, payer_msisdn, payer_reference_number, 
                               amount, first_payment_date=None, 
                               payee_shortcode=None, payee_account_name=None, 
+                              frequency='01', start_range_of_days=1, end_range_of_days=31,
                               debug=False):
         """
         Create One-Off Payment for Coin Purchasing
         
-        This method creates a one-off payment using frequency '01' (Once)
+        This method creates a one-off payment using frequency (default '01' for Once)
         for coin purchases. The payment is processed via Telebirr Direct Debit.
         
         Args:
@@ -496,6 +497,9 @@ class TelebirrDirectDebitService:
             first_payment_date: Payment date (YYYYMMDD format or date object, defaults to today)
             payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
             payee_account_name: Payee account name (defaults to Flipstar)
+            frequency: Debit frequency (default '01' for Once)
+            start_range_of_days: Start range of days for payment (default 1)
+            end_range_of_days: End range of days for payment (default 31)
             debug: If True, print the SOAP envelope for debugging
             
         Returns:
@@ -511,8 +515,10 @@ class TelebirrDirectDebitService:
             # Expiry date - same as first payment date for one-off
             expiry_date = first_payment_date
             
-            # Frequency '01' for one-off payment
-            frequency = '01'
+            # Use provided frequency (default '01' for one-off payment)
+            # Can be overridden for testing other frequencies
+            if not frequency:
+                frequency = '01'
             
             # Set defaults
             if payee_shortcode is None:
@@ -544,8 +550,8 @@ class TelebirrDirectDebitService:
             <com:AgreedTC>1</com:AgreedTC>
             <com:FirstPaymentDate>{first_payment_date}</com:FirstPaymentDate>
             <com:Frequency>{frequency}</com:Frequency>
-            <com:StartRangeOfDays>1</com:StartRangeOfDays>
-            <com:EndRangeOfDays>31</com:EndRangeOfDays>
+            <com:StartRangeOfDays>{start_range_of_days}</com:StartRangeOfDays>
+            <com:EndRangeOfDays>{end_range_of_days}</com:EndRangeOfDays>
             <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
           </req:DirectDebitMandateInfo>
         </req:CreateDirectDebitMandateByPayerRequest>'''
