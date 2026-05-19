@@ -584,9 +584,17 @@ class TelebirrDirectDebitService:
                         'response_text': response.text[:500]
                     }
                 
-                # Parse ResponseCode and ResponseDesc
-                response_code = self._extract_xml_value(response.text, 'ResponseCode')
-                response_desc = self._extract_xml_value(response.text, 'ResponseDesc')
+                # Parse ResponseCode and ResponseDesc using regex
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                except:
+                    response_code = '1'
+                    response_desc = 'Parse error'
                 
                 if response_code == '0':
                     return {
