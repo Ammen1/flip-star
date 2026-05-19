@@ -1383,7 +1383,13 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                   </div>
                 </div>
               ) : newReelFile ? (
-                <div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                }}>
                   <Check size={48} color={T.green} style={{ marginBottom: 12 }} />
                   <p style={{ margin: 0, color: T.txt, fontWeight: 600 }}>
                     {newReelFile.name}
@@ -1393,7 +1399,13 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                   </p>
                 </div>
               ) : (
-                <div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                }}>
                   <Upload size={48} color={T.sub} style={{ marginBottom: 12 }} />
                   <p style={{ margin: 0, color: T.txt, fontWeight: 600, marginBottom: 4 }}>
                     Click to upload photo or video
