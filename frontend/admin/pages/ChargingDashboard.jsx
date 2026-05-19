@@ -44,7 +44,7 @@ export function ChargingDashboard({ theme }) {
 
   const loadTransactions = async () => {
     try {
-      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
+      const response = await api.request(`/admin/wallet/all-transactions/?type=purchase&page_size=50`);
       setTransactions(response);
     } catch (err) {
       console.error('Failed to load transactions:', err);
@@ -72,42 +72,37 @@ export function ChargingDashboard({ theme }) {
 
     setSearching(true);
     try {
-      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
-      // Filter the recent_transactions based on search query
-      const filteredTransactions = response.recent_transactions?.filter(tx => {
+      const response = await api.request(`/admin/wallet/all-transactions/?type=purchase&page_size=50`);
+      // Filter the results based on search query
+      const filteredTransactions = response.results?.filter(tx => {
         if (searchType === 'phone') {
           const q = searchQuery.toLowerCase();
-          return (tx.phone || '').toLowerCase().includes(q) ||
-                 (tx.user || '').toLowerCase().includes(q);
-        } else {
-          return tx.user_id?.toString().includes(searchQuery);
+          return (tx.phone || '').toLowerCase().includes(q) || (tx.user || '').toLowerCase().includes(q);
         }
+        return true;
       }) || [];
-      setSearchResults({ transactions: filteredTransactions });
+      setSearchResults(filteredTransactions);
     } catch (err) {
       console.error('Search failed:', err);
-      setError('Search failed');
     } finally {
       setSearching(false);
     }
   };
 
   const handleExport = () => {
-    const dataToExport = searchResults || statistics;
-    if (!dataToExport.recent_transactions) return;
+    const dataToExport = searchResults || statistics?.results || [];
+    if (!dataToExport || dataToExport.length === 0) return;
 
-    const headers = ['Date', 'Period End', 'User', 'Email', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Payment Method', 'Status'];
-    const rows = dataToExport.recent_transactions.map(t => [
-      t.date,
-      t.period_end || '',
-      t.user,
+    const headers = ['Date', 'User', 'Email', 'Phone', 'Type', 'Coins', 'Payment Method', 'Description'];
+    const rows = dataToExport.map(t => [
+      t.created_at || '',
+      t.user || '',
       t.email || '',
       t.phone || '',
-      t.tier,
-      `${t.duration_type || ''}${t.duration_days ? ` (${t.duration_days}d)` : ''}`,
-      t.amount.toFixed(2),
-      t.payment_method,
-      t.status || ''
+      t.type_display || t.transaction_type || '',
+      t.coins || 0,
+      t.payment_method || '',
+      t.description || ''
     ]);
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -115,7 +110,7 @@ export function ChargingDashboard({ theme }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `charging_transactions_${searchQuery ? 'search' : 'export'}.csv`;
+    a.download = `ondemand_transactions_${searchQuery ? 'search' : 'export'}.csv`;
     a.click();
   };
 

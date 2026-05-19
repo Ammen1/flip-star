@@ -868,6 +868,50 @@ def admin_user_transactions(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_all_coin_transactions(request):
+    """Get all coin transactions (admin only). Optional ?type=purchase to filter by purchase type."""
+    try:
+        page_size = int(request.query_params.get('page_size', 50))
+        tx_type = request.query_params.get('type')
+
+        qs = CoinTransaction.objects.all().order_by('-created_at')
+        if tx_type:
+            qs = qs.filter(transaction_type=tx_type)
+
+        transactions = qs[:page_size]
+
+        data = []
+        for tx in transactions:
+            user_obj = tx.user
+            phone = ''
+            if user_obj and hasattr(user_obj, 'profile') and getattr(user_obj.profile, 'phone_number', None):
+                phone = user_obj.profile.phone_number
+
+            data.append({
+                'id': tx.id,
+                'transaction_type': tx.transaction_type,
+                'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
+                'coins': tx.coins if tx.coins is not None else 0,
+                'is_credit': tx.coins > 0 if tx.coins is not None else False,
+                'created_at': tx.created_at.isoformat() if tx.created_at else None,
+                'description': tx.description or '',
+                'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
+                'payment_method': tx.payment_method or '',
+                'user': user_obj.username if user_obj else 'N/A',
+                'user_id': user_obj.id if user_obj else None,
+                'email': user_obj.email if user_obj else '',
+                'phone': phone,
+            })
+
+        return Response({'results': data, 'count': len(data)})
+    except Exception as e:
+        import logging
+        logging.error(f"[Admin All Transactions] Error: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def admin_adjust_balance(request):
