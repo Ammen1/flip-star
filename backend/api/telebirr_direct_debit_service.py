@@ -45,7 +45,7 @@ class TelebirrDirectDebitService:
         """Generate timestamp in YYYYMMDDHHMMSS format"""
         return datetime.now().strftime('%Y%m%d%H%M%S')
     
-    def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml):
+    def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml, caller_id=None, caller_password=None):
         """
         Build SOAP envelope for Telebirr Direct Debit API
         
@@ -54,6 +54,8 @@ class TelebirrDirectDebitService:
             initiator: Initiator identifier dict (IdentifierType, Identifier, SecurityCredential)
             receiver_party: Receiver party dict (IdentifierType, Identifier)
             body_xml: Body XML string specific to the operation
+            caller_id: Optional caller ID (defaults to third_party_id)
+            caller_password: Optional caller password (defaults to third_party_password)
             
         Returns:
             str: Complete SOAP envelope XML
@@ -61,6 +63,10 @@ class TelebirrDirectDebitService:
         originator_conversation_id = self._generate_originator_conversation_id()
         conversation_id = self._generate_conversation_id()
         timestamp = self._generate_timestamp()
+        
+        # Use provided caller credentials or default to third_party
+        caller_third_party_id = caller_id or self.third_party_id
+        caller_password = caller_password or self.third_party_password
         
         shortcode_xml = ""
         if 'ShortCode' in initiator and initiator['ShortCode']:
@@ -78,8 +84,8 @@ class TelebirrDirectDebitService:
         <req:ConversationID>{conversation_id}</req:ConversationID>
         <req:Caller>
           <req:CallerType>{self.caller_type}</req:CallerType>
-          <req:ThirdPartyID>{self.third_party_id}</req:ThirdPartyID>
-          <req:Password>{self.third_party_password}</req:Password>
+          <req:ThirdPartyID>{caller_third_party_id}</req:ThirdPartyID>
+          <req:Password>{caller_password}</req:Password>
           <req:ResultURL>{self.result_url}</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
@@ -386,12 +392,14 @@ class TelebirrDirectDebitService:
         </req:TransactionRequest>
         <req:Remark>Direct debit for {payer_reference_number}</req:Remark>'''
             
-            # Build SOAP envelope
+            # Build SOAP envelope with Organization Operator credentials in Caller section
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='InitTrans_Initiate Direct Debit Transaction',
                 initiator=initiator,
                 receiver_party=receiver_party,
-                body_xml=body_xml
+                body_xml=body_xml,
+                caller_id=self.org_operator_id or self.third_party_id,
+                caller_password=self.org_operator_credential or self.third_party_password
             )
             
             # Make raw SOAP request
