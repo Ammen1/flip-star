@@ -317,17 +317,6 @@ export default function GiftPage({ username, reelId, onClose, onShowWallet, onSh
               style={{ ...inputStyle, padding: '10px 12px', fontSize: 13, marginBottom: 10 }}
             />
 
-            {/* Transfer Rules Info */}
-            {walletConfig?.gifting && (
-              <div style={{ fontSize: 11, color: sub, marginBottom: 10, padding: '8px 12px', background: `${border}22`, borderRadius: 8, border: `1px solid ${border}` }}>
-                <div style={{ fontWeight: 600, marginBottom: 4, color: txt }}>Transfer Rules:</div>
-                <div>• Min: {walletConfig.gifting.min_points_per_transaction} pts per transaction</div>
-                <div>• Max: {walletConfig.gifting.max_points_per_transaction} pts per transaction</div>
-                <div>• Max to one creator: {walletConfig.gifting.max_points_to_recipient_per_day} pts/day</div>
-                <div>• Max total sent: {walletConfig.gifting.max_total_points_sent_per_day} pts/day</div>
-              </div>
-            )}
-
             {/* Send Button */}
             <button
               onClick={handleSendGift}

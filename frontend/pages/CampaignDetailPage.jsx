@@ -916,47 +916,18 @@ function CampaignEntryCard({ entry, theme: T, canVote, onVote }) {
 }
 
 function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }) {
-  const [selectedReel, setSelectedReel] = useState(null);
-  const [userReels, setUserReels] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [showCreateNew, setShowCreateNew] = useState(true);
   const [newReelFile, setNewReelFile] = useState(null);
   const [newReelCaption, setNewReelCaption] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [stream, setStream] = useState(null);
-
-  useEffect(() => {
-    loadUserReels();
-  }, []);
-
-  const loadUserReels = async () => {
-    if (!api.hasToken()) {
-      setLoading(false);
-      setError('Please log in to submit a campaign entry.');
-      return;
-    }
-    try {
-      // Get current user's ID first
-      const userResponse = await api.request('/profile/me/');
-      const userId = userResponse.id;
-      
-      // Fetch only current user's reels
-      const response = await api.request(`/reels/?user=${userId}`);
-      setUserReels(response.results || []);
-    } catch (error) {
-      console.error('Failed to load reels:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [isRecording, setIsRecording] = useState(false);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       setNewReelFile(file);
-      setShowCreateNew(true);
     }
   };
 
@@ -1018,7 +989,6 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
 
       setStream(mediaStream);
       setShowCamera(true);
-      setShowCreateNew(true);
     } catch (error) {
       console.error('Camera access denied:', error);
 
@@ -1058,44 +1028,58 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
 
   const startRecording = async () => {
     if (!stream) return;
-    
+
     try {
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm'
-      });
-      
+      // Pick a supported mimeType
+      let mimeType = 'video/webm;codecs=vp9,opus';
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm;codecs=vp8,opus';
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+      }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = '';
+      }
+
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
       const chunks = [];
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           chunks.push(event.data);
         }
       };
-      
+
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        const file = new File([blob], `camera_recording_${Date.now()}.webm`, { type: 'video/webm' });
+        const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'video/webm' });
+        const ext = (mediaRecorder.mimeType || 'video/webm').includes('mp4') ? 'mp4' : 'webm';
+        const file = new File([blob], `camera_recording_${Date.now()}.${ext}`, { type: blob.type });
         setNewReelFile(file);
+        setIsRecording(false);
         stopCamera();
       };
-      
+
       mediaRecorder.start();
-      
-      // Stop recording after 30 seconds or when user clicks stop
+      setIsRecording(true);
+
+      // Auto-stop after 60 seconds as safety
       setTimeout(() => {
         if (mediaRecorder.state === 'recording') {
           mediaRecorder.stop();
         }
-      }, 30000);
-      
-      // Store mediaRecorder instance for stopping
+      }, 60000);
+
       window.currentMediaRecorder = mediaRecorder;
-      
     } catch (error) {
       console.error('Error starting recording:', error);
       setError('Failed to start recording. Please try again.');
+      setIsRecording(false);
     }
   };
-  
+
   const stopRecording = () => {
     if (window.currentMediaRecorder && window.currentMediaRecorder.state === 'recording') {
       window.currentMediaRecorder.stop();
@@ -1144,30 +1128,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
   };
 
   const handleSubmit = async () => {
-    if (showCreateNew) {
-      return handleCreateAndSubmit();
-    }
-    
-    if (!selectedReel) {
-      setError('Please select a reel to submit');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      setError('');
-      await api.request(`/campaigns/${campaignId}/enter/`, {
-        method: 'POST',
-        body: JSON.stringify({ reel_id: selectedReel })
-      });
-      console.log('Entry submitted successfully!');
-      onSuccess();
-    } catch (error) {
-      console.error('Error submitting entry:', error);
-      setError(error.message || 'Failed to submit entry');
-    } finally {
-      setSubmitting(false);
-    }
+    return handleCreateAndSubmit();
   };
 
   return (
@@ -1214,50 +1175,10 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
           margin: 0,
           fontSize: 14,
           color: T.sub,
-          marginBottom: 16,
+          marginBottom: 20,
         }}>
-          {showCreateNew ? 'Upload new content for this campaign' : 'Select existing reel or create new'}
+          Upload your content to enter this campaign
         </p>
-        
-        {/* Toggle Buttons */}
-        <div style={{
-          display: 'flex',
-          gap: 12,
-          marginBottom: 24,
-        }}>
-          <button
-            onClick={() => setShowCreateNew(false)}
-            style={{
-              flex: 1,
-              padding: '12px 16px',
-              background: !showCreateNew ? T.pri : 'transparent',
-              border: `2px solid ${T.pri}`,
-              borderRadius: 8,
-              color: !showCreateNew ? '#fff' : T.pri,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            📚 Use Existing
-          </button>
-          <button
-            onClick={() => setShowCreateNew(true)}
-            style={{
-              flex: 1,
-              padding: '12px 16px',
-              background: showCreateNew ? T.pri : 'transparent',
-              border: `2px solid ${T.pri}`,
-              borderRadius: 8,
-              color: showCreateNew ? '#fff' : T.pri,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            🎬 Create New
-          </button>
-        </div>
 
         {error && (
           <div style={{
@@ -1273,8 +1194,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
           </div>
         )}
 
-        {showCreateNew ? (
-          <div>
+        <div>
             {/* Campaign Requirements */}
             {campaign && (
               <div style={{
@@ -1337,7 +1257,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                 }}
               >
                 <Upload size={18} />
-                Upload File
+                Upload
               </button>
               <button
                 onClick={startCamera}
@@ -1358,7 +1278,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                 }}
               >
                 <Video size={18} />
-                Record Video
+                Record
               </button>
             </div>
             
@@ -1375,10 +1295,10 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
             }}
             >
               {showCamera && stream ? (
-                <div style={{ position: 'relative', width: '100%', height: '300px' }}>
+                <div style={{ position: 'relative', width: '100%' }}>
                   <video
                     ref={(videoEl) => {
-                      if (videoEl && stream) {
+                      if (videoEl && stream && videoEl.srcObject !== stream) {
                         videoEl.srcObject = stream;
                       }
                     }}
@@ -1387,24 +1307,98 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                     muted
                     style={{
                       width: '100%',
-                      height: '100%',
+                      height: 300,
                       objectFit: 'contain',
                       background: '#000',
                       borderRadius: 8,
                     }}
                   />
+                  {isRecording && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 10,
+                      left: 10,
+                      background: 'rgba(239,68,68,0.95)',
+                      color: '#fff',
+                      padding: '6px 10px',
+                      borderRadius: 20,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
+                      REC
+                    </div>
+                  )}
                   <div style={{
-                    position: 'absolute',
-                    bottom: 10,
-                    right: 10,
-                    background: 'rgba(0,0,0,0.7)',
-                    color: '#fff',
-                    padding: '8px 12px',
-                    borderRadius: 20,
-                    fontSize: 12,
-                    fontWeight: 600,
+                    display: 'flex',
+                    gap: 10,
+                    marginTop: 12,
+                    justifyContent: 'center',
                   }}>
-                    Recording...
+                    {!isRecording ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          style={{
+                            padding: '10px 18px',
+                            background: '#EF4444',
+                            border: 'none',
+                            borderRadius: 8,
+                            color: '#fff',
+                            fontSize: 14,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                          }}
+                        >
+                          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
+                          Start Recording
+                        </button>
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          style={{
+                            padding: '10px 18px',
+                            background: 'transparent',
+                            border: `2px solid ${T.border}`,
+                            borderRadius: 8,
+                            color: T.txt,
+                            fontSize: 14,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={stopRecording}
+                        style={{
+                          padding: '10px 18px',
+                          background: '#1F2937',
+                          border: 'none',
+                          borderRadius: 8,
+                          color: '#fff',
+                          fontSize: 14,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        <span style={{ width: 10, height: 10, background: '#fff', display: 'inline-block' }} />
+                        Stop Recording
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : newReelFile ? (
@@ -1476,104 +1470,6 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
               )}
             </div>
           </div>
-        ) : loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: T.sub }}>
-            Loading your reels...
-          </div>
-        ) : userReels.length === 0 ? (
-          <div style={{
-            padding: 40,
-            textAlign: 'center',
-            background: T.bg,
-            borderRadius: 12,
-          }}>
-            <Video size={48} color={T.sub} style={{ marginBottom: 16 }} />
-            <p style={{ margin: 0, color: T.sub, marginBottom: 20 }}>
-              You don't have any reels yet. Create one first!
-            </p>
-            <button
-              onClick={() => {
-                onClose();
-                // Navigate to create post - will be handled by parent component
-                window.dispatchEvent(new CustomEvent('navigateToCreatePost'));
-              }}
-              style={{
-                padding: '12px 24px',
-                background: 'linear-gradient(135deg, #DA9B2A, #F97316)',
-                border: 'none',
-                borderRadius: 12,
-                color: '#fff',
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(218,155,42,0.4)',
-              }}
-            >
-              🎬 Create Reel Now
-            </button>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-            gap: 12,
-            marginBottom: 24,
-          }}>
-            {userReels.map(reel => (
-              <div
-                key={reel.id}
-                onClick={() => setSelectedReel(reel.id)}
-                style={{
-                  position: 'relative',
-                  aspectRatio: '9/16',
-                  borderRadius: 12,
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  border: selectedReel === reel.id ? `3px solid ${T.pri}` : `1px solid ${T.border}`,
-                }}
-              >
-                {reel.image ? (
-                  <img
-                    src={mediaUrl(reel.image)}
-                    alt=""
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                    }}
-                  />
-                ) : (
-                  <div style={{
-                    width: '100%',
-                    height: '100%',
-                    background: T.card,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Video size={32} color={T.sub} />
-                  </div>
-                )}
-                {selectedReel === reel.id && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 8,
-                    right: 8,
-                    width: 24,
-                    height: 24,
-                    borderRadius: '50%',
-                    background: T.pri,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <Check size={16} color="#fff" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
 
         <div style={{
           display: 'flex',
@@ -1600,21 +1496,21 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
           </button>
           <button
             onClick={handleSubmit}
-            disabled={(showCreateNew ? !newReelFile : !selectedReel) || submitting}
+            disabled={!newReelFile || submitting}
             style={{
               flex: 1,
               padding: 14,
-              background: ((showCreateNew ? newReelFile : selectedReel) && !submitting) ? T.pri : T.sub + '30',
+              background: (newReelFile && !submitting) ? T.pri : T.sub + '30',
               border: 'none',
               borderRadius: 8,
-              color: ((showCreateNew ? newReelFile : selectedReel) && !submitting) ? '#fff' : T.sub,
+              color: (newReelFile && !submitting) ? '#fff' : T.sub,
               fontSize: 15,
               fontWeight: 600,
-              cursor: ((showCreateNew ? newReelFile : selectedReel) && !submitting) ? 'pointer' : 'not-allowed',
+              cursor: (newReelFile && !submitting) ? 'pointer' : 'not-allowed',
               transition: 'all 0.2s',
             }}
           >
-            {submitting ? 'Submitting...' : showCreateNew ? '🚀 Create & Submit' : 'Submit Entry'}
+            {submitting ? 'Submitting...' : 'Submit Entry'}
           </button>
         </div>
       </div>

@@ -2744,45 +2744,47 @@ export const TikTokLayout = memo(function TikTokLayout({
                       </div>
                     </div>
 
-                    {/* Gift Button */}
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <button
-                        onClick={() => {
-                          if (!user) {
-                            onRequireAuth();
-                            return;
-                          }
-                          setGiftReelId(video.id);
-                          setShowGiftModal(video.user?.username);
-                        }}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: 0,
-                        }}
-                      >
-                        <Gift size={32} color="#8fc441" fill="none" strokeWidth={2} />
-                      </button>
+                    {/* Gift Button - hide on own reels */}
+                    {video.user?.username !== user?.username && (
                       <div
-                        className="feed-action-label"
                         style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: '#8fc441',
-                          textAlign: 'center',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 4,
                         }}
                       >
-                        {video.gift_count === 0 ? '' : video.gift_count}
+                        <button
+                          onClick={() => {
+                            if (!user) {
+                              onRequireAuth();
+                              return;
+                            }
+                            setGiftReelId(video.id);
+                            setShowGiftModal(video.user?.username);
+                          }}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                          }}
+                        >
+                          <Gift size={32} color="#8fc441" fill="none" strokeWidth={2} />
+                        </button>
+                        <div
+                          className="feed-action-label"
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: '#8fc441',
+                            textAlign: 'center',
+                          }}
+                        >
+                          {video.gift_count === 0 ? '' : video.gift_count}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Save Button */}
                     <div

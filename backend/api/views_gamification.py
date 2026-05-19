@@ -90,7 +90,7 @@ def get_gamification_status(request):
         )
 
     try:
-        today = timezone.now().date()
+        today = timezone.localdate()
 
         # Check if can spin today
         can_spin = profile.last_spin_date != today
@@ -160,7 +160,7 @@ def get_gamification_status(request):
 def daily_spin(request):
     """Perform daily spin wheel"""
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    today = timezone.now().date()
+    today = timezone.localdate()
     
     # Check if already spun today
     if profile.last_spin_date == today:
@@ -248,23 +248,26 @@ def daily_spin(request):
 def claim_login_bonus(request):
     """Claim daily login bonus"""
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    today = timezone.now().date()
+    today = timezone.localdate()
     now = timezone.now()
-    
+
     # Check if already claimed today
     if profile.last_login_date == today:
         return Response({
             'error': 'Login bonus already claimed today',
             'next_claim': 'tomorrow'
         }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Check streak continuity
+
+    # Check streak continuity (use local calendar days)
     if profile.last_login_date:
         days_since_last = (today - profile.last_login_date).days
         if days_since_last > 1:
-            # Streak broken
+            # Streak broken — reset before increment (so it lands on 1)
             profile.login_streak = 0
-    
+    else:
+        # First-ever claim — start fresh
+        profile.login_streak = 0
+
     # Increment streak (capped at 30)
     profile.login_streak = min(profile.login_streak + 1, 30)
     profile.last_login_date = today
@@ -341,7 +344,7 @@ def send_coin_gift(request):
     sender_profile, _ = UserProfile.objects.get_or_create(user=request.user)
     recipient_profile, _ = UserProfile.objects.get_or_create(user=recipient)
     
-    today = timezone.now().date()
+    today = timezone.localdate()
     
     # Reset daily counters if needed
     if sender_profile.last_gift_reset != today:
@@ -474,11 +477,19 @@ def get_recent_activity(request):
 def check_in(request):
     """Check in for daily streak (separate from login bonus)"""
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    today = timezone.now().date()
-    
+    today = timezone.localdate()
+
     # This is for the original streak field (posting streak)
     if profile.last_checkin:
-        days_since = (today - profile.last_checkin.date()).days
+        last_checkin_date = timezone.localtime(profile.last_checkin).date()
+        if last_checkin_date == today:
+            # Already checked in today — return current streak without changes
+            return Response({
+                'streak': profile.streak,
+                'xp_reward': 0,
+                'message': f'Already checked in today. Streak: {profile.streak}'
+            })
+        days_since = (today - last_checkin_date).days
         if days_since > 1:
             profile.streak = 0
     
