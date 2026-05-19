@@ -396,11 +396,10 @@ export default function HomeScreen({ navigation, route }) {
           });
           finalResults = withSuggestions;
         }
-        // Preserve local share counts and gift counts, filter blocked users
+        // Preserve local share counts, filter blocked users
         const updatedFinalResults = finalResults.map(post => ({
           ...post,
           shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
-          gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
         }));
         // Filter out posts from blocked users
         const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
@@ -427,11 +426,10 @@ export default function HomeScreen({ navigation, route }) {
           });
           finalResults = withSuggestions;
         }
-        // Preserve local share counts and gift counts, filter blocked users
+        // Preserve local share counts, filter blocked users
         const updatedFinalResults = finalResults.map(post => ({
           ...post,
           shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
-          gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
         }));
         // Filter out posts from blocked users
         const filteredFinalResults = filterBlockedUsers(updatedFinalResults);
@@ -546,16 +544,14 @@ export default function HomeScreen({ navigation, route }) {
         finalResults = withSuggestions;
       }
       
-      // Preserve local share counts and gift counts, filter blocked users
+      // Preserve local share counts, filter blocked users
       const updatedFinalResults = finalResults.map(post => ({
         ...post,
         shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
-        gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
       }));
       const updatedResults = results.map(post => ({
         ...post,
         shares: (post.shares || 0) + (localShareCounts[post.id] || 0),
-        gifts_count: (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0),
       }));
       
       // Filter out posts from blocked users
@@ -583,11 +579,11 @@ export default function HomeScreen({ navigation, route }) {
 
     if (isCampaign && userCoins < SHARE_COST) {
       Alert.alert(
-        'Insufficient Coins',
-        `Sharing a campaign post costs ${SHARE_COST} coins. You have ${userCoins} coin(s).\n\nEarn more coins or purchase to engage with campaign posts.`,
+        'Oops! Not Enough Coins',
+        `Sharing this campaign costs ${SHARE_COST} coins, but you only have ${userCoins} coin(s).\n\nWant to share more? Get more coins and keep supporting amazing campaigns!`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Get Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+          { text: 'Buy Coins Here', onPress: () => navigation.navigate('WebsiteCoin') },
         ]
       );
       return;
@@ -886,11 +882,11 @@ export default function HomeScreen({ navigation, route }) {
     if (isCampaign && newLiked) {
       if (userCoins < VOTE_COST) {
         Alert.alert(
-          'Insufficient Coins',
-          `Voting on a campaign post costs ${VOTE_COST} coin. You have ${userCoins} coin(s).\n\nEarn more coins or purchase to engage with campaign posts.`,
+          'Oops! Not Enough Coins',
+          `Voting costs ${VOTE_COST} coin, but you only have ${userCoins} coin(s).\n\nYour vote matters! Get more coins and support your favorite campaigns.`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Get Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+            { text: 'Buy Coins Here', onPress: () => navigation.navigate('WebsiteCoin') },
           ]
         );
         return;
@@ -997,15 +993,11 @@ export default function HomeScreen({ navigation, route }) {
       setGiftSent(true);
       setUserCoins(prev => prev - totalCost);
       setGiftsSentToday(prev => prev + 1);
-      // Update gifts_count on the post locally and persist across refreshes
-      if (giftPost?.id) {
-        const reelId = giftPost.id;
-        localGiftCountsRef.current = { ...localGiftCountsRef.current, [reelId]: (localGiftCountsRef.current[reelId] || 0) + 1 };
-        setLocalGiftCounts({ ...localGiftCountsRef.current });
-        setPosts(prev => prev.map(p =>
-          p.id === reelId ? { ...p, gifts_count: (p.gifts_count || 0) + 1 } : p
-        ));
-      }
+      // Backend will update gifts_count, refresh posts to show updated count
+      setTimeout(() => {
+        // Refresh posts to get updated gift count from backend
+        fetchPosts(page);
+      }, 1000);
       
       // Play coin sound for successful gift
       SoundManager.playCoinSound();
@@ -1023,11 +1015,11 @@ export default function HomeScreen({ navigation, route }) {
         const needed = match ? match[1] : totalCost;
         const have = match ? match[2] : userCoins;
         Alert.alert(
-          'Insufficient Coins',
-          `You need ${needed} purchased coins but only have ${have}.\n\nOnly purchased coins can be used for gifting. Please top up your coins.`,
+          'Oops! Not Enough Coins',
+          `You need ${needed} coins to send this gift, but you only have ${have}.\n\nShow your appreciation! Get more coins and keep supporting amazing creators.`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Buy Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+            { text: 'Buy Coins Here', onPress: () => navigation.navigate('WebsiteCoin') },
           ]
         );
       } else {
@@ -1473,17 +1465,9 @@ export default function HomeScreen({ navigation, route }) {
             {post.user?.username !== user?.username && (
               <TouchableOpacity style={styles.actionBtn} onPress={() => openGiftModal(post)}>
                 <Ionicons name="gift-outline" size={22} color={colors.primary} />
-                {(() => {
-                  console.log('=== GIFT COUNT DEBUG ===');
-                  console.log('Post ID:', post.id);
-                  console.log('post.gifts_count:', post.gifts_count);
-                  console.log('localGiftCountsRef.current[post.id]:', localGiftCountsRef.current[post.id]);
-                  console.log('Calculated total:', (post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0));
-                  return null;
-                })()}
-                {(post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0) > 0 && (
+                {post.gifts_count > 0 && (
                   <Text style={[styles.actionCount, { color: colors.text }]}>
-                    {(post.gifts_count || 0) + (localGiftCountsRef.current[post.id] || 0)}
+                    {post.gifts_count}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -2101,6 +2085,7 @@ export default function HomeScreen({ navigation, route }) {
         </TouchableOpacity>
       </Modal>
 
+      
     </View>
   );
 }
@@ -2558,7 +2543,7 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    height: '75%',
+    height: '60%',
     paddingBottom: 20,
   },
   infoSheet: {
@@ -2802,6 +2787,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-});
+
+  });
 
 

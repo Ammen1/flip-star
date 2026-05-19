@@ -109,12 +109,7 @@ const Avatar = React.memo(({ uri, size = 36, name = '', showBorder = false }) =>
 const ReelItem = React.memo(function ReelItem({ 
   item, 
   isActive, 
-  onLike, 
-  onComment, 
-  onSave, 
   onFollow,
-  onShare,
-  onReport,
   onShowProfile,
   onNavigate,
   onOpenGiftModal,
@@ -225,7 +220,7 @@ const ReelItem = React.memo(function ReelItem({
     
     // Like the video if not already liked
     if (!item.is_liked) {
-      onLike();
+      handleLike();
     }
   };
 
@@ -652,8 +647,8 @@ const ReelItem = React.memo(function ReelItem({
                   : (item.is_liked ? 'heart' : 'heart-outline')
               }
               size={28}
-              color={item.is_liked ? '#EF4444' : DARK_GOLD}
-              fill={item.is_liked ? '#EF4444' : 'none'}
+              color={item.is_liked ? '#8fc441' : DARK_GOLD}
+              fill={item.is_liked ? '#8fc441' : 'none'}
               style={styles.iconShadow}
             />
             <Text style={styles.actionLabelInline}>{(item.votes || 0) + 1}</Text>
@@ -671,7 +666,7 @@ const ReelItem = React.memo(function ReelItem({
         {/* Share Button */}
         <TouchableOpacity style={styles.actionItem} onPress={handleShareVideo}>
           <View style={styles.actionIconRow}>
-            <Ionicons name="share-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
+            <Ionicons name="share-social-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
             <Text style={styles.actionLabelInline}>
           {(() => {
             const shares = item.shares || 0;
@@ -757,9 +752,7 @@ const ReelItem = React.memo(function ReelItem({
           reel={item}
           user={user}
           onClose={() => setShowComments(false)}
-          onOpenGiftModal={openGiftModal}
           onShare={handleShareVideo}
-          onLike={handleLike}
         />
       </Modal>
 
@@ -810,7 +803,7 @@ const ReelItem = React.memo(function ReelItem({
                 </TouchableOpacity>
                 
                 <TouchableOpacity style={styles.longPressMenuItem} onPress={handleShareVideo}>
-                  <Ionicons name="share-outline" size={20} color={LIGHT_GOLD} />
+                  <Ionicons name="share-social-outline" size={20} color={LIGHT_GOLD} />
                   <Text style={styles.longPressMenuText}>Share</Text>
                 </TouchableOpacity>
                 
@@ -841,7 +834,7 @@ const ReelItem = React.memo(function ReelItem({
 });
 
 // Comments Modal Component
-const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose, onOpenGiftModal, onShare, onLike }) {
+const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose, onShare }) {
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [postingComment, setPostingComment] = useState(false);
@@ -891,45 +884,28 @@ const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose, o
       <View style={styles.commentsSheet}>
         <View style={styles.sheetHandle} />
         <View style={styles.sheetHeader}>
-          <View style={styles.sheetHeaderLeft}>
-            <Text style={styles.sheetTitle}>Comments</Text>
-            <View style={styles.sheetActions}>
-              <TouchableOpacity 
-                onPress={() => onLike && onLike(reel)} 
-                style={styles.sheetActionButton}
-              >
-                <Ionicons 
-                  name={reel.is_liked ? "heart" : "heart-outline"} 
-                  size={20} 
-                  color={reel.is_liked ? "#ff6b6b" : "#fff"} 
-                />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                onPress={() => onShare && onShare(reel)} 
-                style={styles.sheetActionButton}
-              >
-                <Ionicons 
-                  name="share-outline" 
-                  size={20} 
-                  color="#fff" 
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <TouchableOpacity onPress={onClose}>
-            <Ionicons name="close" size={24} color="#fff" />
+          <Text style={styles.sheetTitle}>Comments</Text>
+          <TouchableOpacity 
+            onPress={onClose}
+            style={styles.closeButton}
+          >
+            <Ionicons 
+              name="close" 
+              size={24} 
+              color="#fff" 
+            />
           </TouchableOpacity>
         </View>
         
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           {loading ? (
-            <View style={{ padding: 32, alignItems: 'center' }}>
+            <View style={{ padding: 20, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={GOLD} />
             </View>
           ) : comments.length === 0 ? (
-            <Text style={{ color: '#666', textAlign: 'center', padding: 32 }}>
-              No comments yet
-            </Text>
+            <View style={{ padding: 20, alignItems: 'center' }}>
+              <Text style={{ color: '#666' }}>No comments yet</Text>
+            </View>
           ) : (
             comments.map(c => (
               <View key={c.id} style={styles.commentItem}>
@@ -971,17 +947,7 @@ const CommentsModal = React.memo(function CommentsModal({ reel, user, onClose, o
             onChangeText={setCommentText}
             multiline
           />
-          <TouchableOpacity 
-            onPress={() => onOpenGiftModal && onOpenGiftModal(reel.user)} 
-            style={{ marginRight: 8 }}
-          >
-            <Ionicons 
-              name="gift-outline" 
-              size={22} 
-              color={GOLD} 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity 
+                    <TouchableOpacity 
             onPress={postComment} 
             disabled={!commentText.trim() || postingComment}
           >
@@ -1173,7 +1139,7 @@ export default function ReelsScreen({ navigation, route }) {
   const [selectedGift, setSelectedGift] = useState(null);
   const [giftQuantity, setGiftQuantity] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const LIMIT = 10;
+    const LIMIT = 10;
   const initialVideoId = route?.params?.initialVideoId;
   const fromDeepLink = route?.params?.fromDeepLink;
   const flatListRef = useRef(null);
@@ -1340,11 +1306,11 @@ export default function ReelsScreen({ navigation, route }) {
         const needed = match ? match[1] : '';
         const have = match ? match[2] : '';
         Alert.alert(
-          'Insufficient Coins',
-          `You need ${needed || 'more'} purchased coins but only have ${have || '0'}.\n\nOnly purchased coins can be used for gifting. Please top up your coins.`,
+          'Oops! Not Enough Coins',
+          `You need ${needed || 'more'} coins to send this gift, but you only have ${have || '0'}.\n\nDon't worry! You can easily get more coins to keep supporting your favorite creators.`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Buy Coins', onPress: () => navigation.navigate('WebsiteCoin') },
+            { text: 'Buy Coins Here', onPress: () => navigation.navigate('WebsiteCoin') },
           ]
         );
       } else {
@@ -1665,13 +1631,8 @@ export default function ReelsScreen({ navigation, route }) {
       followStates={followStates}
       fromDeepLink={fromDeepLink}
       localShareCounts={localShareCounts}
-      onLike={handleLike}
-      onComment={handleComment}
-      onSave={handleSave}
-      onShare={handleShareVideo}
-      onReport={handleReport}
     />
-  ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates, fromDeepLink, localShareCounts, handleLike, handleComment, handleSave, handleShareVideo, handleReport]);
+  ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates, fromDeepLink, localShareCounts]);
 
   if (loading) {
     return (
@@ -1783,7 +1744,7 @@ export default function ReelsScreen({ navigation, route }) {
       {screenMenuVisible && (
         <View style={[styles.dropdownMenu, { top: insets.top + 70, right: 16, zIndex: 1000, elevation: 25 }]}>
           <TouchableOpacity style={styles.menuItem} onPress={screenHandleShare}>
-            <Ionicons name="share-outline" size={18} color={LIGHT_GOLD} />
+            <Ionicons name="share-social-outline" size={18} color={LIGHT_GOLD} />
             <Text style={styles.menuText}>Share</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={screenHandleNotInterested}>
@@ -1982,6 +1943,9 @@ export default function ReelsScreen({ navigation, route }) {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      
+      
     </View>
   );
 }
@@ -2614,5 +2578,69 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+
+  // Floating Comment Button
+  floatingCommentBtn: {
+    position: 'absolute',
+    bottom: 90,
+    left: 16,
+    backgroundColor: GOLD,
+    borderRadius: 25,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  floatingCommentText: {
+    color: '#000',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Floating Comment Modal
+  floatingCommentSheet: {
+    backgroundColor: CARD,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '40%',
+    paddingBottom: 20,
+  },
+  floatingCommentInput: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    gap: 10,
+  },
+  floatingCommentTextInput: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    color: '#fff',
+    fontSize: 14,
+  },
+  floatingCommentSendBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(249,224,139,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

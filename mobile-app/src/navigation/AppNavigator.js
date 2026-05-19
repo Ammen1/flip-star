@@ -76,7 +76,8 @@ function ReelsDetailWrapper({ route, navigation }) {
     return <HomeScreen />;
   }
   
-  return <ReelsScreen navigation={navigation} route={{ params: { initialVideoId: videoId, fromDeepLink: true } }} />;
+  // Pass the route params directly to ReelsScreen so it can handle the initialVideoId
+  return <ReelsScreen navigation={navigation} route={route} />;
 }
 
 const GOLD = '#C8B56A';

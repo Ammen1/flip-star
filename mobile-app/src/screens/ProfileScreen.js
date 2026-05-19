@@ -80,6 +80,7 @@ export default function ProfileScreen({ navigation, route }) {
   const [posts, setPosts] = useState([]);
   const [reels, setReels] = useState([]);
   const [savedPosts, setSavedPosts] = useState([]);
+  const [campaignPosts, setCampaignPosts] = useState([]);
   const [campaignStats, setCampaignStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -125,17 +126,21 @@ export default function ProfileScreen({ navigation, route }) {
     { id: 'other', label: 'Other', emoji: '📋' },
   ];
 
-  useEffect(() => { 
-    // Reset state when targetProfileId changes to prevent profile mixing
-    setProfile(null);
+  const resetProfile = useCallback(() => {
+    setProfile(!routeUserId ? authUser : null);
     setPosts([]);
     setReels([]);
     setSavedPosts([]);
+    setCampaignPosts([]);
     setCampaignStats(null);
     setIsFollowing(false);
     setActiveTab('posts');
     loadProfile(); 
-  }, [targetProfileId]);
+  }, [routeUserId, authUser, loadProfile]);
+
+  useEffect(() => { 
+    resetProfile();
+  }, [targetProfileId, resetProfile]);
 
   // Reload profile when screen comes back into focus (e.g. after EditProfile)
   useEffect(() => {
@@ -149,7 +154,7 @@ export default function ProfileScreen({ navigation, route }) {
   useEffect(() => { 
     if (activeTab === 'reels') loadReels();
     else if (activeTab === 'saved') loadSavedPosts();
-    else if (activeTab === 'campaigns') loadCampaignStats();
+    else if (activeTab === 'campaigns') loadCampaignPosts();
   }, [activeTab]);
 
   const loadProfile = async () => {
@@ -277,6 +282,28 @@ export default function ProfileScreen({ navigation, route }) {
       setCampaignStats(campaignData);
     } catch (e) { 
       console.log('Failed to load campaign stats:', e);
+    }
+  };
+
+  const loadCampaignPosts = async () => {
+    try {
+      // First try the campaign endpoint, but if it doesn't work properly, filter all posts
+      const campaignPostsData = await api.request(`/reels/?user=${targetUserId}`);
+      const allPosts = Array.isArray(campaignPostsData) ? campaignPostsData : (campaignPostsData.results || []);
+      
+      // Filter posts to show only campaign posts
+      const campaignPostsList = allPosts.filter(post => 
+        post.is_campaign_post || post.campaign_id || post.campaign
+      );
+      
+      console.log('All posts count:', allPosts.length);
+      console.log('Campaign posts count:', campaignPostsList.length);
+      console.log('Campaign posts:', campaignPostsList.map(p => ({ id: p.id, is_campaign_post: p.is_campaign_post, campaign_id: p.campaign_id })));
+      
+      setCampaignPosts(campaignPostsList);
+    } catch (e) { 
+      console.log('Failed to load campaign posts:', e);
+      setCampaignPosts([]);
     }
   };
 
@@ -636,7 +663,7 @@ export default function ProfileScreen({ navigation, route }) {
         content = savedPosts;
         break;
       case 'campaigns': 
-        content = [];
+        content = campaignPosts;
         break;
       default: 
         content = posts;
@@ -650,7 +677,7 @@ export default function ProfileScreen({ navigation, route }) {
     }
     
     return content;
-  }, [activeTab, posts, reels, savedPosts]);
+  }, [activeTab, posts, reels, savedPosts, campaignPosts]);
 
   const renderPost = useCallback(({ item, index }) => {
     const isVideo = !!(item.media || '').match(/\.(mp4|webm|ogg|mov)/i) || (item.media && item.media.includes('/video/'));
@@ -957,67 +984,9 @@ export default function ProfileScreen({ navigation, route }) {
             ))}
         </View>
 
-        {/* Campaign Stats Content */}
-        {activeTab === 'campaigns' && (
-          <View style={[styles.campaignsContent, { backgroundColor: colors.cardBg }]}>
-            {!campaignStats ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading campaign stats...</Text>
-              </View>
-            ) : !campaignStats.campaigns || campaignStats.campaigns.length === 0 ? (
-              <View style={styles.emptyCampaigns}>
-                <Ionicons name="trophy-outline" size={48} color={colors.textSecondary} />
-                <Text style={[styles.emptyCampaignsTitle, { color: colors.text }]}>No campaigns yet</Text>
-                <Text style={[styles.emptyCampaignsText, { color: colors.textSecondary }]}>Join a campaign to see your stats here!</Text>
-              </View>
-            ) : (
-              <View>
-                {/* Header */}
-                <View style={[styles.campaignHeader, { borderBottomColor: colors.border }]}>
-                  <Ionicons name="trophy" size={22} color={colors.primary} />
-                  <Text style={[styles.campaignTitle, { color: colors.text }]}>Campaign Achievements</Text>
-                </View>
-
-                
-                {/* Campaign List */}
-                <View style={[styles.campaignList, { backgroundColor: colors.cardBg }]}>
-                  <Text style={[styles.campaignListTitle, { color: colors.text }]}>Active Campaigns</Text>
-                  {campaignStats.campaigns.map((campaign, index) => {
-                    console.log(`Campaign ${index}:`, campaign);
-                    // Try different possible field names for campaign name
-                    const campaignName = campaign.campaign_title || campaign.title || campaign.name || campaign.campaign_name || `Campaign ${index + 1}`;
-                    const campaignId = campaign.campaign_id || campaign.id || campaign.campaignId || index;
-                    
-                    return (
-                      <View key={campaignId} style={[styles.campaignItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                        <Text style={[styles.campaignName, { color: colors.text }]}>{campaignName}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-
-                {/* Badges */}
-                {campaignStats.badges && campaignStats.badges.length > 0 && (
-                  <View style={[styles.badgesSection, { backgroundColor: colors.cardBg }]}>
-                    <Text style={[styles.badgesTitle, { color: colors.text }]}>Badges Earned</Text>
-                    <View style={styles.badgesList}>
-                      {campaignStats.badges.map((badge) => (
-                        <View key={`badge-${badge.title}-${badge.id || Math.random()}`} style={[styles.badgeItem, { backgroundColor: colors.bg, borderColor: colors.border }]}>
-                          <Ionicons name="award" size={13} color={colors.primary} />
-                          <Text style={[styles.badgeText, { color: colors.text }]}>{badge.title}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
+        
         {/* Posts Grid */}
-        {activeTab !== 'campaigns' && (
+        {true && (
           <View style={styles.postsGrid}>
             {currentTabContent.length === 0 ? (
               <View style={[styles.emptyState, { backgroundColor: colors.cardBg }]}>
@@ -1025,6 +994,7 @@ export default function ProfileScreen({ navigation, route }) {
                   name={
                     activeTab === 'posts' ? 'grid-outline' : 
                     activeTab === 'reels' ? 'film-outline' : 
+                    activeTab === 'campaigns' ? 'trophy-outline' :
                     'bookmark-outline'
                   } 
                   size={48} 
@@ -1033,6 +1003,7 @@ export default function ProfileScreen({ navigation, route }) {
                 <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
                   {activeTab === 'posts' ? 'No posts yet' : 
                    activeTab === 'reels' ? 'No reels yet' : 
+                   activeTab === 'campaigns' ? 'No campaign posts yet' :
                    'No saved posts yet'}
                 </Text>
               </View>
