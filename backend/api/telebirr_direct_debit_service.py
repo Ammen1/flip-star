@@ -575,6 +575,118 @@ class TelebirrDirectDebitService:
                 'error': f'Mandate cancellation failed: {str(e)}'
             }
     
+    def query_mandate_by_payer(self, payer_msisdn, mandate_statuses=None, debug=False):
+        """
+        Query Direct Debit Mandate by Payer
+        
+        Args:
+            payer_msisdn: Payer phone number (MSISDN)
+            mandate_statuses: Optional list of mandate status codes (e.g., ['03', '01'])
+            debug: If True, print the SOAP envelope for debugging
+            
+        Returns:
+            dict: Response with success status and mandate data
+        """
+        try:
+            # Build initiator (Organization Operator)
+            initiator = {
+                'IdentifierType': 11,  # Organization Operator
+                'Identifier': self.org_operator_id or self.third_party_id,
+                'SecurityCredential': self.org_operator_credential or self.third_party_password,
+                'ShortCode': self.shortcode,
+            }
+            
+            # Build receiver party (Payer MSISDN)
+            receiver_party = {
+                'IdentifierType': 1,  # MSISDN
+                'Identifier': payer_msisdn,
+            }
+            
+            # Build body XML with mandate statuses
+            if mandate_statuses and len(mandate_statuses) > 0:
+                status_xml = '\n'.join([f'          <req:MandateStatus>{status}</req:MandateStatus>' for status in mandate_statuses])
+            else:
+                status_xml = ''
+            
+            body_xml = f'''<req:QueryDirectDebitMandateByPayerRequest>
+{status_xml}
+        </req:QueryDirectDebitMandateByPayerRequest>'''
+            
+            # Build SOAP envelope
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
+                command_id='QueryDirectDebitMandateByPayer',
+                initiator=initiator,
+                receiver_party=receiver_party,
+                body_xml=body_xml
+            )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
+            
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'QueryDirectDebitMandateByPayer'
+            }
+            
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                if 'soapenv:Fault' in response.text:
+                    return {
+                        'success': False,
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
+                    }
+                
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                    
+                    if response_code == '0':
+                        return {
+                            'success': True,
+                            'originator_conversation_id': originator_conversation_id,
+                            'conversation_id': conversation_id,
+                            'message': response_desc,
+                            'response_code': response_code,
+                            'response_text': response.text
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': response_desc,
+                            'response_code': response_code,
+                            'conversation_id': conversation_id
+                        }
+                except Exception as parse_error:
+                    return {
+                        'success': False,
+                        'error': f'Failed to parse response: {str(parse_error)}',
+                        'response_text': response.text[:500]
+                    }
+            else:
+                return {
+                    'success': False,
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
+                }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Mandate query failed: {str(e)}'
+            }
+    
     def process_callback(self, callback_data):
         """
         Process async callback from Telebirr
