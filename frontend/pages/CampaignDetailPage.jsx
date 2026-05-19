@@ -939,47 +939,28 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
         return;
       }
 
-      // First, try to enumerate devices to check if cameras are available
-      let devices = [];
-      try {
-        devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(d => d.kind === 'videoinput');
-        console.log('Available video devices:', videoDevices);
-        if (videoDevices.length === 0) {
-          throw new Error('No camera devices found on this system');
-        }
-      } catch (enumError) {
-        console.warn('Could not enumerate devices:', enumError);
-        // Continue anyway - this might be a permission issue that will be resolved by getUserMedia
-      }
-
       let mediaStream = null;
       let lastError = null;
 
-      // Strategy: Start with the most flexible constraints first, then get stricter
+      // Try to get camera stream directly - browser will handle permission and device detection
       const constraintAttempts = [
         // Attempt 1: Most flexible - just request video and audio
-        {
-          name: 'Basic video/audio',
-          constraints: { video: true, audio: true }
-        },
-        // Attempt 2: With facingMode
-        {
-          name: 'With facingMode',
-          constraints: { video: { facingMode: 'user' }, audio: true }
-        }
+        { video: true, audio: true },
+        // Attempt 2: Without audio if audio fails
+        { video: true, audio: false },
+        // Attempt 3: With facingMode preference
+        { video: { facingMode: 'user' }, audio: false },
       ];
 
-      for (const attempt of constraintAttempts) {
+      for (const constraints of constraintAttempts) {
         try {
-          console.log(`Attempting camera with: ${attempt.name}`, attempt.constraints);
-          mediaStream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
-          console.log(`Camera access successful with: ${attempt.name}`);
-          break; // Success! Exit the loop
+          console.log('Attempting camera with constraints:', constraints);
+          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log('Camera access successful');
+          break;
         } catch (error) {
           lastError = error;
-          console.warn(`Camera attempt failed (${attempt.name}):`, error.name, error.message);
-          // Continue to next attempt
+          console.warn(`Camera attempt failed:`, error.name, error.message);
         }
       }
 
