@@ -1437,7 +1437,7 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
                   resize: 'vertical',
                   boxSizing: 'border-box',
                   background: T.card,
-                  color: T.txt || '#000',
+                  color: '#000000',
                 }}
               />
               {campaign?.required_hashtags && (
