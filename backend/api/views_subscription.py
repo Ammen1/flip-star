@@ -247,7 +247,7 @@ class OnevasWebhookView(APIView):
             resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, '1')
             cancel_keyword = stop_keywords.get(tier.duration_type, 'STOP')
             
-            # Map tier duration type to service name for message
+            # Map tier duration type to service name and resubscribe keyword for message
             service_names = {
                 'daily': 'Daily',
                 'weekly': 'Weekly',
@@ -255,7 +255,16 @@ class OnevasWebhookView(APIView):
                 'ondemand': 'On-Demand'
             }
             service_name = service_names.get(tier.duration_type, tier.name)
-            cancellation_message = f"You have successfully unsubscribed from the {service_name} service. To subscribe again, send {resubscribe_keyword} to {tier.short_code}."
+            
+            # Map duration type to the correct resubscribe keyword for the message
+            resubscribe_keyword_map = {
+                'daily': '1',
+                'weekly': '2',
+                'monthly': '3',
+                'ondemand': '4'
+            }
+            message_keyword = resubscribe_keyword_map.get(tier.duration_type, '1')
+            cancellation_message = f"You have successfully unsubscribed from the {service_name} service. To subscribe again, send {message_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending cancellation SMS to {phone_number}")
             sms_sent = self.send_sms(phone_number, cancellation_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] Cancellation SMS sent: {sms_sent}")
