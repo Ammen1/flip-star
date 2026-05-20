@@ -140,9 +140,9 @@ export default function SubscriptionPlansModal({ visible, onClose, onSuccess, us
     const tier = paymentTier || selectedTier;
     if (!tier) return;
 
-    const tierCode = tier.duration_type === 'daily' ? 'OK1' :
-                     tier.duration_type === 'weekly' ? 'OK2' :
-                     tier.duration_type === 'monthly' ? 'OK3' : 'OK1';
+    const tierCode = tier.duration_type === 'daily' ? '1' :
+                     tier.duration_type === 'weekly' ? '2' :
+                     tier.duration_type === 'monthly' ? '3' : '1';
     const shortCode = tier.short_code || '9286';
     const smsUrl = `sms:${shortCode}?body=${encodeURIComponent(tierCode)}`;
     

@@ -12,7 +12,7 @@ const FAQ_ITEMS = [
   { q: "Who can use FlipStar?", a: "All active Ethio telecom prepaid, postpaid, and hybrid mobile customers with a smartphone (Android or iOS) or any HTML5-capable browser for web access. Users must be at least 18 years of age." },
   { q: "What devices and platforms does FlipStar support?", a: "Android App: Available on Google Play Store (search: FlipStar). iOS App: Available on Apple App Store (search: FlipStar). Web: Visit https://flipstar.et in any modern browser." },
   { q: "Is FlipStar available to all Ethio telecom customers?", a: "Yes. All active prepaid, postpaid, and hybrid Ethio telecom mobile customers can subscribe and use the service. The subscriber's number must be in 'Active' status at the time of subscription." },
-  { q: "How do I subscribe to FlipStar?", a: "Via SMS: Send OK1, OK2, or OK3 to the FlipStar shortcode — all three keywords activate the same service. Via App/Web: Download the FlipStar app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, enter the confirmation code sent to your number. Via telebirr: Open the telebirr app, navigate to the FlipStar service page, and select 'Subscribe'." },
+  { q: "How do I subscribe to FlipStar?", a: "Via SMS: Send 1, 2, or 3 to the FlipStar shortcode — all three keywords activate the same service. Via App/Web: Download the FlipStar app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, enter the confirmation code sent to your number. Via telebirr: Open the telebirr app, navigate to the FlipStar service page, and select 'Subscribe'." },
   { q: "What subscription plans are available?", a: "Flip Daily: 3 ETB/24hrs • Flip Weekly: 20 ETB/7days • Flip Monthly: 70 ETB/30days • Flip On-Demand: 10 ETB for 100 Coins (one-time purchase, no recurring charge)." },
   { q: "Is there a free trial?", a: "Yes. New subscribers receive a 1-day (24-hour) free trial on their very first subscription. Re-subscribers who have previously used the free trial are not eligible for another free trial." },
   { q: "How am I charged?", a: "Prepaid: fee deducted from airtime balance. Postpaid: fee added to monthly bill. Hybrid: charged from your default account. A maximum of one charge applies per 24-hour cycle. Failed charges are retried automatically if you recharge within the same day." },
@@ -177,7 +177,7 @@ export function TermsModal({ onClose }) {
           <S>2. Service Overview</S>
           <B>• FlipStar is available to all active Ethio telecom prepaid, postpaid, and hybrid mobile customers with a smartphone (Android, iOS, or any HTML5-capable browser for web access).</B>
           <B>• The Service allows users to upload short-form videos (15–60 seconds for standard subscribers, up to 120 seconds for coin buyers) and photos, interact with content, participate in daily, weekly, monthly, and grand prize competitions, and earn and spend digital coins.</B>
-          <B>• To subscribe via SMS: send OK1, OK2, or OK3 to the FlipStar shortcode. To unsubscribe: send STOP1, STOP2, or STOP3 to the same shortcode.</B>
+          <B>• To subscribe via SMS: send 1, 2, or 3 to the FlipStar shortcode. To unsubscribe: send STOP1, STOP2, or STOP3 to the same shortcode.</B>
           <B>• To subscribe via app or web: download the FlipStar app or visit https://flipstar.et, select Sign Up, and follow the on-screen registration flow.</B>
 
           <S>3. Subscription and Billing</S>
@@ -197,7 +197,7 @@ export function TermsModal({ onClose }) {
             headers={['Action', 'Accepted Keywords', 'Effect']}
             flex={[1, 1.5, 2]}
             rows={[
-              ['Subscribe', 'OK1, OK2, OK3', 'Any of these keywords sent to the FlipStar shortcode will initiate a new subscription. All three keywords are equivalent and activate the same service.'],
+              ['Subscribe', '1, 2, 3', 'Any of these keywords sent to the FlipStar shortcode will initiate a new subscription. All three keywords are equivalent and activate the same service.'],
               ['Unsubscribe', 'STOP1, STOP2, STOP3', 'Any of these keywords sent to the FlipStar shortcode will immediately cancel the active subscription. A confirmation SMS will be sent upon successful unsubscription.'],
             ]}
           />

@@ -114,20 +114,21 @@ class TelebirrDirectDebitService:
     def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
                       first_payment_date, expiry_date, payee_shortcode=None,
                       payee_account_name=None, start_range_of_days=1, 
-                      end_range_of_days=31):
+                      end_range_of_days=31, debug=False):
         """
         Create Direct Debit Mandate
         
         Args:
             payer_msisdn: Payer phone number (MSISDN)
             payer_reference_number: Payer reference number for mandate
-            frequency: Debit frequency (02=Daily, 03=Weekly, 05=Monthly, etc.)
+            frequency: Debit frequency (02=Daily, 03=Weekly, 04=Bi-Weekly, 05=Monthly, etc.)
             first_payment_date: First payment date (YYYYMMDD format or date object)
             expiry_date: Mandate expiry date (YYYYMMDD format or date object)
             payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
             payee_account_name: Payee account name (defaults to Flipstar)
             start_range_of_days: Start range of days for payment (default 1)
             end_range_of_days: End range of days for payment (default 31)
+            debug: If True, print the SOAP envelope for debugging
             
         Returns:
             dict: Response with success status and mandate details
@@ -182,6 +183,14 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
             
             # Make raw SOAP request
             headers = {
@@ -470,6 +479,159 @@ class TelebirrDirectDebitService:
                 'error': f'Direct debit initiation failed: {str(e)}'
             }
     
+    def create_one_off_payment(self, payer_msisdn, payer_reference_number, 
+                              frequency='01', first_payment_date=None, expiry_date=None,
+                              payee_shortcode=None, payee_account_name=None, 
+                              start_range_of_days=1, end_range_of_days=31, 
+                              debug=False):
+        """
+        Create One-Off Payment for Coin Purchasing
+        
+        This method creates a one-off payment using frequency (default '01' for Once)
+        for coin purchases. The payment is processed via Telebirr Direct Debit.
+        
+        Args:
+            payer_msisdn: Payer phone number (MSISDN)
+            payer_reference_number: Payer reference number for payment
+            frequency: Debit frequency (default '01' for Once)
+            first_payment_date: Payment date (YYYYMMDD format or date object, defaults to today)
+            expiry_date: Mandate expiry date (YYYYMMDD format or date object, defaults to today for one-off)
+            payee_shortcode: Payee shortcode (defaults to TELEBIRR_SHORTCODE)
+            payee_account_name: Payee account name (defaults to Flipstar)
+            start_range_of_days: Start range of days for payment (default 1)
+            end_range_of_days: End range of days for payment (default 31)
+            debug: If True, print the SOAP envelope for debugging
+            
+        Returns:
+            dict: Response with success status and payment details
+        """
+        try:
+            # Format dates - default to today if not provided
+            if first_payment_date is None:
+                first_payment_date = datetime.now().strftime('%Y%m%d')
+            elif isinstance(first_payment_date, datetime):
+                first_payment_date = first_payment_date.strftime('%Y%m%d')
+            
+            # Format expiry date - default to today for one-off if not provided
+            if expiry_date is None:
+                expiry_date = first_payment_date
+            elif isinstance(expiry_date, datetime):
+                expiry_date = expiry_date.strftime('%Y%m%d')
+            
+            # Use provided frequency (default '01' for one-off payment)
+            # Can be overridden for testing other frequencies
+            if not frequency:
+                frequency = '01'
+            
+            # Set defaults
+            if payee_shortcode is None:
+                payee_shortcode = self.shortcode
+            if payee_account_name is None:
+                payee_account_name = self.payee_account_name
+            
+            # Build initiator (SP Operator)
+            initiator = {
+                'IdentifierType': 14,  # SP Operator Username
+                'Identifier': self.sp_operator_id or self.third_party_id,
+                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
+            }
+            
+            # Build receiver party (Payer MSISDN)
+            receiver_party = {
+                'IdentifierType': 1,  # MSISDN
+                'Identifier': payer_msisdn,
+            }
+            
+            # Build body XML for one-off payment
+            body_xml = f'''<req:CreateDirectDebitMandateByPayerRequest>
+          <req:Payee> 
+            <com:IdentifierType>4</com:IdentifierType>
+            <com:IdentifierValue>{payee_shortcode}</com:IdentifierValue>
+          </req:Payee>
+          <req:DirectDebitMandateInfo>
+            <com:PayerReferenceNumber>{payer_reference_number}</com:PayerReferenceNumber>
+            <com:AgreedTC>1</com:AgreedTC>
+            <com:FirstPaymentDate>{first_payment_date}</com:FirstPaymentDate>
+            <com:Frequency>{frequency}</com:Frequency>
+            <com:StartRangeOfDays>{start_range_of_days}</com:StartRangeOfDays>
+            <com:EndRangeOfDays>{end_range_of_days}</com:EndRangeOfDays>
+            <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
+          </req:DirectDebitMandateInfo>
+        </req:CreateDirectDebitMandateByPayerRequest>'''
+            
+            # Build SOAP envelope
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
+                command_id='CreateDirectDebitMandateByCustomer',
+                initiator=initiator,
+                receiver_party=receiver_party,
+                body_xml=body_xml
+            )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR (ONE-OFF PAYMENT):")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
+            
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'CreateDirectDebitMandateByCustomer'
+            }
+            
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                # Check for SOAP fault
+                if 'soapenv:Fault' in response.text:
+                    return {
+                        'success': False,
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
+                    }
+                
+                # Parse ResponseCode and ResponseDesc using regex
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                except:
+                    response_code = '1'
+                    response_desc = 'Parse error'
+                
+                if response_code == '0':
+                    return {
+                        'success': True,
+                        'originator_conversation_id': originator_conversation_id,
+                        'conversation_id': conversation_id,
+                        'message': response_desc or 'One-off payment request accepted successfully',
+                        'response_code': response_code
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'error': response_desc or 'One-off payment request failed',
+                        'response_code': response_code,
+                        'response_text': response.text[:500]
+                    }
+            else:
+                return {
+                    'success': False,
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
+                }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'One-off payment request failed: {str(e)}'
+            }
+    
     def cancel_mandate(self, mandate_id, payer_msisdn, debug=False):
         """
         Cancel Direct Debit Mandate
@@ -573,6 +735,118 @@ class TelebirrDirectDebitService:
             return {
                 'success': False,
                 'error': f'Mandate cancellation failed: {str(e)}'
+            }
+    
+    def query_mandate_by_payer(self, payer_msisdn, mandate_statuses=None, debug=False):
+        """
+        Query Direct Debit Mandate by Payer
+        
+        Args:
+            payer_msisdn: Payer phone number (MSISDN)
+            mandate_statuses: Optional list of mandate status codes (e.g., ['03', '01'])
+            debug: If True, print the SOAP envelope for debugging
+            
+        Returns:
+            dict: Response with success status and mandate data
+        """
+        try:
+            # Build initiator (Organization Operator)
+            initiator = {
+                'IdentifierType': 11,  # Organization Operator
+                'Identifier': self.org_operator_id or self.third_party_id,
+                'SecurityCredential': self.org_operator_credential or self.third_party_password,
+                'ShortCode': self.shortcode,
+            }
+            
+            # Build receiver party (Payer MSISDN)
+            receiver_party = {
+                'IdentifierType': 1,  # MSISDN
+                'Identifier': payer_msisdn,
+            }
+            
+            # Build body XML with mandate statuses
+            if mandate_statuses and len(mandate_statuses) > 0:
+                status_xml = '\n'.join([f'          <req:MandateStatus>{status}</req:MandateStatus>' for status in mandate_statuses])
+            else:
+                status_xml = ''
+            
+            body_xml = f'''<req:QueryDirectDebitMandateByPayerRequest>
+{status_xml}
+        </req:QueryDirectDebitMandateByPayerRequest>'''
+            
+            # Build SOAP envelope
+            soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
+                command_id='QueryDirectDebitMandateByPayer',
+                initiator=initiator,
+                receiver_party=receiver_party,
+                body_xml=body_xml
+            )
+            
+            # Print SOAP envelope for debugging if debug=True
+            if debug:
+                print("=" * 80)
+                print("SOAP ENVELOPE BEING SENT TO TELEBIRR:")
+                print("=" * 80)
+                print(soap_envelope)
+                print("=" * 80)
+            
+            # Make raw SOAP request
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': 'QueryDirectDebitMandateByPayer'
+            }
+            
+            response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
+            
+            # Parse response
+            if response.status_code == 200:
+                if 'soapenv:Fault' in response.text:
+                    return {
+                        'success': False,
+                        'error': 'SOAP Fault returned',
+                        'response_text': response.text[:500]
+                    }
+                
+                try:
+                    import re
+                    response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
+                    response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
+                    
+                    response_code = response_code_match.group(1) if response_code_match else '1'
+                    response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
+                    
+                    if response_code == '0':
+                        return {
+                            'success': True,
+                            'originator_conversation_id': originator_conversation_id,
+                            'conversation_id': conversation_id,
+                            'message': response_desc,
+                            'response_code': response_code,
+                            'response_text': response.text
+                        }
+                    else:
+                        return {
+                            'success': False,
+                            'error': response_desc,
+                            'response_code': response_code,
+                            'conversation_id': conversation_id
+                        }
+                except Exception as parse_error:
+                    return {
+                        'success': False,
+                        'error': f'Failed to parse response: {str(parse_error)}',
+                        'response_text': response.text[:500]
+                    }
+            else:
+                return {
+                    'success': False,
+                    'error': f'HTTP {response.status_code}: {response.text[:200]}'
+                }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'Mandate query failed: {str(e)}'
             }
     
     def process_callback(self, callback_data):

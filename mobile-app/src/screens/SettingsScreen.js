@@ -56,7 +56,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "How do I subscribe to FlipStar?",
-    a: "Via SMS: Send OK1, OK2, or OK3 to the FlipStar shortcode — all three keywords activate the same service. Via App/Web: Download the FlipStar app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, enter the confirmation code sent to your number. Via telebirr: Open the telebirr app, navigate to the FlipStar service page, and select 'Subscribe'."
+    a: "Via SMS: Send 1, 2, or 3 to the FlipStar shortcode — all three keywords activate the same service. Via App/Web: Download the FlipStar app or visit https://flipstar.et, select 'Sign Up', enter your full name and mobile number, enter the confirmation code sent to your number. Via telebirr: Open the telebirr app, navigate to the FlipStar service page, and select 'Subscribe'."
   },
   {
     q: "What subscription plans are available?",
@@ -744,7 +744,7 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.sectionTitle}>2. Service Overview</Text>
               <Text style={styles.bullet}>• FlipStar is available to all active Ethio telecom prepaid, postpaid, and hybrid mobile customers with a smartphone (Android, iOS) or web browser.</Text>
               <Text style={styles.bullet}>• The Service allows users to upload short-form videos (15–120 seconds depending on user tier) and photos, interact with content, participate in daily, weekly, monthly, and grand prize competitions, and earn and spend digital coins.</Text>
-              <Text style={styles.bullet}>• To subscribe via SMS: send OK1, OK2, or OK3 to the FlipStar shortcode. To unsubscribe: send STOP1, STOP2, or STOP3 to the same shortcode.</Text>
+              <Text style={styles.bullet}>• To subscribe via SMS: send 1, 2, or 3 to the FlipStar shortcode. To unsubscribe: send STOP1, STOP2, or STOP3 to the same shortcode.</Text>
               <Text style={styles.bullet}>• To subscribe via app or web: download the FlipStar app or visit https://flipstar.et, select Sign Up, and follow the on-screen registration flow.</Text>
 
               {/* 3 */}
@@ -765,7 +765,7 @@ export default function SettingsScreen({ navigation }) {
                 headers={['Action', 'Accepted Keywords', 'Effect']}
                 flex={[1, 1.5, 2]}
                 rows={[
-                  ['Subscribe', 'OK1, OK2, OK3', 'Any of these keywords sent to the FlipStar shortcode will initiate a new subscription. All three keywords are equivalent and activate the same service.'],
+                  ['Subscribe', '1, 2, 3', 'Any of these keywords sent to the FlipStar shortcode will initiate a new subscription. All three keywords are equivalent and activate the same service.'],
                   ['Unsubscribe', 'STOP1, STOP2, STOP3', 'Any of these keywords sent to the FlipStar shortcode will immediately cancel the active subscription. A confirmation SMS will be sent upon successful unsubscription.'],
                 ]}
               />

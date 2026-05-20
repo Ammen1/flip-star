@@ -470,13 +470,33 @@ def telebirr_direct_debit_webhook(request):
             if new_mandate_id and not mandate.mandate_id:
                 mandate.mandate_id = new_mandate_id[:18]
 
-            if mandate.status == 'pending_created':
-                mandate.status = 'pending_active'
-                mandate.save()
-            elif mandate.status == 'pending_active':
-                mandate.activate()  # also sets activated_at and saves
+            # Handle one-off payments (coin purchases)
+            if mandate.payment_type == 'one_off':
+                # Add coins to user's profile
+                from .models import UserProfile
+                try:
+                    profile = mandate.user.profile
+                    coins_to_add = mandate.metadata.get('coins', 100)
+                    profile.coins += coins_to_add
+                    profile.coins_earned_total += coins_to_add
+                    profile.save()
+                    logger.info(f'Added {coins_to_add} coins to user {mandate.user.username} for one-off payment {mandate.id}')
+                    
+                    # Mark mandate as completed
+                    mandate.status = 'active'  # Use active to indicate successful one-off payment
+                    mandate.save()
+                except UserProfile.DoesNotExist:
+                    logger.error(f'UserProfile not found for user {mandate.user.username}, cannot add coins')
+                    mandate.mark_failed('UserProfile not found')
             else:
-                mandate.save()
+                # Handle recurring mandates
+                if mandate.status == 'pending_created':
+                    mandate.status = 'pending_active'
+                    mandate.save()
+                elif mandate.status == 'pending_active':
+                    mandate.activate()  # also sets activated_at and saves
+                else:
+                    mandate.save()
         else:
             mandate.mark_failed(result_desc or f'ResultCode={result_code}')
 
@@ -573,5 +593,110 @@ def initiate_direct_debit(request):
     except Exception as e:
         return Response(
             {'error': f'Failed to initiate direct debit: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_one_off_coin_purchase(request):
+    """
+    Create a one-off payment for coin purchasing via Telebirr Direct Debit
+    
+    Request Body:
+    {
+        "amount": 10.00,
+        "coins": 100
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "mandate_id": "uuid",
+        "originator_conversation_id": "S_X20260519...",
+        "message": "One-off payment request accepted"
+    }
+    """
+    try:
+        user = request.user
+        amount = request.data.get('amount')
+        coins = request.data.get('coins', 100)
+        
+        # Validate required fields
+        if not amount:
+            return Response(
+                {'error': 'amount is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get user's phone number from profile
+        from .models import UserProfile
+        try:
+            profile = user.profile
+            payer_msisdn = profile.phone_number
+            if not payer_msisdn:
+                return Response(
+                    {'error': 'Phone number not found in profile'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except UserProfile.DoesNotExist:
+            return Response(
+                {'error': 'User profile not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Generate unique payer reference number
+        payer_reference_number = f"COIN_{user.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # Call Telebirr service to create one-off payment
+        result = telebirr_direct_debit_service.create_one_off_payment(
+            payer_msisdn=payer_msisdn,
+            payer_reference_number=payer_reference_number,
+            frequency='01',
+            first_payment_date=datetime.now().date(),
+            expiry_date=datetime.now().date()
+        )
+        
+        if not result.get('success'):
+            return Response(
+                {'error': result.get('error', 'One-off payment request failed')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Create mandate record with payment_type='one_off'
+        mandate = DirectDebitMandate.objects.create(
+            user=user,
+            payer_msisdn=payer_msisdn,
+            payer_reference_number=payer_reference_number,
+            payee_identifier_type=4,
+            payee_identifier_value=telebirr_direct_debit_service.shortcode,
+            payee_account_name=telebirr_direct_debit_service.payee_account_name,
+            status='pending_created',
+            payment_type='one_off',
+            frequency='01',
+            first_payment_date=datetime.now().date(),
+            expiry_date=datetime.now().date(),
+            agreed_tc=True,
+            originator_conversation_id=result.get('originator_conversation_id'),
+            conversation_id=result.get('conversation_id'),
+            metadata={
+                'coins': coins,
+                'amount': amount
+            }
+        )
+        
+        return Response({
+            'success': True,
+            'mandate_id': str(mandate.id),
+            'originator_conversation_id': result.get('originator_conversation_id'),
+            'conversation_id': result.get('conversation_id'),
+            'message': 'One-off payment request accepted successfully. Wait for payment confirmation.',
+            'coins': coins,
+            'amount': amount
+        })
+        
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to create one-off payment: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

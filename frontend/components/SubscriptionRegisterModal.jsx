@@ -58,10 +58,11 @@ function OtpInput({ value, onChange }) {
  * Shown when user arrives via Onevas SMS link:
  * ?subscription_tp=true&phone=251XXXXXXXXX&otp=XXXXXX
  *
- * Fields: Username, Phone (pre-filled), OTP (pre-filled / editable), Password
+ * For new users: Fields: Username, Phone (pre-filled), OTP (pre-filled / editable), Password
+ * For existing users: Fields: Phone (pre-filled), OTP (pre-filled / editable), Password (existing PIN)
  * Calls POST /api/auth/login-with-subscription-otp/
  */
-export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess, onBackToLogin }) {
+export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, existingUser, onSuccess, onBackToLogin }) {
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState(prefillPhone || "");
   const [otp, setOtp] = useState(prefillOtp || "");
@@ -85,17 +86,17 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
     e?.preventDefault();
     setError("");
 
-    if (!username) { setError("Please enter a username"); return; }
+    if (!existingUser && !username) { setError("Please enter a username"); return; }
     if (!phone) { setError("Please enter your phone number"); return; }
     if (otp.length !== 6) { setError("Please enter the 6-digit OTP from your SMS"); return; }
     if (!/^\d{6}$/.test(password)) { setError("PIN must be exactly 6 digits"); return; }
-    if (password !== confirm) { setError("PINs do not match"); return; }
+    if (!existingUser && password !== confirm) { setError("PINs do not match"); return; }
 
     setLoading(true);
     try {
       const res = await api.post('/auth/login-with-subscription-otp/', {
         phone,
-        username,
+        username: existingUser ? undefined : username,
         otp,
         password,
       });
@@ -145,9 +146,9 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
         {/* Card */}
         <div style={{ background: "#1A1A1A", borderRadius: 18, padding: "28px 24px", border: "1px solid #8fc44130" }}>
           <div style={{ textAlign: "center", marginBottom: 24 }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441", marginBottom: 4 }}>Complete Registration</div>
-            <div style={{ fontSize: 13, color: "#aaa" }}>Your subscription is confirmed! Set up your account below.</div>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{existingUser ? "🔄" : "🎉"}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: "#8fc441", marginBottom: 4 }}>{existingUser ? "Subscription Renewed" : "Complete Registration"}</div>
+            <div style={{ fontSize: 13, color: "#aaa" }}>{existingUser ? "Your subscription has been renewed! Enter your OTP and PIN to access your account." : "Your subscription is confirmed! Set up your account below."}</div>
           </div>
 
           {/* Success badge */}
@@ -162,22 +163,24 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
               </div>
             )}
 
-            {/* Username */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Username *</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><User size={17} /></div>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
-                  placeholder="Choose a unique username"
-                  style={inp(focusUser)}
-                  onFocus={() => setFocusUser(true)}
-                  onBlur={() => setFocusUser(false)}
-                />
+            {/* Username - only shown for new users */}
+            {!existingUser && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Username *</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><User size={17} /></div>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                    placeholder="Choose a unique username"
+                    style={inp(focusUser)}
+                    onFocus={() => setFocusUser(true)}
+                    onBlur={() => setFocusUser(false)}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Phone */}
             <div style={{ marginBottom: 16 }}>
@@ -205,7 +208,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
 
             {/* Password */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>PIN *</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>{existingUser ? "Your PIN *" : "PIN *"}</label>
               <div style={{ position: "relative" }}>
                 <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Lock size={17} /></div>
                 <input
@@ -214,7 +217,7 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
                   maxLength={6}
                   value={password}
                   onChange={e => setPassword(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="••••••"
+                  placeholder={existingUser ? "Enter your existing PIN" : "••••••"}
                   style={{ ...inp(focusPwd), paddingRight: 46 }}
                   onFocus={() => setFocusPwd(true)}
                   onBlur={() => setFocusPwd(false)}
@@ -225,30 +228,32 @@ export function SubscriptionRegisterModal({ prefillPhone, prefillOtp, onSuccess,
               </div>
             </div>
 
-            {/* Confirm */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Confirm PIN *</label>
-              <div style={{ position: "relative" }}>
-                <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Lock size={17} /></div>
-                <input
-                  type={showConfirm ? "text" : "password"}
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="••••••"
-                  style={{ ...inp(focusConfirm), paddingRight: 46 }}
-                  onFocus={() => setFocusConfirm(true)}
-                  onBlur={() => setFocusConfirm(false)}
-                />
-                <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
-                  {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
+            {/* Confirm - only shown for new users */}
+            {!existingUser && (
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#8fc441", marginBottom: 7, letterSpacing: 0.5 }}>Confirm PIN *</label>
+                <div style={{ position: "relative" }}>
+                  <div style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#8fc441", display: "flex" }}><Lock size={17} /></div>
+                  <input
+                    type={showConfirm ? "text" : "password"}
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={confirm}
+                    onChange={e => setConfirm(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="••••••"
+                    style={{ ...inp(focusConfirm), paddingRight: 46 }}
+                    onFocus={() => setFocusConfirm(true)}
+                    onBlur={() => setFocusConfirm(false)}
+                  />
+                  <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#8fc441" }}>
+                    {showConfirm ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             <button type="submit" disabled={loading || otp.length < 6} style={{ width: "auto", padding: "14px 24px", background: loading || otp.length < 6 ? "#3A3A3A" : GOLD, border: "none", borderRadius: 10, color: loading || otp.length < 6 ? "#888" : "#000", fontSize: 15, fontWeight: 800, cursor: loading || otp.length < 6 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 }}>
-              {loading ? <><Loader size={18} style={{ animation: "spin 1s linear infinite" }} /> Creating Account…</> : "Create Account & Login 🚀"}
+              {loading ? <><Loader size={18} style={{ animation: "spin 1s linear infinite" }} /> {existingUser ? "Logging in…" : "Creating Account…"}</> : (existingUser ? "Login & Access 🚀" : "Create Account & Login 🚀")}
             </button>
           </form>
 

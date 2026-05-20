@@ -931,6 +931,36 @@ def create_post(request):
             or file.name.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.mkv'))
         )
 
+        # Determine if campaign post
+        campaign = None
+        is_campaign_post = False
+        if campaign_id:
+            from .models_campaign import Campaign
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                is_campaign_post = True
+                print(f"[CREATE_POST] Campaign found: {campaign.id} - {campaign.title}")
+            except Campaign.DoesNotExist:
+                print(f"[CREATE_POST] Campaign not found for ID: {campaign_id}")
+
+        # Charge coin cost based on post type
+        from .models_wallet import WalletConfig
+        from .models_contest import UserCoinBalance
+        config = WalletConfig.get_config()
+        if is_campaign_post:
+            cost = config.cost_post_create
+        else:
+            cost = config.cost_post_create_non_campaign
+
+        if cost and cost > 0:
+            balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+            try:
+                balance.spend_coins(cost, 'post_create' if not is_campaign_post else 'campaign_post_create',
+                                    description=f'Create {"campaign" if is_campaign_post else "non-campaign"} post')
+            except ValueError as e:
+                return Response({'error': str(e), 'required_coins': cost},
+                                status=status.HTTP_400_BAD_REQUEST)
+
         # Create reel with file - Django S3Boto3Storage handles upload automatically
         if is_video:
             # Generate thumbnail from video
@@ -974,17 +1004,6 @@ def create_post(request):
                 # Continue without thumbnail if generation fails
             
             # Create reel with video and optional thumbnail
-            campaign = None
-            is_campaign_post = False
-            if campaign_id:
-                from .models_campaign import Campaign
-                try:
-                    campaign = Campaign.objects.get(id=campaign_id)
-                    is_campaign_post = True
-                    print(f"[CREATE_POST] Campaign found: {campaign.id} - {campaign.title}")
-                except Campaign.DoesNotExist:
-                    print(f"[CREATE_POST] Campaign not found for ID: {campaign_id}")
-            
             reel = Reel.objects.create(
                 user=request.user,
                 caption=caption,
@@ -995,18 +1014,7 @@ def create_post(request):
                 is_campaign_post=is_campaign_post
             )
         else:
-            # Handle campaign for image posts
-            campaign = None
-            is_campaign_post = False
-            if campaign_id:
-                from .models_campaign import Campaign
-                try:
-                    campaign = Campaign.objects.get(id=campaign_id)
-                    is_campaign_post = True
-                    print(f"[CREATE_POST] Campaign found: {campaign.id} - {campaign.title}")
-                except Campaign.DoesNotExist:
-                    print(f"[CREATE_POST] Campaign not found for ID: {campaign_id}")
-            
+            # Create reel with image
             reel = Reel.objects.create(
                 user=request.user,
                 caption=caption,

@@ -569,6 +569,10 @@ def admin_wallet_config(request):
         'cost_post_create', 'cost_like', 'cost_comment', 'cost_share', 'cost_gift', 'cost_join_campaign',
         'cost_extra_campaign_entry', 'cost_boost_1hr', 'cost_boost_2hr', 'cost_boost_24hr',
         'cost_trending_1hr', 'cost_trending_24hr',
+        'cost_post_create_non_campaign', 'cost_like_non_campaign', 'cost_comment_non_campaign',
+        'cost_share_non_campaign', 'cost_gift_non_campaign', 'cost_boost_1hr_non_campaign',
+        'cost_boost_2hr_non_campaign', 'cost_boost_24hr_non_campaign',
+        'cost_trending_1hr_non_campaign', 'cost_trending_24hr_non_campaign',
         'min_balance_to_post', 'min_balance_to_join_campaign',
         'withdrawal_enabled', 'withdrawal_min_coins', 'withdrawal_max_coins_per_request',
         'coins_per_birr', 'withdrawal_fee_percent', 'withdrawal_processing_days',
@@ -589,14 +593,28 @@ def admin_wallet_config(request):
         'gift_max_points_to_recipient_per_day',
         'gift_max_total_points_sent_per_day',
     ]
+    
+    print(f"[WALLET_CONFIG] Request data keys: {list(request.data.keys())}")
+    print(f"[WALLET_CONFIG] Non-campaign fields in request: {[k for k in request.data.keys() if 'non_campaign' in k]}")
+    
     for field in editable_fields:
         if field in request.data:
             value = request.data[field]
+            print(f"[WALLET_CONFIG] Processing {field}={value} (type: {type(value).__name__})")
             if field in ('withdrawal_fee_percent',):
                 value = Decimal(str(value))
             elif field.startswith(('earned_coins_', 'purchased_coins_', 'withdrawal_enabled')):
                 if isinstance(value, str):
                     value = value.lower() in ('true', '1', 'yes', 'on')
+            elif field.startswith('cost_') or field.startswith('daily_') or field.startswith('min_') or field.startswith('max_') or field.startswith('coins_per_') or field.startswith('points_per_') or field.startswith('withdrawal_') or field.startswith('gift_'):
+                # Convert to integer for cost/points/withdrawal fields
+                if isinstance(value, str):
+                    try:
+                        value = int(value)
+                        print(f"[WALLET_CONFIG] Converted {field} to int: {value}")
+                    except ValueError:
+                        print(f"[WALLET_CONFIG] Failed to convert {field}={value} to int")
+            print(f"[WALLET_CONFIG] Setting {field}={value} (type: {type(value).__name__})")
             setattr(config, field, value)
 
     config.updated_by = request.user
@@ -644,6 +662,16 @@ def _serialize_full_config(config):
             'boost_24hr': config.cost_boost_24hr,
             'trending_1hr': config.cost_trending_1hr,
             'trending_24hr': config.cost_trending_24hr,
+            'post_create_non_campaign': config.cost_post_create_non_campaign,
+            'like_non_campaign': config.cost_like_non_campaign,
+            'comment_non_campaign': config.cost_comment_non_campaign,
+            'share_non_campaign': config.cost_share_non_campaign,
+            'gift_non_campaign': config.cost_gift_non_campaign,
+            'boost_1hr_non_campaign': config.cost_boost_1hr_non_campaign,
+            'boost_2hr_non_campaign': config.cost_boost_2hr_non_campaign,
+            'boost_24hr_non_campaign': config.cost_boost_24hr_non_campaign,
+            'trending_1hr_non_campaign': config.cost_trending_1hr_non_campaign,
+            'trending_24hr_non_campaign': config.cost_trending_24hr_non_campaign,
         },
         'thresholds': {
             'min_balance_to_post': config.min_balance_to_post,

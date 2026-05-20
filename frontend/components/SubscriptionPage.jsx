@@ -121,9 +121,9 @@ export function SubscriptionPage({ user, onBack }) {
 
   const handleSubscribe = async (tier) => {
     // For regular subscriptions, use SMS
-    const tierCode = tier.duration_type === 'daily' ? 'OK1' :
-                     tier.duration_type === 'weekly' ? 'OK2' :
-                     tier.duration_type === 'monthly' ? 'OK3' : 'OK4';
+    const tierCode = tier.duration_type === 'daily' ? '1' :
+                     tier.duration_type === 'weekly' ? '2' :
+                     tier.duration_type === 'monthly' ? '3' : '4';
     const shortCode = tier.short_code || '9286';
     const smsUrl = `sms:${shortCode}?body=${encodeURIComponent(tierCode)}`;
     window.location.href = smsUrl;
@@ -292,12 +292,9 @@ export function SubscriptionPage({ user, onBack }) {
     <div style={{ minHeight: '100vh', background: M_BG, color: '#fff' }}>
       {/* Header */}
       <div style={{
-        background: M_CARD,
         padding: '12px 16px',
-        borderBottom: `1px solid ${M_BORDER}`,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
         position: 'sticky',
         top: 0,
         zIndex: 10,
@@ -315,22 +312,11 @@ export function SubscriptionPage({ user, onBack }) {
         >
           <ChevronLeft size={22} />
         </button>
-        <div style={{ fontSize: 17, fontWeight: 700 }}>Premium</div>
-        <div style={{ width: 36 }} />
       </div>
 
       <div style={{ maxWidth: '100%', margin: '0 auto', paddingBottom: 32 }}>
         {/* Hero */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px' }}>
-          <div style={{
-            width: 100, height: 100, borderRadius: 50,
-            background: BRAND_GREEN,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 20,
-            boxShadow: '0 8px 32px rgba(143,196,65,0.3)',
-          }}>
-            <Trophy size={48} color="#fff" />
-          </div>
           <div style={{ fontSize: 32, fontWeight: 900, marginBottom: 8, color: '#fff' }}>FlipStar Premium</div>
           <div style={{ fontSize: 16, color: BRAND_GREEN, textAlign: 'center', fontWeight: 600 }}>Unlock the full experience</div>
           {isActive && currentSubscription?.end_date && (
@@ -366,28 +352,6 @@ export function SubscriptionPage({ user, onBack }) {
               )}
             </div>
           )}
-        </div>
-
-        {/* Benefits row */}
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 12,
-          padding: '0 16px', marginBottom: 32, justifyContent: 'center',
-        }}>
-          {BENEFITS.map((b, i) => {
-            const BIcon = b.icon;
-            return (
-              <div key={i} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: BRAND_GREEN + '15',
-                borderRadius: 25,
-                padding: '10px 16px',
-                border: `1px solid ${BRAND_GREEN}40`,
-              }}>
-                <BIcon size={18} color={BRAND_GREEN} />
-                <span style={{ fontSize: 13, color: BRAND_GREEN, fontWeight: 600 }}>{b.text}</span>
-              </div>
-            );
-          })}
         </div>
 
         {/* Section label */}
@@ -564,9 +528,9 @@ export function SubscriptionPage({ user, onBack }) {
             </div>
             <div>
               <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>SMS:</strong> Send SMS to <span style={{ color: BRAND_GREEN, fontWeight: 800 }}>9286</span> with code{' '}
-              <span style={{ color: '#fff', fontWeight: 700 }}>OK1</span> (Daily),{' '}
-              <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
-              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via ethio telecom.
+              <span style={{ color: '#fff', fontWeight: 700 }}>1</span> (Daily),{' '}
+              <span style={{ color: '#fff' }}>2</span> (Weekly),{' '}
+              <span style={{ color: '#fff' }}>3</span> (Monthly) via ethio telecom.
             </div>
           </div>
         </div>

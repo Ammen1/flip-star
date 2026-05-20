@@ -31,6 +31,11 @@ class DirectDebitMandate(models.Model):
         ('expired', 'Expired'),
         ('failed', 'Failed'),
     ]
+
+    PAYMENT_TYPE_CHOICES = [
+        ('recurring', 'Recurring Subscription'),
+        ('one_off', 'One-Off Payment'),
+    ]
     
     IDENTIFIER_TYPE_CHOICES = [
         (1, 'MSISDN'),
@@ -67,6 +72,7 @@ class DirectDebitMandate(models.Model):
     # Mandate details
     mandate_id = models.CharField(max_length=18, blank=True, null=True, help_text='Telebirr mandate ID (max 18 bytes)')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending_created')
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default='recurring', help_text='Payment type: recurring or one-off')
     
     # Mandate configuration
     frequency = models.CharField(max_length=2, choices=FREQUENCY_CHOICES, help_text='Debit frequency')

@@ -19,7 +19,7 @@ from .views import (
 )
 from .views_subscription import (
     OnevasWebhookView, SubscriptionTierViewSet, SubscriptionViewSet as NewSubscriptionViewSet,
-    TrialPopupViewSet, CoinTransactionViewSet, AdminSubscriptionViewSet
+    TrialPopupViewSet, CoinTransactionViewSet, AdminSubscriptionViewSet, UserSubscriptionStatusView
 )
 from .views_master_campaign import (
     master_campaign_list, master_campaign_detail, master_campaign_participants,
@@ -45,6 +45,7 @@ from .views_direct_debit import (
     list_user_mandates,
     telebirr_direct_debit_webhook,
     initiate_direct_debit,
+    create_one_off_coin_purchase,
 )
 
 @api_view(['GET', 'HEAD'])
@@ -447,6 +448,8 @@ urlpatterns = [
     path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-withdrawals-list'),
     path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-withdrawal-action'),
     # ============ SUBSCRIPTION SYSTEM ============
+    # Subscription Status Check
+    path('subscription/status/', UserSubscriptionStatusView.as_view(), name='subscription-status'),
     # Onevas Webhooks
     path('onevas/subscription/', OnevasWebhookView.as_view(), {'webhook_type': 'subscription'}, name='onevas-subscription'),
     path('onevas/unsubscription/', OnevasWebhookView.as_view(), {'webhook_type': 'unsubscription'}, name='onevas-unsubscription'),
@@ -466,6 +469,7 @@ urlpatterns = [
     path('direct-debit/cancel/', cancel_direct_debit_mandate, name='direct-debit-cancel'),
     path('direct-debit/mandates/', list_user_mandates, name='direct-debit-mandates'),
     path('direct-debit/initiate/', initiate_direct_debit, name='direct-debit-initiate'),
+    path('direct-debit/one-off-coin-purchase/', create_one_off_coin_purchase, name='one-off-coin-purchase'),
     path('webhooks/telebirr-direct-debit/', telebirr_direct_debit_webhook, name='telebirr-direct-debit-webhook'),
     # Coin Transactions
     path('coins/transactions/', CoinTransactionViewSet.as_view({'get': 'list'}), name='coin-transactions'),

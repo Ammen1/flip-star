@@ -121,6 +121,10 @@ function TopUpModal({ theme: T, onClose }) {
         setTimeout(() => {
           onClose();
         }, 2000);
+      } else if (response.error === 'insufficient_balance') {
+        setResultSuccess(false);
+        setResultMessage('Your airtime balance is insufficient to complete this purchase. Please top up your airtime and try again.');
+        setShowResultModal(true);
       } else {
         setResultSuccess(false);
         setResultMessage(response.message || 'Purchase failed');
@@ -445,6 +449,7 @@ export default function WerqRoot() {
   const _isSubTp = _urlParams.get('subscription_tp') === 'true' || _urlParams.get('subscriptiontp') === 'true';
   const _prefillPhone = _urlParams.get('phone') || '';
   const _prefillOtp = _urlParams.get('otp') || '';
+  const _existingUser = _urlParams.get('existing_user') === 'true' || _urlParams.get('existinguser') === 'true';
 
   // If arriving via SMS registration link, show register modal (not login)
   const [showSubRegister, setShowSubRegister] = useState(_isSubTp && !authUser);
@@ -860,6 +865,8 @@ export default function WerqRoot() {
       setFollowersListType(state.followersListType || 'followers');
       setFollowersListUserId(state.followersListUserId || null);
       setShowSettings(state.showSettings || false);
+      setShowWallet(state.showWallet || false);
+      setShowSubscription(state.showSubscription || false);
       setShowNotifications(state.showNotifications || false);
       setShowCampaigns(state.showCampaigns || false);
       setShowCampaignLeaderboard(state.showCampaignLeaderboard || false);
@@ -1033,10 +1040,78 @@ export default function WerqRoot() {
       }
     };
 
-    // Check subscription status after a short delay
-    const timer = setTimeout(checkSubscription, 2000);
-    return () => clearTimeout(timer);
+    // Check subscription status immediately (no delay)
+    checkSubscription();
   }, [authUser]); // Run when authUser changes
+
+  // Enforce subscription gate - prevent navigation when subscription is not active
+  useEffect(() => {
+    if (!authUser || !subscriptionChecked) return;
+    
+    const hasActiveSubscription = subscriptionStatus?.has_subscription;
+    
+    if (!hasActiveSubscription && !showSubscription) {
+      console.log('🔒 Subscription gate: No active subscription, forcing subscription page');
+      setShowSubscription(true);
+      // Clear all other pages
+      setShowPostPage(false);
+      setShowProfile(false);
+      setShowEditProfile(false);
+      setShowFollowersList(false);
+      setShowSettings(false);
+      setShowWallet(false);
+      setShowNotifications(false);
+      setShowCampaigns(false);
+      setShowCampaignDetail(false);
+      setShowCampaignLeaderboard(false);
+      setShowCampaignFeed(false);
+      setShowVideoDetail(false);
+      setShowExplorer(false);
+    }
+  }, [subscriptionChecked, subscriptionStatus, showSubscription, authUser, showPostPage, showProfile, showEditProfile, showFollowersList, showSettings, showWallet, showNotifications, showCampaigns, showCampaignDetail, showCampaignLeaderboard, showCampaignFeed, showVideoDetail, showExplorer]);
+
+  // Periodically check subscription expiry (every 30 seconds)
+  useEffect(() => {
+    if (!authUser || !api.hasToken()) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const status = await api.checkSubscriptionStatus();
+        setSubscriptionStatus(status);
+        
+        if (!status.has_subscription && !showSubscription) {
+          console.log('🔒 Subscription expired, redirecting to subscription page');
+          setShowSubscription(true);
+        }
+      } catch (e) {
+        console.log('Periodic subscription check failed:', e.message);
+      }
+    }, 30 * 1000); // 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [authUser, showSubscription]);
+
+  // Check subscription status when window/tab gains focus (user switches back to the app)
+  useEffect(() => {
+    if (!authUser || !api.hasToken()) return;
+    
+    const handleFocus = async () => {
+      try {
+        const status = await api.checkSubscriptionStatus();
+        setSubscriptionStatus(status);
+        
+        if (!status.has_subscription && !showSubscription) {
+          console.log('🔒 Window focused - no active subscription, redirecting to subscription page');
+          setShowSubscription(true);
+        }
+      } catch (e) {
+        console.log('Window focus subscription check failed:', e.message);
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [authUser, showSubscription]);
 
   // Listen for navigate to create post event from campaign modal
   useEffect(() => {
@@ -1268,6 +1343,12 @@ export default function WerqRoot() {
   };
 
   const handleCloseSubscription = () => {
+    // Prevent closing subscription page if user has no active subscription
+    if (subscriptionChecked && !subscriptionStatus?.has_subscription) {
+      console.log('🔒 Cannot close subscription page - no active subscription');
+      return;
+    }
+    
     setShowSubscription(false);
     const ret = subscriptionReturnState.current;
     if (ret) {
@@ -1286,7 +1367,11 @@ export default function WerqRoot() {
         return;
       }
     }
-    pushHistoryState({ showSubscription: false }, true);
+    // Default: navigate to profile if no return state
+    setShowProfile(true);
+    setProfileUserId(authUser?.id || null);
+    setActiveTab('profile');
+    pushHistoryState({ showSubscription: false, showProfile: true, profileUserId: authUser?.id || null, activeTab: 'profile' }, true);
   };
 
   const handleCloseSettings = () => { goHome(); };
@@ -1766,6 +1851,7 @@ export default function WerqRoot() {
               <SubscriptionRegisterModal
                 prefillPhone={_prefillPhone}
                 prefillOtp={_prefillOtp}
+                existingUser={_existingUser}
                 onSuccess={(u) => {
                   setAuthUser(u);
                   localStorage.setItem('user', JSON.stringify(u));

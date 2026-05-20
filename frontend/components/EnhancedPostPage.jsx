@@ -1509,7 +1509,7 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
                 style={{
                   background: isUploading ? 'rgba(218,155,42,0.4)' : T.pri,
                   borderRadius: 24, padding: '10px 22px',
-                  fontSize: 15, fontWeight: 800, color: '#8fc441',
+                  fontSize: 15, fontWeight: 800, color: '#fff',
                   opacity: isUploading ? 0.7 : 1,
                 }}>
                 {isUploading ? 'Posting...' : 'Post'}

@@ -233,10 +233,10 @@ class OnevasWebhookView(APIView):
             tier = subscriptions[0].tier
             # Map duration type to resubscribe keyword and stop keyword
             resubscribe_keywords = {
-                'daily': 'OK1',
-                'weekly': 'OK2',
-                'monthly': 'OK3',
-                'ondemand': 'OK4'
+                'daily': '1',
+                'weekly': '2',
+                'monthly': '3',
+                'ondemand': '4'
             }
             stop_keywords = {
                 'daily': 'STOP1',
@@ -244,9 +244,27 @@ class OnevasWebhookView(APIView):
                 'monthly': 'STOP3',
                 'ondemand': 'STOP'
             }
-            resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, 'OK1')
+            resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, '1')
             cancel_keyword = stop_keywords.get(tier.duration_type, 'STOP')
-            cancellation_message = f"You have successfully unsubscribed from the {tier.name} service. To subscribe again, send {resubscribe_keyword} to {tier.short_code}."
+            
+            # Map tier duration type to service name and resubscribe keyword for message
+            service_names = {
+                'daily': 'Daily',
+                'weekly': 'Weekly',
+                'monthly': 'Monthly',
+                'ondemand': 'On-Demand'
+            }
+            service_name = service_names.get(tier.duration_type, tier.name)
+            
+            # Map duration type to the correct resubscribe keyword for the message
+            resubscribe_keyword_map = {
+                'daily': '1',
+                'weekly': '2',
+                'monthly': '3',
+                'ondemand': '4'
+            }
+            message_keyword = resubscribe_keyword_map.get(tier.duration_type, '1')
+            cancellation_message = f"You have successfully unsubscribed from the {service_name} service. To subscribe again, send {message_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending cancellation SMS to {phone_number}")
             sms_sent = self.send_sms(phone_number, cancellation_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] Cancellation SMS sent: {sms_sent}")
@@ -408,10 +426,10 @@ class OnevasWebhookView(APIView):
         if not tier:
             sms_code = (keyword_from_params or password or '').upper()
             sms_code_mapping = {
-                'OK1': 'daily',
-                'OK2': 'weekly',
-                'OK3': 'monthly',
-                'OK4': 'ondemand',
+                '1': 'daily',
+                '2': 'weekly',
+                '3': 'monthly',
+                '4': 'ondemand',
             }
             duration_type = sms_code_mapping.get(sms_code)
             if duration_type:
@@ -704,7 +722,7 @@ class OnevasWebhookView(APIView):
                 'ondemand': 'use'
             }
             price_period = price_periods.get(tier.duration_type, 'day')
-            renewal_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {active_sub.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+            renewal_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {active_sub.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending renewal SMS with OTP to {phone_number}")
             sms_result = self.send_sms(phone_number, renewal_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] Renewal SMS sent: {sms_result}")
@@ -801,7 +819,7 @@ class OnevasWebhookView(APIView):
                     'ondemand': 'use'
                 }
                 price_period = price_periods.get(tier.duration_type, 'day')
-                confirmation_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+                confirmation_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
                 print(f"[SUBSCRIPTION DEBUG] Sending confirmation SMS with OTP to {phone_number}")
                 sms_result = self.send_sms(phone_number, confirmation_message, tier.duration_type)
                 print(f"[SUBSCRIPTION DEBUG] Confirmation SMS sent: {sms_result}")

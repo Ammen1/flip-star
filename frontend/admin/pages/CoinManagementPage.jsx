@@ -90,18 +90,28 @@ export function CoinManagementPage({ theme }) {
         profile_complete_reward: config.rewards.profile_complete_reward,
         referral_reward: config.rewards.referral_reward,
         campaign_winner_reward: config.rewards.campaign_winner_reward,
-        cost_post_create: config.costs.post_create,
-        cost_like: config.costs.like,
-        cost_comment: config.costs.comment,
-        cost_share: config.costs.share,
-        cost_gift: config.costs.gift,
-        cost_join_campaign: config.costs.join_campaign,
-        cost_extra_campaign_entry: config.costs.extra_campaign_entry,
-        cost_boost_1hr: config.costs.boost_1hr,
-        cost_boost_2hr: config.costs.boost_2hr,
-        cost_boost_24hr: config.costs.boost_24hr,
-        cost_trending_1hr: config.costs.trending_1hr,
-        cost_trending_24hr: config.costs.trending_24hr,
+        cost_post_create: config.costs.post_create || 0,
+        cost_like: config.costs.like || 0,
+        cost_comment: config.costs.comment || 0,
+        cost_share: config.costs.share || 0,
+        cost_gift: config.costs.gift || 0,
+        cost_join_campaign: config.costs.join_campaign || 0,
+        cost_extra_campaign_entry: config.costs.extra_campaign_entry || 0,
+        cost_boost_1hr: config.costs.boost_1hr || 0,
+        cost_boost_2hr: config.costs.boost_2hr || 0,
+        cost_boost_24hr: config.costs.boost_24hr || 0,
+        cost_trending_1hr: config.costs.trending_1hr || 0,
+        cost_trending_24hr: config.costs.trending_24hr || 0,
+        cost_post_create_non_campaign: config.costs.post_create_non_campaign || 0,
+        cost_like_non_campaign: config.costs.like_non_campaign || 0,
+        cost_comment_non_campaign: config.costs.comment_non_campaign || 0,
+        cost_share_non_campaign: config.costs.share_non_campaign || 0,
+        cost_gift_non_campaign: config.costs.gift_non_campaign || 0,
+        cost_boost_1hr_non_campaign: config.costs.boost_1hr_non_campaign || 0,
+        cost_boost_2hr_non_campaign: config.costs.boost_2hr_non_campaign || 0,
+        cost_boost_24hr_non_campaign: config.costs.boost_24hr_non_campaign || 0,
+        cost_trending_1hr_non_campaign: config.costs.trending_1hr_non_campaign || 0,
+        cost_trending_24hr_non_campaign: config.costs.trending_24hr_non_campaign || 0,
         withdrawal_enabled: config.withdrawal.enabled,
         withdrawal_min_coins: config.withdrawal.min_coins,
         withdrawal_max_coins_per_request: config.withdrawal.max_coins_per_request,
@@ -323,7 +333,8 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
 
   const subTabs = [
     { id: 'earned', label: 'Earned Coins', icon: TrendingUp },
-    { id: 'action', label: 'Action Costs', icon: TrendingDown },
+    { id: 'action', label: 'Campaign Action Costs', icon: TrendingDown },
+    { id: 'non_campaign_action', label: 'Non-Campaign Action Costs', icon: TrendingDown },
     { id: 'withdrawal', label: 'Withdrawal', icon: ArrowUpFromLine },
     { id: 'points', label: 'Points System', icon: Coins },
     { id: 'gifting', label: 'Gifting', icon: Gift },
@@ -374,6 +385,10 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
 
       {activeSubTab === 'action' && (
         <ActionCostsSubTab theme={T} config={config} updateField={updateField} />
+      )}
+
+      {activeSubTab === 'non_campaign_action' && (
+        <NonCampaignActionCostsSubTab theme={T} config={config} updateField={updateField} />
       )}
 
       {activeSubTab === 'withdrawal' && (
@@ -442,7 +457,10 @@ function EarnedCoinsSubTab({ theme: T, config, updateField }) {
 function ActionCostsSubTab({ theme: T, config, updateField }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24 }}>
-      <SectionCard theme={T} title="Action Costs" icon={<TrendingDown size={20} color="#EF4444" />}>
+      <SectionCard theme={T} title="Campaign Action Costs" icon={<TrendingDown size={20} color="#EF4444" />}>
+        <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
+          Costs for actions on campaign posts
+        </div>
         <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create} onChange={(v) => updateField('costs', 'post_create', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Like Cost" value={config.costs.like} onChange={(v) => updateField('costs', 'like', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
@@ -455,6 +473,32 @@ function ActionCostsSubTab({ theme: T, config, updateField }) {
         <FieldRow theme={T} label="Boost 24hr Cost" value={config.costs.boost_24hr} onChange={(v) => updateField('costs', 'boost_24hr', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Trending 1hr Cost" value={config.costs.trending_1hr} onChange={(v) => updateField('costs', 'trending_1hr', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Trending 24hr Cost" value={config.costs.trending_24hr} onChange={(v) => updateField('costs', 'trending_24hr', parseInt(v) || 0)} />
+      </SectionCard>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------
+// Sub-tab: Non-Campaign Action Costs
+// ---------------------------------------------------------------
+
+function NonCampaignActionCostsSubTab({ theme: T, config, updateField }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24 }}>
+      <SectionCard theme={T} title="Non-Campaign Action Costs" icon={<TrendingDown size={20} color="#8B5CF6" />}>
+        <div style={{ fontSize: 12, color: T.sub, marginBottom: 12, fontStyle: 'italic' }}>
+          Costs for actions on non-campaign posts
+        </div>
+        <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create_non_campaign} onChange={(v) => updateField('costs', 'post_create_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Like Cost" value={config.costs.like_non_campaign} onChange={(v) => updateField('costs', 'like_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Comment Cost" value={config.costs.comment_non_campaign} onChange={(v) => updateField('costs', 'comment_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Share Cost" value={config.costs.share_non_campaign} onChange={(v) => updateField('costs', 'share_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Gift Cost" value={config.costs.gift_non_campaign} onChange={(v) => updateField('costs', 'gift_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Boost 1hr Cost" value={config.costs.boost_1hr_non_campaign} onChange={(v) => updateField('costs', 'boost_1hr_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Boost 2hr Cost" value={config.costs.boost_2hr_non_campaign} onChange={(v) => updateField('costs', 'boost_2hr_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Boost 24hr Cost" value={config.costs.boost_24hr_non_campaign} onChange={(v) => updateField('costs', 'boost_24hr_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Trending 1hr Cost" value={config.costs.trending_1hr_non_campaign} onChange={(v) => updateField('costs', 'trending_1hr_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Trending 24hr Cost" value={config.costs.trending_24hr_non_campaign} onChange={(v) => updateField('costs', 'trending_24hr_non_campaign', parseInt(v) || 0)} />
       </SectionCard>
     </div>
   );

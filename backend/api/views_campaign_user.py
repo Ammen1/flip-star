@@ -248,23 +248,31 @@ def create_campaign_post(request):
         campaign=campaign
     )
     
-    # Update streak
-    today = timezone.now().date()
+    # Update streak (use local date so day boundaries match user's timezone)
+    today = timezone.localdate()
     if stats.last_post_date:
         days_diff = (today - stats.last_post_date).days
-        if days_diff == 1:
+        if days_diff == 0:
+            # Already posted today — keep streak as-is
+            pass
+        elif days_diff == 1:
             stats.current_streak += 1
         elif days_diff > 1:
             stats.current_streak = 1
     else:
         stats.current_streak = 1
-    
+
     stats.longest_streak = max(stats.longest_streak, stats.current_streak)
     stats.last_post_date = today
-    stats.days_participated = UserCampaignStats.objects.filter(
+
+    # Count distinct local-calendar days the user actually posted in this campaign
+    post_dates = PostScore.objects.filter(
         user=request.user,
-        campaign=campaign
-    ).values('last_post_date').distinct().count()
+        campaign=campaign,
+    ).values_list('created_at', flat=True)
+    unique_days = {timezone.localtime(ts).date() for ts in post_dates if ts}
+    unique_days.add(today)  # include the post we just created
+    stats.days_participated = len(unique_days)
     stats.save()
     
     return Response({
