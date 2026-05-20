@@ -593,9 +593,14 @@ def admin_wallet_config(request):
         'gift_max_points_to_recipient_per_day',
         'gift_max_total_points_sent_per_day',
     ]
+    
+    print(f"[WALLET_CONFIG] Request data keys: {list(request.data.keys())}")
+    print(f"[WALLET_CONFIG] Non-campaign fields in request: {[k for k in request.data.keys() if 'non_campaign' in k]}")
+    
     for field in editable_fields:
         if field in request.data:
             value = request.data[field]
+            print(f"[WALLET_CONFIG] Processing {field}={value} (type: {type(value).__name__})")
             if field in ('withdrawal_fee_percent',):
                 value = Decimal(str(value))
             elif field.startswith(('earned_coins_', 'purchased_coins_', 'withdrawal_enabled')):
@@ -606,6 +611,7 @@ def admin_wallet_config(request):
                 if isinstance(value, str):
                     try:
                         value = int(value)
+                        print(f"[WALLET_CONFIG] Converted {field} to int: {value}")
                     except ValueError:
                         print(f"[WALLET_CONFIG] Failed to convert {field}={value} to int")
             print(f"[WALLET_CONFIG] Setting {field}={value} (type: {type(value).__name__})")
