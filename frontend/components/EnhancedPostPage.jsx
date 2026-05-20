@@ -104,6 +104,11 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
   const [showInsufficientCoins, setShowInsufficientCoins] = useState(false);
   const [postCost, setPostCost] = useState(0);
 
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('[INSUFFICIENT_COINS] Modal state changed:', showInsufficientCoins);
+  }, [showInsufficientCoins]);
+
   // Refs
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
