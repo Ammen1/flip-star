@@ -113,33 +113,33 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
 
       {/* Media area */}
       <div
-        style={{ 
-          position: 'relative', 
-          width: '100%', 
-          background: 'transparent',
+        style={{
+          position: 'relative',
+          width: '100%',
+          background: video?.thumbnail ? `url(${mediaUrl(video.thumbnail)}) center/cover no-repeat` :
+                   video?.image ? `url(${mediaUrl(video.image)}) center/cover no-repeat` : 'transparent',
           flex: '1 1 auto',
           minHeight: 320,
-          maxHeight: 450,
-          aspectRatio: '4 / 5',
+          maxHeight: 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           padding: '0',
           overflow: 'hidden'
         }}
-        onMouseDown={onPressStart} 
-        onMouseUp={onPressEnd} 
+        onMouseDown={onPressStart}
+        onMouseUp={onPressEnd}
         onMouseLeave={onPressEnd}
-        onTouchStart={onPressStart} 
-        onTouchEnd={onPressEnd} 
+        onTouchStart={onPressStart}
+        onTouchEnd={onPressEnd}
         onTouchCancel={onPressEnd}
       >
         {video?.thumbnail
-          ? <img src={mediaUrl(video.thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={mediaUrl(video.thumbnail)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', minHeight: 320 }} />
           : video?.image
-            ? <img src={mediaUrl(video.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={mediaUrl(video.image)} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', minHeight: 320 }} />
             : video?.media
-              ? <video src={mediaUrl(video.media)} controls playsInline autoPlay muted loop style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <video src={mediaUrl(video.media)} controls playsInline autoPlay muted loop style={{ width: '100%', height: '100%', objectFit: 'contain', minHeight: 320 }} />
               : <div style={{ textAlign:"center", color:"#666", padding: 40 }}><div style={{ fontSize:60 }}>?</div><div>No media</div></div>
         }
 
