@@ -819,7 +819,7 @@ class OnevasWebhookView(APIView):
                     'ondemand': 'use'
                 }
                 price_period = price_periods.get(tier.duration_type, 'day')
-                confirmation_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+                confirmation_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
                 print(f"[SUBSCRIPTION DEBUG] Sending confirmation SMS with OTP to {phone_number}")
                 sms_result = self.send_sms(phone_number, confirmation_message, tier.duration_type)
                 print(f"[SUBSCRIPTION DEBUG] Confirmation SMS sent: {sms_result}")
