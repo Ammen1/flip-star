@@ -126,6 +126,12 @@ const ReelItem = React.memo(function ReelItem({
   const [showReportModal, setShowReportModal] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showLongPressMenu, setShowLongPressMenu] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareableUsers, setShareableUsers] = useState([]);
+  const [loadingShareableUsers, setLoadingShareableUsers] = useState(false);
+  const [shareSearch, setShareSearch] = useState('');
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const shareSearchTimer = useRef(null);
   const [likeAnimation, setLikeAnimation] = useState(false);
   const [doubleTapLike, setDoubleTapLike] = useState(false);
   const longPressTimer = useRef(null);
@@ -138,14 +144,13 @@ const ReelItem = React.memo(function ReelItem({
     ? (item.media.startsWith('http') ? item.media : `${MEDIA_BASE}${item.media}`)
     : null;
 
-  // Check if this is a campaign post
-  const isCampaignPost = item.is_campaign || item.campaign_id || item.campaign || item.competition;
+  // Check if this is a campaign post (matching website implementation)
+  const isCampaignPost = !!(item.is_campaign_post || item.campaign_id || item.campaign);
   console.log('Post data:', { 
     id: item.id, 
-    is_campaign: item.is_campaign, 
+    is_campaign_post: item.is_campaign_post, 
     campaign_id: item.campaign_id, 
     campaign: item.campaign,
-    competition: item.competition,
     isCampaignPost 
   });
 
@@ -294,53 +299,136 @@ const ReelItem = React.memo(function ReelItem({
     setShowReportModal(true);
   };
 
-  const handleShareVideo = async () => {
-    // Use both web URL and app URL for better compatibility
-    const webUrl = `https://uat.flipstar.et/post/${item.id}`;
-    const appUrl = `flipstar://post/${item.id}`;
-    const title = item.caption ? item.caption.slice(0, 80) : 'Check out this reel on FlipStar';
-    
-    try {
-      await Share.share({
-        message: `${title}\n\n${webUrl}\n\nOr open in app: ${appUrl}`,
-        title: 'FlipStar Reel',
-        url: webUrl,
-      });
-      
-      // Increment share count
+  const handleShareVideo = () => {
+    setShareSearch('');
+    setShowShareModal(true);
+    loadShareableUsers();
+  };
+
+  const handleShareSearch = (text) => {
+    setShareSearch(text);
+    clearTimeout(shareSearchTimer.current);
+    if (!text.trim()) {
+      loadShareableUsers();
+      return;
+    }
+    setSearchingUsers(true);
+    shareSearchTimer.current = setTimeout(async () => {
       try {
-        console.log('Before share - item shares:', item.shares);
-        console.log('Before share - localShareCounts:', localShareCounts[item.id]);
-        
-        await api.request(`/reels/${item.id}/share/`, { method: 'POST' });
-        
-        // Update persistent local share count
-        setLocalShareCounts(prev => {
-          const updated = {
-            ...prev,
-            [item.id]: (prev[item.id] || 0) + 1
-          };
-          console.log('Updated localShareCounts:', updated[item.id]);
-          return updated;
-        });
-        
-        // Update local share count
-        setVideos(prev => {
-          const updated = prev.map(v => 
-            v.id === item.id ? { ...v, shares: (v.shares || 0) + 1 } : v
-          );
-          console.log('Updated videos share count for item', item.id);
-          return updated;
-        });
-        
-        console.log('Share increment successful');
-      } catch (error) {
-        console.log('Share increment failed:', error);
+        const res = await api.search(text.trim());
+        const users = Array.isArray(res?.users) ? res.users
+          : Array.isArray(res) ? res
+          : (res?.results || []);
+        setShareableUsers(users.filter(u => u.id !== user?.id && u.id !== item.user?.id));
+      } catch {
+        // keep existing list on error
+      } finally {
+        setSearchingUsers(false);
       }
+    }, 400);
+  };
+
+  const loadShareableUsers = async () => {
+    setLoadingShareableUsers(true);
+    try {
+      // Primary: use follow suggestions
+      const response = await api.getUserSuggestions();
+      const allUsers = Array.isArray(response) ? response : (response.results || []);
+      const filtered = allUsers.filter(u => u.id !== user?.id && u.id !== item.user?.id);
+      setShareableUsers(filtered);
+    } catch (error) {
+      // Fallback: general search
+      try {
+        const response2 = await api.search('a');
+        const users2 = Array.isArray(response2?.users) ? response2.users
+          : Array.isArray(response2) ? response2
+          : (response2?.results || []);
+        const filtered2 = users2.filter(u => u.id !== user?.id && u.id !== item.user?.id);
+        setShareableUsers(filtered2);
+      } catch {
+        setShareableUsers([]);
+      }
+    } finally {
+      setLoadingShareableUsers(false);
+    }
+  };
+
+  const handleShareExternal = async () => {
+    setShowShareModal(false);
+    try {
+      const shareUrl = `${MEDIA_BASE}/reels/${item.id}/`;
+      await Share.share({
+        message: `Check out this reel on FlipStar! 🎬\n${item.caption || ''}\n${shareUrl}`,
+        url: shareUrl,
+        title: 'FlipStar Reel',
+      });
+      // Optimistic share count increment
+      setVideos(prev => prev.map(v =>
+        v.id === item.id ? { ...v, shares: (v.shares || 0) + 1 } : v
+      ));
+      api.request(`/reels/${item.id}/share/`, { method: 'POST' }).catch(() => {
+        setVideos(prev => prev.map(v =>
+          v.id === item.id ? { ...v, shares: Math.max(0, (v.shares || 1) - 1) } : v
+        ));
+      });
+    } catch (error) {
+      if (error.message !== 'User did not share') {
+        console.log('External share error:', error);
+      }
+    }
+  };
+
+  const handleShareWithUser = async (targetUserId) => {
+    try {
+      // Send the shared reel as a message to the user
+      try {
+        // First create or get conversation with the user
+        const conversation = await api.request('/messages/conversations/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: targetUserId }),
+        });
+        
+        // Then send the reel as a message
+        const caption = item.caption || item.description || 'Check out this reel!';
+        const userName = item.user?.username || item.user?.first_name || 'Someone';
+        const messageText = `🎬 ${userName} shared a reel\n\n${caption}\n\n[REEL_ID:${item.id}]`;
+        const messageData = {
+          text: messageText
+        };
+        console.log('Sending message with data:', messageData);
+        
+        await api.request(`/messages/conversations/${conversation.id}/messages/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(messageData),
+        });
+        
+        console.log('Shared reel sent as message successfully with reel_id:', item.id);
+      } catch (messageError) {
+        console.log('Failed to send reel as message:', messageError.message);
+        Alert.alert('Error', 'Failed to send reel as message');
+        return;
+      }
+      
+      // Optimistic share count update - do immediately before API call
+      setVideos(prev => prev.map(v =>
+        v.id === item.id ? { ...v, shares: (v.shares || 0) + 1 } : v
+      ));
+      setShowShareModal(false);
+      Alert.alert('Shared!', 'Reel shared with user successfully');
+
+      // Fire share count API in background
+      api.request(`/reels/${item.id}/share/`, { method: 'POST' }).catch(() => {
+        // Revert on failure
+        setVideos(prev => prev.map(v =>
+          v.id === item.id ? { ...v, shares: Math.max(0, (v.shares || 1) - 1) } : v
+        ));
+      });
     } catch (error) {
       console.log('Share error:', error);
+      Alert.alert('Error', 'Failed to share reel with user');
     }
-    setShowMenu(false);
   };
 
   // Long-press handlers for TikTok-style context menu
@@ -691,12 +779,14 @@ const ReelItem = React.memo(function ReelItem({
           </View>
         </TouchableOpacity>
 
-        {/* Gift Button */}
-        <TouchableOpacity style={styles.actionItem} onPress={() => onOpenGiftModal(item.user)}>
-          <View style={styles.actionIconRow}>
-            <Ionicons name="gift-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
-          </View>
-        </TouchableOpacity>
+        {/* Gift Button - Only show for other users' posts */}
+        {!isOwnPost && (
+          <TouchableOpacity style={styles.actionItem} onPress={() => onOpenGiftModal(item.user)}>
+            <View style={styles.actionIconRow}>
+              <Ionicons name="gift-outline" size={26} color={DARK_GOLD} style={styles.iconShadow} />
+            </View>
+          </TouchableOpacity>
+        )}
 
         </View>
 
@@ -829,6 +919,129 @@ const ReelItem = React.memo(function ReelItem({
           </TouchableOpacity>
         </Modal>
       )}
+
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.shareModal}>
+            <View style={styles.shareModalHeader}>
+              <Text style={styles.shareModalTitle}>Share</Text>
+              <TouchableOpacity onPress={() => setShowShareModal(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Share to external apps */}
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12, margin: 16, marginBottom: 8, backgroundColor: '#222', borderRadius: 12, padding: 14 }}
+              onPress={handleShareExternal}
+            >
+              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: GOLD, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="share-outline" size={22} color="#000" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Share to Apps</Text>
+                <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>WhatsApp, Instagram, and more</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#666" />
+            </TouchableOpacity>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginBottom: 4 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: '#333' }} />
+              <Text style={{ color: '#666', fontSize: 12, marginHorizontal: 10 }}>or send to a user</Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: '#333' }} />
+            </View>
+
+            <View style={styles.shareModalContent}>
+              {/* Search input */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#222', borderRadius: 10, marginBottom: 10, paddingHorizontal: 10 }}>
+                <Ionicons name="search-outline" size={18} color="#888" style={{ marginRight: 6 }} />
+                <TextInput
+                  value={shareSearch}
+                  onChangeText={handleShareSearch}
+                  placeholder="Search users..."
+                  placeholderTextColor="#666"
+                  style={{ flex: 1, color: '#fff', fontSize: 14, paddingVertical: 10 }}
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {(searchingUsers || loadingShareableUsers) && (
+                  <ActivityIndicator size="small" color={GOLD} />
+                )}
+                {!!shareSearch && !searchingUsers && (
+                  <TouchableOpacity onPress={() => handleShareSearch('')}>
+                    <Ionicons name="close-circle" size={18} color="#666" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              {loadingShareableUsers ? (
+                <View style={styles.shareModalLoading}>
+                  <ActivityIndicator size="small" color={GOLD} />
+                  <Text style={styles.shareModalLoadingText}>Loading users...</Text>
+                </View>
+              ) : shareableUsers.length === 0 ? (
+                <View style={styles.shareModalEmpty}>
+                  <Ionicons name="people-outline" size={48} color="#666" />
+                  <Text style={styles.shareModalEmptyText}>
+                    No users available to message
+                  </Text>
+                  <Text style={styles.shareModalEmptySubtext}>
+                    Connect with more users to share posts
+                  </Text>
+                </View>
+              ) : (
+                <ScrollView style={styles.shareModalUserList} showsVerticalScrollIndicator={false}>
+                  {shareableUsers.map(userItem => (
+                    <TouchableOpacity 
+                      key={userItem.id}
+                      style={styles.shareModalUserItem}
+                      onPress={() => handleShareWithUser(userItem.id)}
+                    >
+                      <Avatar 
+                        uri={userItem.profile_photo?.startsWith('http')
+                          ? userItem.profile_photo
+                          : userItem.profile_photo
+                            ? `${MEDIA_BASE}${userItem.profile_photo}`
+                            : null}
+                        size={40} 
+                        name={userItem.username} 
+                      />
+                      <View style={styles.shareModalUserInfo}>
+                        <Text style={styles.shareModalUsername}>
+                          @{userItem.username}
+                        </Text>
+                        <Text style={styles.shareModalUserFullname}>
+                          {userItem.full_name || userItem.first_name && userItem.last_name 
+                            ? `${userItem.first_name} ${userItem.last_name}` 
+                            : 'No name'}
+                        </Text>
+                      </View>
+                      <View style={styles.shareModalUserAction}>
+                        <Ionicons name="send-outline" size={20} color={GOLD} />
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              )}
+            </View>
+            
+            <View style={styles.shareModalFooter}>
+              <TouchableOpacity 
+                style={styles.shareModalCancelButton}
+                onPress={() => setShowShareModal(false)}
+              >
+                <Text style={styles.shareModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 });
@@ -1371,44 +1584,19 @@ export default function ReelsScreen({ navigation, route }) {
             cache: 'no-cache'
           });
           if (specificVideo && specificVideo.media) {
-            console.log('Specific video loaded:', specificVideo.id);
-            console.log('Video stats:', {
-              likes: specificVideo.likes_count,
-              comments: specificVideo.comments_count,
-              shares: specificVideo.shares_count
-            });
-            // Set the specific video as the first item with preserved share counts
-            setReels(prev => {
-              const updatedVideo = {
-                ...specificVideo,
-                shares: (specificVideo.shares || 0) + (localShareCounts[specificVideo.id] || 0)
-              };
-              return [updatedVideo];
-            });
+            // Show ONLY this specific shared video - no background feed loading
+            // This guarantees the correct video is always shown
+            const updatedVideo = {
+              ...specificVideo,
+              shares: (specificVideo.shares || 0) + (localShareCounts[specificVideo.id] || 0)
+            };
+            setReels([updatedVideo]);
+            setActiveIndex(0);
             setLoading(false);
-            
-            // Then load the rest of the feed in the background
-            const endpoint = activeTab === 'following' 
-              ? `/reels/following/?limit=${LIMIT}&offset=0`
-              : `/reels/?limit=${LIMIT}&offset=0`;
-            
-            const data = await api.request(endpoint);
-            const results = Array.isArray(data) ? data : (data.results || []);
-            const filteredResults = results.filter(reel => reel && reel.media && String(reel.id) !== String(initialVideoId));
-            
-            // Add the rest of the videos after the specific one with preserved share counts
-            setReels(prev => {
-              const updatedSpecificVideo = {
-                ...specificVideo,
-                shares: (specificVideo.shares || 0) + (localShareCounts[specificVideo.id] || 0)
-              };
-              const updatedFilteredResults = filteredResults.map(reel => ({
-                ...reel,
-                shares: (reel.shares || 0) + (localShareCounts[reel.id] || 0)
-              }));
-              return [updatedSpecificVideo, ...updatedFilteredResults];
-            });
-            setHasMore(filteredResults.length === LIMIT);
+            setTimeout(() => {
+              flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+            }, 100);
+            setHasMore(false);
             return;
           }
         } catch (error) {
@@ -1474,12 +1662,15 @@ export default function ReelsScreen({ navigation, route }) {
 
   // Auto-refresh content when block state changes
   useEffect(() => {
-    // Refresh the current tab to reflect block/unblock changes
+    // Don't override specific video when navigating from a shared link
+    if (initialVideoId) return;
     fetchReels(0, true);
   }, [filterBlockedUsers]);
 
   const fetchReels = async (offset = 0, reset = false) => {
     try {
+      // Don't override specific video when navigating from a shared link
+      if (reset && initialVideoId) return;
       if (reset) setLoading(true); else setLoadingMore(true);
       
       let endpoint = activeTab === 'following'
@@ -1634,14 +1825,6 @@ export default function ReelsScreen({ navigation, route }) {
     />
   ), [activeIndex, user, reels, handleShowProfile, handleNavigate, openGiftModal, handleFollow, followStates, fromDeepLink, localShareCounts]);
 
-  if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: BG, justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={GOLD} />
-      </View>
-    );
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: BG }]}>
       <StatusBar barStyle={'#fff' === '#FFFFFF' ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
@@ -1663,7 +1846,7 @@ export default function ReelsScreen({ navigation, route }) {
       )}
 
       {/* Tab Navigation */}
-      <View style={[styles.tabContainer, { backgroundColor: CARD + '80', top: insets.top + 8 }]}>
+      <View style={[styles.tabContainer, { top: insets.top + 8 }]}>
         {['for_you', 'following'].map(tab => (
           <TouchableOpacity 
             key={tab} 
@@ -2642,5 +2825,127 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(249,224,139,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // Share Modal Styles
+  shareModal: {
+    backgroundColor: CARD,
+    borderRadius: 16,
+    margin: 20,
+    maxWidth: 400,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  shareModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  shareModalContent: {
+    padding: 20,
+  },
+  shareModalDescription: {
+    fontSize: 14,
+    color: '#ccc',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  shareModalPlaceholder: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  shareModalPlaceholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  shareModalPlaceholderSubtext: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  shareModalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  shareModalCancelButton: {
+    backgroundColor: 'transparent',
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  shareModalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#8fc441',
+  },
+
+  // Share Modal User List Styles
+  shareModalLoading: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  shareModalLoadingText: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 12,
+  },
+  shareModalEmpty: {
+    alignItems: 'center',
+    padding: 40,
+  },
+  shareModalEmptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  shareModalEmptySubtext: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  shareModalUserList: {
+    maxHeight: 300,
+  },
+  shareModalUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  shareModalUserInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  shareModalUsername: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  shareModalUserFullname: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  shareModalUserAction: {
+    padding: 8,
   },
 });

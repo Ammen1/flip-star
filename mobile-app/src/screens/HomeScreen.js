@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Avatar from '../components/Avatar';
 import UserSuggestions from '../components/UserSuggestions';
 import HorizontalUserSuggestions from '../components/HorizontalUserSuggestions';
+import CampaignEventEmitter from '../contexts/CampaignEventEmitter';
 
 const { width, height } = Dimensions.get('window');
 const GOLD = '#8fc441';
@@ -630,6 +631,18 @@ export default function HomeScreen({ navigation, route }) {
         if (isCampaign) {
           setUserCoins(prev => Math.max(0, prev - SHARE_COST));
           showCampaignToast(`🪙 −${SHARE_COST} coins · +${SHARE_COST} score earned by creator`);
+          
+          // Immediately update any campaign leaderboards that might be showing this entry
+          setTimeout(() => {
+            if (post?.campaign_id) {
+              console.log('[CAMPAIGN] Share added, triggering leaderboard update for campaign:', post.campaign_id);
+              CampaignEventEmitter.emit('campaign_interaction', { 
+                type: 'share', 
+                campaignId: post.campaign_id, 
+                postId: post.id 
+              });
+            }
+          }, 100);
         }
       } catch (err) {
         console.log('HomeScreen share increment failed:', err);
@@ -993,6 +1006,33 @@ export default function HomeScreen({ navigation, route }) {
       setGiftSent(true);
       setUserCoins(prev => prev - totalCost);
       setGiftsSentToday(prev => prev + 1);
+      
+      // Update local gift count immediately
+      if (giftPost) {
+        setPosts(prev => prev.map(p => 
+          p.id === giftPost.id ? { ...p, gifts_count: (p.gifts_count || 0) + giftQuantity } : p
+        ));
+        
+        // Update local gift counts tracking
+        const newLocalGiftCounts = { ...localGiftCountsRef.current };
+        newLocalGiftCounts[giftPost.id] = (newLocalGiftCounts[giftPost.id] || 0) + giftQuantity;
+        localGiftCountsRef.current = newLocalGiftCounts;
+        setLocalGiftCounts(newLocalGiftCounts);
+      }
+      
+      // Immediately update any campaign leaderboards that might be showing this entry
+      if (giftPost?.campaign_id) {
+        setTimeout(() => {
+          console.log('[CAMPAIGN] Gift sent, triggering leaderboard update for campaign:', giftPost.campaign_id);
+          CampaignEventEmitter.emit('campaign_interaction', { 
+            type: 'gift', 
+            campaignId: giftPost.campaign_id, 
+            postId: giftPost.id,
+            quantity: giftQuantity
+          });
+        }, 100);
+      }
+      
       // Backend will update gifts_count, refresh posts to show updated count
       setTimeout(() => {
         // Refresh posts to get updated gift count from backend
@@ -1120,6 +1160,19 @@ export default function HomeScreen({ navigation, route }) {
         const COMMENT_COST = 2;
         setUserCoins(prev => Math.max(0, prev - COMMENT_COST));
         showCampaignToast(`🪙 −${COMMENT_COST} coins · +${COMMENT_COST} score earned by creator`);
+        
+        // Immediately update any campaign leaderboards that might be showing this entry
+        // This will trigger a refresh of campaign detail screens if they're open
+        setTimeout(() => {
+          if (commentPost?.campaign_id) {
+            console.log('[CAMPAIGN] Comment added, triggering leaderboard update for campaign:', commentPost.campaign_id);
+            CampaignEventEmitter.emit('campaign_interaction', { 
+              type: 'comment', 
+              campaignId: commentPost.campaign_id, 
+              postId: commentPost.id 
+            });
+          }
+        }, 100);
       }
     } catch (e) {
       Alert.alert('Error', 'Failed to post comment');

@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api';
 
-const GOLD = '#C8B56A';
+const GOLD = '#8fc441';
 const BG = '#0D0D0D';
 const CARD = '#1A1A1A';
 const BORDER = '#262626';
