@@ -69,8 +69,8 @@ export default function SubscriptionScreen({ navigation }) {
     }
 
     // Other tiers use SMS
-    const codeMap = { daily: 'OK1', weekly: 'OK2', monthly: 'OK3' };
-    const code = codeMap[tier.duration_type] || 'OK1';
+    const codeMap = { daily: '1', weekly: '2', monthly: '3' };
+    const code = codeMap[tier.duration_type] || '1';
     Linking.openURL(`sms:9286?body=${encodeURIComponent(code)}`).catch(() =>
       Alert.alert('Error', 'Could not open SMS app')
     );
