@@ -445,6 +445,7 @@ export default function WerqRoot() {
   const _isSubTp = _urlParams.get('subscription_tp') === 'true' || _urlParams.get('subscriptiontp') === 'true';
   const _prefillPhone = _urlParams.get('phone') || '';
   const _prefillOtp = _urlParams.get('otp') || '';
+  const _existingUser = _urlParams.get('existing_user') === 'true';
 
   // If arriving via SMS registration link, show register modal (not login)
   const [showSubRegister, setShowSubRegister] = useState(_isSubTp && !authUser);
@@ -1766,6 +1767,7 @@ export default function WerqRoot() {
               <SubscriptionRegisterModal
                 prefillPhone={_prefillPhone}
                 prefillOtp={_prefillOtp}
+                existingUser={_existingUser}
                 onSuccess={(u) => {
                   setAuthUser(u);
                   localStorage.setItem('user', JSON.stringify(u));
