@@ -630,7 +630,11 @@ const api = {
   // Subscription status check
   checkSubscriptionStatus: () => {
     if (!api.hasToken()) return Promise.resolve({ has_subscription: false });
-    return api.request('/subscription/status/', { skipCache: true });
+    return api.request('/subscription/status/', { skipCache: true }).catch(err => {
+      console.error('Subscription status check failed:', err);
+      // Return false on any error to be safe
+      return { has_subscription: false };
+    });
   },
 
   // Settings
