@@ -10,19 +10,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='notificationpreference',
-            name='mentions',
-            field=models.BooleanField(default=True),
-        ),
-        migrations.AddField(
-            model_name='walletconfig',
-            name='cost_post_create_long_video',
-            field=models.PositiveIntegerField(default=0, help_text='Additional coins for campaign videos > 60 seconds (0 = free)'),
-        ),
-        migrations.AddField(
-            model_name='walletconfig',
-            name='cost_post_create_long_video_non_campaign',
-            field=models.PositiveIntegerField(default=0, help_text='Additional coins for non-campaign videos > 60 seconds (0 = free)'),
-        ),
+        # mentions field already exists, removed from this migration
     ]
