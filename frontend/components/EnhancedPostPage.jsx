@@ -5,7 +5,7 @@ import {
   Image as ImageIcon, Video, Hash, Type, Upload, Music, Volume2, VolumeX, 
   Play, Pause, RotateCw, RefreshCw, Camera, Mic, MicOff, Sparkles, Palette, 
   ChevronDown, ChevronLeft, ChevronRight, Check, AlertCircle, Trash2,
-  Zap, ZapOff, Square, FileText, Eye, Bookmark, Share2, ArrowLeft, Heart
+  Zap, ZapOff, Square, FileText, Eye, Bookmark, Share2, ArrowLeft, Heart, Coins
 } from 'lucide-react';
 import api from '../api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -101,6 +101,8 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showInsufficientCoins, setShowInsufficientCoins] = useState(false);
+  const [postCost, setPostCost] = useState(0);
 
   // Refs
   const videoRef = useRef(null);
@@ -788,6 +790,27 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
       return;
     }
     console.log('[POST] file:', selectedFile.name, selectedFile.type, selectedFile.size, 'bytes');
+    
+    // Check coin balance before posting
+    try {
+      const [walletConfig, coinBalance] = await Promise.all([
+        api.request('/wallet/config/'),
+        api.request('/coins/balance/').catch(() => ({ balance: 0 }))
+      ]);
+      
+      const cost = walletConfig.cost_post_create_non_campaign || 0;
+      const balance = coinBalance.balance || 0;
+      
+      if (cost > 0 && balance < cost) {
+        setPostCost(cost);
+        setShowInsufficientCoins(true);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking coin balance:', error);
+      // Continue with posting if balance check fails
+    }
+    
     setIsUploading(true);
     setUploadProgress(0);
     try {
@@ -1875,6 +1898,53 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, color: T.white }}>Video is Live! 🎉</div>
           <div style={{ fontSize: 15, color: T.sub }}>Your post has been uploaded</div>
+        </div>
+      )}
+
+      {/* ── INSUFFICIENT COINS MODAL ──────────────────────────────────────────── */}
+      {showInsufficientCoins && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 20, animation: 'ep-fade-in 0.3s ease',
+        }}>
+          <div style={{
+            width: 96, height: 96, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Coins size={48} color={T.white} strokeWidth={3} />
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: T.white }}>Insufficient Coins</div>
+          <div style={{ fontSize: 15, color: T.sub, textAlign: 'center', maxWidth: 300, padding: '0 20px' }}>
+            You need {postCost} coins to create a post. Purchase coins to continue.
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+            <button
+              onClick={() => setShowInsufficientCoins(false)}
+              style={{
+                padding: '12px 24px', borderRadius: 24, fontSize: 14, fontWeight: 700,
+                background: 'rgba(255,255,255,0.1)', color: T.white, border: 'none', cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setShowInsufficientCoins(false);
+                // Navigate to wallet page for coin purchase
+                onNavHome?.();
+                // Trigger wallet show (this would need to be passed as a prop or handled differently)
+                // For now, just close and let user navigate manually
+              }}
+              style={{
+                padding: '12px 24px', borderRadius: 24, fontSize: 14, fontWeight: 700,
+                background: T.pri, color: T.white, border: 'none', cursor: 'pointer',
+              }}
+            >
+              Purchase Coins
+            </button>
+          </div>
         </div>
       )}
 
