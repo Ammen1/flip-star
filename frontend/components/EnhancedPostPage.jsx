@@ -853,22 +853,24 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
       }).catch(err => {
         console.error('[POST] Upload error:', err);
         setIsUploading(false);
-        
+
         // Check if error is due to insufficient coins
         if (err?.error && err.error.includes('Insufficient') || err?.required_coins) {
           const requiredCoins = err.required_coins || postCost || 2;
           console.log('[POST] Backend returned insufficient coins error, showing modal');
           setPostCost(requiredCoins);
           setShowInsufficientCoins(true);
-          return;
+          return null; // Return null to prevent success logic
         }
-        
+
         // Only show alert for other errors (not insufficient coins)
         alert(`Upload failed: ${err?.error || err?.message || 'Server error'}\n\nSee console for details`);
+        return null; // Return null to prevent success logic
       });
-      
-      // Broadcast new post to all users for real-time updates
+
+      // Only show success if upload actually succeeded (newReel is not null)
       if (newReel && newReel.id) {
+        // Broadcast new post to all users for real-time updates
         realtimeService.broadcastNewPost({
           id: newReel.id,
           user: user,
@@ -876,21 +878,21 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           media: newReel.media || newReel.image,
           created_at: newReel.created_at || new Date().toISOString()
         });
-        
+
         // Also broadcast feed refresh to ensure all tabs update
         realtimeService.broadcastFeedRefresh();
+
+        setUploadProgress(100);
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+          if (onPostSuccess) {
+            onPostSuccess(newReel.id);
+          } else {
+            onBack?.();
+          }
+        }, 2000);
       }
-      
-      setUploadProgress(100);
-      setShowSuccess(true);
-      setTimeout(() => {
-        setShowSuccess(false);
-        if (newReel?.id && onPostSuccess) {
-          onPostSuccess(newReel.id);
-        } else {
-          onBack?.();
-        }
-      }, 2000);
     } catch (e) {
       console.error('Upload failed', e);
       const detail = e?.traceback || e?.error || e?.message || String(e);
