@@ -865,6 +865,8 @@ export default function WerqRoot() {
       setFollowersListType(state.followersListType || 'followers');
       setFollowersListUserId(state.followersListUserId || null);
       setShowSettings(state.showSettings || false);
+      setShowWallet(state.showWallet || false);
+      setShowSubscription(state.showSubscription || false);
       setShowNotifications(state.showNotifications || false);
       setShowCampaigns(state.showCampaigns || false);
       setShowCampaignLeaderboard(state.showCampaignLeaderboard || false);
