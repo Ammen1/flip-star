@@ -121,9 +121,9 @@ export function SubscriptionPage({ user, onBack }) {
 
   const handleSubscribe = async (tier) => {
     // For regular subscriptions, use SMS
-    const tierCode = tier.duration_type === 'daily' ? 'OK1' :
-                     tier.duration_type === 'weekly' ? 'OK2' :
-                     tier.duration_type === 'monthly' ? 'OK3' : 'OK4';
+    const tierCode = tier.duration_type === 'daily' ? '1' :
+                     tier.duration_type === 'weekly' ? '2' :
+                     tier.duration_type === 'monthly' ? '3' : '4';
     const shortCode = tier.short_code || '9286';
     const smsUrl = `sms:${shortCode}?body=${encodeURIComponent(tierCode)}`;
     window.location.href = smsUrl;
@@ -564,9 +564,9 @@ export function SubscriptionPage({ user, onBack }) {
             </div>
             <div>
               <strong style={{ color: BRAND_GREEN, fontWeight: 700 }}>SMS:</strong> Send SMS to <span style={{ color: BRAND_GREEN, fontWeight: 800 }}>9286</span> with code{' '}
-              <span style={{ color: '#fff', fontWeight: 700 }}>OK1</span> (Daily),{' '}
-              <span style={{ color: '#fff' }}>OK2</span> (Weekly),{' '}
-              <span style={{ color: '#fff' }}>OK3</span> (Monthly) via ethio telecom.
+              <span style={{ color: '#fff', fontWeight: 700 }}>1</span> (Daily),{' '}
+              <span style={{ color: '#fff' }}>2</span> (Weekly),{' '}
+              <span style={{ color: '#fff' }}>3</span> (Monthly) via ethio telecom.
             </div>
           </div>
         </div>
