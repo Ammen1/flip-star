@@ -317,15 +317,6 @@ export function SubscriptionPage({ user, onBack }) {
       <div style={{ maxWidth: '100%', margin: '0 auto', paddingBottom: 32 }}>
         {/* Hero */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 24px' }}>
-          <div style={{
-            width: 100, height: 100, borderRadius: 50,
-            background: BRAND_GREEN,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 20,
-            boxShadow: '0 8px 32px rgba(143,196,65,0.3)',
-          }}>
-            <Trophy size={48} color="#fff" />
-          </div>
           <div style={{ fontSize: 32, fontWeight: 900, marginBottom: 8, color: '#fff' }}>FlipStar Premium</div>
           <div style={{ fontSize: 16, color: BRAND_GREEN, textAlign: 'center', fontWeight: 600 }}>Unlock the full experience</div>
           {isActive && currentSubscription?.end_date && (
@@ -361,28 +352,6 @@ export function SubscriptionPage({ user, onBack }) {
               )}
             </div>
           )}
-        </div>
-
-        {/* Benefits row */}
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: 12,
-          padding: '0 16px', marginBottom: 32, justifyContent: 'center',
-        }}>
-          {BENEFITS.map((b, i) => {
-            const BIcon = b.icon;
-            return (
-              <div key={i} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: BRAND_GREEN + '15',
-                borderRadius: 25,
-                padding: '10px 16px',
-                border: `1px solid ${BRAND_GREEN}40`,
-              }}>
-                <BIcon size={18} color={BRAND_GREEN} />
-                <span style={{ fontSize: 13, color: BRAND_GREEN, fontWeight: 600 }}>{b.text}</span>
-              </div>
-            );
-          })}
         </div>
 
         {/* Section label */}
