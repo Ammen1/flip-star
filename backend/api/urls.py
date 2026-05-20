@@ -19,7 +19,7 @@ from .views import (
 )
 from .views_subscription import (
     OnevasWebhookView, SubscriptionTierViewSet, SubscriptionViewSet as NewSubscriptionViewSet,
-    TrialPopupViewSet, CoinTransactionViewSet, AdminSubscriptionViewSet
+    TrialPopupViewSet, CoinTransactionViewSet, AdminSubscriptionViewSet, UserSubscriptionStatusView
 )
 from .views_master_campaign import (
     master_campaign_list, master_campaign_detail, master_campaign_participants,
@@ -448,6 +448,8 @@ urlpatterns = [
     path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-withdrawals-list'),
     path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-withdrawal-action'),
     # ============ SUBSCRIPTION SYSTEM ============
+    # Subscription Status Check
+    path('subscription/status/', UserSubscriptionStatusView.as_view(), name='subscription-status'),
     # Onevas Webhooks
     path('onevas/subscription/', OnevasWebhookView.as_view(), {'webhook_type': 'subscription'}, name='onevas-subscription'),
     path('onevas/unsubscription/', OnevasWebhookView.as_view(), {'webhook_type': 'unsubscription'}, name='onevas-unsubscription'),
