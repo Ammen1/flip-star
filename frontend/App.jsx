@@ -121,6 +121,10 @@ function TopUpModal({ theme: T, onClose }) {
         setTimeout(() => {
           onClose();
         }, 2000);
+      } else if (response.error === 'insufficient_balance') {
+        setResultSuccess(false);
+        setResultMessage('Your airtime balance is insufficient to complete this purchase. Please top up your airtime and try again.');
+        setShowResultModal(true);
       } else {
         setResultSuccess(false);
         setResultMessage(response.message || 'Purchase failed');
