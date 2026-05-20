@@ -809,9 +809,11 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
       console.log('[POST] Coin check:', { cost, balance, sufficient: balance >= cost });
       
       if (cost > 0 && balance < cost) {
-        console.log('[POST] Showing insufficient coins modal');
+        console.log('[POST] Showing insufficient coins modal', { cost, balance });
         setPostCost(cost);
         setShowInsufficientCoins(true);
+        // Force a re-render by using a small timeout
+        setTimeout(() => console.log('[POST] Modal state set:', showInsufficientCoins), 100);
         return;
       }
     } catch (error) {
