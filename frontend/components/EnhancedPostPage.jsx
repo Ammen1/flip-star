@@ -845,6 +845,22 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           lastReported = pct;
           setUploadProgress(Math.min(pct, 97));
         },
+      }).catch(err => {
+        console.error('[POST] Upload error:', err);
+        setIsUploading(false);
+        
+        // Check if error is due to insufficient coins
+        if (err?.error && err.error.includes('Insufficient') || err?.required_coins) {
+          const requiredCoins = err.required_coins || postCost || 2;
+          console.log('[POST] Backend returned insufficient coins error, showing modal');
+          setPostCost(requiredCoins);
+          setShowInsufficientCoins(true);
+          throw new Error('Insufficient coins');
+        }
+        
+        // Show alert for other errors
+        alert(`Upload failed: ${err?.error || err?.message || 'Server error'}\n\nSee console for details`);
+        throw err;
       });
       
       // Broadcast new post to all users for real-time updates
