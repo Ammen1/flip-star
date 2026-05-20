@@ -952,6 +952,37 @@ def create_post(request):
         else:
             cost = config.cost_post_create_non_campaign
 
+        # Check video duration for long video surcharge
+        video_duration = None
+        if is_video:
+            # Get video duration using ffmpeg
+            import os
+            import tempfile
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
+                    for chunk in file.chunks():
+                        temp_video.write(chunk)
+                    temp_video_path = temp_video.name
+
+                import ffmpeg
+                probe = ffmpeg.probe(temp_video_path)
+                video_duration = float(probe['streams'][0]['duration'])
+                print(f"[CREATE_POST] Video duration: {video_duration} seconds")
+
+                os.unlink(temp_video_path)
+            except Exception as e:
+                print(f"[CREATE_POST] Failed to get video duration: {e}")
+
+        # Add long video surcharge if duration > 60 seconds
+        if video_duration and video_duration > 60:
+            if is_campaign_post:
+                long_video_cost = config.cost_post_create_long_video
+            else:
+                long_video_cost = config.cost_post_create_long_video_non_campaign
+            if long_video_cost and long_video_cost > 0:
+                cost += long_video_cost
+                print(f"[CREATE_POST] Long video surcharge added: {long_video_cost}, total cost: {cost}")
+
         if cost and cost > 0:
             balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
             try:

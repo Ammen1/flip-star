@@ -51,6 +51,7 @@ class WalletConfig(models.Model):
     cost_boost_24hr = models.PositiveIntegerField(default=800)
     cost_trending_1hr = models.PositiveIntegerField(default=150, help_text='Cost to make post trending for 1 hour')
     cost_trending_24hr = models.PositiveIntegerField(default=1200, help_text='Cost to make post trending for 24 hours')
+    cost_post_create_long_video = models.PositiveIntegerField(default=0, help_text='Additional coins for campaign videos > 60 seconds (0 = free)')
 
     # ============ NON-CAMPAIGN ACTION COSTS ============
     cost_post_create_non_campaign = models.PositiveIntegerField(default=0, help_text='Cost to create a non-campaign post (0 = free)')
@@ -63,6 +64,7 @@ class WalletConfig(models.Model):
     cost_boost_24hr_non_campaign = models.PositiveIntegerField(default=800)
     cost_trending_1hr_non_campaign = models.PositiveIntegerField(default=150, help_text='Cost to make non-campaign post trending for 1 hour')
     cost_trending_24hr_non_campaign = models.PositiveIntegerField(default=1200, help_text='Cost to make non-campaign post trending for 24 hours')
+    cost_post_create_long_video_non_campaign = models.PositiveIntegerField(default=0, help_text='Additional coins for non-campaign videos > 60 seconds (0 = free)')
 
     # ============ MINIMUM BALANCE THRESHOLDS ============
     min_balance_to_post = models.PositiveIntegerField(default=0)
