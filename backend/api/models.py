@@ -346,6 +346,7 @@ class NotificationPreference(models.Model):
     comments = models.BooleanField(default=True)
     follows = models.BooleanField(default=True)
     messages = models.BooleanField(default=True)
+    mentions = models.BooleanField(default=True)
 
     def __str__(self):
         return f"Notifications for {self.user.username}"
