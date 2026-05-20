@@ -1928,11 +1928,16 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
 
       {/* ── INSUFFICIENT COINS MODAL ──────────────────────────────────────────── */}
       {showInsufficientCoins && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 20, animation: 'ep-fade-in 0.3s ease',
-        }}>
+        <div 
+          onClick={(e) => {
+            // Prevent closing when clicking outside the modal content
+            e.stopPropagation();
+          }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 20, animation: 'ep-fade-in 0.3s ease',
+          }}>
           <div style={{
             width: 96, height: 96, borderRadius: '50%',
             background: 'linear-gradient(135deg, #EF4444, #DC2626)',
