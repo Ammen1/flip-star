@@ -52,6 +52,18 @@ class WalletConfig(models.Model):
     cost_trending_1hr = models.PositiveIntegerField(default=150, help_text='Cost to make post trending for 1 hour')
     cost_trending_24hr = models.PositiveIntegerField(default=1200, help_text='Cost to make post trending for 24 hours')
 
+    # ============ NON-CAMPAIGN ACTION COSTS ============
+    cost_post_create_non_campaign = models.PositiveIntegerField(default=0, help_text='Cost to create a non-campaign post (0 = free)')
+    cost_like_non_campaign = models.PositiveIntegerField(default=0, help_text='Coins charged when liking a non-campaign post (0 = free)')
+    cost_comment_non_campaign = models.PositiveIntegerField(default=0, help_text='Coins charged when commenting on a non-campaign post (0 = free)')
+    cost_share_non_campaign = models.PositiveIntegerField(default=0, help_text='Coins charged when sharing a non-campaign post (0 = free)')
+    cost_gift_non_campaign = models.PositiveIntegerField(default=0, help_text='Extra coins charged on top of gift value when gifting on a non-campaign post (0 = free)')
+    cost_boost_1hr_non_campaign = models.PositiveIntegerField(default=100, help_text='Cost to boost non-campaign post for 1 hour')
+    cost_boost_2hr_non_campaign = models.PositiveIntegerField(default=200)
+    cost_boost_24hr_non_campaign = models.PositiveIntegerField(default=800)
+    cost_trending_1hr_non_campaign = models.PositiveIntegerField(default=150, help_text='Cost to make non-campaign post trending for 1 hour')
+    cost_trending_24hr_non_campaign = models.PositiveIntegerField(default=1200, help_text='Cost to make non-campaign post trending for 24 hours')
+
     # ============ MINIMUM BALANCE THRESHOLDS ============
     min_balance_to_post = models.PositiveIntegerField(default=0)
     min_balance_to_join_campaign = models.PositiveIntegerField(default=50)
