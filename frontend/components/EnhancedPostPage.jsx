@@ -793,15 +793,23 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
     
     // Check coin balance before posting
     try {
-      const [walletConfig, coinBalance] = await Promise.all([
-        api.request('/wallet/config/'),
-        api.request('/coins/balance/').catch(() => ({ balance: 0 }))
-      ]);
+      const walletConfig = await api.request('/wallet/config/').catch(err => {
+        console.error('Wallet config error:', err);
+        return { cost_post_create_non_campaign: 0 };
+      });
+      
+      const coinBalance = await api.request('/coins/balance/').catch(err => {
+        console.error('Coin balance error:', err);
+        return { balance: 0 };
+      });
       
       const cost = walletConfig.cost_post_create_non_campaign || 0;
       const balance = coinBalance.balance || 0;
       
+      console.log('[POST] Coin check:', { cost, balance, sufficient: balance >= cost });
+      
       if (cost > 0 && balance < cost) {
+        console.log('[POST] Showing insufficient coins modal');
         setPostCost(cost);
         setShowInsufficientCoins(true);
         return;
