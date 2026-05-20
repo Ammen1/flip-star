@@ -855,12 +855,11 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           console.log('[POST] Backend returned insufficient coins error, showing modal');
           setPostCost(requiredCoins);
           setShowInsufficientCoins(true);
-          throw new Error('Insufficient coins');
+          return;
         }
         
-        // Show alert for other errors
+        // Only show alert for other errors (not insufficient coins)
         alert(`Upload failed: ${err?.error || err?.message || 'Server error'}\n\nSee console for details`);
-        throw err;
       });
       
       // Broadcast new post to all users for real-time updates
