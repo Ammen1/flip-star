@@ -1961,9 +1961,16 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
             </button>
             <button
               onClick={() => {
+                console.log('[INSUFFICIENT_COINS] Purchase button clicked', { onShowCoinPurchase: !!onShowCoinPurchase });
                 setShowInsufficientCoins(false);
                 // Show coin purchase modal
-                onShowCoinPurchase?.();
+                if (onShowCoinPurchase) {
+                  onShowCoinPurchase();
+                } else {
+                  console.error('[INSUFFICIENT_COINS] onShowCoinPurchase not available');
+                  // Fallback: navigate to profile
+                  onNavProfile?.();
+                }
               }}
               style={{
                 padding: '12px 24px', borderRadius: 24, fontSize: 14, fontWeight: 700,
