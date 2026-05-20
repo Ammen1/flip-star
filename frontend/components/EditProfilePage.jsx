@@ -200,8 +200,10 @@ export function EditProfilePage({ user, onBack, onSave }) {
                   position: "absolute",
                   bottom: 0,
                   right: 0,
-                  width: 32,
-                  height: 32,
+                  width: "32px",
+                  height: "32px",
+                  minWidth: "32px",
+                  minHeight: "32px",
                   borderRadius: "50%",
                   background: T.pri,
                   border: "2px solid #fff",
@@ -213,9 +215,10 @@ export function EditProfilePage({ user, onBack, onSave }) {
                   boxSizing: "border-box",
                   padding: 0,
                   flexShrink: 0,
+                  overflow: "hidden",
                 }}
               >
-                <Camera size={16} style={{ flexShrink: 0 }} />
+                <Camera size={16} style={{ flexShrink: 0, display: "block" }} />
               </button>
               <input
                 ref={fileInputRef}
