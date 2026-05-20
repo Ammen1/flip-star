@@ -365,6 +365,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hasSubscriptionParams = params.get('subscription_tp') === 'true' || params.get('subscriptiontp') === 'true';
+    const existingUser = params.get('existing_user') === 'true' || params.get('existinguser') === 'true';
     
     if (hasSubscriptionParams) {
       // Check if user is already logged in
@@ -380,7 +381,7 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
       const phoneFromUrl = params.get('phone');
       if (phoneFromUrl) {
         // Check if phone has an account
-        checkPhoneHasAccount(phoneFromUrl);
+        checkPhoneHasAccount(phoneFromUrl, existingUser);
       } else {
         // No phone in URL, show subscription OTP mode by default
         setSubscriptionOtpMode(true);
@@ -388,11 +389,11 @@ export function ModernLoginScreen({ onSuccess, onRegister, onBack }) {
     }
   }, []);
 
-  const checkPhoneHasAccount = async (phone) => {
+  const checkPhoneHasAccount = async (phone, existingUser) => {
     try {
       const response = await api.post('/auth/check-phone-account/', { phone });
-      if (response.data.has_account) {
-        // Phone has account, show regular login
+      if (response.data.has_account || existingUser) {
+        // Phone has account or is existing user (from URL param), show regular login
         setSubscriptionOtpMode(false);
         // Pre-fill phone number
         setEmail(phone);
