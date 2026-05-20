@@ -292,12 +292,9 @@ export function SubscriptionPage({ user, onBack }) {
     <div style={{ minHeight: '100vh', background: M_BG, color: '#fff' }}>
       {/* Header */}
       <div style={{
-        background: M_CARD,
         padding: '12px 16px',
-        borderBottom: `1px solid ${M_BORDER}`,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
         position: 'sticky',
         top: 0,
         zIndex: 10,
@@ -315,8 +312,6 @@ export function SubscriptionPage({ user, onBack }) {
         >
           <ChevronLeft size={22} />
         </button>
-        <div style={{ fontSize: 17, fontWeight: 700 }}>Premium</div>
-        <div style={{ width: 36 }} />
       </div>
 
       <div style={{ maxWidth: '100%', margin: '0 auto', paddingBottom: 32 }}>
