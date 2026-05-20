@@ -1040,9 +1040,8 @@ export default function WerqRoot() {
       }
     };
 
-    // Check subscription status after a short delay
-    const timer = setTimeout(checkSubscription, 2000);
-    return () => clearTimeout(timer);
+    // Check subscription status immediately (no delay)
+    checkSubscription();
   }, [authUser]); // Run when authUser changes
 
   // Enforce subscription gate - prevent navigation when subscription is not active
@@ -1069,9 +1068,9 @@ export default function WerqRoot() {
       setShowVideoDetail(false);
       setShowExplorer(false);
     }
-  }, [subscriptionChecked, subscriptionStatus, showSubscription, authUser]);
+  }, [subscriptionChecked, subscriptionStatus, showSubscription, authUser, showPostPage, showProfile, showEditProfile, showFollowersList, showSettings, showWallet, showNotifications, showCampaigns, showCampaignDetail, showCampaignLeaderboard, showCampaignFeed, showVideoDetail, showExplorer]);
 
-  // Periodically check subscription expiry (every 5 minutes)
+  // Periodically check subscription expiry (every 30 seconds)
   useEffect(() => {
     if (!authUser || !api.hasToken()) return;
     
@@ -1087,9 +1086,31 @@ export default function WerqRoot() {
       } catch (e) {
         console.log('Periodic subscription check failed:', e.message);
       }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 30 * 1000); // 30 seconds
     
     return () => clearInterval(interval);
+  }, [authUser, showSubscription]);
+
+  // Check subscription status when window/tab gains focus (user switches back to the app)
+  useEffect(() => {
+    if (!authUser || !api.hasToken()) return;
+    
+    const handleFocus = async () => {
+      try {
+        const status = await api.checkSubscriptionStatus();
+        setSubscriptionStatus(status);
+        
+        if (!status.has_subscription && !showSubscription) {
+          console.log('🔒 Window focused - no active subscription, redirecting to subscription page');
+          setShowSubscription(true);
+        }
+      } catch (e) {
+        console.log('Window focus subscription check failed:', e.message);
+      }
+    };
+    
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [authUser, showSubscription]);
 
   // Listen for navigate to create post event from campaign modal
