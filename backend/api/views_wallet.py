@@ -601,6 +601,13 @@ def admin_wallet_config(request):
             elif field.startswith(('earned_coins_', 'purchased_coins_', 'withdrawal_enabled')):
                 if isinstance(value, str):
                     value = value.lower() in ('true', '1', 'yes', 'on')
+            elif field.startswith('cost_') or field.startswith('daily_') or field.startswith('min_') or field.startswith('max_') or field.startswith('coins_per_') or field.startswith('points_per_') or field.startswith('withdrawal_') or field.startswith('gift_'):
+                # Convert to integer for cost/points/withdrawal fields
+                if isinstance(value, str):
+                    try:
+                        value = int(value)
+                    except ValueError:
+                        pass
             setattr(config, field, value)
 
     config.updated_by = request.user
