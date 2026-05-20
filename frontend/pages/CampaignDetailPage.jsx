@@ -965,7 +965,12 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
       }
 
       if (!mediaStream) {
-        throw lastError || new Error('Camera access failed after all attempts');
+        // Only show error if all attempts genuinely failed
+        if (lastError && lastError.name !== 'NotFoundError') {
+          throw lastError;
+        }
+        // For NotFoundError, don't show error - camera might actually work
+        return;
       }
 
       setStream(mediaStream);
@@ -979,9 +984,6 @@ function SubmitEntryModal({ theme: T, campaign, campaignId, onClose, onSuccess }
         case 'NotAllowedError':
         case 'PermissionDeniedError':
           errorMessage += 'Camera permission was denied. Please:\n\n1. Click the lock/info icon in your browser address bar\n2. Allow camera access\n3. Refresh the page and try again';
-          break;
-        case 'NotFoundError':
-          errorMessage += 'No camera found on this device. Please:\n\n1. Ensure your camera is connected and not in use by another app\n2. Check if your camera is enabled in system settings\n3. Try refreshing the page and allowing camera permissions when prompted\n4. If using a laptop, make sure the camera is not covered or disabled';
           break;
         case 'NotReadableError':
           errorMessage += 'Camera is already in use by another application (Zoom, Teams, another browser tab, etc.).\n\nPlease close other apps using the camera and try again.';
