@@ -1293,7 +1293,11 @@ export default function WerqRoot() {
         return;
       }
     }
-    pushHistoryState({ showSubscription: false }, true);
+    // Default: navigate to profile if no return state
+    setShowProfile(true);
+    setProfileUserId(authUser?.id || null);
+    setActiveTab('profile');
+    pushHistoryState({ showSubscription: false, showProfile: true, profileUserId: authUser?.id || null, activeTab: 'profile' }, true);
   };
 
   const handleCloseSettings = () => { goHome(); };
