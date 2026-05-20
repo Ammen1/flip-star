@@ -1343,11 +1343,9 @@ export default function WerqRoot() {
   };
 
   const handleCloseSubscription = () => {
-    // Prevent closing subscription page if user has no active subscription
-    if (subscriptionChecked && !subscriptionStatus?.has_subscription) {
-      console.log('🔒 Cannot close subscription page - no active subscription');
-      return;
-    }
+    // Always allow closing subscription page - subscription gate enforcement happens separately
+    // The subscription gate will redirect back to subscription page if needed
+    console.log('� Closing subscription page', { subscriptionChecked, hasSubscription: subscriptionStatus?.has_subscription });
     
     setShowSubscription(false);
     const ret = subscriptionReturnState.current;
