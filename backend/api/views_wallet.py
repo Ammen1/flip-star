@@ -651,6 +651,7 @@ def _serialize_full_config(config):
         },
         'costs': {
             'post_create': config.cost_post_create,
+            'post_create_long_video': config.cost_post_create_long_video,
             'like': config.cost_like,
             'comment': config.cost_comment,
             'share': config.cost_share,
@@ -663,6 +664,7 @@ def _serialize_full_config(config):
             'trending_1hr': config.cost_trending_1hr,
             'trending_24hr': config.cost_trending_24hr,
             'post_create_non_campaign': config.cost_post_create_non_campaign,
+            'post_create_long_video_non_campaign': config.cost_post_create_long_video_non_campaign,
             'like_non_campaign': config.cost_like_non_campaign,
             'comment_non_campaign': config.cost_comment_non_campaign,
             'share_non_campaign': config.cost_share_non_campaign,
