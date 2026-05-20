@@ -49,7 +49,7 @@ function ProgressRing({ radius, stroke, progress, color }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNavReels, onNavMessages, onNavProfile, unreadDmCount = 0 }) {
+export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNavReels, onNavMessages, onNavProfile, unreadDmCount = 0, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   // Stage
   const [stage, setStage] = useState('capture'); // 'capture' | 'details'
@@ -1957,10 +1957,8 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
             <button
               onClick={() => {
                 setShowInsufficientCoins(false);
-                // Navigate to wallet page for coin purchase
-                onNavHome?.();
-                // Trigger wallet show (this would need to be passed as a prop or handled differently)
-                // For now, just close and let user navigate manually
+                // Show coin purchase modal
+                onShowCoinPurchase?.();
               }}
               style={{
                 padding: '12px 24px', borderRadius: 24, fontSize: 14, fontWeight: 700,

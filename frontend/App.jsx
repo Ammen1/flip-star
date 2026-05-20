@@ -1744,6 +1744,7 @@ export default function WerqRoot() {
                 onNavMessages={() => { setShowPostPage(false); setActiveTab('messages'); }}
                 onNavProfile={() => handleShowProfile(null)}
                 unreadDmCount={unreadDmCount}
+                onShowCoinPurchase={handleShowCoinPurchase}
               />
             </Suspense>
           </LazyLoadErrorBoundary>
