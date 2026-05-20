@@ -1045,6 +1045,53 @@ export default function WerqRoot() {
     return () => clearTimeout(timer);
   }, [authUser]); // Run when authUser changes
 
+  // Enforce subscription gate - prevent navigation when subscription is not active
+  useEffect(() => {
+    if (!authUser || !subscriptionChecked) return;
+    
+    const hasActiveSubscription = subscriptionStatus?.has_subscription;
+    
+    if (!hasActiveSubscription && !showSubscription) {
+      console.log('🔒 Subscription gate: No active subscription, forcing subscription page');
+      setShowSubscription(true);
+      // Clear all other pages
+      setShowPostPage(false);
+      setShowProfile(false);
+      setShowEditProfile(false);
+      setShowFollowersList(false);
+      setShowSettings(false);
+      setShowWallet(false);
+      setShowNotifications(false);
+      setShowCampaigns(false);
+      setShowCampaignDetail(false);
+      setShowCampaignLeaderboard(false);
+      setShowCampaignFeed(false);
+      setShowVideoDetail(false);
+      setShowExplorer(false);
+    }
+  }, [subscriptionChecked, subscriptionStatus, showSubscription, authUser]);
+
+  // Periodically check subscription expiry (every 5 minutes)
+  useEffect(() => {
+    if (!authUser || !api.hasToken()) return;
+    
+    const interval = setInterval(async () => {
+      try {
+        const status = await api.checkSubscriptionStatus();
+        setSubscriptionStatus(status);
+        
+        if (!status.has_subscription && !showSubscription) {
+          console.log('🔒 Subscription expired, redirecting to subscription page');
+          setShowSubscription(true);
+        }
+      } catch (e) {
+        console.log('Periodic subscription check failed:', e.message);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    return () => clearInterval(interval);
+  }, [authUser, showSubscription]);
+
   // Listen for navigate to create post event from campaign modal
   useEffect(() => {
     const handleNavigateToCreatePost = () => {
@@ -1275,6 +1322,12 @@ export default function WerqRoot() {
   };
 
   const handleCloseSubscription = () => {
+    // Prevent closing subscription page if user has no active subscription
+    if (subscriptionChecked && !subscriptionStatus?.has_subscription) {
+      console.log('🔒 Cannot close subscription page - no active subscription');
+      return;
+    }
+    
     setShowSubscription(false);
     const ret = subscriptionReturnState.current;
     if (ret) {
