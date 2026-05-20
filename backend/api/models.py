@@ -111,6 +111,7 @@ class UserProfile(models.Model):
     is_private = models.BooleanField(default=False)
     show_activity = models.BooleanField(default=True)
     allow_messages = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
