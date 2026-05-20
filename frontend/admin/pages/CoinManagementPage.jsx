@@ -91,6 +91,7 @@ export function CoinManagementPage({ theme }) {
         referral_reward: config.rewards.referral_reward,
         campaign_winner_reward: config.rewards.campaign_winner_reward,
         cost_post_create: config.costs.post_create || 0,
+        cost_post_create_long_video: config.costs.post_create_long_video || 0,
         cost_like: config.costs.like || 0,
         cost_comment: config.costs.comment || 0,
         cost_share: config.costs.share || 0,
@@ -103,6 +104,7 @@ export function CoinManagementPage({ theme }) {
         cost_trending_1hr: config.costs.trending_1hr || 0,
         cost_trending_24hr: config.costs.trending_24hr || 0,
         cost_post_create_non_campaign: config.costs.post_create_non_campaign || 0,
+        cost_post_create_long_video_non_campaign: config.costs.post_create_long_video_non_campaign || 0,
         cost_like_non_campaign: config.costs.like_non_campaign || 0,
         cost_comment_non_campaign: config.costs.comment_non_campaign || 0,
         cost_share_non_campaign: config.costs.share_non_campaign || 0,
@@ -462,6 +464,7 @@ function ActionCostsSubTab({ theme: T, config, updateField }) {
           Costs for actions on campaign posts
         </div>
         <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create} onChange={(v) => updateField('costs', 'post_create', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Long Video Cost (>60s)" value={config.costs.post_create_long_video} onChange={(v) => updateField('costs', 'post_create_long_video', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Like Cost" value={config.costs.like} onChange={(v) => updateField('costs', 'like', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Share Cost" value={config.costs.share} onChange={(v) => updateField('costs', 'share', parseInt(v) || 0)} />
@@ -490,6 +493,7 @@ function NonCampaignActionCostsSubTab({ theme: T, config, updateField }) {
           Costs for actions on non-campaign posts
         </div>
         <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create_non_campaign} onChange={(v) => updateField('costs', 'post_create_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Long Video Cost (>60s)" value={config.costs.post_create_long_video_non_campaign} onChange={(v) => updateField('costs', 'post_create_long_video_non_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Like Cost" value={config.costs.like_non_campaign} onChange={(v) => updateField('costs', 'like_non_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment_non_campaign} onChange={(v) => updateField('costs', 'comment_non_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Share Cost" value={config.costs.share_non_campaign} onChange={(v) => updateField('costs', 'share_non_campaign', parseInt(v) || 0)} />
