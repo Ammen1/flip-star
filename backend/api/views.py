@@ -958,6 +958,7 @@ def create_post(request):
                 balance.spend_coins(cost, 'post_create' if not is_campaign_post else 'campaign_post_create',
                                     description=f'Create {"campaign" if is_campaign_post else "non-campaign"} post')
             except ValueError as e:
+                print(f"[CREATE_POST] Insufficient coins error: {str(e)}, required: {cost}")
                 return Response({'error': str(e), 'required_coins': cost},
                                 status=status.HTTP_400_BAD_REQUEST)
 
