@@ -153,7 +153,7 @@ function NewChatModal({ onClose, onSelectUser }) {
 }
 
 // ─── Message Bubble ────────────────────────────────────────────────────────────
-const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
+const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete, navigation }) {
   const { colors } = useTheme();
   const own = msg.is_own;
 
@@ -168,6 +168,29 @@ const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
     }
     opts.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message options', undefined, opts);
+  };
+
+  const handleReelPress = () => {
+    console.log('=== HANDLE REEL PRESS CALLED ===');
+    console.log('handleReelPress called, msg:', msg);
+    console.log('msg.text:', msg.text);
+    
+    // Parse reel ID from text message
+    const reelIdMatch = msg.text && msg.text.match(/\[REEL_ID:(\d+)\]/);
+    if (reelIdMatch) {
+      const reelId = parseInt(reelIdMatch[1]);
+      console.log('Found reel ID:', reelId);
+      console.log('About to navigate to ReelsDetail with initialVideoId:', reelId);
+      try {
+        // Navigate to the ReelsDetail with the specific reel
+        navigation.navigate('ReelsDetail', { initialVideoId: reelId });
+        console.log('Navigation call completed');
+      } catch (error) {
+        console.log('Navigation error:', error);
+      }
+    } else {
+      console.log('No reel ID found in message text');
+    }
   };
 
   const bubbleStyle = own
@@ -202,6 +225,33 @@ const MessageBubble = memo(function MessageBubble({ msg, onEdit, onDelete }) {
         </View>
       );
     }
+    
+    // Handle messages with embedded reel ID (shared reels)
+    const reelIdMatch = msg.text && msg.text.match(/\[REEL_ID:(\d+)\]/);
+    if (reelIdMatch) {
+      const cleanText = msg.text.replace(/\[REEL_ID:\d+\]/, '').replace(/\n+$/, '').trim();
+      const reelTextColor = '#fff';
+      return (
+        <TouchableOpacity 
+          onPress={handleReelPress}
+          activeOpacity={0.7}
+          style={[bubbleStyle, { paddingVertical: 6, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' }]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="film-outline" size={16} color={reelTextColor} />
+            <Text style={{ color: reelTextColor, fontSize: 13, fontWeight: '600' }}>
+              🎬 Tap to watch
+            </Text>
+          </View>
+          {!!cleanText && (
+            <Text style={{ color: reelTextColor, fontSize: 11, marginTop: 2, opacity: 0.8 }} numberOfLines={1}>
+              {cleanText}
+            </Text>
+          )}
+        </TouchableOpacity>
+      );
+    }
+    
     return (
       <View style={bubbleStyle}>
         <Text style={{ color: textColor, fontSize: 14, lineHeight: 19, flexWrap: 'wrap' }}>
@@ -394,8 +444,9 @@ function ChatView({ conversation, onBack, userId, navigation }) {
       msg={item}
       onEdit={handleEdit}
       onDelete={handleDelete}
+      navigation={navigation}
     />
-  ), []);
+  ), [handleEdit, handleDelete, navigation]);
 
   return (
     <KeyboardAvoidingView
@@ -434,7 +485,7 @@ function ChatView({ conversation, onBack, userId, navigation }) {
           data={messages}
           keyExtractor={m => String(m.id)}
           renderItem={renderMsg}
-          contentContainerStyle={{ padding: 12, paddingBottom: 3, gap: 6 }}
+          contentContainerStyle={{ padding: 12, paddingBottom: 80, gap: 6 }}
           ListEmptyComponent={
             <View style={{ alignItems: 'center', marginTop: 60 }}>
               <Ionicons name="chatbubbles-outline" size={48} color={colors.textSecondary} />

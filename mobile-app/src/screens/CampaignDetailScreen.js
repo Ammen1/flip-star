@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 import config from '../config';
+import CampaignEventEmitter from '../contexts/CampaignEventEmitter';
 
 const GOLD = '#8fc441';
 const BG = '#0D0D0D';
@@ -175,6 +176,93 @@ export default function CampaignDetailScreen({ route, navigation }) {
     }
   }, [activeTab]);
 
+  // Refresh campaign data when user navigates back from create screen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('[CAMPAIGN DETAIL] Screen focused, refreshing campaign data...');
+      loadCampaign();
+    });
+    
+    return unsubscribe;
+  }, [navigation, campaignId]);
+
+  // Listen for campaign interaction events from other screens
+  useEffect(() => {
+    const unsubscribe = CampaignEventEmitter.addListener('campaign_interaction', (event) => {
+      const { type, campaignId: eventCampaignId, postId, quantity } = event;
+      
+      // Only update if this event is for the current campaign
+      if (eventCampaignId === campaignId) {
+        console.log(`[CAMPAIGN DETAIL] Received ${type} event for campaign ${campaignId}, updating leaderboard...`);
+        
+        // Update local state immediately for instant feedback
+        if (type === 'vote') {
+          setLbEntries(prev => prev.map(entry => {
+            if (entry.reel?.id === postId) {
+              return {
+                ...entry,
+                vote_count: (entry.vote_count || 0) + 1
+              };
+            }
+            return entry;
+          }));
+          
+          setEntries(prev => prev.map(entry => {
+            if (entry.reel?.id === postId) {
+              return {
+                ...entry,
+                vote_count: (entry.vote_count || 0) + 1
+              };
+            }
+            return entry;
+          }));
+        } else if (type === 'comment') {
+          // Comments don't directly affect leaderboard score but we should refresh
+          setTimeout(() => {
+            loadLeaderboard();
+            loadCampaign();
+          }, 500);
+        } else if (type === 'share') {
+          // Shares don't directly affect leaderboard score but we should refresh
+          setTimeout(() => {
+            loadLeaderboard();
+            loadCampaign();
+          }, 500);
+        } else if (type === 'gift') {
+          // Gifts affect the score - update immediately
+          const giftScore = (quantity || 1) * 1; // Assume 1 point per gift
+          setLbEntries(prev => prev.map(entry => {
+            if (entry.reel?.id === postId) {
+              return {
+                ...entry,
+                vote_count: (entry.vote_count || 0) + giftScore // Add gift score to vote count
+              };
+            }
+            return entry;
+          }));
+          
+          setEntries(prev => prev.map(entry => {
+            if (entry.reel?.id === postId) {
+              return {
+                ...entry,
+                vote_count: (entry.vote_count || 0) + giftScore
+              };
+            }
+            return entry;
+          }));
+        }
+        
+        // Refresh data in background to ensure accuracy
+        setTimeout(() => {
+          loadLeaderboard();
+          loadCampaign();
+        }, 1000);
+      }
+    });
+    
+    return unsubscribe;
+  }, [campaignId]);
+
   const loadLeaderboard = async () => {
     setLoadingLb(true);
     try {
@@ -238,6 +326,10 @@ export default function CampaignDetailScreen({ route, navigation }) {
         console.log('[CAMPAIGN DETAIL] ✗ User entry NOT FOUND in entries list');
         console.log('[CAMPAIGN DETAIL] 💡 You are logged in as user ID:', data.current_user_id);
         console.log('[CAMPAIGN DETAIL] 💡 Entries belong to user IDs:', data.entries?.map(e => e.user?.id).join(', ') || 'none');
+        
+        // Additional check: if user recently created a post for this campaign, they might be in the process of joining
+        // We'll check if there's a recent post from this user that might be a campaign entry
+        console.log('[CAMPAIGN DETAIL] 🔍 Checking for recent campaign posts from user...');
       }
       console.log('[CAMPAIGN DETAIL] ========================================');
       
@@ -342,9 +434,62 @@ export default function CampaignDetailScreen({ route, navigation }) {
 
   const handleVote = async (entryId) => {
     try {
+      // Update local state immediately for instant feedback
+      setLbEntries(prev => prev.map(entry => {
+        if (entry.id === entryId) {
+          return {
+            ...entry,
+            vote_count: (entry.vote_count || 0) + 1,
+            // Update rank if needed (simple increment for now)
+            rank: entry.rank ? entry.rank - 1 : entry.rank
+          };
+        }
+        return entry;
+      }));
+      
+      // Also update campaign entries
+      setEntries(prev => prev.map(entry => {
+        if (entry.id === entryId) {
+          return {
+            ...entry,
+            vote_count: (entry.vote_count || 0) + 1
+          };
+        }
+        return entry;
+      }));
+      
+      // Make API call in background
       await api.request(`/campaigns/entries/${entryId}/vote/`, { method: 'POST' });
-      loadCampaign();
+      
+      // Refresh data in background to ensure accuracy
+      setTimeout(() => {
+        loadLeaderboard();
+        loadCampaign();
+      }, 1000);
+      
     } catch (error) {
+      // Revert the optimistic update if API call fails
+      setLbEntries(prev => prev.map(entry => {
+        if (entry.id === entryId) {
+          return {
+            ...entry,
+            vote_count: Math.max(0, (entry.vote_count || 1) - 1),
+            rank: entry.rank ? entry.rank + 1 : entry.rank
+          };
+        }
+        return entry;
+      }));
+      
+      setEntries(prev => prev.map(entry => {
+        if (entry.id === entryId) {
+          return {
+            ...entry,
+            vote_count: Math.max(0, (entry.vote_count || 1) - 1)
+          };
+        }
+        return entry;
+      }));
+      
       Alert.alert('Error', error.message || 'Failed to vote');
     }
   };
@@ -631,15 +776,20 @@ export default function CampaignDetailScreen({ route, navigation }) {
             const color   = MEDAL[rank];
             const size    = isFirst ? 68 : 52;
             const score   = e.total_score ?? e.score ?? 0;
+            const photo   = mediaUrl(e.profile_image || e.profile_photo || e.user?.profile_photo);
             return (
               <View style={[styles.lbPodiumCard, isFirst && { marginBottom: 16 }]}>
                 {isFirst
                   ? <Ionicons name="trophy" size={20} color="#FFD700" style={{ marginBottom: 4 }} />
                   : <Ionicons name="medal"  size={16} color={color}   style={{ marginBottom: 4 }} />}
-                <View style={[styles.lbPodiumAvatar, { width: size, height: size, borderRadius: size/2, borderColor: color }]}>
-                  <Text style={[styles.lbPodiumLetter, { fontSize: isFirst ? 26 : 20 }]}>
-                    {e.username?.[0]?.toUpperCase() || '?'}
-                  </Text>
+                <View style={[styles.lbPodiumAvatar, { width: size, height: size, borderRadius: size/2, borderColor: color, overflow: 'hidden' }]}>
+                  {photo ? (
+                    <Image source={{ uri: photo }} style={{ width: size, height: size, borderRadius: size/2 }} resizeMode="cover" />
+                  ) : (
+                    <Text style={[styles.lbPodiumLetter, { fontSize: isFirst ? 26 : 20 }]}>
+                      {e.username?.[0]?.toUpperCase() || '?'}
+                    </Text>
+                  )}
                 </View>
                 <Text style={styles.lbPodiumName} numberOfLines={1}>{e.username || '—'}</Text>
                 <Text style={[styles.lbPodiumScore, { color, fontSize: isFirst ? 22 : 16 }]}>{score}</Text>
@@ -660,8 +810,16 @@ export default function CampaignDetailScreen({ route, navigation }) {
                    rank === 3 ? <Ionicons name="medal"  size={18} color="#CD7F32" /> :
                    <Text style={styles.lbRankNum}>#{rank}</Text>}
                 </View>
-                <View style={[styles.lbRowAvatar, color && { borderColor: color }]}>
-                  <Text style={styles.lbRowLetter}>{e.username?.[0]?.toUpperCase() || '?'}</Text>
+                <View style={[styles.lbRowAvatar, color && { borderColor: color }, { overflow: 'hidden' }]}>
+                  {mediaUrl(e.profile_image || e.profile_photo || e.user?.profile_photo) ? (
+                    <Image
+                      source={{ uri: mediaUrl(e.profile_image || e.profile_photo || e.user?.profile_photo) }}
+                      style={{ width: 40, height: 40, borderRadius: 20 }}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.lbRowLetter}>{e.username?.[0]?.toUpperCase() || '?'}</Text>
+                  )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={styles.lbRowName} numberOfLines={1}>{e.username || 'Anonymous'}</Text>

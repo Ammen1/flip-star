@@ -226,8 +226,14 @@ const handlePost = async () => {
       fd.append('caption', caption || '');
       if (hashtags) fd.append('hashtags', hashtags);
       // Add campaignId if posting to a campaign
-      if (campaignId) fd.append('campaign_id', campaignId);
+      if (campaignId) {
+        fd.append('campaign_id', campaignId);
+        console.log('[CREATE] Posting to campaign:', campaignId);
+      } else {
+        console.log('[CREATE] Regular post (no campaign)');
+      }
 
+      console.log('[CREATE] Uploading post with FormData keys:', Array.from(fd._parts.map(([key]) => key)));
       await api.createPost(fd, { onProgress: pct => setProgress(Math.min(pct, 99)) });
       setProgress(100);
       setTimeout(() => {

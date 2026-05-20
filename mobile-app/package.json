@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@0no-co/graphql.web": "^1.2.0",
     "@expo/metro-config": "~55.0.9",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -17,11 +18,12 @@
     "@react-navigation/stack": "^6.3.20",
     "@types/react": "~19.2.10",
     "expo": "^55.0.23",
-    "expo-application": "^55.0.14",
+    "expo-application": "~55.0.15",
     "expo-asset": "~55.0.17",
     "expo-av": "^16.0.8",
     "expo-camera": "~55.0.18",
     "expo-constants": "~55.0.16",
+    "expo-dev-client": "~55.0.35",
     "expo-file-system": "~55.0.19",
     "expo-font": "~55.0.7",
     "expo-image-picker": "~55.0.20",

@@ -287,13 +287,11 @@ function AppNavigatorContent() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <AuthProvider>
-        <BlockProvider>
-          <AppAlertProvider>
-            <NavigationContainer linking={linkingConfig} theme={navTheme}>
-              <RootNavigator />
-            </NavigationContainer>
-          </AppAlertProvider>
-        </BlockProvider>
+        <AppAlertProvider>
+          <NavigationContainer linking={linkingConfig} theme={navTheme}>
+            <RootNavigator />
+          </NavigationContainer>
+        </AppAlertProvider>
       </AuthProvider>
     </GestureHandlerRootView>
   );
@@ -303,7 +301,9 @@ export default function AppNavigator() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <AppNavigatorContent />
+        <BlockProvider>
+          <AppNavigatorContent />
+        </BlockProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

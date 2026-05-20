@@ -14,7 +14,10 @@
       "package": "com.flipstar.mobile"
     },
     "ios": {
-      "bundleIdentifier": "com.flipstar.mobile"
+      "bundleIdentifier": "com.flipstar.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "extra": {
       "eas": {

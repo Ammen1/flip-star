@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../api';
 import config from '../config';
+import CampaignEventEmitter from '../contexts/CampaignEventEmitter';
 
 const BACKEND = config.API_BASE_URL.replace('/api', '');
 
@@ -187,16 +188,78 @@ export default function LeaderboardScreen({ route, navigation }) {
     }
   }, [campaignId, period]);
 
+  // Listen for campaign interaction events from other screens
+  useEffect(() => {
+    const unsubscribe = CampaignEventEmitter.addListener('campaign_interaction', (event) => {
+      const { type, campaignId: eventCampaignId, postId, quantity } = event;
+      
+      // Only update if this event is for the current campaign
+      if (eventCampaignId === campaignId) {
+        console.log(`[LEADERBOARD] Received ${type} event for campaign ${campaignId}, updating leaderboard...`);
+        
+        // Update local state immediately for instant feedback
+        if (type === 'vote') {
+          setEntries(prev => prev.map(entry => {
+            if (entry.reel?.id === postId) {
+              return {
+                ...entry,
+                vote_count: (entry.vote_count || 0) + 1
+              };
+            }
+            return entry;
+          }));
+        } else if (type === 'gift') {
+          // Gifts affect the score - update immediately
+          const giftScore = (quantity || 1) * 1; // Assume 1 point per gift
+          setEntries(prev => prev.map(entry => {
+            if (entry.reel?.id === postId) {
+              return {
+                ...entry,
+                vote_count: (entry.vote_count || 0) + giftScore
+              };
+            }
+            return entry;
+          }));
+        } else {
+          // For comments and shares, refresh after a short delay
+          setTimeout(() => {
+            loadLeaderboard(true);
+          }, 500);
+        }
+        
+        // Refresh data in background to ensure accuracy
+        setTimeout(() => {
+          loadLeaderboard(true);
+        }, 1000);
+      }
+    });
+    
+    return unsubscribe;
+  }, [campaignId]);
+
   const handleRefresh = () => { setRefreshing(true); loadLeaderboard(true); };
 
   const handleVote = async (entryId) => {
     try {
-      await api.request(`/campaigns/entries/${entryId}/vote/`, { method: 'POST' });
+      // Update local state immediately for instant feedback
       setEntries(prev => prev.map(e =>
         e.id === entryId ? { ...e, vote_count: (e.vote_count || 0) + 1, user_voted: true } : e
       ));
+      
+      // Make API call in background
+      await api.request(`/campaigns/entries/${entryId}/vote/`, { method: 'POST' });
+      
+      // Refresh data in background to ensure accuracy
+      setTimeout(() => {
+        loadLeaderboard(true);
+      }, 1000);
+      
       Alert.alert('Success', 'Vote recorded!');
     } catch (err) {
+      // Revert the optimistic update if API call fails
+      setEntries(prev => prev.map(e =>
+        e.id === entryId ? { ...e, vote_count: Math.max(0, (e.vote_count || 1) - 1), user_voted: false } : e
+      ));
       console.error('Vote failed:', err);
       Alert.alert('Error', 'Failed to vote.');
     }

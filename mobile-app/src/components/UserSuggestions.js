@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api';
 
-const GOLD = '#C8B56A', BG = '#0D0D0D', CARD = '#1A1A1A', BORDER = '#262626';
+const GOLD = '#8fc441', BG = '#0D0D0D', CARD = '#1A1A1A', BORDER = '#262626';
 
 export default React.memo(function UserSuggestions({ onUserClick }) {
   const [suggestions, setSuggestions] = useState([]);
