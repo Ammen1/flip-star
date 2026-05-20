@@ -627,11 +627,10 @@ const api = {
   getSavedPosts: () => api.request('/reels/?saved=true'),
   getUserSavedPosts: () => api.request('/reels/?saved=true'),
 
-  // Subscription status check - endpoint removed from backend
+  // Subscription status check
   checkSubscriptionStatus: () => {
     if (!api.hasToken()) return Promise.resolve({ has_subscription: false });
-    // Endpoint removed - return default response
-    return Promise.resolve({ has_subscription: true });
+    return api.request('/subscription/status/', { skipCache: true });
   },
 
   // Settings
