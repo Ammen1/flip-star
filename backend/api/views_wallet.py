@@ -607,7 +607,8 @@ def admin_wallet_config(request):
                     try:
                         value = int(value)
                     except ValueError:
-                        pass
+                        print(f"[WALLET_CONFIG] Failed to convert {field}={value} to int")
+            print(f"[WALLET_CONFIG] Setting {field}={value} (type: {type(value).__name__})")
             setattr(config, field, value)
 
     config.updated_by = request.user
