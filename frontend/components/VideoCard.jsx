@@ -100,7 +100,8 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift, currentUs
   const handleDropdownBoost = () => { setShowDropdown(false); setShowBoostModal(true); };
 
   return (
-    <div style={{ background: T?.cardBg || '#1A1A1A', borderRadius: 16, overflow: "hidden", marginBottom: 20, position: "relative", display: "flex", flexDirection: "column", maxWidth: 560, border: '1.5px solid rgba(226,179,85,0.22)' }} onClick={() => setShowDropdown(false)}>
+    <>
+      <div style={{ background: T?.cardBg || '#1A1A1A', borderRadius: 16, overflow: "hidden", marginBottom: 20, position: "relative", display: "flex", flexDirection: "column", maxWidth: 560, border: '1.5px solid rgba(226,179,85,0.22)' }} onClick={() => setShowDropdown(false)}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 8, flexShrink: 0 }}>
@@ -321,6 +322,7 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift, currentUs
           {toast}
         </div>
       )}
+      </div>
 
       {/* ── Boost Modal ── */}
       {showBoostModal && (
@@ -333,7 +335,7 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift, currentUs
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
