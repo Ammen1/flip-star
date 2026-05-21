@@ -134,7 +134,7 @@ def initiate_on_demand_charging(request):
 @permission_classes([IsAuthenticated])
 def get_charging_statistics(request):
     """
-    Get charging statistics (admin only)
+    Get charging statistics (admin only) - queries CoinTransaction for on-demand airtime purchases
     
     Query params:
     - days: number of days to look back (default: 3650 = 10 years to show all)
@@ -150,54 +150,42 @@ def get_charging_statistics(request):
         days = int(request.GET.get('days', 3650))  # Default to 10 years to show all
         start_date = timezone.now() - timedelta(days=days)
         
+        # Query CoinTransaction for on-demand airtime purchases
+        base_filter = Q(transaction_type='purchase') & Q(payment_method='airtime') & Q(created_at__gte=start_date)
+        
         # Get statistics
-        total_transactions = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date
-        ).count()
+        total_transactions = CoinTransaction.objects.filter(base_filter).count()
         
-        successful_transactions = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='success'
-        ).count()
+        successful_transactions = CoinTransaction.objects.filter(base_filter & Q(is_successful=True)).count()
         
-        failed_transactions = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='failed'
-        ).count()
+        failed_transactions = CoinTransaction.objects.filter(base_filter & Q(is_successful=False)).count()
         
-        insufficient_balance = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='insufficient_balance'
-        ).count()
+        # Calculate total coins purchased
+        total_coins = CoinTransaction.objects.filter(base_filter & Q(is_successful=True)).aggregate(total=Sum('coins'))['total'] or 0
         
-        expected_collection = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date
-        ).aggregate(total=Sum('amount_etb'))['total'] or 0
-        
-        actual_collection = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='success'
-        ).aggregate(total=Sum('amount_etb'))['total'] or 0
+        # Calculate total amount (ETB) - assuming 10 ETB = 100 coins ratio
+        total_amount_etb = (total_coins / 10) if total_coins else 0
         
         success_rate = (successful_transactions / total_transactions * 100) if total_transactions > 0 else 0
         
         # Daily statistics for charts
         daily_stats = []
-        for i in range(days):
+        for i in range(min(days, 30)):  # Limit to 30 days for chart
             date = (timezone.now() - timedelta(days=days - i - 1)).date()
-            day_transactions = OnevasChargingTransaction.objects.filter(
-                created_at__date=date
+            day_transactions = CoinTransaction.objects.filter(
+                base_filter & Q(created_at__date=date)
             ).aggregate(
                 total=Count('id'),
-                success=Count('id', filter=Q(status='success')),
-                amount=Sum('amount_etb')
+                success=Count('id', filter=Q(is_successful=True)),
+                coins=Sum('coins', filter=Q(is_successful=True))
             )
             
             daily_stats.append({
                 'date': date.isoformat(),
                 'total': day_transactions['total'] or 0,
                 'success': day_transactions['success'] or 0,
-                'amount': float(day_transactions['amount'] or 0)
+                'coins': int(day_transactions['coins'] or 0),
+                'amount': float((day_transactions['coins'] or 0) / 10)
             })
         
         return Response({
@@ -205,9 +193,9 @@ def get_charging_statistics(request):
             'total_transactions': total_transactions,
             'successful_transactions': successful_transactions,
             'failed_transactions': failed_transactions,
-            'insufficient_balance': insufficient_balance,
-            'expected_collection': float(expected_collection),
-            'actual_collection': float(actual_collection),
+            'insufficient_balance': 0,  # Not applicable for CoinTransaction
+            'expected_collection': total_amount_etb,
+            'actual_collection': total_amount_etb,
             'success_rate': round(success_rate, 2),
             'daily_statistics': daily_stats
         })
@@ -224,10 +212,10 @@ def get_charging_statistics(request):
 @permission_classes([IsAuthenticated])
 def get_charging_transactions(request):
     """
-    Get charging transactions (admin only)
+    Get charging transactions (admin only) - queries CoinTransaction for on-demand airtime purchases
     
     Query params:
-    - status: filter by status
+    - status: filter by status (successful/failed)
     - days: number of days to look back (default: 3650 = 10 years to show all)
     - page: page number
     - page_size: items per page
@@ -247,12 +235,15 @@ def get_charging_transactions(request):
         
         start_date = timezone.now() - timedelta(days=days)
         
-        queryset = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date
-        ).select_related('user', 'subscription_tier').order_by('-created_at')
+        # Query CoinTransaction for on-demand airtime purchases
+        base_filter = Q(transaction_type='purchase') & Q(payment_method='airtime') & Q(created_at__gte=start_date)
+        queryset = CoinTransaction.objects.filter(base_filter).select_related('user').order_by('-created_at')
         
         if status_filter:
-            queryset = queryset.filter(status=status_filter)
+            if status_filter == 'successful':
+                queryset = queryset.filter(is_successful=True)
+            elif status_filter == 'failed':
+                queryset = queryset.filter(is_successful=False)
         
         total_count = queryset.count()
         offset = (page - 1) * page_size
@@ -260,17 +251,21 @@ def get_charging_transactions(request):
         
         transactions_data = []
         for t in transactions:
+            # Get user phone from user profile if available
+            phone = getattr(t.user, 'phone', '') or ''
+            
             transactions_data.append({
                 'id': str(t.id),
                 'user': t.user.username,
-                'phone_number': t.phone_number,
-                'subscription_tier': t.subscription_tier.name if t.subscription_tier else None,
-                'amount_etb': float(t.amount_etb),
-                'status': t.status,
-                'transaction_id': t.transaction_id,
-                'error_message': t.error_message,
+                'phone_number': phone,
+                'subscription_tier': None,  # Not applicable for coin purchases
+                'amount_etb': float(t.coins / 10) if t.coins else 0,  # 10 ETB = 100 coins
+                'status': 'success' if t.is_successful else 'failed',
+                'transaction_id': t.payment_reference,
+                'error_message': t.description if not t.is_successful else '',
                 'created_at': t.created_at.isoformat(),
-                'updated_at': t.updated_at.isoformat()
+                'updated_at': t.created_at.isoformat(),
+                'coins': t.coins
             })
         
         return Response({
@@ -392,7 +387,7 @@ def purchase_coins_on_demand(request):
 @permission_classes([IsAuthenticated])
 def search_charging_transactions(request):
     """
-    Search charging transactions by phone number or user ID (admin only)
+    Search charging transactions by phone number or user ID (admin only) - queries CoinTransaction
     
     Query params:
     - phone: phone number to search
@@ -415,14 +410,13 @@ def search_charging_transactions(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        queryset = OnevasChargingTransaction.objects.select_related('user', 'subscription_tier').order_by('-created_at')
+        # Query CoinTransaction for on-demand airtime purchases
+        base_filter = Q(transaction_type='purchase') & Q(payment_method='airtime')
+        queryset = CoinTransaction.objects.filter(base_filter).select_related('user').order_by('-created_at')
         
         if phone:
-            # Normalize phone number for search
-            phone_normalized = phone.replace(' ', '').replace('-', '').replace('+', '')
-            if not phone_normalized.startswith('251'):
-                phone_normalized = '251' + phone_normalized
-            queryset = queryset.filter(phone_number__contains=phone_normalized)
+            # Search by phone in user profile
+            queryset = queryset.filter(user__phone__contains=phone)
         
         if user_id:
             try:
@@ -438,18 +432,21 @@ def search_charging_transactions(request):
         
         transactions_data = []
         for t in transactions:
+            phone = getattr(t.user, 'phone', '') or ''
+            
             transactions_data.append({
                 'id': str(t.id),
                 'user_id': t.user.id,
                 'user': t.user.username,
-                'phone_number': t.phone_number,
-                'subscription_tier': t.subscription_tier.name if t.subscription_tier else None,
-                'amount_etb': float(t.amount_etb),
-                'status': t.status,
-                'transaction_id': t.transaction_id,
-                'error_message': t.error_message,
+                'phone_number': phone,
+                'subscription_tier': None,  # Not applicable for coin purchases
+                'amount_etb': float(t.coins / 10) if t.coins else 0,
+                'status': 'success' if t.is_successful else 'failed',
+                'transaction_id': t.payment_reference,
+                'error_message': t.description if not t.is_successful else '',
                 'created_at': t.created_at.isoformat(),
-                'updated_at': t.updated_at.isoformat()
+                'updated_at': t.created_at.isoformat(),
+                'coins': t.coins
             })
         
         return Response({
@@ -469,7 +466,7 @@ def search_charging_transactions(request):
 @permission_classes([IsAuthenticated])
 def get_charging_analytics(request):
     """
-    Get charging analytics by period (admin only)
+    Get charging analytics by period (admin only) - queries CoinTransaction for on-demand airtime purchases
     
     Query params:
     - period: daily, monthly, yearly
@@ -494,38 +491,23 @@ def get_charging_analytics(request):
         now = timezone.now()
         if period == 'daily':
             start_date = now - timedelta(days=30)
-            group_by = 'created_at__date'
         elif period == 'monthly':
             start_date = now - timedelta(days=365)
-            group_by = 'created_at__month'
         else:  # yearly
             start_date = now - timedelta(days=365 * 5)
-            group_by = 'created_at__year'
+        
+        # Query CoinTransaction for on-demand airtime purchases
+        base_filter = Q(transaction_type='purchase') & Q(payment_method='airtime') & Q(created_at__gte=start_date)
         
         # Get total statistics
-        total_transactions = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date
-        ).count()
+        total_transactions = CoinTransaction.objects.filter(base_filter).count()
         
-        successful = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='success'
-        ).count()
+        successful = CoinTransaction.objects.filter(base_filter & Q(is_successful=True)).count()
         
-        failed = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='failed'
-        ).count()
+        failed = CoinTransaction.objects.filter(base_filter & Q(is_successful=False)).count()
         
-        insufficient_balance = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='insufficient_balance'
-        ).count()
-        
-        total_revenue = OnevasChargingTransaction.objects.filter(
-            created_at__gte=start_date,
-            status='success'
-        ).aggregate(total=Sum('amount_etb'))['total'] or 0
+        total_coins = CoinTransaction.objects.filter(base_filter & Q(is_successful=True)).aggregate(total=Sum('coins'))['total'] or 0
+        total_revenue = (total_coins / 10) if total_coins else 0  # 10 ETB = 100 coins
         
         success_rate = (successful / total_transactions * 100) if total_transactions > 0 else 0
         
@@ -534,59 +516,58 @@ def get_charging_analytics(request):
             breakdown = []
             for i in range(30):
                 date = (now - timedelta(days=29 - i)).date()
-                day_stats = OnevasChargingTransaction.objects.filter(
-                    created_at__date=date
+                day_stats = CoinTransaction.objects.filter(
+                    base_filter & Q(created_at__date=date)
                 ).aggregate(
                     total=Count('id'),
-                    success=Count('id', filter=Q(status='success')),
-                    failed=Count('id', filter=Q(status='failed')),
-                    revenue=Sum('amount_etb', filter=Q(status='success'))
+                    success=Count('id', filter=Q(is_successful=True)),
+                    failed=Count('id', filter=Q(is_successful=False)),
+                    coins=Sum('coins', filter=Q(is_successful=True))
                 )
                 breakdown.append({
                     'date': date.isoformat(),
                     'total': day_stats['total'] or 0,
                     'success': day_stats['success'] or 0,
                     'failed': day_stats['failed'] or 0,
-                    'revenue': float(day_stats['revenue'] or 0)
+                    'revenue': float((day_stats['coins'] or 0) / 10)
                 })
         elif period == 'monthly':
             breakdown = []
             for i in range(12):
                 month_date = now - timedelta(days=30 * (11 - i))
-                month_stats = OnevasChargingTransaction.objects.filter(
-                    created_at__year=month_date.year,
-                    created_at__month=month_date.month
+                month_stats = CoinTransaction.objects.filter(
+                    base_filter & Q(created_at__year=month_date.year, created_at__month=month_date.month)
                 ).aggregate(
                     total=Count('id'),
-                    success=Count('id', filter=Q(status='success')),
-                    failed=Count('id', filter=Q(status='failed')),
-                    revenue=Sum('amount_etb', filter=Q(status='success'))
+                    success=Count('id', filter=Q(is_successful=True)),
+                    failed=Count('id', filter=Q(is_successful=False)),
+                    coins=Sum('coins', filter=Q(is_successful=True))
                 )
                 breakdown.append({
                     'month': f"{month_date.year}-{month_date.month:02d}",
                     'total': month_stats['total'] or 0,
                     'success': month_stats['success'] or 0,
                     'failed': month_stats['failed'] or 0,
-                    'revenue': float(month_stats['revenue'] or 0)
+                    'revenue': float((month_stats['coins'] or 0) / 10)
                 })
         else:  # yearly
             breakdown = []
             for i in range(5):
                 year_date = now - timedelta(days=365 * (4 - i))
-                year_stats = OnevasChargingTransaction.objects.filter(
-                    created_at__year=year_date.year
+                year_stats = CoinTransaction.objects.filter(
+                    base_filter & Q(created_at__year=year_date.year)
                 ).aggregate(
                     total=Count('id'),
-                    success=Count('id', filter=Q(status='success')),
-                    failed=Count('id', filter=Q(status='failed')),
-                    revenue=Sum('amount_etb', filter=Q(status='success'))
+                    success=Count('id', filter=Q(is_successful=True)),
+                    failed=Count('id', filter=Q(is_successful=False)),
+                    coins=Sum('coins', filter=Q(is_successful=True))
                 )
                 breakdown.append({
                     'year': str(year_date.year),
                     'total': year_stats['total'] or 0,
                     'success': year_stats['success'] or 0,
                     'failed': year_stats['failed'] or 0,
-                    'revenue': float(year_stats['revenue'] or 0)
+                    'revenue': float((year_stats['coins'] or 0) / 10)
                 })
         
         return Response({
@@ -594,7 +575,7 @@ def get_charging_analytics(request):
             'total_transactions': total_transactions,
             'successful': successful,
             'failed': failed,
-            'insufficient_balance': insufficient_balance,
+            'insufficient_balance': 0,  # Not applicable for CoinTransaction
             'total_revenue': float(total_revenue),
             'success_rate': round(success_rate, 2),
             'breakdown': breakdown
