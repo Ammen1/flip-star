@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Flag, CheckCircle, XCircle, AlertCircle, Eye, Trash2, User, FileVideo, MessageSquare, RefreshCw, ShieldAlert, Ban, AlertOctagon, Clock, ChevronDown, ChevronUp, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Flag, CheckCircle, XCircle, AlertCircle, Eye, Trash2, User, FileVideo, MessageSquare, RefreshCw, ShieldAlert, Ban, AlertOctagon, Clock, ChevronDown, ChevronUp, ExternalLink, AlertTriangle, RotateCcw } from 'lucide-react';
 import api from '../../api';
 
 const PRIORITY_COLORS = {
@@ -40,9 +40,11 @@ export function ReportsPage({ theme }) {
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [selectedAction, setSelectedAction] = useState('');
   const [moderating, setModerating] = useState(false);
+  const [undoing, setUndoing] = useState(false);
   const [toast, setToast] = useState(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
+  const [moderationActions, setModerationActions] = useState([]);
 
   const showToast = (msg, isError = false) => {
     setToast({ msg, isError });
@@ -53,6 +55,12 @@ export function ReportsPage({ theme }) {
     fetchReports();
     fetchStats();
   }, [filterStatus]);
+
+  useEffect(() => {
+    if (selectedReport) {
+      fetchModerationActions(selectedReport.id);
+    }
+  }, [selectedReport]);
 
   const fetchReports = async () => {
     try {
@@ -75,6 +83,35 @@ export function ReportsPage({ theme }) {
       setStats(response);
     } catch (error) {
       console.error('Failed to fetch stats:', error);
+    }
+  };
+
+  const fetchModerationActions = async (reportId) => {
+    try {
+      const response = await api.request(`/admin/reports/${reportId}/`);
+      setModerationActions(response.moderation_actions || []);
+    } catch (error) {
+      console.error('Failed to fetch moderation actions:', error);
+      setModerationActions([]);
+    }
+  };
+
+  const handleUndoAction = async (actionId) => {
+    if (!confirm('Are you sure you want to undo this moderation action?')) return;
+    setUndoing(true);
+    try {
+      await api.request(`/admin/moderation-actions/${actionId}/undo/`, {
+        method: 'POST',
+      });
+      showToast('Moderation action undone successfully');
+      fetchModerationActions(selectedReport.id);
+      fetchReports();
+      fetchStats();
+    } catch (error) {
+      console.error('Failed to undo action:', error);
+      showToast('Failed to undo action', true);
+    } finally {
+      setUndoing(false);
     }
   };
 
@@ -359,6 +396,44 @@ export function ReportsPage({ theme }) {
               <div style={{ marginBottom: 20, padding: 12, background: '#10B98115', borderRadius: 10, border: '1px solid #10B981' }}>
                 <div style={{ fontSize: 12, color: '#10B981', fontWeight: 700, marginBottom: 4 }}>RESOLUTION NOTES</div>
                 <div style={{ fontSize: 14, color: theme.txt }}>{selectedReport.resolution_notes}</div>
+              </div>
+            )}
+
+            {/* Moderation Actions History */}
+            {moderationActions.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, color: theme.sub, marginBottom: 10, fontWeight: 600 }}>MODERATION ACTIONS HISTORY</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {moderationActions.map((action) => {
+                    const actionLabel = MODERATION_ACTIONS.find(a => a.value === action.action_taken)?.label || action.action_taken;
+                    const actionColor = MODERATION_ACTIONS.find(a => a.value === action.action_taken)?.color || '#6B7280';
+                    const canUndo = !action.undone && action.action_taken !== 'no_action';
+                    return (
+                      <div key={action.id} style={{ padding: 12, background: action.undone ? theme.bg : actionColor + '10', borderRadius: 10, border: action.undone ? `1px solid ${theme.border}` : `1px solid ${actionColor}30`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: action.undone ? theme.sub : actionColor }}>
+                            {actionLabel}
+                          </div>
+                          {action.undone && (
+                            <span style={{ fontSize: 11, color: theme.sub, fontStyle: 'italic' }}>(Undone by {action.undone_by?.username})</span>
+                          )}
+                          <span style={{ fontSize: 11, color: theme.sub }}>
+                            {new Date(action.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        {canUndo && (
+                          <button
+                            onClick={() => handleUndoAction(action.id)}
+                            disabled={undoing}
+                            style={{ padding: '6px 12px', background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 6, color: theme.txt, fontSize: 12, fontWeight: 600, cursor: undoing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 4, opacity: undoing ? 0.5 : 1 }}
+                          >
+                            <RotateCcw size={12} /> Undo
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
