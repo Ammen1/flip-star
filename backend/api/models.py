@@ -114,6 +114,11 @@ class UserProfile(models.Model):
     show_activity = models.BooleanField(default=True)
     allow_messages = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    
+    # Moderation
+    is_shadowbanned = models.BooleanField(default=False, help_text='User is shadow banned - content hidden from others but visible to self')
+    ban_expires_at = models.DateTimeField(null=True, blank=True, help_text='When temporary ban expires (null if not temp banned)')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -157,6 +162,9 @@ class Reel(models.Model):
     )
     total_boost_impressions = models.IntegerField(default=0, help_text='Total impressions from all boost campaigns')
     total_boost_engagements = models.IntegerField(default=0, help_text='Total engagements from all boost campaigns')
+
+    # Moderation
+    is_hidden = models.BooleanField(default=False, help_text='Content is hidden/removed by moderation (soft-delete)')
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -505,6 +513,7 @@ class Notification(models.Model):
         ('follow', 'Follow'),
         ('mention', 'Mention'),
         ('gift', 'Gift'),
+        ('moderation', 'Moderation Action'),
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
