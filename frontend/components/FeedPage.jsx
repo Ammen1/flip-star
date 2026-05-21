@@ -45,6 +45,7 @@ export function FeedPage({ tab }) {
           thumbnail: reel.thumbnail,
           overlay_text: reel.overlay_text || '',
           user: reel.user,
+          is_boosted: reel.is_boosted || false,
         };
       });
       
@@ -68,6 +69,34 @@ export function FeedPage({ tab }) {
     setVideos(videos.map(v => 
       v.id === videoId ? { ...v, shares: v.shares + 1 } : v
     ));
+  };
+
+  // Inject boosted posts into feed (1 boosted post per 4 organic posts)
+  const injectBoostedPosts = (posts) => {
+    const injectionRatio = 4; // 1 boost per 4 organic posts
+    const boostedPosts = posts.filter(p => p.is_boosted);
+    const organicPosts = posts.filter(p => !p.is_boosted);
+    
+    const finalFeed = [];
+    let boostIndex = 0;
+    
+    for (let i = 0; i < organicPosts.length; i++) {
+      finalFeed.push(organicPosts[i]);
+      
+      // Insert a boosted post every N organic posts
+      if ((i + 1) % injectionRatio === 0 && boostIndex < boostedPosts.length) {
+        finalFeed.push(boostedPosts[boostIndex]);
+        boostIndex++;
+      }
+    }
+    
+    // Add any remaining boosted posts at the end
+    while (boostIndex < boostedPosts.length) {
+      finalFeed.push(boostedPosts[boostIndex]);
+      boostIndex++;
+    }
+    
+    return finalFeed;
   };
 
   if (loading) {
@@ -140,7 +169,7 @@ export function FeedPage({ tab }) {
         gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
         gap: 20,
       }}>
-        {videos.map(video => (
+        {injectBoostedPosts(videos).map(video => (
           <VideoCard
             key={video.id}
             video={video}
