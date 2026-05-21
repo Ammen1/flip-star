@@ -525,5 +525,6 @@ urlpatterns = [
     path('boost/eligible/', get_eligible_boosts, name='boost-eligible'),
     path('boost/impression/', record_boost_impression, name='boost-impression'),
     path('boost/engagement/', record_boost_engagement, name='boost-engagement'),
+    path('boost/pacing-check/', check_pacing_engine, name='boost-pacing-check'),
     path('', include(router.urls)),
 ]

@@ -554,3 +554,51 @@ def record_boost_engagement(request):
         return Response({'success': True})
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def check_pacing_engine(request):
+    """Pacing engine task - ensures budget is distributed evenly over duration"""
+    try:
+        config = BoostConfig.objects.first()
+        if not config:
+            config = BoostConfig.objects.create()
+        
+        now = timezone.now()
+        
+        # Get all active campaigns
+        active_campaigns = BoostCampaign.objects.filter(
+            status='active',
+            end_time__gt=now,
+            coins_remaining__gt=0
+        )
+        
+        paused_count = 0
+        for campaign in active_campaigns:
+            hours_elapsed = (now - campaign.start_time).total_seconds() / 3600
+            expected_spend = campaign.hourly_budget * hours_elapsed
+            
+            # Calculate actual spend
+            actual_spend = campaign.coins_spent - campaign.coins_remaining
+            
+            # If we spent more than expected + tolerance, pause the campaign
+            if actual_spend > expected_spend * config.pacing_tolerance:
+                campaign.status = 'paused'
+                campaign.save()
+                
+                # Update reel
+                if campaign.reel.active_boost_campaign == campaign:
+                    campaign.reel.is_boosted = False
+                    campaign.reel.active_boost_campaign = None
+                    campaign.reel.save()
+                
+                paused_count += 1
+        
+        return Response({
+            'success': True,
+            'campaigns_checked': active_campaigns.count(),
+            'campaigns_paused': paused_count,
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
