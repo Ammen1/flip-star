@@ -331,7 +331,8 @@ export function ReportsPage({ theme }) {
                   <button
                     onClick={() => {
                       const reelId = typeof selectedReport.reported_reel === 'object' ? selectedReport.reported_reel.id : selectedReport.reported_reel;
-                      window.open(`/post/${reelId}`, '_blank');
+                      // Open in main app context (home page with post parameter)
+                      window.open(`/?post=${reelId}`, '_blank');
                     }}
                     style={{ padding: '6px 12px', background: theme.pri, border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                   >

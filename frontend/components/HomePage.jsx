@@ -885,6 +885,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
   const [showAllInline, setShowAllInline] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [reportSuccessModal, setReportSuccessModal] = useState(false);
 
   const isOwnPost = currentUser?.id === post.user?.id;
 
@@ -906,7 +907,7 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
         }),
         headers: { 'Content-Type': 'application/json' }
       });
-      alert('Report submitted successfully. Thank you for helping keep our community safe.');
+      setReportSuccessModal(true);
     } catch (error) {
       console.error('Failed to submit report:', error);
       alert('Failed to submit report. Please try again.');
@@ -1710,6 +1711,94 @@ const PostCard = memo(function PostCard({ post, index, currentUser, T, onShowPro
               }}
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Report Success Modal */}
+      {reportSuccessModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            pointerEvents: 'auto',
+          }}
+          onClick={() => setReportSuccessModal(false)}
+        >
+          <div
+            style={{
+              background: T?.cardBg || '#1A1A1A',
+              borderRadius: 16,
+              padding: '32px',
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+              pointerEvents: 'auto',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: 'rgba(16, 185, 129, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px',
+              }}
+            >
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <h3
+              style={{
+                fontSize: 20,
+                fontWeight: 700,
+                color: T?.txt,
+                marginBottom: 12,
+              }}
+            >
+              Report Submitted
+            </h3>
+            <p
+              style={{
+                fontSize: 14,
+                color: T?.sub,
+                marginBottom: 24,
+                lineHeight: 1.6,
+              }}
+            >
+              Thank you for helping keep our community safe. Our team will review this report shortly.
+            </p>
+            <button
+              onClick={() => setReportSuccessModal(false)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: 10,
+                border: 'none',
+                background: '#10B981',
+                cursor: 'pointer',
+                fontSize: 15,
+                fontWeight: 600,
+                color: '#fff',
+                pointerEvents: 'auto',
+              }}
+            >
+              Done
             </button>
           </div>
         </div>
