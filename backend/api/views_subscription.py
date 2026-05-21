@@ -74,8 +74,9 @@ class UserSubscriptionStatusView(APIView):
         """Get current user's subscription status"""
         try:
             from django.utils import timezone
+            from .models import Subscription
             
-            # Check for active subscription
+            # First check new UserSubscription model
             active_subscription = UserSubscription.objects.filter(
                 user=request.user,
                 status='active',
@@ -99,16 +100,41 @@ class UserSubscriptionStatusView(APIView):
                         'auto_renew': active_subscription.auto_renew,
                     }
                 })
-            else:
-                # Check if user has any subscription (expired or cancelled)
-                any_subscription = UserSubscription.objects.filter(user=request.user).first()
-                
+            
+            # Fallback to old Subscription model
+            old_subscription = Subscription.objects.filter(
+                user=request.user,
+                expires_at__gt=timezone.now()
+            ).first()
+            
+            if old_subscription:
                 return Response({
-                    'has_subscription': False,
-                    'subscription': None,
-                    'has_had_subscription': any_subscription is not None,
-                    'message': 'You need an active subscription to access this feature'
-                }, status=status.HTTP_403_FORBIDDEN)
+                    'has_subscription': True,
+                    'subscription': {
+                        'id': str(old_subscription.id),
+                        'tier': {
+                            'id': None,
+                            'name': old_subscription.plan,
+                            'duration_type': None,
+                            'price_etb': 0,
+                        },
+                        'status': 'active',
+                        'start_date': old_subscription.started_at.isoformat() if old_subscription.started_at else None,
+                        'end_date': old_subscription.expires_at.isoformat() if old_subscription.expires_at else None,
+                        'auto_renew': False,
+                    }
+                })
+            
+            # No active subscription found
+            any_subscription = UserSubscription.objects.filter(user=request.user).first()
+            any_old_subscription = Subscription.objects.filter(user=request.user).first()
+            
+            return Response({
+                'has_subscription': False,
+                'subscription': None,
+                'has_had_subscription': any_subscription is not None or any_old_subscription is not None,
+                'message': 'No active subscription found'
+            }, status=status.HTTP_200_OK)
         
         except Exception as e:
             return Response({
