@@ -421,7 +421,7 @@ export function SettingsPage({ theme }) {
               height: 'fit-content',
             }}>
               <div style={{
-                background: '#fff',
+                background: theme.card,
                 borderRadius: 12,
                 border: `2px solid ${theme.border}`,
                 overflow: 'hidden',
@@ -437,12 +437,12 @@ export function SettingsPage({ theme }) {
                   Live Preview
                 </div>
                 
-                <div style={{ padding: 24 }}>
+                <div style={{ padding: 24, background: theme.bg }}>
                   {/* Heading Preview */}
                   <div style={{
                     marginBottom: 24,
                     paddingBottom: 24,
-                    borderBottom: `1px solid ${theme.border}`,
+                    borderBottom: `2px solid ${theme.border}`,
                   }}>
                     <div style={{
                       fontSize: 11,
@@ -450,7 +450,7 @@ export function SettingsPage({ theme }) {
                       letterSpacing: '0.5px',
                       color: theme.sub,
                       marginBottom: 8,
-                      fontWeight: 600,
+                      fontWeight: 700,
                     }}>
                       Heading Font
                     </div>
@@ -490,7 +490,7 @@ export function SettingsPage({ theme }) {
                   <div style={{
                     marginBottom: 24,
                     paddingBottom: 24,
-                    borderBottom: `1px solid ${theme.border}`,
+                    borderBottom: `2px solid ${theme.border}`,
                   }}>
                     <div style={{
                       fontSize: (settings.font_size_base || 16) * 0.6875,
@@ -498,7 +498,7 @@ export function SettingsPage({ theme }) {
                       letterSpacing: '0.5px',
                       color: theme.sub,
                       marginBottom: 8,
-                      fontWeight: 600,
+                      fontWeight: 700,
                     }}>
                       Body Font
                     </div>
@@ -530,7 +530,7 @@ export function SettingsPage({ theme }) {
                   <div style={{
                     marginBottom: 24,
                     paddingBottom: 24,
-                    borderBottom: `1px solid ${theme.border}`,
+                    borderBottom: `2px solid ${theme.border}`,
                   }}>
                     <div style={{
                       fontSize: (settings.font_size_base || 16) * 0.6875,
@@ -538,7 +538,7 @@ export function SettingsPage({ theme }) {
                       letterSpacing: '0.5px',
                       color: theme.sub,
                       marginBottom: 12,
-                      fontWeight: 600,
+                      fontWeight: 700,
                     }}>
                       Username Font
                     </div>
@@ -586,7 +586,7 @@ export function SettingsPage({ theme }) {
                       letterSpacing: '0.5px',
                       color: theme.sub,
                       marginBottom: 8,
-                      fontWeight: 600,
+                      fontWeight: 700,
                     }}>
                       Caption Font
                     </div>
@@ -601,13 +601,13 @@ export function SettingsPage({ theme }) {
                   </div>
                   
                   {/* Button Preview */}
-                  <div style={{ marginTop: 24, paddingTop: 24, borderTop: `1px solid ${theme.border}` }}>
+                  <div style={{ marginTop: 24, paddingTop: 24, borderTop: `2px solid ${theme.border}` }}>
                     <button style={{
                       fontFamily: `"${settings.font_family_secondary || 'Inter'}", sans-serif`,
                       padding: `${(settings.font_size_base || 16) * 0.75}px ${(settings.font_size_base || 16) * 1.5}px`,
                       background: theme.pri,
                       border: 'none',
-                      borderRadius: 8,
+                      borderRadius: 10,
                       color: '#fff',
                       fontSize: (settings.font_size_base || 16) * 0.875,
                       fontWeight: 600,
@@ -1022,9 +1022,9 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: theme.txt, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>Live Preview</div>
         {/* Phone mockup */}
         <div style={{ background: '#111', borderRadius: 32, padding: '12px 8px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)', width: 240, margin: '0 auto' }}>
-          <div style={{ background: previewColors.bg, borderRadius: 22, overflow: 'hidden', minHeight: 380 }}>
+          <div style={{ background: previewColors.bg, borderRadius: 22, overflow: 'hidden', minHeight: 380, color: previewColors.txt }}>
             {/* App bar */}
-            <div style={{ background: previewColors.cardBg, padding: '14px 14px 10px', borderBottom: `1px solid ${previewColors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: previewColors.cardBg, padding: '14px 14px 10px', borderBottom: `2px solid ${previewColors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: previewColors.pri }}>FlipStar</div>
               <div style={{ width: 24, height: 24, borderRadius: '50%', background: previewColors.pri + '30', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: previewColors.pri }} />
@@ -1032,7 +1032,7 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
             </div>
             {/* Feed cards */}
             {[0,1].map(i => (
-              <div key={i} style={{ margin: '10px 10px 0', background: previewColors.cardBg, borderRadius: 12, padding: 10, border: `1px solid ${previewColors.border}` }}>
+              <div key={i} style={{ margin: '10px 10px 0', background: previewColors.cardBg, borderRadius: 12, padding: 10, border: `2px solid ${previewColors.border}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                   <div style={{ width: 24, height: 24, borderRadius: '50%', background: previewColors.pri }} />
                   <div>
@@ -1040,15 +1040,15 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
                     <div style={{ width: 36, height: 5, background: previewColors.sub + '40', borderRadius: 4 }} />
                   </div>
                 </div>
-                <div style={{ height: 60, background: previewColors.bg, borderRadius: 8, marginBottom: 8 }} />
+                <div style={{ height: 60, background: previewColors.bg, borderRadius: 8, marginBottom: 8, border: `1px solid ${previewColors.border}` }} />
                 <div style={{ display: 'flex', gap: 6 }}>
                   <div style={{ padding: '4px 10px', background: previewColors.pri, borderRadius: 6, color: '#fff', fontSize: 9, fontWeight: 700 }}>Like</div>
-                  <div style={{ padding: '4px 10px', background: previewColors.border, borderRadius: 6, color: previewColors.sub, fontSize: 9, fontWeight: 600 }}>Share</div>
+                  <div style={{ padding: '4px 10px', background: previewColors.border, borderRadius: 6, color: previewColors.txt, fontSize: 9, fontWeight: 600 }}>Share</div>
                 </div>
               </div>
             ))}
             {/* Bottom nav */}
-            <div style={{ margin: '12px 0 0', padding: '8px 0', background: previewColors.cardBg, borderTop: `1px solid ${previewColors.border}`, display: 'flex', justifyContent: 'space-around' }}>
+            <div style={{ margin: '12px 0 0', padding: '8px 0', background: previewColors.cardBg, borderTop: `2px solid ${previewColors.border}`, display: 'flex', justifyContent: 'space-around' }}>
               {['🏠','🔍','➕','🔔','👤'].map((icon, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
                   <div style={{ fontSize: 14 }}>{icon}</div>
@@ -1059,7 +1059,7 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
           </div>
         </div>
         {/* Swatch strip */}
-        <div style={{ marginTop: 16, padding: 16, background: theme.bg, borderRadius: 12, border: `2px solid ${theme.border}` }}>
+        <div style={{ marginTop: 16, padding: 16, background: theme.card, borderRadius: 12, border: `2px solid ${theme.border}` }}>
           {[
             { label: 'Primary', color: previewColors.pri },
             { label: 'Background', color: previewColors.bg },
