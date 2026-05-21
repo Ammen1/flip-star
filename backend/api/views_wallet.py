@@ -630,15 +630,13 @@ def _serialize_full_config(config):
     return {
         'rewards': {
             'welcome_bonus': config.welcome_bonus,
-            'daily_login': {
-                'day1': config.daily_login_day1,
-                'day2': config.daily_login_day2,
-                'day3': config.daily_login_day3,
-                'day4': config.daily_login_day4,
-                'day5': config.daily_login_day5,
-                'day6': config.daily_login_day6,
-                'day7': config.daily_login_day7,
-            },
+            'daily_login_day1': config.daily_login_day1,
+            'daily_login_day2': config.daily_login_day2,
+            'daily_login_day3': config.daily_login_day3,
+            'daily_login_day4': config.daily_login_day4,
+            'daily_login_day5': config.daily_login_day5,
+            'daily_login_day6': config.daily_login_day6,
+            'daily_login_day7': config.daily_login_day7,
             'daily_post_bonus': config.daily_post_bonus,
             'campaign_join_reward': config.campaign_join_reward,
             'receive_like_reward': config.receive_like_reward,
@@ -692,12 +690,10 @@ def _serialize_full_config(config):
             'purchased_coins_giftable': config.purchased_coins_giftable,
             'earned_coins_withdrawable': config.earned_coins_withdrawable,
             'purchased_coins_withdrawable': config.purchased_coins_withdrawable,
-            'restrictions': {
-                'min_points_per_transaction': config.gift_min_points_per_transaction,
-                'max_points_per_transaction': config.gift_max_points_per_transaction,
-                'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
-                'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
-            }
+            'min_points_per_transaction': config.gift_min_points_per_transaction,
+            'max_points_per_transaction': config.gift_max_points_per_transaction,
+            'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
+            'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
         },
         'expiry': {
             'earned_coins_expire_days': config.earned_coins_expire_days,

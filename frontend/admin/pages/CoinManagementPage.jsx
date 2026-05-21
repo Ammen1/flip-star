@@ -145,9 +145,8 @@ export function CoinManagementPage({ theme }) {
         method: 'PATCH',
         body: JSON.stringify(flat),
       });
-      // Update the local config with the response to keep sync without full reload
-      const response = await api.request('/admin/wallet/config/', { skipCache: true });
-      setConfig(response.config || response);
+      // Don't reload config - backend response structure differs from frontend expectations
+      // which causes value clearing. Keep local state after successful save.
       setAdjustResult({ type: 'success', message: 'Wallet configuration saved' });
     } catch (err) {
       setError(err.message || 'Failed to save config');
