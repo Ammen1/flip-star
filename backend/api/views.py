@@ -2559,6 +2559,138 @@ def admin_moderate_report(request, report_id):
     return Response({'success': True, 'action': action_taken})
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def admin_undo_moderation_action(request, action_id):
+    """Undo a moderation action"""
+    if not request.user.is_staff:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        moderation_action = ModerationAction.objects.select_related('report', 'report__reported_user', 'report__reported_reel').get(id=action_id)
+    except ModerationAction.DoesNotExist:
+        return Response({'error': 'Moderation action not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    action_to_undo = moderation_action.action_taken
+    report = moderation_action.report
+    print(f'[MODERATION] Undoing action: {action_to_undo}')
+
+    # Undo the action based on type
+    if action_to_undo == 'content_removed':
+        # Restore the reel (unhide it)
+        if report.reported_reel:
+            print(f'[MODERATION] Restoring reel {report.reported_reel.id}')
+            report.reported_reel.is_hidden = False
+            report.reported_reel.save(update_fields=['is_hidden'])
+            print(f'[MODERATION] Reel restored successfully')
+            # Notify the user
+            if report.reported_user:
+                _create_moderation_notification(
+                    user=report.reported_user,
+                    action_type='content_restored',
+                    target_type='reel',
+                    reason='Your content has been restored after review',
+                    report_id=report.id,
+                    moderator=request.user
+                )
+                print(f'[MODERATION] Content restoration notification sent')
+        else:
+            print(f'[MODERATION] No reported_reel found for content_removed undo')
+
+    elif action_to_undo == 'shadowban':
+        # Remove shadowban
+        if report.reported_user:
+            print(f'[MODERATION] Removing shadowban from user {report.reported_user.id}')
+            profile = getattr(report.reported_user, 'profile', None)
+            if profile:
+                print(f'[MODERATION] Profile found, setting is_shadowbanned=False')
+                profile.is_shadowbanned = False
+                profile.save(update_fields=['is_shadowbanned'])
+                print(f'[MODERATION] Shadowban removed successfully')
+                _create_moderation_notification(
+                    user=report.reported_user,
+                    action_type='shadowban_removed',
+                    target_type=report.target_type,
+                    reason='Your shadowban has been removed after review',
+                    report_id=report.id,
+                    moderator=request.user
+                )
+                print(f'[MODERATION] Shadowban removal notification sent')
+            else:
+                print(f'[MODERATION] No profile found for user {report.reported_user.id}')
+        else:
+            print(f'[MODERATION] No reported_user found for shadowban undo')
+
+    elif action_to_undo == 'temp_ban':
+        # Remove temp ban
+        if report.reported_user:
+            print(f'[MODERATION] Removing temp ban from user {report.reported_user.id}')
+            profile = getattr(report.reported_user, 'profile', None)
+            if profile:
+                print(f'[MODERATION] Profile found, clearing ban_expires_at')
+                profile.ban_expires_at = None
+                profile.save(update_fields=['ban_expires_at'])
+                print(f'[MODERATION] Temp ban removed successfully')
+                _create_moderation_notification(
+                    user=report.reported_user,
+                    action_type='temp_ban_removed',
+                    target_type=report.target_type,
+                    reason='Your temporary ban has been removed after review',
+                    report_id=report.id,
+                    moderator=request.user
+                )
+                print(f'[MODERATION] Temp ban removal notification sent')
+            else:
+                print(f'[MODERATION] No profile found for user {report.reported_user.id}')
+        else:
+            print(f'[MODERATION] No reported_user found for temp_ban undo')
+
+    elif action_to_undo == 'permanent_ban':
+        # Reactivate account
+        if report.reported_user:
+            print(f'[MODERATION] Reactivating user {report.reported_user.id}')
+            report.reported_user.is_active = True
+            report.reported_user.save(update_fields=['is_active'])
+            print(f'[MODERATION] Account reactivated successfully')
+            _create_moderation_notification(
+                user=report.reported_user,
+                action_type='account_reactivated',
+                target_type=report.target_type,
+                reason='Your account has been reactivated after review',
+                report_id=report.id,
+                moderator=request.user
+            )
+            print(f'[MODERATION] Account reactivation notification sent')
+        else:
+            print(f'[MODERATION] No reported_user found for permanent_ban undo')
+
+    elif action_to_undo == 'warning':
+        # Warning is just a notification, nothing to undo
+        print(f'[MODERATION] Warning has no effect to undo, but will notify user')
+        if report.reported_user:
+            _create_moderation_notification(
+                user=report.reported_user,
+                action_type='warning_cleared',
+                target_type=report.target_type,
+                reason='Your warning has been cleared after review',
+                report_id=report.id,
+                moderator=request.user
+            )
+            print(f'[MODERATION] Warning cleared notification sent')
+
+    elif action_to_undo == 'no_action':
+        # No action was taken, nothing to undo
+        print(f'[MODERATION] No action was taken, nothing to undo')
+        return Response({'error': 'No action to undo'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Mark the moderation action as undone
+    moderation_action.undone = True
+    moderation_action.undone_by = request.user
+    moderation_action.undone_at = timezone.now()
+    moderation_action.save(update_fields=['undone', 'undone_by', 'undone_at'])
+
+    return Response({'success': True, 'undone_action': action_to_undo})
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def admin_reports_stats(request):

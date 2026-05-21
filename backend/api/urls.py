@@ -13,7 +13,7 @@ from .views import (
     SubscriptionViewSet, NotificationPreferenceViewSet, CompetitionViewSet, WinnerViewSet, FollowViewSet, BlockViewSet, UserSearchViewSet,
     get_user_notifications, mark_notifications_read, get_unread_notification_count,
     mark_single_notification_read, create_report, admin_reports_list, admin_report_detail,
-    admin_reports_stats, admin_moderate_report, get_trending_reels, mark_not_interested, undo_not_interested,
+    admin_reports_stats, admin_moderate_report, admin_undo_moderation_action, get_trending_reels, mark_not_interested, undo_not_interested,
     get_trending_hashtags, get_reels_by_hashtag, track_view,
     get_notification_settings, update_notification_settings, get_privacy_settings, update_privacy_settings
 )
@@ -293,6 +293,7 @@ urlpatterns = [
     path('admin/reports/stats/', admin_reports_stats, name='admin-reports-stats'),
     path('admin/reports/<int:report_id>/', admin_report_detail, name='admin-report-detail'),
     path('admin/reports/<int:report_id>/moderate/', admin_moderate_report, name='admin-report-moderate'),
+    path('admin/moderation-actions/<int:action_id>/undo/', admin_undo_moderation_action, name='admin-undo-moderation-action'),
     # Admin endpoints
     path('admin/dashboard/', admin_dashboard_stats, name='admin-dashboard'),
     path('admin/users/', admin_users_list, name='admin-users-list'),
