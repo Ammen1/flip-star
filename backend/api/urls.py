@@ -59,6 +59,7 @@ from .views_boost import (
     get_eligible_boosts,
     record_boost_impression,
     record_boost_engagement,
+    check_pacing_engine,
 )
 
 @api_view(['GET', 'HEAD'])
