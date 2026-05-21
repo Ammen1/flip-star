@@ -348,15 +348,15 @@ export function ChargingDashboard({ theme }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(!statistics.transactions || statistics.transactions.length === 0) ? (
+                  {(!transactions.transactions || transactions.transactions.length === 0) ? (
                     <tr>
                       <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
                         No transactions yet.
                       </td>
                     </tr>
-                  ) : statistics.transactions.map((t, idx) => (
+                  ) : transactions.transactions.map((t, idx) => (
                     <tr key={t.id || idx} style={{
-                      borderBottom: idx < statistics.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
+                      borderBottom: idx < transactions.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                     }}>
                       <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
                         {new Date(t.created_at).toLocaleString()}
