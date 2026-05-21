@@ -474,6 +474,9 @@ class ModerationAction(models.Model):
     action_taken = models.CharField(max_length=30, choices=ACTION_CHOICES)
     reason_details = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    undone = models.BooleanField(default=False)
+    undone_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderation_actions_undone')
+    undone_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
