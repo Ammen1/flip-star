@@ -655,9 +655,16 @@ class WalletConfigAdmin(admin.ModelAdmin):
             'description': 'Coins deducted from the user (earned + purchased) when they perform these actions on a campaign post. Set to 0 to make free.',
             'fields': (
                 ('cost_like', 'cost_comment', 'cost_share', 'cost_gift'),
-                ('cost_post_create',),
+                ('cost_post_create', 'cost_post_create_long_video'),
                 ('cost_join_campaign', 'cost_extra_campaign_entry'),
                 ('cost_boost_2hr', 'cost_boost_24hr'),
+            )
+        }),
+        ('Action Costs (non-campaign posts)', {
+            'description': 'Coins deducted from the user (earned + purchased) when they perform these actions on a non-campaign post. Set to 0 to make free.',
+            'fields': (
+                ('cost_like_non_campaign', 'cost_comment_non_campaign', 'cost_share_non_campaign', 'cost_gift_non_campaign'),
+                ('cost_post_create_non_campaign', 'cost_post_create_long_video_non_campaign'),
             )
         }),
         ('Thresholds', {

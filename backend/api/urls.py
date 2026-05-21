@@ -47,6 +47,20 @@ from .views_direct_debit import (
     initiate_direct_debit,
     create_one_off_coin_purchase,
 )
+from .views_boost import (
+    get_boost_config,
+    calculate_boost_cost,
+    create_boost_campaign,
+    get_user_boost_campaigns,
+    get_boost_campaign_detail,
+    cancel_boost_campaign,
+    pause_boost_campaign,
+    resume_boost_campaign,
+    get_eligible_boosts,
+    record_boost_impression,
+    record_boost_engagement,
+    check_pacing_engine,
+)
 
 @api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
@@ -500,5 +514,18 @@ urlpatterns = [
     path('legal/<str:document_type>/accept/', accept_legal_document, name='legal-accept'),
     path('legal/user/pending/', get_pending_acceptances, name='legal-pending'),
     path('legal/user/history/', get_user_acceptances, name='legal-history'),
+    # ============ BOOST SYSTEM ============
+    path('boost/config/', get_boost_config, name='boost-config'),
+    path('boost/calculate-cost/', calculate_boost_cost, name='boost-calculate-cost'),
+    path('boost/campaigns/', create_boost_campaign, name='boost-create'),
+    path('boost/campaigns/my/', get_user_boost_campaigns, name='boost-my-campaigns'),
+    path('boost/campaigns/<int:campaign_id>/', get_boost_campaign_detail, name='boost-detail'),
+    path('boost/campaigns/<int:campaign_id>/cancel/', cancel_boost_campaign, name='boost-cancel'),
+    path('boost/campaigns/<int:campaign_id>/pause/', pause_boost_campaign, name='boost-pause'),
+    path('boost/campaigns/<int:campaign_id>/resume/', resume_boost_campaign, name='boost-resume'),
+    path('boost/eligible/', get_eligible_boosts, name='boost-eligible'),
+    path('boost/impression/', record_boost_impression, name='boost-impression'),
+    path('boost/engagement/', record_boost_engagement, name='boost-engagement'),
+    path('boost/pacing-check/', check_pacing_engine, name='boost-pacing-check'),
     path('', include(router.urls)),
 ]

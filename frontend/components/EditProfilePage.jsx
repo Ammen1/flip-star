@@ -159,28 +159,6 @@ export function EditProfilePage({ user, onBack, onSave }) {
         <div style={{ flex: 1, fontSize: 17, fontWeight: 700, color: T.txt, minWidth: 0 }}>
           Edit Profile
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          style={{
-            background: T.pri,
-            border: "none",
-            borderRadius: 8,
-            padding: "8px 16px",
-            color: "#fff",
-            fontSize: 14,
-            fontWeight: 700,
-            cursor: saving ? "not-allowed" : "pointer",
-            opacity: saving ? 0.6 : 1,
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            flexShrink: 0,
-          }}
-        >
-          <Save size={16} />
-          {saving ? "Saving..." : "Save"}
-        </button>
       </div>
 
       {/* Scrollable Content */}
@@ -222,8 +200,10 @@ export function EditProfilePage({ user, onBack, onSave }) {
                   position: "absolute",
                   bottom: 0,
                   right: 0,
-                  width: 32,
-                  height: 32,
+                  width: "32px",
+                  height: "32px",
+                  minWidth: "32px",
+                  minHeight: "32px",
                   borderRadius: "50%",
                   background: T.pri,
                   border: "2px solid #fff",
@@ -232,9 +212,13 @@ export function EditProfilePage({ user, onBack, onSave }) {
                   justifyContent: "center",
                   cursor: "pointer",
                   color: "#fff",
+                  boxSizing: "border-box",
+                  padding: 0,
+                  flexShrink: 0,
+                  overflow: "hidden",
                 }}
               >
-                <Camera size={16} />
+                <Camera size={16} style={{ flexShrink: 0, display: "block" }} />
               </button>
               <input
                 ref={fileInputRef}

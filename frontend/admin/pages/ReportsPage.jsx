@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Flag, CheckCircle, XCircle, AlertCircle, Eye, Trash2, User, FileVideo, MessageSquare, RefreshCw, ShieldAlert, Ban, AlertOctagon, Clock, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { Flag, CheckCircle, XCircle, AlertCircle, Eye, Trash2, User, FileVideo, MessageSquare, RefreshCw, ShieldAlert, Ban, AlertOctagon, Clock, ChevronDown, ChevronUp, ExternalLink, AlertTriangle } from 'lucide-react';
 import api from '../../api';
 
 const PRIORITY_COLORS = {
@@ -41,6 +41,8 @@ export function ReportsPage({ theme }) {
   const [selectedAction, setSelectedAction] = useState('');
   const [moderating, setModerating] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
 
   const showToast = (msg, isError = false) => {
     setToast({ msg, isError });
@@ -89,6 +91,20 @@ export function ReportsPage({ theme }) {
 
   const handleModerate = async () => {
     if (!selectedAction) { showToast('Please select an action', true); return; }
+    
+    // Destructive actions require confirmation
+    const destructiveActions = ['content_removed', 'shadowban', 'temp_ban', 'permanent_ban'];
+    if (destructiveActions.includes(selectedAction)) {
+      setPendingAction(selectedAction);
+      setShowConfirmDialog(true);
+      return;
+    }
+    
+    // Non-destructive actions proceed immediately
+    executeModeration();
+  };
+
+  const executeModeration = async () => {
     setModerating(true);
     try {
       await api.request(`/admin/reports/${selectedReport.id}/moderate/`, {
@@ -99,12 +115,24 @@ export function ReportsPage({ theme }) {
       setSelectedReport(null);
       setSelectedAction('');
       setResolutionNotes('');
+      setShowConfirmDialog(false);
+      setPendingAction(null);
       fetchReports(); fetchStats();
     } catch (e) {
       showToast('Failed to apply moderation action', true);
     } finally {
       setModerating(false);
     }
+  };
+
+  const getActionWarning = (action) => {
+    const warnings = {
+      content_removed: 'This will hide the reported content from all users. This action can be reversed by an admin.',
+      shadowban: 'This will hide all content from this user from other users, but the user will not be notified. Their content remains visible to themselves.',
+      temp_ban: 'This will temporarily ban the user from posting for 72 hours. They will be notified of this action.',
+      permanent_ban: 'This will permanently deactivate the user account. They will not be able to log in or access their content. This action cannot be easily undone.',
+    };
+    return warnings[action] || '';
   };
 
   const getStatusColor = (s) => ({ pending: '#8fc441', reviewing: '#3B82F6', resolved: '#10B981', dismissed: '#6B7280' }[s] || theme.txt);
@@ -296,12 +324,32 @@ export function ReportsPage({ theme }) {
             </div>
 
             {/* Content preview if reel attached */}
-            {selectedReport.reported_reel && typeof selectedReport.reported_reel === 'object' && selectedReport.reported_reel.media && (
+            {selectedReport.reported_reel && (
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 12, color: theme.sub, marginBottom: 6, fontWeight: 600 }}>REPORTED CONTENT</div>
-                <video src={selectedReport.reported_reel.media} style={{ width: '100%', maxHeight: 240, borderRadius: 10, background: '#000', objectFit: 'cover' }} controls />
-                {selectedReport.reported_reel.caption && (
-                  <p style={{ fontSize: 13, color: theme.sub, marginTop: 6 }}>{selectedReport.reported_reel.caption}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, color: theme.sub, fontWeight: 600 }}>REPORTED CONTENT</div>
+                  <button
+                    onClick={() => {
+                      const reelId = typeof selectedReport.reported_reel === 'object' ? selectedReport.reported_reel.id : selectedReport.reported_reel;
+                      // Open in main app context (home page with post parameter)
+                      window.open(`/?post=${reelId}`, '_blank');
+                    }}
+                    style={{ padding: '6px 12px', background: theme.pri, border: 'none', borderRadius: 6, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <ExternalLink size={12} /> View Full Content
+                  </button>
+                </div>
+                {typeof selectedReport.reported_reel === 'object' && selectedReport.reported_reel.media ? (
+                  <>
+                    <video src={selectedReport.reported_reel.media} style={{ width: '100%', maxHeight: 240, borderRadius: 10, background: '#000', objectFit: 'cover' }} controls />
+                    {selectedReport.reported_reel.caption && (
+                      <p style={{ fontSize: 13, color: theme.sub, marginTop: 6 }}>{selectedReport.reported_reel.caption}</p>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ padding: 14, background: theme.bg, borderRadius: 10, fontSize: 13, color: theme.sub, textAlign: 'center' }}>
+                    Click "View Full Content" to see the reported post
+                  </div>
                 )}
               </div>
             )}
@@ -355,6 +403,45 @@ export function ReportsPage({ theme }) {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Destructive Actions */}
+      {showConfirmDialog && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001, padding: 16 }}
+          onClick={() => setShowConfirmDialog(false)}>
+          <div style={{ background: theme.card, borderRadius: 20, padding: 28, width: '100%', maxWidth: 480 }}
+            onClick={e => e.stopPropagation()}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#EF444420', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <AlertTriangle size={24} color="#EF4444" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>Confirm Action</h3>
+                <p style={{ fontSize: 13, color: theme.sub, margin: '4px 0 0 0' }}>
+                  {MODERATION_ACTIONS.find(a => a.value === pendingAction)?.label}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: 14, background: '#EF444410', borderRadius: 10, marginBottom: 20, border: '1px solid #EF4444' }}>
+              <p style={{ fontSize: 14, color: theme.txt, margin: 0, lineHeight: 1.6 }}>
+                {getActionWarning(pendingAction)}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setShowConfirmDialog(false)}
+                style={{ flex: 1, padding: 12, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.txt, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={executeModeration} disabled={moderating}
+                style={{ flex: 1, padding: 12, background: '#EF4444', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 600, fontSize: 14, cursor: moderating ? 'not-allowed' : 'pointer', opacity: moderating ? 0.7 : 1 }}>
+                {moderating ? 'Applying...' : 'Confirm'}
+              </button>
+            </div>
           </div>
         </div>
       )}

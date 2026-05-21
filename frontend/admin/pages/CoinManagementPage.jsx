@@ -91,6 +91,7 @@ export function CoinManagementPage({ theme }) {
         referral_reward: config.rewards.referral_reward,
         campaign_winner_reward: config.rewards.campaign_winner_reward,
         cost_post_create: config.costs.post_create || 0,
+        cost_post_create_long_video: config.costs.post_create_long_video || 0,
         cost_like: config.costs.like || 0,
         cost_comment: config.costs.comment || 0,
         cost_share: config.costs.share || 0,
@@ -103,6 +104,7 @@ export function CoinManagementPage({ theme }) {
         cost_trending_1hr: config.costs.trending_1hr || 0,
         cost_trending_24hr: config.costs.trending_24hr || 0,
         cost_post_create_non_campaign: config.costs.post_create_non_campaign || 0,
+        cost_post_create_long_video_non_campaign: config.costs.post_create_long_video_non_campaign || 0,
         cost_like_non_campaign: config.costs.like_non_campaign || 0,
         cost_comment_non_campaign: config.costs.comment_non_campaign || 0,
         cost_share_non_campaign: config.costs.share_non_campaign || 0,
@@ -143,7 +145,8 @@ export function CoinManagementPage({ theme }) {
         method: 'PATCH',
         body: JSON.stringify(flat),
       });
-      await loadConfig();
+      // Don't reload config - backend response structure differs from frontend expectations
+      // which causes value clearing. Keep local state after successful save.
       setAdjustResult({ type: 'success', message: 'Wallet configuration saved' });
     } catch (err) {
       setError(err.message || 'Failed to save config');
@@ -308,8 +311,8 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
     localStorage.setItem('adminCoinConfigSubTab', activeSubTab);
   }, [activeSubTab]);
 
-  if (loading) return <LoadingState theme={T} />;
-  if (!config) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
+  if (!config) return <LoadingState theme={T} />;
+  if (!config && error) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
 
   const updateField = (section, field, value) => {
     setConfig({ 
@@ -462,6 +465,7 @@ function ActionCostsSubTab({ theme: T, config, updateField }) {
           Costs for actions on campaign posts
         </div>
         <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create} onChange={(v) => updateField('costs', 'post_create', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Long Video Cost (>60s)" value={config.costs.post_create_long_video} onChange={(v) => updateField('costs', 'post_create_long_video', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Like Cost" value={config.costs.like} onChange={(v) => updateField('costs', 'like', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment} onChange={(v) => updateField('costs', 'comment', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Share Cost" value={config.costs.share} onChange={(v) => updateField('costs', 'share', parseInt(v) || 0)} />
@@ -490,6 +494,7 @@ function NonCampaignActionCostsSubTab({ theme: T, config, updateField }) {
           Costs for actions on non-campaign posts
         </div>
         <FieldRow theme={T} label="Create Post Cost" value={config.costs.post_create_non_campaign} onChange={(v) => updateField('costs', 'post_create_non_campaign', parseInt(v) || 0)} />
+        <FieldRow theme={T} label="Long Video Cost (>60s)" value={config.costs.post_create_long_video_non_campaign} onChange={(v) => updateField('costs', 'post_create_long_video_non_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Like Cost" value={config.costs.like_non_campaign} onChange={(v) => updateField('costs', 'like_non_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Comment Cost" value={config.costs.comment_non_campaign} onChange={(v) => updateField('costs', 'comment_non_campaign', parseInt(v) || 0)} />
         <FieldRow theme={T} label="Share Cost" value={config.costs.share_non_campaign} onChange={(v) => updateField('costs', 'share_non_campaign', parseInt(v) || 0)} />
@@ -1365,8 +1370,19 @@ function FieldRow({ label, value, onChange, type = 'number', theme: T }) {
       <input
         type={type}
         value={value !== undefined && value !== null ? value : ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (type === 'number') {
+            // Allow empty string for editing, but prevent negative numbers
+            if (val === '' || parseFloat(val) >= 0) {
+              onChange(val);
+            }
+          } else {
+            onChange(val);
+          }
+        }}
         placeholder="0"
+        min="0"
         style={{
           flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${theme.border}`,
           background: theme.card, color: theme.txt, fontSize: 14, fontWeight: 500,

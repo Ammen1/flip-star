@@ -5,7 +5,7 @@ import {
   Image as ImageIcon, Video, Hash, Type, Upload, Music, Volume2, VolumeX, 
   Play, Pause, RotateCw, RefreshCw, Camera, Mic, MicOff, Sparkles, Palette, 
   ChevronDown, ChevronLeft, ChevronRight, Check, AlertCircle, Trash2,
-  Zap, ZapOff, Square, FileText, Eye, Bookmark, Share2, ArrowLeft, Heart
+  Zap, ZapOff, Square, FileText, Eye, Bookmark, Share2, ArrowLeft, Heart, Coins
 } from 'lucide-react';
 import api from '../api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -49,7 +49,7 @@ function ProgressRing({ radius, stroke, progress, color }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNavReels, onNavMessages, onNavProfile, unreadDmCount = 0 }) {
+export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNavReels, onNavMessages, onNavProfile, unreadDmCount = 0, onShowCoinPurchase }) {
   const { colors: T } = useTheme();
   // Stage
   const [stage, setStage] = useState('capture'); // 'capture' | 'details'
@@ -101,6 +101,13 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showInsufficientCoins, setShowInsufficientCoins] = useState(false);
+  const [postCost, setPostCost] = useState(0);
+
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('[INSUFFICIENT_COINS] Modal state changed:', showInsufficientCoins);
+  }, [showInsufficientCoins]);
 
   // Refs
   const videoRef = useRef(null);
@@ -788,6 +795,37 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
       return;
     }
     console.log('[POST] file:', selectedFile.name, selectedFile.type, selectedFile.size, 'bytes');
+    
+    // Check coin balance before posting
+    try {
+      const walletConfig = await api.request('/wallet/config/').catch(err => {
+        console.error('Wallet config error:', err);
+        return { cost_post_create_non_campaign: 0 };
+      });
+      
+      const coinBalance = await api.request('/coins/balance/').catch(err => {
+        console.error('Coin balance error:', err);
+        return { balance: 0 };
+      });
+      
+      const cost = walletConfig.cost_post_create_non_campaign || 0;
+      const balance = coinBalance.balance || 0;
+      
+      console.log('[POST] Coin check:', { cost, balance, sufficient: balance >= cost });
+      
+      if (cost > 0 && balance < cost) {
+        console.log('[POST] Showing insufficient coins modal', { cost, balance });
+        setPostCost(cost);
+        setShowInsufficientCoins(true);
+        // Force a re-render by using a small timeout
+        setTimeout(() => console.log('[POST] Modal state set:', showInsufficientCoins), 100);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking coin balance:', error);
+      // Continue with posting if balance check fails
+    }
+    
     setIsUploading(true);
     setUploadProgress(0);
     try {
@@ -812,10 +850,27 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           lastReported = pct;
           setUploadProgress(Math.min(pct, 97));
         },
+      }).catch(err => {
+        console.error('[POST] Upload error:', err);
+        setIsUploading(false);
+
+        // Check if error is due to insufficient coins
+        if (err?.error && err.error.includes('Insufficient') || err?.required_coins) {
+          const requiredCoins = err.required_coins || postCost || 2;
+          console.log('[POST] Backend returned insufficient coins error, showing modal');
+          setPostCost(requiredCoins);
+          setShowInsufficientCoins(true);
+          return null; // Return null to prevent success logic
+        }
+
+        // Only show alert for other errors (not insufficient coins)
+        alert(`Upload failed: ${err?.error || err?.message || 'Server error'}\n\nSee console for details`);
+        return null; // Return null to prevent success logic
       });
-      
-      // Broadcast new post to all users for real-time updates
+
+      // Only show success if upload actually succeeded (newReel is not null)
       if (newReel && newReel.id) {
+        // Broadcast new post to all users for real-time updates
         realtimeService.broadcastNewPost({
           id: newReel.id,
           user: user,
@@ -823,21 +878,21 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           media: newReel.media || newReel.image,
           created_at: newReel.created_at || new Date().toISOString()
         });
-        
+
         // Also broadcast feed refresh to ensure all tabs update
         realtimeService.broadcastFeedRefresh();
+
+        setUploadProgress(100);
+        setShowSuccess(true);
+        setTimeout(() => {
+          setShowSuccess(false);
+          if (onPostSuccess) {
+            onPostSuccess(newReel.id);
+          } else {
+            onBack?.();
+          }
+        }, 2000);
       }
-      
-      setUploadProgress(100);
-      setShowSuccess(true);
-      setTimeout(() => {
-        setShowSuccess(false);
-        if (newReel?.id && onPostSuccess) {
-          onPostSuccess(newReel.id);
-        } else {
-          onBack?.();
-        }
-      }, 2000);
     } catch (e) {
       console.error('Upload failed', e);
       const detail = e?.traceback || e?.error || e?.message || String(e);
@@ -1875,6 +1930,63 @@ export function EnhancedPostPage({ user, onBack, onPostSuccess, onNavHome, onNav
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, color: T.white }}>Video is Live! 🎉</div>
           <div style={{ fontSize: 15, color: T.sub }}>Your post has been uploaded</div>
+        </div>
+      )}
+
+      {/* ── INSUFFICIENT COINS MODAL ──────────────────────────────────────────── */}
+      {showInsufficientCoins && (
+        <div 
+          onClick={(e) => {
+            // Prevent closing when clicking outside the modal content
+            e.stopPropagation();
+          }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 20, animation: 'ep-fade-in 0.3s ease',
+          }}>
+          <div style={{
+            width: 96, height: 96, borderRadius: '50%',
+            background: 'linear-gradient(135deg, #EF4444, #DC2626)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Coins size={48} color={T.white} strokeWidth={3} />
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: T.white }}>Insufficient Coins</div>
+          <div style={{ fontSize: 15, color: T.sub, textAlign: 'center', maxWidth: 300, padding: '0 20px' }}>
+            You need {postCost} coins to create a post. Purchase coins to continue.
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+            <button
+              onClick={() => setShowInsufficientCoins(false)}
+              style={{
+                padding: '12px 24px', borderRadius: 24, fontSize: 14, fontWeight: 700,
+                background: 'rgba(255,255,255,0.1)', color: T.white, border: 'none', cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                console.log('[INSUFFICIENT_COINS] Purchase button clicked', { onShowCoinPurchase: !!onShowCoinPurchase });
+                setShowInsufficientCoins(false);
+                // Show coin purchase modal
+                if (onShowCoinPurchase) {
+                  onShowCoinPurchase();
+                } else {
+                  console.error('[INSUFFICIENT_COINS] onShowCoinPurchase not available');
+                  // Fallback: navigate to profile
+                  onNavProfile?.();
+                }
+              }}
+              style={{
+                padding: '12px 24px', borderRadius: 24, fontSize: 14, fontWeight: 700,
+                background: T.pri, color: T.white, border: 'none', cursor: 'pointer',
+              }}
+            >
+              Purchase Coins
+            </button>
+          </div>
         </div>
       )}
 

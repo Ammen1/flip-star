@@ -32,7 +32,7 @@ export function ChargingDashboard({ theme }) {
   const loadStatistics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
+      const response = await api.request(`/charging/on-demand/statistics/?days=3650`);
       setStatistics(response);
     } catch (err) {
       setError('Failed to load statistics');
@@ -44,7 +44,7 @@ export function ChargingDashboard({ theme }) {
 
   const loadTransactions = async () => {
     try {
-      const response = await api.request(`/admin/wallet/all-transactions/?type=purchase&page_size=50`);
+      const response = await api.request(`/charging/on-demand/transactions/?days=3650&page=${page}&page_size=50`);
       setTransactions(response);
     } catch (err) {
       console.error('Failed to load transactions:', err);
@@ -54,7 +54,7 @@ export function ChargingDashboard({ theme }) {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
+      const response = await api.request(`/charging/on-demand/analytics/?period=${analyticsPeriod}`);
       setAnalyticsData(response);
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -72,16 +72,14 @@ export function ChargingDashboard({ theme }) {
 
     setSearching(true);
     try {
-      const response = await api.request(`/admin/wallet/all-transactions/?type=purchase&page_size=50`);
-      // Filter the results based on search query
-      const filteredTransactions = response.results?.filter(tx => {
-        if (searchType === 'phone') {
-          const q = searchQuery.toLowerCase();
-          return (tx.phone || '').toLowerCase().includes(q) || (tx.user || '').toLowerCase().includes(q);
-        }
-        return true;
-      }) || [];
-      setSearchResults(filteredTransactions);
+      let url = `/charging/on-demand/search/?`;
+      if (searchType === 'phone') {
+        url += `phone=${searchQuery}`;
+      } else {
+        url += `user_id=${searchQuery}`;
+      }
+      const response = await api.request(url);
+      setSearchResults(response);
     } catch (err) {
       console.error('Search failed:', err);
     } finally {
@@ -90,19 +88,18 @@ export function ChargingDashboard({ theme }) {
   };
 
   const handleExport = () => {
-    const dataToExport = searchResults || statistics?.results || [];
+    const dataToExport = searchResults?.transactions || statistics?.transactions || [];
     if (!dataToExport || dataToExport.length === 0) return;
 
-    const headers = ['Date', 'User', 'Email', 'Phone', 'Type', 'Coins', 'Payment Method', 'Description'];
+    const headers = ['Date', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Transaction ID'];
     const rows = dataToExport.map(t => [
       t.created_at || '',
       t.user || '',
-      t.email || '',
-      t.phone || '',
-      t.type_display || t.transaction_type || '',
-      t.coins || 0,
-      t.payment_method || '',
-      t.description || ''
+      t.phone_number || '',
+      t.subscription_tier || '',
+      t.amount_etb || 0,
+      t.status || '',
+      t.transaction_id || ''
     ]);
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -260,44 +257,51 @@ export function ChargingDashboard({ theme }) {
           }}>
             <StatCard
               icon={CreditCard}
-              label="Active Subscriptions"
-              value={statistics.active_subscriptions?.total || 0}
+              label="Total Transactions"
+              value={statistics.total_transactions || 0}
               color={theme.pri}
               theme={theme}
             />
             <StatCard
-              icon={TrendingUp}
-              label="MRR"
-              value={`ETB ${statistics.active_subscriptions?.mrr?.toFixed(2) || '0.00'}`}
+              icon={CheckCircle}
+              label="Successful"
+              value={statistics.successful_transactions || 0}
               color="#10B981"
               theme={theme}
             />
             <StatCard
-              icon={DollarSign}
-              label="Today's Revenue"
-              value={`ETB ${statistics.revenue?.today?.total?.toFixed(2) || '0.00'}`}
-              color="#3B82F6"
+              icon={XCircle}
+              label="Failed"
+              value={statistics.failed_transactions || 0}
+              color="#EF4444"
               theme={theme}
             />
             <StatCard
-              icon={Calendar}
-              label="Today's Transactions"
-              value={statistics.revenue?.today?.count || 0}
-              color="#8B5CF6"
-              theme={theme}
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Week Revenue"
-              value={`ETB ${statistics.revenue?.week?.total?.toFixed(2) || '0.00'}`}
+              icon={AlertCircle}
+              label="Insufficient Balance"
+              value={statistics.insufficient_balance || 0}
               color="#F59E0B"
               theme={theme}
             />
             <StatCard
-              icon={TrendingDown}
-              label="Month Revenue"
-              value={`ETB ${statistics.revenue?.month?.total?.toFixed(2) || '0.00'}`}
-              color="#EF4444"
+              icon={DollarSign}
+              label="Expected Collection"
+              value={`ETB ${statistics.expected_collection?.toFixed(2) || '0.00'}`}
+              color="#3B82F6"
+              theme={theme}
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Actual Collection"
+              value={`ETB ${statistics.actual_collection?.toFixed(2) || '0.00'}`}
+              color="#10B981"
+              theme={theme}
+            />
+            <StatCard
+              icon={Activity}
+              label="Success Rate"
+              value={`${statistics.success_rate?.toFixed(1) || 0}%`}
+              color="#8B5CF6"
               theme={theme}
             />
           </div>
@@ -318,7 +322,7 @@ export function ChargingDashboard({ theme }) {
               alignItems: 'center'
             }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: theme.txt }}>
-                Recent Transactions
+                Recent Charging Transactions
               </h2>
             </div>
 
@@ -329,7 +333,7 @@ export function ChargingDashboard({ theme }) {
                     background: theme.bg,
                     borderBottom: `1px solid ${theme.border}`
                   }}>
-                    {['Date', 'User', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Method', 'Status'].map(h => (
+                    {['Date', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Transaction ID'].map(h => (
                       <th key={h} style={{
                         padding: 12,
                         textAlign: h === 'Amount (ETB)' ? 'right' : 'left',
@@ -344,40 +348,37 @@ export function ChargingDashboard({ theme }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(!statistics.recent_transactions || statistics.recent_transactions.length === 0) ? (
+                  {(!transactions.transactions || transactions.transactions.length === 0) ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
+                      <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
                         No transactions yet.
                       </td>
                     </tr>
-                  ) : statistics.recent_transactions.map((t, idx) => (
+                  ) : transactions.transactions.map((t, idx) => (
                     <tr key={t.id || idx} style={{
-                      borderBottom: idx < statistics.recent_transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
+                      borderBottom: idx < transactions.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                     }}>
                       <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
-                        <div>{t.date}</div>
-                        {t.period_end && <div style={{ fontSize: 10 }}>ends {t.period_end}</div>}
+                        {new Date(t.created_at).toLocaleString()}
                       </td>
                       <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 600 }}>@{t.user}</div>
-                        {t.email && <div style={{ fontSize: 11, color: theme.sub }}>{t.email}</div>}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone || '—'}</td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.tier}</td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
-                        {t.duration_type || '—'}{t.duration_days ? ` (${t.duration_days}d)` : ''}
-                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone_number || '—'}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.subscription_tier || '—'}</td>
                       <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        {t.amount.toFixed(2)}
+                        {t.amount_etb?.toFixed(2) || '0.00'}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.payment_method}</td>
                       <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
                         <span style={{
                           padding: '3px 8px', borderRadius: 999,
-                          background: t.status === 'completed' ? '#10B98122' : '#9CA3AF22',
-                          color: t.status === 'completed' ? '#10B981' : theme.sub,
+                          background: t.status === 'success' ? '#10B98122' : t.status === 'failed' ? '#EF444422' : '#F59E0B22',
+                          color: t.status === 'success' ? '#10B981' : t.status === 'failed' ? '#EF4444' : '#F59E0B',
                           fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
                         }}>{t.status || '—'}</span>
+                      </td>
+                      <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                        {t.transaction_id || '—'}
                       </td>
                     </tr>
                   ))}
@@ -487,7 +488,7 @@ export function ChargingDashboard({ theme }) {
                       background: theme.bg,
                       borderBottom: `1px solid ${theme.border}`
                     }}>
-                      {['Date', 'User', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Method', 'Status'].map(h => (
+                      {['Date', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Transaction ID'].map(h => (
                         <th key={h} style={{
                           padding: 12,
                           textAlign: h === 'Amount (ETB)' ? 'right' : 'left',
@@ -507,29 +508,26 @@ export function ChargingDashboard({ theme }) {
                         borderBottom: idx < searchResults.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                       }}>
                         <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
-                          <div>{t.date}</div>
-                          {t.period_end && <div style={{ fontSize: 10 }}>ends {t.period_end}</div>}
+                          {new Date(t.created_at).toLocaleString()}
                         </td>
                         <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
                           <div style={{ fontWeight: 600 }}>@{t.user}</div>
-                          {t.email && <div style={{ fontSize: 11, color: theme.sub }}>{t.email}</div>}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone || '—'}</td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.tier}</td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
-                          {t.duration_type || '—'}{t.duration_days ? ` (${t.duration_days}d)` : ''}
-                        </td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone_number || '—'}</td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.subscription_tier || '—'}</td>
                         <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {t.amount.toFixed(2)}
+                          {t.amount_etb?.toFixed(2) || '0.00'}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.payment_method}</td>
                         <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
                           <span style={{
                             padding: '3px 8px', borderRadius: 999,
-                            background: t.status === 'completed' ? '#10B98122' : '#9CA3AF22',
-                            color: t.status === 'completed' ? '#10B981' : theme.sub,
+                            background: t.status === 'success' ? '#10B98122' : t.status === 'failed' ? '#EF444422' : '#F59E0B22',
+                            color: t.status === 'success' ? '#10B981' : t.status === 'failed' ? '#EF4444' : '#F59E0B',
                             fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
                           }}>{t.status || '—'}</span>
+                        </td>
+                        <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                          {t.transaction_id || '—'}
                         </td>
                       </tr>
                     ))}
@@ -559,37 +557,223 @@ export function ChargingDashboard({ theme }) {
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 16
+            gap: 16,
+            marginBottom: 32
           }}>
             <StatCard
               icon={CreditCard}
-              label="Active Subscriptions"
-              value={analyticsData.active_subscriptions?.total || 0}
+              label="Total Transactions"
+              value={analyticsData.total_transactions || 0}
               color={theme.pri}
               theme={theme}
             />
             <StatCard
-              icon={TrendingUp}
-              label="MRR"
-              value={`ETB ${analyticsData.active_subscriptions?.mrr?.toFixed(2) || '0.00'}`}
+              icon={CheckCircle}
+              label="Successful"
+              value={analyticsData.successful || 0}
               color="#10B981"
               theme={theme}
             />
             <StatCard
+              icon={XCircle}
+              label="Failed"
+              value={analyticsData.failed || 0}
+              color="#EF4444"
+              theme={theme}
+            />
+            <StatCard
+              icon={AlertCircle}
+              label="Insufficient Balance"
+              value={analyticsData.insufficient_balance || 0}
+              color="#F59E0B"
+              theme={theme}
+            />
+            <StatCard
               icon={DollarSign}
-              label="Today's Revenue"
-              value={`ETB ${analyticsData.revenue?.today?.total?.toFixed(2) || '0.00'}`}
+              label="Total Revenue"
+              value={`ETB ${analyticsData.total_revenue?.toFixed(2) || '0.00'}`}
               color="#8B5CF6"
               theme={theme}
             />
             <StatCard
               icon={Activity}
-              label="Today's Transactions"
-              value={analyticsData.revenue?.today?.count || 0}
+              label="Success Rate"
+              value={`${analyticsData.success_rate?.toFixed(1) || 0}%`}
               color="#10B981"
               theme={theme}
             />
           </div>
+
+          {/* Charts Section */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 24 }}>
+            {/* Transaction Trend Chart - CSS Bar Chart */}
+            <div style={{
+              background: theme.bg,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                Transaction Trend
+              </h3>
+              <div style={{ height: 300, overflowX: 'auto' }}>
+                {analyticsData.breakdown && analyticsData.breakdown.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 400 }}>
+                    {analyticsData.breakdown.map((item, idx) => {
+                      const maxValue = Math.max(...analyticsData.breakdown.map(b => b.total || 0));
+                      const totalPercent = ((item.total || 0) / maxValue) * 100;
+                      const successPercent = ((item.success || 0) / maxValue) * 100;
+                      const failedPercent = ((item.failed || 0) / maxValue) * 100;
+                      const label = activeTab === 'analytics_daily' ? item.date : activeTab === 'analytics_monthly' ? item.month : item.year;
+                      
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 80, fontSize: 11, color: theme.sub, flexShrink: 0 }}>
+                            {label}
+                          </div>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div style={{ display: 'flex', gap: 2, height: 20 }}>
+                              <div style={{ width: `${totalPercent}%`, background: theme.pri, borderRadius: 2, minWidth: item.total > 0 ? 2 : 0 }} title={`Total: ${item.total}`} />
+                              <div style={{ width: `${successPercent}%`, background: '#10B981', borderRadius: 2, minWidth: item.success > 0 ? 2 : 0 }} title={`Successful: ${item.success}`} />
+                              <div style={{ width: `${failedPercent}%`, background: '#EF4444', borderRadius: 2, minWidth: item.failed > 0 ? 2 : 0 }} title={`Failed: ${item.failed}`} />
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 11, color: theme.sub, minWidth: 60, textAlign: 'right' }}>
+                            {item.total || 0}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: theme.sub }}>
+                    No data available
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: theme.sub }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: theme.pri, borderRadius: 2 }} />
+                  <span>Total</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: '#10B981', borderRadius: 2 }} />
+                  <span>Successful</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: '#EF4444', borderRadius: 2 }} />
+                  <span>Failed</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Revenue Chart - CSS Line/Bar Chart */}
+            <div style={{
+              background: theme.bg,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                Revenue Trend
+              </h3>
+              <div style={{ height: 300, overflowX: 'auto' }}>
+                {analyticsData.breakdown && analyticsData.breakdown.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 400 }}>
+                    {analyticsData.breakdown.map((item, idx) => {
+                      const maxValue = Math.max(...analyticsData.breakdown.map(b => b.revenue || 0)) || 1;
+                      const percent = ((item.revenue || 0) / maxValue) * 100;
+                      const label = activeTab === 'analytics_daily' ? item.date : activeTab === 'analytics_monthly' ? item.month : item.year;
+                      
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 80, fontSize: 11, color: theme.sub, flexShrink: 0 }}>
+                            {label}
+                          </div>
+                          <div style={{ flex: 1, height: 20, background: theme.bg, borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${percent}%`, height: '100%', background: '#8B5CF6', borderRadius: 2, minWidth: item.revenue > 0 ? 2 : 0, transition: 'width 0.3s' }} />
+                          </div>
+                          <div style={{ fontSize: 11, color: theme.sub, minWidth: 60, textAlign: 'right' }}>
+                            {item.revenue?.toFixed(2) || '0.00'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: theme.sub }}>
+                    No data available
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: theme.sub }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: '#8B5CF6', borderRadius: 2 }} />
+                  <span>Revenue (ETB)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Success/Failure Distribution - CSS Pie Chart */}
+          {analyticsData.total_transactions > 0 && (
+            <div style={{
+              background: theme.bg,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`,
+              marginTop: 24
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                Transaction Status Distribution
+              </h3>
+              <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <div style={{ 
+                    width: 150, height: 150, borderRadius: '50%', 
+                    background: `conic-gradient(#10B981 ${((analyticsData.successful || 0) / analyticsData.total_transactions) * 360}deg, #EF4444 ${((analyticsData.successful || 0) / analyticsData.total_transactions) * 360}deg ${((analyticsData.successful || 0) + (analyticsData.failed || 0)) / analyticsData.total_transactions * 360}deg, #F59E0B ${((analyticsData.successful || 0) + (analyticsData.failed || 0)) / analyticsData.total_transactions * 360}deg 360deg)`,
+                    position: 'relative'
+                  }}>
+                    <div style={{ 
+                      position: 'absolute', inset: 30, borderRadius: '50%', 
+                      background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'column'
+                    }}>
+                      <div style={{ fontSize: 24, fontWeight: 700, color: theme.txt }}>
+                        {analyticsData.total_transactions}
+                      </div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>
+                        Total
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 16, height: 16, background: '#10B981', borderRadius: 4 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt }}>Successful</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{analyticsData.successful || 0} ({((analyticsData.successful || 0) / analyticsData.total_transactions * 100).toFixed(1)}%)</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 16, height: 16, background: '#EF4444', borderRadius: 4 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt }}>Failed</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{analyticsData.failed || 0} ({((analyticsData.failed || 0) / analyticsData.total_transactions * 100).toFixed(1)}%)</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 16, height: 16, background: '#F59E0B', borderRadius: 4 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt }}>Insufficient Balance</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{analyticsData.insufficient_balance || 0} ({((analyticsData.insufficient_balance || 0) / analyticsData.total_transactions * 100).toFixed(1)}%)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

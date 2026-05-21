@@ -952,12 +952,44 @@ def create_post(request):
         else:
             cost = config.cost_post_create_non_campaign
 
+        # Check video duration for long video surcharge
+        video_duration = None
+        if is_video:
+            # Get video duration using ffmpeg
+            import os
+            import tempfile
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
+                    for chunk in file.chunks():
+                        temp_video.write(chunk)
+                    temp_video_path = temp_video.name
+
+                import ffmpeg
+                probe = ffmpeg.probe(temp_video_path)
+                video_duration = float(probe['streams'][0]['duration'])
+                print(f"[CREATE_POST] Video duration: {video_duration} seconds")
+
+                os.unlink(temp_video_path)
+            except Exception as e:
+                print(f"[CREATE_POST] Failed to get video duration: {e}")
+
+        # Add long video surcharge if duration > 60 seconds
+        if video_duration and video_duration > 60:
+            if is_campaign_post:
+                long_video_cost = config.cost_post_create_long_video
+            else:
+                long_video_cost = config.cost_post_create_long_video_non_campaign
+            if long_video_cost and long_video_cost > 0:
+                cost += long_video_cost
+                print(f"[CREATE_POST] Long video surcharge added: {long_video_cost}, total cost: {cost}")
+
         if cost and cost > 0:
             balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
             try:
                 balance.spend_coins(cost, 'post_create' if not is_campaign_post else 'campaign_post_create',
                                     description=f'Create {"campaign" if is_campaign_post else "non-campaign"} post')
             except ValueError as e:
+                print(f"[CREATE_POST] Insufficient coins error: {str(e)}, required: {cost}")
                 return Response({'error': str(e), 'required_coins': cost},
                                 status=status.HTTP_400_BAD_REQUEST)
 
@@ -1175,6 +1207,18 @@ class ReelViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Generate thumbnail for video uploads using FFmpeg"""
+        # Check if user is banned before allowing content creation
+        if self.request.user.is_authenticated:
+            profile = getattr(self.request.user, 'profile', None)
+            if profile:
+                # Check for permanent ban
+                if not self.request.user.is_active:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('Your account has been permanently banned.')
+                # Check for temp ban
+                if profile.ban_expires_at and profile.ban_expires_at > timezone.now():
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied(f'Your account is temporarily banned until {profile.ban_expires_at.strftime("%Y-%m-%d %H:%M")}.')
         instance = serializer.save()
         
         # Generate thumbnail if video is uploaded
@@ -1214,7 +1258,7 @@ class ReelViewSet(viewsets.ModelViewSet):
         try:
             from .models import Comment
             from .models_gift import GiftTransaction
-            from django.db.models import Sum
+            from django.db.models import Sum, Q
             # Prefetch recent comments to avoid N+1 queries in serializer
             recent_comments_prefetch = Prefetch(
                 'comments',
@@ -1231,6 +1275,39 @@ class ReelViewSet(viewsets.ModelViewSet):
                 comment_count_db=Count('comments', distinct=True),
                 votes_count_db=Count('reel_votes', distinct=True),
             ).order_by('-created_at')
+            
+            # Filter out hidden/banned content (moderation)
+            # - is_hidden: Content removed by moderation
+            # - is_shadowbanned: User shadowbanned (content hidden from others, but visible to owner)
+            # - is_active=False: User permanently banned
+            # - ban_expires_at > now: User temporarily banned
+            if self.request.user.is_authenticated:
+                # Authenticated users: show their own content even if shadowbanned/temp-banned
+                # but hide content from other banned users
+                queryset = queryset.filter(
+                    Q(is_hidden=False) &  # Content not hidden by moderation
+                    Q(
+                        Q(user=self.request.user) |  # OR it's their own content
+                        Q(
+                            Q(user__is_active=True) &  # User is active
+                            Q(user__profile__is_shadowbanned=False) &  # Not shadowbanned
+                            (
+                                Q(user__profile__ban_expires_at__isnull=True) |  # Not temp banned
+                                Q(user__profile__ban_expires_at__lte=timezone.now())  # OR temp ban expired
+                            )
+                        )
+                    )
+                )
+            else:
+                # Anonymous users: hide all banned/shadowbanned content
+                queryset = queryset.filter(
+                    is_hidden=False,
+                    user__is_active=True,
+                    user__profile__is_shadowbanned=False
+                ).filter(
+                    Q(user__profile__ban_expires_at__isnull=True) |
+                    Q(user__profile__ban_expires_at__lte=timezone.now())
+                )
             
             # Skip NotInterested filter to prevent crashes - it's causing performance issues
             # If needed, can be re-enabled later with optimization
@@ -2205,6 +2282,7 @@ def create_report(request):
     """Create a new report for inappropriate content"""
     try:
         data = request.data.copy()
+        print(f'[REPORT] Received report data: {data}')
 
         # Map legacy field names sent by frontend (reported_reel -> reported_reel_id)
         if 'reported_reel' in data and 'reported_reel_id' not in data:
@@ -2232,9 +2310,17 @@ def create_report(request):
         else:
             data['priority'] = 'medium'
 
+        print(f'[REPORT] Data after processing: {data}')
         serializer = ReportSerializer(data=data)
         if serializer.is_valid():
             report = serializer.save(reported_by=request.user)
+            print(f'[REPORT] Report created successfully: ID {report.id}')
+
+            # Auto-set reported_user from reel owner if not provided
+            if report.reported_reel and not report.reported_user:
+                report.reported_user = report.reported_reel.user
+                report.save(update_fields=['reported_user'])
+                print(f'[REPORT] Auto-set reported_user to reel owner: {report.reported_user.id}')
 
             # Auto-flag if target has 5+ pending reports
             if report.reported_reel:
@@ -2295,6 +2381,31 @@ def admin_report_detail(request, report_id):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+def _create_moderation_notification(user, action_type, target_type, reason, report_id=None, moderator=None):
+    """Create a notification for a moderation action taken on a user's content or account"""
+    if not user:
+        return
+    
+    action_messages = {
+        'warning': f'Your account has received a warning due to a report. Reason: {reason}',
+        'content_removed': f'Your content has been removed due to a report. Reason: {reason}',
+        'shadowban': f'Your account has been shadow banned - your content is now hidden from other users. Reason: {reason}',
+        'temp_ban': f'Your account has been temporarily banned. Reason: {reason}',
+        'permanent_ban': f'Your account has been permanently banned due to severe violations. Reason: {reason}',
+    }
+    
+    message = action_messages.get(action_type, f'Moderation action taken: {action_type}. Reason: {reason}')
+    if report_id:
+        message += f' (Report #{report_id})'
+    
+    Notification.objects.create(
+        recipient=user,
+        sender=moderator or user,  # System notification
+        notification_type='moderation',
+        message=message,
+    )
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def admin_moderate_report(request, report_id):
@@ -2319,17 +2430,124 @@ def admin_moderate_report(request, report_id):
         reason_details=reason_details,
     )
 
-    # Execute the action
-    if action_taken == 'content_removed' and report.reported_reel:
-        report.reported_reel.delete()
-    elif action_taken in ('temp_ban', 'permanent_ban', 'shadowban') and report.reported_user:
-        profile = getattr(report.reported_user, 'profile', None)
-        if profile:
-            profile.is_shadowbanned = action_taken == 'shadowban'
-            profile.save(update_fields=['is_shadowbanned'] if hasattr(profile, 'is_shadowbanned') else [])
-        if action_taken == 'permanent_ban':
+    # Execute the action based on type
+    print(f'[MODERATION] Executing action: {action_taken}')
+    # Fallback: if reported_user is not set but reported_reel is, get the reel owner
+    if not report.reported_user and report.reported_reel:
+        report.reported_user = report.reported_reel.user
+        report.save(update_fields=['reported_user'])
+        print(f'[MODERATION] Auto-set reported_user from reel owner: {report.reported_user.id}')
+
+    if action_taken == 'warning':
+        # Send warning notification to user
+        if report.reported_user:
+            print(f'[MODERATION] Sending warning to user {report.reported_user.id}')
+            _create_moderation_notification(
+                user=report.reported_user,
+                action_type='warning',
+                target_type=report.target_type,
+                reason=reason_details or 'Violation of community guidelines',
+                report_id=report.id,
+                moderator=request.user
+            )
+            print(f'[MODERATION] Warning notification sent')
+        else:
+            print(f'[MODERATION] No reported_user found for warning')
+
+    elif action_taken == 'content_removed':
+        # Soft-delete the reel (mark as hidden instead of deleting)
+        if report.reported_reel:
+            print(f'[MODERATION] Hiding reel {report.reported_reel.id}')
+            report.reported_reel.is_hidden = True
+            report.reported_reel.save(update_fields=['is_hidden'])
+            print(f'[MODERATION] Reel hidden successfully')
+            # Notify the user
+            if report.reported_user:
+                _create_moderation_notification(
+                    user=report.reported_user,
+                    action_type='content_removed',
+                    target_type='reel',
+                    reason=reason_details or 'Content violates community guidelines',
+                    report_id=report.id,
+                    moderator=request.user
+                )
+                print(f'[MODERATION] Content removal notification sent')
+        else:
+            print(f'[MODERATION] No reported_reel found for content_removed')
+
+    elif action_taken == 'shadowban':
+        # Shadow ban the user - content hidden from others but visible to self
+        if report.reported_user:
+            print(f'[MODERATION] Shadowbanning user {report.reported_user.id}')
+            profile = getattr(report.reported_user, 'profile', None)
+            if profile:
+                print(f'[MODERATION] Profile found, setting is_shadowbanned=True')
+                profile.is_shadowbanned = True
+                profile.save(update_fields=['is_shadowbanned'])
+                print(f'[MODERATION] Shadowban saved successfully')
+                _create_moderation_notification(
+                    user=report.reported_user,
+                    action_type='shadowban',
+                    target_type=report.target_type,
+                    reason=reason_details or 'Repeated violations of community guidelines',
+                    report_id=report.id,
+                    moderator=request.user
+                )
+                print(f'[MODERATION] Shadowban notification sent')
+            else:
+                print(f'[MODERATION] No profile found for user {report.reported_user.id}')
+        else:
+            print(f'[MODERATION] No reported_user found for shadowban')
+
+    elif action_taken == 'temp_ban':
+        # Temporary ban - set expiration (default 72 hours)
+        if report.reported_user:
+            print(f'[MODERATION] Temporarily banning user {report.reported_user.id}')
+            profile = getattr(report.reported_user, 'profile', None)
+            if profile:
+                # Default to 72 hours from now, can be customized
+                ban_duration_hours = 72
+                profile.ban_expires_at = timezone.now() + timedelta(hours=ban_duration_hours)
+                print(f'[MODERATION] Setting ban_expires_at to {profile.ban_expires_at}')
+                profile.save(update_fields=['ban_expires_at'])
+                print(f'[MODERATION] Temp ban saved successfully')
+                _create_moderation_notification(
+                    user=report.reported_user,
+                    action_type='temp_ban',
+                    target_type=report.target_type,
+                    reason=reason_details or f'Temporary ban for {ban_duration_hours} hours due to violations',
+                    report_id=report.id,
+                    moderator=request.user
+                )
+                print(f'[MODERATION] Temp ban notification sent')
+            else:
+                print(f'[MODERATION] No profile found for user {report.reported_user.id}')
+        else:
+            print(f'[MODERATION] No reported_user found for temp_ban')
+
+    elif action_taken == 'permanent_ban':
+        # Permanent ban - deactivate account
+        if report.reported_user:
+            print(f'[MODERATION] Permanently banning user {report.reported_user.id}')
             report.reported_user.is_active = False
             report.reported_user.save(update_fields=['is_active'])
+            print(f'[MODERATION] Permanent ban saved successfully')
+            _create_moderation_notification(
+                user=report.reported_user,
+                action_type='permanent_ban',
+                target_type=report.target_type,
+                reason=reason_details or 'Severe or repeated violations of community guidelines',
+                report_id=report.id,
+                moderator=request.user
+            )
+            print(f'[MODERATION] Permanent ban notification sent')
+        else:
+            print(f'[MODERATION] No reported_user found for permanent_ban')
+
+    elif action_taken == 'no_action':
+        # No action taken - just resolve the report
+        print(f'[MODERATION] No action taken, just resolving report')
+        pass
 
     # Mark report resolved
     report.status = 'resolved'

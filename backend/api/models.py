@@ -27,6 +27,8 @@ from .models_subscription import (
 )
 # Import direct debit models
 from .models_direct_debit import DirectDebitMandate, DirectDebitTransaction
+# Import boost models
+from .models_boost import BoostConfig, BoostCampaign, BoostImpression, BoostEngagement, BoostStats
 
 class Category(models.Model):
     """Content categories for posts - admin-managed"""
@@ -112,6 +114,11 @@ class UserProfile(models.Model):
     show_activity = models.BooleanField(default=True)
     allow_messages = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
+    
+    # Moderation
+    is_shadowbanned = models.BooleanField(default=False, help_text='User is shadow banned - content hidden from others but visible to self')
+    ban_expires_at = models.DateTimeField(null=True, blank=True, help_text='When temporary ban expires (null if not temp banned)')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -143,6 +150,22 @@ class Reel(models.Model):
     duration = models.FloatField(null=True, blank=True)
     processed = models.BooleanField(default=False)
 
+    # Boost functionality
+    is_boosted = models.BooleanField(default=False, help_text='Whether this post is currently boosted')
+    active_boost_campaign = models.ForeignKey(
+        BoostCampaign,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='boosted_reels',
+        help_text='Currently active boost campaign for this post'
+    )
+    total_boost_impressions = models.IntegerField(default=0, help_text='Total impressions from all boost campaigns')
+    total_boost_engagements = models.IntegerField(default=0, help_text='Total engagements from all boost campaigns')
+
+    # Moderation
+    is_hidden = models.BooleanField(default=False, help_text='Content is hidden/removed by moderation (soft-delete)')
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -152,6 +175,7 @@ class Reel(models.Model):
             models.Index(fields=['-created_at']),
             models.Index(fields=['campaign', '-created_at']),
             models.Index(fields=['is_campaign_post', '-created_at']),
+            models.Index(fields=['is_boosted', '-created_at']),
         ]
 
     def __str__(self):
@@ -489,6 +513,7 @@ class Notification(models.Model):
         ('follow', 'Follow'),
         ('mention', 'Mention'),
         ('gift', 'Gift'),
+        ('moderation', 'Moderation Action'),
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')

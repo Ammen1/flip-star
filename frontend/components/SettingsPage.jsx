@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import {
   X, User, Bell, Lock, Globe, HelpCircle, LogOut, ChevronRight, Moon, Sun, Wallet,
   ChevronLeft, MessageCircle, Heart, Users as UsersIcon, Mail, Eye, EyeOff, Activity,
-  Trash2, Check, Crown, ChevronUp, ChevronDown
+  Trash2, Check, Crown, ChevronUp, ChevronDown, Zap
 } from "lucide-react";
 import api from "../api";
 import config from "../config";
 import { useTheme } from "../contexts/ThemeContext";
 import { useLanguage } from "../contexts/LanguageContext";
+import { BoostDashboard } from "./BoostDashboard";
 
 const FAQ_ITEMS = [
   { q: "What is FlipStar?", a: "FlipStar is a premium, subscription-based gamified social media platform by Ethio Telecom and Skykin Technologies PLC. Upload short videos and photos ('Flips'), compete in campaigns, earn coins, and participate in a creator economy powered by telebirr." },
@@ -283,6 +284,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
   const [modal, setModal] = useState({ isOpen: false, title: '', message: '', type: 'info', onConfirm: null });
   const [showFaqModal, setShowFaqModal] = useState(false);
   const [faqOpen, setFaqOpen] = useState(null);
+  const [showBoostDashboard, setShowBoostDashboard] = useState(false);
 
   // Support / help requests
   const [supportRequests, setSupportRequests] = useState([]);
@@ -352,6 +354,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
     { id: "account", icon: User, label: t('account') },
     { id: "wallet", icon: Wallet, label: 'Wallet', isExternal: true },
     { id: "subscription", icon: Crown, label: 'Subscription', isExternal: true },
+    { id: "boost", icon: Zap, label: 'Boost Dashboard' },
     { id: "notifications", icon: Bell, label: t('notificationsSettings') },
     { id: "privacy", icon: Lock, label: t('privacy') },
     { id: "appearance", icon: darkMode ? Moon : Sun, label: t('appearance') },
@@ -547,6 +550,7 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
             <Row icon={User} title={t('editProfile')} subtitle="Change bio and photo" onPress={() => { onClose?.(); onShowEditProfile?.(); }} />
             <Row icon={Wallet} title="Wallet" subtitle="Coins & transactions" onPress={() => { onClose?.(); onShowWallet?.(); }} />
             <Row icon={Crown} title="Subscription" subtitle="Plans & billing" onPress={() => { onClose?.(); onShowSubscription?.(); }} />
+            <Row icon={Zap} title="Boost Dashboard" subtitle="Manage your boosted posts" onPress={() => setShowBoostDashboard(true)} />
             <Row icon={Lock} title={t('changePassword')} onPress={() => setShowPassModal(true)} />
           </SectionCard>
 
@@ -797,6 +801,10 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
                     }
                     if (section.isExternal && section.id === 'subscription' && onShowSubscription) {
                       onShowSubscription();
+                      return;
+                    }
+                    if (section.id === 'boost') {
+                      setShowBoostDashboard(true);
                       return;
                     }
                     setActiveSection(section.id);
@@ -1293,6 +1301,11 @@ export function SettingsPage({ user, onClose, onLogout, onShowWallet, onShowSubs
 
       {/* FAQ Modal */}
       <FaqModal />
+
+      {/* Boost Dashboard Modal */}
+      {showBoostDashboard && (
+        <BoostDashboard onClose={() => setShowBoostDashboard(false)} />
+      )}
     </div>
   );
 }

@@ -328,8 +328,22 @@ export function SubscriptionPage({ user, onBack }) {
               }}>
                 <span style={{ width: 7, height: 7, borderRadius: 4, background: '#10B981' }} />
                 <span style={{ color: '#10B981', fontSize: 13, fontWeight: 600 }}>
-                  Active · expires {new Date(currentSubscription.end_date).toLocaleDateString()}
+                  Active · {currentSubscription?.tier?.name || 'Premium'}
                 </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, fontSize: 12, color: '#aaa' }}>
+                <div>
+                  <span style={{ color: '#888' }}>Start:</span> {currentSubscription?.start_date ? new Date(currentSubscription.start_date).toLocaleString('en-US', {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                  }) : 'N/A'}
+                </div>
+                <div>
+                  <span style={{ color: '#888' }}>End:</span> {currentSubscription?.end_date ? new Date(currentSubscription.end_date).toLocaleString('en-US', {
+                    year: 'numeric', month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                  }) : 'N/A'}
+                </div>
               </div>
               {currentSubscription?.payment_method === 'telebirr_direct_debit' && (
                 <button
