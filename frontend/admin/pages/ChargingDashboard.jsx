@@ -32,7 +32,7 @@ export function ChargingDashboard({ theme }) {
   const loadStatistics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/charging/on-demand/statistics/?days=${days}`);
+      const response = await api.request(`/charging/on-demand/statistics/?days=3650`);
       setStatistics(response);
     } catch (err) {
       setError('Failed to load statistics');
@@ -44,7 +44,7 @@ export function ChargingDashboard({ theme }) {
 
   const loadTransactions = async () => {
     try {
-      const response = await api.request(`/charging/on-demand/transactions/?days=${days}&page=${page}&page_size=50`);
+      const response = await api.request(`/charging/on-demand/transactions/?days=3650&page=${page}&page_size=50`);
       setTransactions(response);
     } catch (err) {
       console.error('Failed to load transactions:', err);

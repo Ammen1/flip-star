@@ -137,7 +137,7 @@ def get_charging_statistics(request):
     Get charging statistics (admin only)
     
     Query params:
-    - days: number of days to look back (default: 30)
+    - days: number of days to look back (default: 3650 = 10 years to show all)
     """
     try:
         # Check if user is admin
@@ -147,7 +147,7 @@ def get_charging_statistics(request):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        days = int(request.GET.get('days', 30))
+        days = int(request.GET.get('days', 3650))  # Default to 10 years to show all
         start_date = timezone.now() - timedelta(days=days)
         
         # Get statistics
@@ -228,7 +228,7 @@ def get_charging_transactions(request):
     
     Query params:
     - status: filter by status
-    - days: number of days to look back
+    - days: number of days to look back (default: 3650 = 10 years to show all)
     - page: page number
     - page_size: items per page
     """
@@ -241,7 +241,7 @@ def get_charging_transactions(request):
             )
         
         status_filter = request.GET.get('status')
-        days = int(request.GET.get('days', 30))
+        days = int(request.GET.get('days', 3650))  # Default to 10 years to show all transactions
         page = int(request.GET.get('page', 1))
         page_size = int(request.GET.get('page_size', 20))
         
