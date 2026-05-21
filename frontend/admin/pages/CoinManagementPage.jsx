@@ -145,7 +145,9 @@ export function CoinManagementPage({ theme }) {
         method: 'PATCH',
         body: JSON.stringify(flat),
       });
-      await loadConfig();
+      // Update the local config with the response to keep sync without full reload
+      const response = await api.request('/admin/wallet/config/', { skipCache: true });
+      setConfig(response.config || response);
       setAdjustResult({ type: 'success', message: 'Wallet configuration saved' });
     } catch (err) {
       setError(err.message || 'Failed to save config');
@@ -1369,8 +1371,19 @@ function FieldRow({ label, value, onChange, type = 'number', theme: T }) {
       <input
         type={type}
         value={value !== undefined && value !== null ? value : ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (type === 'number') {
+            // Allow empty string for editing, but prevent negative numbers
+            if (val === '' || parseFloat(val) >= 0) {
+              onChange(val);
+            }
+          } else {
+            onChange(val);
+          }
+        }}
         placeholder="0"
+        min="0"
         style={{
           flex: 1, padding: '10px 12px', borderRadius: 6, border: `1px solid ${theme.border}`,
           background: theme.card, color: theme.txt, fontSize: 14, fontWeight: 500,
