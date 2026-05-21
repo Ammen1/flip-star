@@ -353,6 +353,7 @@ class ReportSerializer(serializers.ModelSerializer):
     reported_user = UserSerializer(read_only=True)
     reported_reel = ReelSerializer(read_only=True)
     reviewed_by = UserSerializer(read_only=True)
+    moderation_actions = serializers.SerializerMethodField()
     # Write-only FK fields so frontend can submit IDs
     reported_user_id = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(), source='reported_user', write_only=True, required=False, allow_null=True
@@ -375,7 +376,22 @@ class ReportSerializer(serializers.ModelSerializer):
             'status', 'priority',
             'resolution_notes', 'reviewed_by',
             'created_at', 'updated_at', 'resolved_at',
+            'moderation_actions',
         ]
+
+    def get_moderation_actions(self, obj):
+        from .models import ModerationAction
+        actions = obj.moderation_actions.all().order_by('-created_at')
+        return [{
+            'id': action.id,
+            'action_taken': action.action_taken,
+            'reason_details': action.reason_details,
+            'moderator': action.moderator.username if action.moderator else None,
+            'created_at': action.created_at,
+            'undone': action.undone,
+            'undone_by': action.undone_by.username if action.undone_by else None,
+            'undone_at': action.undone_at,
+        } for action in actions]
 
 
 class NotificationSerializer(serializers.ModelSerializer):

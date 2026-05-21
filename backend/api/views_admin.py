@@ -39,13 +39,9 @@ def admin_dashboard_stats(request):
     subscription_stats = Subscription.objects.values('plan').annotate(count=Count('id'))
     
     # Top creators
-    from django.db.models import Subquery, OuterRef
-    reel_count_subquery = Reel.objects.filter(user=OuterRef('pk')).values('user').annotate(count=Count('id')).values('count')[:1]
-    total_votes_subquery = Reel.objects.filter(user=OuterRef('pk')).values('user').annotate(total=Sum('votes')).values('total')[:1]
-    
     top_creators = User.objects.annotate(
-        reel_count=Subquery(reel_count_subquery),
-        total_votes=Subquery(total_votes_subquery)
+        reel_count=Count('reels'),
+        total_votes=Sum('reels__votes')
     ).order_by('-total_votes')[:10]
     
     top_creators_data = [{
@@ -102,18 +98,18 @@ def admin_dashboard_stats(request):
 @permission_classes([IsAdminUser])
 def admin_users_list(request):
     """Get all users with detailed info"""
-    from django.db.models import Subquery, OuterRef
-    
-    # Use subqueries for accurate counts
-    reel_count_subquery = Reel.objects.filter(user=OuterRef('pk')).values('user').annotate(count=Count('id')).values('count')[:1]
-    follower_count_subquery = Follow.objects.filter(following=OuterRef('pk')).values('following').annotate(count=Count('id')).values('count')[:1]
-    following_count_subquery = Follow.objects.filter(follower=OuterRef('pk')).values('follower').annotate(count=Count('id')).values('count')[:1]
-    
+    # Use simple Count annotations without distinct - these should be accurate
     users = User.objects.select_related('profile').annotate(
-        reel_count=Subquery(reel_count_subquery),
-        follower_count=Subquery(follower_count_subquery),
-        following_count=Subquery(following_count_subquery)
+        reel_count=Count('reels'),
+        follower_count=Count('followers'),
+        following_count=Count('following')
     ).order_by('-date_joined')
+    
+    # Debug: print first user counts
+    if users.exists():
+        first_user = users.first()
+        print(f'[ADMIN] First user: {first_user.username}, reels: {first_user.reel_count}, followers: {first_user.follower_count}, following: {first_user.following_count}')
+        print(f'[ADMIN] Direct count - reels: {first_user.reels.count()}, followers: {first_user.followers.count()}, following: {first_user.following.count()}')
     
     # Pagination
     page = int(request.GET.get('page', 1))
@@ -176,21 +172,17 @@ def admin_users_list(request):
 @permission_classes([IsAdminUser])
 def admin_user_detail(request, user_id):
     """Get detailed user information"""
-    from django.db.models import Subquery, OuterRef
-    
-    # Use subqueries for accurate counts
-    reel_count_subquery = Reel.objects.filter(user=OuterRef('pk')).values('user').annotate(count=Count('id')).values('count')[:1]
-    follower_count_subquery = Follow.objects.filter(following=OuterRef('pk')).values('following').annotate(count=Count('id')).values('count')[:1]
-    following_count_subquery = Follow.objects.filter(follower=OuterRef('pk')).values('follower').annotate(count=Count('id')).values('count')[:1]
-    total_votes_subquery = Reel.objects.filter(user=OuterRef('pk')).values('user').annotate(total=Sum('votes')).values('total')[:1]
-    
     try:
         user = User.objects.select_related('profile').annotate(
-            reel_count=Subquery(reel_count_subquery),
-            follower_count=Subquery(follower_count_subquery),
-            following_count=Subquery(following_count_subquery),
-            total_votes=Subquery(total_votes_subquery)
+            reel_count=Count('reels'),
+            follower_count=Count('followers'),
+            following_count=Count('following'),
+            total_votes=Sum('reels__votes')
         ).get(id=user_id)
+        
+        # Debug: print counts
+        print(f'[ADMIN] User detail: {user.username}, reels: {user.reel_count}, followers: {user.follower_count}, following: {user.following_count}, total_votes: {user.total_votes}')
+        print(f'[ADMIN] Direct count - reels: {user.reels.count()}, followers: {user.followers.count()}, following: {user.following.count()}')
         
         recent_reels = Reel.objects.filter(user=user).order_by('-created_at')[:10]
         recent_comments = Comment.objects.filter(user=user).order_by('-created_at')[:10]
