@@ -237,7 +237,7 @@ def get_charging_transactions(request):
         
         # Query CoinTransaction for on-demand airtime purchases
         base_filter = Q(transaction_type='purchase') & Q(payment_method='airtime') & Q(created_at__gte=start_date)
-        queryset = CoinTransaction.objects.filter(base_filter).select_related('user').order_by('-created_at')
+        queryset = CoinTransaction.objects.filter(base_filter).select_related('user', 'user__profile').order_by('-created_at')
         
         if status_filter:
             if status_filter == 'successful':
@@ -412,11 +412,11 @@ def search_charging_transactions(request):
         
         # Query CoinTransaction for on-demand airtime purchases
         base_filter = Q(transaction_type='purchase') & Q(payment_method='airtime')
-        queryset = CoinTransaction.objects.filter(base_filter).select_related('user').order_by('-created_at')
+        queryset = CoinTransaction.objects.filter(base_filter).select_related('user', 'user__profile').order_by('-created_at')
         
         if phone:
             # Search by phone in user profile
-            queryset = queryset.filter(user__phone__contains=phone)
+            queryset = queryset.filter(user__profile__phone_number__contains=phone)
         
         if user_id:
             try:
@@ -432,7 +432,10 @@ def search_charging_transactions(request):
         
         transactions_data = []
         for t in transactions:
-            phone = getattr(t.user, 'phone', '') or ''
+            # Get user phone from user profile
+            phone = ''
+            if hasattr(t.user, 'profile'):
+                phone = getattr(t.user.profile, 'phone_number', '') or ''
             
             transactions_data.append({
                 'id': str(t.id),
