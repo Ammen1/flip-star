@@ -1303,11 +1303,10 @@ class ReelViewSet(viewsets.ModelViewSet):
                 queryset = queryset.filter(
                     is_hidden=False,
                     user__is_active=True,
-                    user__profile__is_shadowbanned=False,
-                    (
-                        Q(user__profile__ban_expires_at__isnull=True) |
-                        Q(user__profile__ban_expires_at__lte=timezone.now())
-                    )
+                    user__profile__is_shadowbanned=False
+                ).filter(
+                    Q(user__profile__ban_expires_at__isnull=True) |
+                    Q(user__profile__ban_expires_at__lte=timezone.now())
                 )
             
             # Skip NotInterested filter to prevent crashes - it's causing performance issues
