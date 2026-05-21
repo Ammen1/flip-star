@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import config from '../config';
 import CampaignEventEmitter from '../contexts/CampaignEventEmitter';
@@ -143,12 +144,14 @@ const Accordion = ({ title, subtitle, icon, children, isOpen, onToggle, iconColo
 export default function CampaignDetailScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { user, hasActiveSubscription } = useAuth();
   const { campaignId } = route.params;
   const [campaign, setCampaign] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [showReelSelector, setShowReelSelector] = useState(false);
+  const [userHasActivePosts, setUserHasActivePosts] = useState(false);
   const [userReels, setUserReels] = useState([]);
   const [loadingReels, setLoadingReels] = useState(false);
   const [selectedReel, setSelectedReel] = useState(null);
@@ -176,15 +179,32 @@ export default function CampaignDetailScreen({ route, navigation }) {
     }
   }, [activeTab]);
 
-  // Refresh campaign data when user navigates back from create screen
+  // Refresh campaign data when user navigates back from create screen or after post operations
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       console.log('[CAMPAIGN DETAIL] Screen focused, refreshing campaign data...');
       loadCampaign();
+      // Always refresh feed and leaderboard to check for post changes
+      console.log('[CAMPAIGN DETAIL] Refreshing feed and leaderboard for post changes...');
+      loadFeed();
+      loadLeaderboard();
+      
+      // Check if refresh was requested (e.g., after posting)
+      if (route.params?.refresh) {
+        console.log('[CAMPAIGN DETAIL] Refresh requested, doing full reload...');
+        // Clear the refresh param to avoid infinite loops
+        navigation.setParams({ refresh: undefined });
+        // Force a complete reload
+        setTimeout(() => {
+          loadCampaign();
+          loadFeed();
+          loadLeaderboard();
+        }, 1000);
+      }
     });
     
     return unsubscribe;
-  }, [navigation, campaignId]);
+  }, [navigation, campaignId, route.params?.refresh]);
 
   // Listen for campaign interaction events from other screens
   useEffect(() => {
@@ -266,10 +286,25 @@ export default function CampaignDetailScreen({ route, navigation }) {
   const loadLeaderboard = async () => {
     setLoadingLb(true);
     try {
+      console.log('[LEADERBOARD] Loading leaderboard for campaign:', campaignId);
       const data = await api.request(`/campaigns/${campaignId}/leaderboard/?period=overall`);
+      console.log('[LEADERBOARD] Raw leaderboard response:', data);
+      console.log('[LEADERBOARD] Loaded entries:', data.entries?.length || 0);
+      if (data.entries && data.entries.length > 0) {
+        console.log('[LEADERBOARD] Current user entries:', data.entries.filter(e => e.user?.id === user?.id).length);
+        // Log first entry to see available fields
+        console.log('[LEADERBOARD] First entry fields:', {
+          id: data.entries[0].id,
+          score: data.entries[0].score,
+          total_score: data.entries[0].total_score,
+          vote_count: data.entries[0].vote_count,
+          user_id: data.entries[0].user?.id,
+          reel_id: data.entries[0].reel_id,
+        });
+      }
       setLbEntries(data.entries || []);
     } catch (e) {
-      console.error('Failed to load leaderboard:', e);
+      console.error('[LEADERBOARD] Failed to load leaderboard:', e);
     } finally {
       setLoadingLb(false);
     }
@@ -311,15 +346,148 @@ export default function CampaignDetailScreen({ route, navigation }) {
       setCampaign(data);
       setEntries(data.entries || []);
       
-      // Check if user has already entered
-      const userHasEntered = data.entries?.some(entry => {
-        const match = entry.user?.id === data.current_user_id;
-        console.log(`[CAMPAIGN DETAIL] Checking entry user ${entry.user?.id} vs current ${data.current_user_id}: ${match}`);
-        return match;
-      });
-      const userEntryData = userHasEntered ? data.entries.find(entry => entry.user?.id === data.current_user_id) : null;
+      // Check if user has already entered - use multiple methods
+      let userHasEntered = data.has_entered;
+      let userEntryData = null;
       
-      console.log('[CAMPAIGN DETAIL] User has entered:', userHasEntered);
+      // Method 1: Check backend has_entered field
+      if (data.has_entered) {
+        userHasEntered = true;
+        console.log('[CAMPAIGN DETAIL] User has entered (backend has_entered)');
+        // Create userEntryData from backend has_entered if not found in entries
+        if (!userEntryData) {
+          userEntryData = { user: { id: data.current_user_id } };
+          console.log('[CAMPAIGN DETAIL] Created userEntryData from backend has_entered');
+        }
+      }
+      
+      // Method 2: Check entries array
+      if (!userHasEntered && data.entries) {
+        userEntryData = data.entries.find(entry => entry.user?.id === data.current_user_id);
+        if (userEntryData) {
+          userHasEntered = true;
+          console.log('[CAMPAIGN DETAIL] User has entered (found in entries array)');
+        }
+      }
+      
+      // Method 3: Check if user has posts in campaign feed (immediate backup method)
+      if (!userHasEntered) {
+        console.log('[CAMPAIGN DETAIL] Checking campaign feed for user posts as backup...');
+        
+        // Make immediate API call to check for user posts
+        try {
+          const feedData = await api.request(`/campaigns/${campaignId}/feed/?filter=all`);
+          console.log('[CAMPAIGN DETAIL] Feed API response:', feedData.posts?.length || 0, 'posts');
+          console.log('[CAMPAIGN DETAIL] Current user ID:', data.current_user_id);
+          console.log('[CAMPAIGN DETAIL] All posts in feed with user IDs:');
+          
+          // Get current user profile to compare usernames
+          let currentUserProfile = null;
+          try {
+            currentUserProfile = await api.request('/profile/me/');
+            console.log('[CAMPAIGN DETAIL] Current user profile:', {
+              id: currentUserProfile.user?.id,
+              username: currentUserProfile.user?.username,
+              profile_id: currentUserProfile.id
+            });
+          } catch (profileError) {
+            console.log('[CAMPAIGN DETAIL] Error getting user profile:', profileError);
+          }
+          
+          feedData.posts?.forEach((post, index) => {
+            console.log(`[CAMPAIGN DETAIL] Post ${index + 1}:`, {
+              id: post.id,
+              user_id: post.user?.id,
+              username: post.user?.username,
+              is_campaign_post: post.is_campaign_post,
+              campaign_id: post.campaign_id
+            });
+          });
+          
+          // Check by user ID first
+          let userPosts = feedData.posts?.filter(post => post.user?.id === data.current_user_id);
+          console.log('[CAMPAIGN DETAIL] User posts found by ID:', userPosts?.length || 0);
+          
+          // If no posts found by ID, try matching by username
+          if ((!userPosts || userPosts.length === 0) && currentUserProfile) {
+            const currentUsername = currentUserProfile.user?.username || currentUserProfile.username;
+            console.log('[CAMPAIGN DETAIL] Trying username match:', currentUsername);
+            userPosts = feedData.posts?.filter(post => 
+              post.user?.username === currentUsername
+            );
+            console.log('[CAMPAIGN DETAIL] User posts found by username:', userPosts?.length || 0);
+          }
+          
+          // If still no posts, try checking if any posts belong to this user's profile
+          if ((!userPosts || userPosts.length === 0) && currentUserProfile) {
+            const profileUserId = currentUserProfile.user?.id || currentUserProfile.id;
+            console.log('[CAMPAIGN DETAIL] Trying profile user ID match:', profileUserId);
+            userPosts = feedData.posts?.filter(post => 
+              post.user?.id === profileUserId
+            );
+            console.log('[CAMPAIGN DETAIL] User posts found by profile ID:', userPosts?.length || 0);
+          }
+          
+          console.log('[CAMPAIGN DETAIL] Final user posts count:', userPosts?.length || 0);
+          
+          if (userPosts && userPosts.length > 0) {
+            console.log('[CAMPAIGN DETAIL] Found user posts in feed, treating as joined:', userPosts.length);
+            userHasEntered = true;
+            // Update the campaign state immediately
+            data.has_entered = true;
+            // Create userEntryData for this user
+            userEntryData = { user: { id: data.current_user_id } };
+            console.log('[CAMPAIGN DETAIL] ✓ User entry created from feed posts');
+          } else {
+            console.log('[CAMPAIGN DETAIL] No user posts found in campaign feed with any method');
+            
+            // Additional check: If user has posted to campaign but posts aren't showing in feed,
+            // check user's posts directly for campaign association
+            if (currentUserProfile) {
+              console.log('[CAMPAIGN DETAIL] Checking user posts for campaign association...');
+              try {
+                // Use the same endpoint as HomeScreen to get user posts
+                const userPostsData = await api.request('/reels/?limit=50&offset=0');
+                const userAllPosts = Array.isArray(userPostsData) ? userPostsData : (userPostsData.results || []);
+                console.log('[CAMPAIGN DETAIL] Fetched', userAllPosts.length, 'posts from main feed');
+                
+                // Filter posts to get only current user's posts
+                const currentUserPosts = userAllPosts.filter(post => {
+                  const postUserId = post.user?.id;
+                  const currentUserId = currentUserProfile.user?.id || currentUserProfile.id || data.current_user_id;
+                  console.log('[CAMPAIGN DETAIL] Comparing post user ID:', postUserId, 'with current user ID:', currentUserId);
+                  return postUserId === currentUserId;
+                });
+                
+                console.log('[CAMPAIGN DETAIL] Current user posts in main feed:', currentUserPosts.length);
+                
+                // Check if any user posts are associated with this campaign
+                const campaignAssociatedPosts = currentUserPosts.filter(post => 
+                  post.campaign_id === parseInt(campaignId) || 
+                  post.campaign?.id === parseInt(campaignId) ||
+                  (post.is_campaign_post && post.campaign_id)
+                );
+                console.log('[CAMPAIGN DETAIL] User posts associated with this campaign:', campaignAssociatedPosts.length);
+                
+                if (campaignAssociatedPosts.length > 0) {
+                  console.log('[CAMPAIGN DETAIL] Found user posts associated with campaign, treating as joined');
+                  userHasEntered = true;
+                  data.has_entered = true;
+                  userEntryData = { user: { id: data.current_user_id } };
+                  console.log('[CAMPAIGN DETAIL] ✓ User entry created from campaign-associated posts');
+                }
+              } catch (error) {
+                console.log('[CAMPAIGN DETAIL] Error checking user posts for campaign association:', error);
+              }
+            }
+          }
+        } catch (error) {
+          console.log('[CAMPAIGN DETAIL] Error checking feed for user posts:', error);
+        }
+      }
+      
+      console.log('[CAMPAIGN DETAIL] Backend has_entered:', data.has_entered);
+      console.log('[CAMPAIGN DETAIL] User has entered (calculated):', userHasEntered);
       if (userEntryData) {
         console.log('[CAMPAIGN DETAIL] ✓ User entry details:', userEntryData);
       } else {
@@ -334,6 +502,12 @@ export default function CampaignDetailScreen({ route, navigation }) {
       console.log('[CAMPAIGN DETAIL] ========================================');
       
       setUserEntry(userEntryData);
+      console.log('[CAMPAIGN DETAIL] Final states set:', {
+        userEntry: !!userEntryData,
+        has_entered: data.has_entered,
+        userHasActivePosts: userHasActivePosts,
+        campaignStatus: data.status
+      });
     } catch (e) {
       console.error('[CAMPAIGN DETAIL] Error loading campaign:', e);
       Alert.alert('Error', 'Failed to load campaign.');
@@ -346,19 +520,127 @@ export default function CampaignDetailScreen({ route, navigation }) {
   const loadFeed = async () => {
     setLoadingFeed(true);
     try {
+      console.log('[CAMPAIGN FEED] Loading feed for campaign:', campaignId);
       const data = await api.request(`/campaigns/${campaignId}/feed/?filter=all`);
+      console.log('[CAMPAIGN FEED] Raw feed response:', data);
       console.log('[CAMPAIGN FEED] Loaded', data.posts?.length || 0, 'posts');
       if (data.posts && data.posts.length > 0) {
+        // Campaign feed has nested structure: post.reel contains the actual post data
+        const firstPost = data.posts[0];
+        const reelData = firstPost.reel || {};
         console.log('[CAMPAIGN FEED] First post sample:', {
-          id: data.posts[0].id,
-          image: data.posts[0].image,
-          media: data.posts[0].media,
-          user: data.posts[0].user?.username,
+          id: firstPost.id,
+          reel_id: reelData.id,
+          image: reelData.image,
+          media: reelData.media,
+          user: firstPost.user?.username,
+          created_at: reelData.created_at,
+          caption: reelData.caption,
         });
+        
+        // Check if current user's posts are in the feed
+        const currentUserPosts = data.posts.filter(post => post.user?.id === user?.id);
+        console.log('[CAMPAIGN FEED] Current user posts in feed:', currentUserPosts.length);
+        currentUserPosts.forEach((post, index) => {
+          const reelData = post.reel || {};
+          console.log(`[CAMPAIGN FEED] User post ${index + 1}:`, {
+            id: post.id,
+            reel_id: reelData.id,
+            username: post.user?.username,
+            created_at: reelData.created_at,
+            caption: reelData.caption,
+          });
+        });
+      } else {
+        console.log('[CAMPAIGN FEED] No posts found in campaign feed');
+        
+        // If no posts in campaign feed, try to get user's posts and check if any should be in this campaign
+        console.log('[CAMPAIGN FEED] Checking user posts for campaign association...');
+        try {
+          // Use the same endpoint as HomeScreen to get posts
+          const userPostsData = await api.request('/reels/?limit=50&offset=0');
+          const userPosts = Array.isArray(userPostsData) ? userPostsData : (userPostsData.results || []);
+          console.log('[CAMPAIGN FEED] Fetched', userPosts.length, 'posts from main feed');
+          
+          // Get current user profile to identify user's posts
+          let currentUserProfile = null;
+          try {
+            currentUserProfile = await api.request('/profile/me/');
+          } catch (profileError) {
+            console.log('[CAMPAIGN FEED] Error getting user profile:', profileError);
+          }
+          
+          if (currentUserProfile) {
+            // Filter posts to get only current user's posts
+            const currentUserId = currentUserProfile.user?.id || currentUserProfile.id || user?.id;
+            const currentUserPosts = userPosts.filter(post => post.user?.id === currentUserId);
+            console.log('[CAMPAIGN FEED] Current user posts in main feed:', currentUserPosts.length);
+            
+            // Log all current user posts with campaign info
+            currentUserPosts.forEach((post, index) => {
+              console.log(`[CAMPAIGN FEED] User post ${index + 1}:`, {
+                id: post.id,
+                is_campaign_post: post.is_campaign_post,
+                campaign_id: post.campaign_id,
+                campaign: post.campaign,
+                campaign_name: post.campaign_name,
+                campaign_title: post.campaign_title,
+                created_at: post.created_at,
+                media: post.media ? 'has media' : 'no media'
+              });
+            });
+            
+            // Check if any user posts should be in this campaign but aren't showing up
+            const campaignRelatedPosts = currentUserPosts.filter(post => 
+              post.campaign_id === parseInt(campaignId) || 
+              post.campaign?.id === parseInt(campaignId)
+            );
+            console.log('[CAMPAIGN FEED] User posts that should be in this campaign:', campaignRelatedPosts.length);
+            
+            if (campaignRelatedPosts.length > 0) {
+              console.log('[CAMPAIGN FEED] Found user posts that should be in campaign but arent showing:', campaignRelatedPosts.map(p => ({ id: p.id, campaign_id: p.campaign_id, created_at: p.created_at })));
+              // These posts should be in the campaign feed but aren't - show them as fallback
+              setFeedPosts(campaignRelatedPosts);
+              setUserHasActivePosts(true); // User has active posts in campaign
+              return;
+            } else {
+              console.log('[CAMPAIGN FEED] No user posts associated with this campaign found');
+              setUserHasActivePosts(false);
+            }
+          }
+        } catch (error) {
+          console.log('[CAMPAIGN FEED] Error checking user posts:', error);
+        }
       }
       setFeedPosts(data.posts || []);
+      
+      // Update userHasActivePosts based on current user's posts in feed
+      if (data.posts && data.posts.length > 0) {
+        const currentUserPosts = data.posts.filter(post => {
+          const postUserId = post.user?.id;
+          const currentUserId = user?.id || campaign?.current_user_id;
+          return postUserId === currentUserId;
+        });
+        setUserHasActivePosts(currentUserPosts.length > 0);
+        console.log('[CAMPAIGN FEED] User has active posts:', currentUserPosts.length > 0);
+        if (currentUserPosts.length > 0) {
+          console.log('[CAMPAIGN FEED] User active posts details:');
+          currentUserPosts.forEach((post, index) => {
+            const reelData = post.reel || {};
+            console.log(`[CAMPAIGN FEED] Active post ${index + 1}:`, {
+              entry_id: post.id,
+              reel_id: reelData.id,
+              caption: reelData.caption,
+              created_at: reelData.created_at,
+            });
+          });
+        }
+      } else {
+        setUserHasActivePosts(false);
+        console.log('[CAMPAIGN FEED] No posts in feed, user has no active posts');
+      }
     } catch (e) {
-      console.error('Failed to load feed:', e);
+      console.error('[CAMPAIGN FEED] Failed to load feed:', e);
       Alert.alert('Error', 'Failed to load campaign feed.');
     } finally {
       setLoadingFeed(false);
@@ -389,6 +671,19 @@ export default function CampaignDetailScreen({ route, navigation }) {
   };
 
   const handleJoinClick = () => {
+    // Check subscription status before allowing campaign participation
+    if (!hasActiveSubscription) {
+      Alert.alert(
+        'Subscription Required',
+        'You need an active subscription to participate in campaigns. Subscribe now to unlock all features!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Subscribe', onPress: () => navigation.navigate('Subscription') }
+        ]
+      );
+      return;
+    }
+    
     setShowReelSelector(true);
     loadUserReels();
   };
@@ -401,24 +696,27 @@ export default function CampaignDetailScreen({ route, navigation }) {
 
     setJoining(true);
     try {
+      console.log('[CAMPAIGN JOIN] Submitting entry for reel:', selectedReel);
       const response = await api.request('/campaigns/' + campaignId + '/enter/', { 
         method: 'POST',
         body: JSON.stringify({ reel_id: selectedReel })
       });
-      
+      console.log('[CAMPAIGN JOIN] Entry submission response:', response);
       console.log('[CAMPAIGN JOIN] Success:', response);
       
       setShowReelSelector(false);
       setSelectedReel(null);
       
-      // Wait a moment for backend to process, then reload
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait a moment for backend to process, then reload everything
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await loadCampaign();
+      await loadLeaderboard();
+      await loadFeed();
       
       // Switch to leaderboard tab to show the entry
       setActiveTab('leaderboard');
       
-      Alert.alert('Success!', 'You have successfully joined this campaign. Check the leaderboard!');
+      Alert.alert('Success!', 'Your entry has been submitted! Check the leaderboard!');
     } catch (e) {
       console.error('[CAMPAIGN JOIN] Error:', e);
       Alert.alert('Error', (e && e.message) ? e.message : 'Could not join campaign.');
@@ -429,7 +727,11 @@ export default function CampaignDetailScreen({ route, navigation }) {
 
   const handleCreateNew = () => {
     setShowReelSelector(false);
-    navigation.navigate('Create', { campaignId });
+    // Navigate to Create screen with campaignId and auto-submission flag
+    navigation.navigate('Create', { 
+      campaignId,
+      autoSubmitToCampaign: true // Flag to auto-submit after creation
+    });
   };
 
   const handleVote = async (entryId) => {
@@ -569,14 +871,32 @@ export default function CampaignDetailScreen({ route, navigation }) {
         </View>
 
         {/* CTA Button */}
-        {isActive && !userEntry && (
+        {isActive && !userEntry && !campaign?.has_entered && (
           <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.primary }]} onPress={handleJoinClick}>
             <Ionicons name='cloud-upload' size={18} color='#000' />
             <Text style={styles.joinBtnText}>Join Campaign</Text>
           </TouchableOpacity>
         )}
 
-        {userEntry && (
+        {/* View Campaign Button for users who have joined AND have posts */}
+        {isActive && (userEntry || campaign?.has_entered) && userHasActivePosts && (
+          <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.border }]} onPress={() => setActiveTab('leaderboard')}>
+            <Ionicons name='eye' size={18} color={colors.text} />
+            <Text style={[styles.joinBtnText, { color: colors.text }]}>View Campaign</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Submit Entry Button for users who have joined but have no posts */}
+        {console.log('[BUTTON DEBUG] Submit Entry - userEntry:', !!userEntry, 'has_entered:', !!campaign?.has_entered, 'userHasActivePosts:', !!userHasActivePosts, 'isActive:', isActive, 'should show:', isActive && (userEntry || campaign?.has_entered) && !userHasActivePosts)}
+        {isActive && (userEntry || campaign?.has_entered) && !userHasActivePosts && (
+          <TouchableOpacity style={[styles.joinBtn, { backgroundColor: colors.primary }]} onPress={handleJoinClick}>
+            <Ionicons name='add-circle' size={18} color='#000' />
+            <Text style={styles.joinBtnText}>Submit Entry</Text>
+          </TouchableOpacity>
+        )}
+        
+        {/* User Entry Card - only show if user has active posts in campaign */}
+        {userEntry && userHasActivePosts && (
           <View style={[styles.userEntryCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
             <View style={[styles.userEntryIcon, { backgroundColor: colors.primary }]}>
               <Ionicons name='checkmark' size={18} color='#fff' />
@@ -586,6 +906,8 @@ export default function CampaignDetailScreen({ route, navigation }) {
             </View>
           </View>
         )}
+        
+        
         
         {/* Debug: Show if total_entries doesn't match entries.length */}
         {campaign.total_entries > 0 && entries.length === 0 && (
@@ -896,10 +1218,20 @@ export default function CampaignDetailScreen({ route, navigation }) {
                       key={post.id}
                       style={styles.feedCard}
                       onPress={() => {
-                        if (post.reel?.id) {
-                          navigation.navigate('Reels', { 
-                            screen: 'ReelsDetail',
-                            params: { id: post.reel.id }
+                        // Check if this is a video post (has media) or image post
+                        const isVideo = !!(post.reel?.media || post.media);
+                        const postId = post.reel?.id || post.id;
+                        
+                        if (isVideo) {
+                          // Video post - navigate to ReelsDetail
+                          console.log('Video post tapped, navigating to ReelsDetail with postId:', postId);
+                          navigation.navigate('ReelsDetail', { initialVideoId: postId });
+                        } else {
+                          // Image post - navigate to HomeScreen with postId parameter
+                          console.log('Image post tapped, navigating to HomeScreen with postId:', postId);
+                          navigation.navigate('MainTabs', { 
+                            screen: 'Home', 
+                            params: { postId: postId } 
                           });
                         }
                       }}
@@ -932,8 +1264,16 @@ export default function CampaignDetailScreen({ route, navigation }) {
                           <Text style={styles.feedStatText}>{post.engagement?.likes || post.reel?.votes || 0}</Text>
                         </View>
                         <View style={styles.feedStat}>
-                          <Ionicons name='chatbubble' size={14} color='#fff' />
+                          <Ionicons name='chatbubble' size={14} color={GOLD} />
                           <Text style={styles.feedStatText}>{post.engagement?.comments || post.reel?.comment_count || 0}</Text>
+                        </View>
+                        <View style={styles.feedStat}>
+                          <Ionicons name='gift-outline' size={14} color='#fff' />
+                          <Text style={styles.feedStatText}>{post.engagement?.gifts || post.reel?.gifts_count || 0}</Text>
+                        </View>
+                        <View style={styles.feedStat}>
+                          <Ionicons name='share-social-outline' size={14} color='#fff' />
+                          <Text style={styles.feedStatText}>{post.engagement?.shares || post.reel?.shares || 0}</Text>
                         </View>
                       </View>
                     </View>

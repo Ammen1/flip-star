@@ -73,7 +73,9 @@ export default function CampaignsScreen({ navigation }) {
   const renderCampaignCard = useCallback(({ item }) => {
     const statusInfo = STATUS_META[item.status] || STATUS_META.active;
     const isActive = item.status === 'active';
-    const btnLabel = isActive ? 'View & Join' : 
+    const hasEntered = item.has_entered; // Check if user has already joined
+    
+    const btnLabel = isActive ? (hasEntered ? 'View Campaign' : 'View & Join') : 
                     item.status === 'upcoming' ? 'Coming Soon' : 
                     item.status === 'voting' ? 'Vote Now' : 'View Results';
     

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Image, Alert,
   TextInput, ActivityIndicator, ScrollView, Dimensions,
@@ -29,7 +29,7 @@ const FILTERS = [
 // Stage: 'pick' | 'edit' | 'details' | 'uploading'
 export default function CreateScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, hasActiveSubscription } = useAuth();
   const { colors } = useTheme();
   const [stage, setStage] = useState('pick');
   const [media, setMedia] = useState(null);
@@ -41,6 +41,61 @@ export default function CreateScreen({ navigation, route }) {
   
   // Get campaignId from route params if coming from campaign
   const campaignId = route?.params?.campaignId;
+  
+  // Wallet state for coin deduction
+  const [walletConfig, setWalletConfig] = useState(null);
+  const [userBalance, setUserBalance] = useState(0);
+  const [postCost, setPostCost] = useState(0);
+  const [showInsufficientCoinsModal, setShowInsufficientCoinsModal] = useState(false);
+  const [loadingWallet, setLoadingWallet] = useState(true);
+
+  // Load wallet config and user balance
+  useEffect(() => {
+    loadWalletData();
+  }, []);
+
+  const loadWalletData = async () => {
+    try {
+      setLoadingWallet(true);
+      const [configData, balanceData] = await Promise.all([
+        api.getWalletConfig(),
+        api.getWalletBalance()
+      ]);
+      
+      console.log('[CREATE] Wallet config:', configData);
+      console.log('[CREATE] User balance:', balanceData);
+      
+      setWalletConfig(configData);
+      
+      // Get total balance from response (handle different response formats)
+      const totalBalance = balanceData?.balance?.total || balanceData?.total || 0;
+      setUserBalance(totalBalance);
+      
+      // Calculate post cost based on whether it's a campaign post
+      const cost = campaignId 
+        ? (configData?.cost_post_create || 0)
+        : (configData?.cost_post_create_non_campaign || 0);
+      setPostCost(cost);
+      
+      console.log('[CREATE] Post cost calculated:', cost, 'for campaign:', !!campaignId);
+    } catch (error) {
+      console.error('[CREATE] Failed to load wallet data:', error);
+    } finally {
+      setLoadingWallet(false);
+    }
+  };
+
+  // Refresh balance after successful post
+  const refreshBalance = async () => {
+    try {
+      const balanceData = await api.getWalletBalance();
+      const totalBalance = balanceData?.balance?.total || balanceData?.total || 0;
+      setUserBalance(totalBalance);
+      console.log('[CREATE] Balance refreshed:', totalBalance);
+    } catch (error) {
+      console.error('[CREATE] Failed to refresh balance:', error);
+    }
+  };
 
   const pickFromLibrary = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -133,6 +188,42 @@ export default function CreateScreen({ navigation, route }) {
 const handlePost = async () => {
     if (!media) return;
     if (!user) { Alert.alert('Login Required', 'Please login to post.'); return; }
+    
+    // Check subscription status before allowing post creation
+    if (!hasActiveSubscription) {
+      Alert.alert(
+        'Subscription Required',
+        'You need an active subscription to create posts. Subscribe now to unlock all features!',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Subscribe', onPress: () => navigation.navigate('Subscription') }
+        ]
+      );
+      return;
+    }
+    
+    // Check if user has enough coins
+    if (postCost > 0 && userBalance < postCost) {
+      setShowInsufficientCoinsModal(true);
+      return;
+    }
+    
+    // Show confirmation for paid posts
+    if (postCost > 0) {
+      Alert.alert(
+        'Confirm Post',
+        `This will cost ${postCost} coins. Your current balance: ${userBalance.toLocaleString()} coins.\n\nDo you want to continue?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Post', onPress: () => executePost() }
+        ]
+      );
+    } else {
+      executePost();
+    }
+  };
+
+  const executePost = async () => {
     setStage('uploading');
     setProgress(0);
     try {
@@ -229,22 +320,83 @@ const handlePost = async () => {
       if (campaignId) {
         fd.append('campaign_id', campaignId);
         console.log('[CREATE] Posting to campaign:', campaignId);
+        console.log('[CREATE] FormData entries:');
+        for (let [key, value] of fd.entries()) {
+          console.log(`[CREATE] ${key}:`, value);
+        }
+        // Also add campaign flag for backend
+        fd.append('is_campaign_post', 'true');
+        console.log('[CREATE] Added is_campaign_post flag');
       } else {
         console.log('[CREATE] Regular post (no campaign)');
       }
 
       console.log('[CREATE] Uploading post with FormData keys:', Array.from(fd._parts.map(([key]) => key)));
-      await api.createPost(fd, { onProgress: pct => setProgress(Math.min(pct, 99)) });
+      const postResponse = await api.createPost(fd, { onProgress: pct => setProgress(Math.min(pct, 99)) });
+      console.log('[CREATE] Post creation response:', postResponse);
       setProgress(100);
+      
+      // Refresh balance after successful post
+      if (postCost > 0) {
+        await refreshBalance();
+      }
+      
       setTimeout(() => {
         setMedia(null); setCaption(''); setHashtags('');
         setFilter(FILTERS[0]); setStage('pick');
-        // Navigate back to campaign detail if coming from campaign, otherwise go to Home
-        if (campaignId) {
-          navigation.navigate('CampaignDetail', { campaignId });
-        } else {
-          navigation.navigate('Home');
+      // Navigate back to campaign detail if coming from campaign, otherwise go to Home
+      if (campaignId) {
+        console.log('[CREATE] Post created successfully, navigating back to campaign:', campaignId);
+        
+        // Check if this is an auto-submission for campaign
+        if (route.params?.autoSubmitToCampaign && postResponse && campaignId) {
+          console.log('[CREATE] Auto-submission flow detected, submitting to campaign');
+          (async () => {
+            try {
+              // Use the post ID from the creation response
+              const postId = postResponse.id || postResponse.post_id;
+              if (postId) {
+                console.log('[CREATE] Submitting post to campaign:', postId);
+                // Submit to campaign directly
+                const response = await api.request('/campaigns/' + campaignId + '/enter/', { 
+                  method: 'POST',
+                  body: JSON.stringify({ reel_id: postId })
+                });
+                console.log('[CREATE] Campaign entry successful:', response);
+                
+                Alert.alert('Success!', 'Your campaign entry has been submitted! Check the leaderboard!');
+              } else {
+                console.log('[CREATE] No post ID in response, trying fallback method');
+                // Fallback: get latest post
+                const userPosts = await api.request('/reels/?user=me&limit=1');
+                const latestPost = Array.isArray(userPosts) ? userPosts[0] : (userPosts.results?.[0]);
+                
+                if (latestPost) {
+                  console.log('[CREATE] Submitting latest post to campaign:', latestPost.id);
+                  const response = await api.request('/campaigns/' + campaignId + '/enter/', { 
+                    method: 'POST',
+                    body: JSON.stringify({ reel_id: latestPost.id })
+                  });
+                  console.log('[CREATE] Campaign entry successful:', response);
+                  
+                  Alert.alert('Success!', 'Your campaign entry has been submitted! Check the leaderboard!');
+                }
+              }
+            } catch (error) {
+              console.error('[CREATE] Auto-submission failed:', error);
+              Alert.alert('Error', 'Post created but failed to submit to campaign. Please try submitting manually.');
+            }
+          })();
         }
+        
+        // Add a small delay to ensure backend processes the campaign association
+        setTimeout(() => {
+          console.log('[CREATE] Navigating back to campaign and triggering refresh...');
+          navigation.navigate('CampaignDetail', { campaignId, refresh: true });
+        }, 500);
+      } else {
+        navigation.navigate('Home');
+      }
       }, 600);
     } catch (err) {
       const msg = typeof err === 'object' ? (err.detail || err.error || err.message || 'Upload failed') : String(err);
@@ -408,6 +560,33 @@ const handlePost = async () => {
               autoCapitalize="none"
             />
           </View>
+
+          {/* Coin Cost and Balance Info */}
+          {!loadingWallet && (postCost > 0 || userBalance > 0) && (
+            <View style={[styles.coinInfoCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+              <View style={styles.coinInfoHeader}>
+                <Ionicons name="wallet" size={20} color={colors.primary} />
+                <Text style={[styles.coinInfoTitle, { color: colors.text }]}>Post Cost</Text>
+              </View>
+              <View style={styles.coinInfoRow}>
+                <Text style={[styles.coinInfoLabel, { color: colors.textSecondary }]}>Cost:</Text>
+                <Text style={[styles.coinInfoValue, { color: postCost > userBalance ? '#ff4444' : colors.primary }]}>
+                  {postCost} coins
+                </Text>
+              </View>
+              <View style={styles.coinInfoRow}>
+                <Text style={[styles.coinInfoLabel, { color: colors.textSecondary }]}>Your Balance:</Text>
+                <Text style={[styles.coinInfoValue, { color: colors.text }]}>
+                  {userBalance.toLocaleString()} coins
+                </Text>
+              </View>
+              {postCost > 0 && userBalance >= postCost && (
+                <Text style={[styles.coinInfoNote, { color: colors.textSecondary }]}>
+                  After posting: {(userBalance - postCost).toLocaleString()} coins
+                </Text>
+              )}
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     );
@@ -426,6 +605,62 @@ const handlePost = async () => {
       </View>
     </View>
   );
+
+  // ── INSUFFICIENT COINS MODAL ────────────────────────────────────────────────
+  if (showInsufficientCoinsModal) {
+    return (
+      <Modal transparent animationType="fade">
+        <View style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
+          <View style={[styles.insufficientCoinsModal, { backgroundColor: colors.cardBg }]}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="wallet" size={32} color="#ff4444" />
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Insufficient Coins</Text>
+            </View>
+            
+            <View style={styles.modalContent}>
+              <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
+                You need {postCost} coins to create this post, but you only have {userBalance.toLocaleString()} coins.
+              </Text>
+              
+              <View style={[styles.coinsSummary, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+                <View style={styles.coinsRow}>
+                  <Text style={[styles.coinsLabel, { color: colors.textSecondary }]}>Required:</Text>
+                  <Text style={[styles.coinsRequired, { color: '#ff4444' }]}>{postCost} coins</Text>
+                </View>
+                <View style={styles.coinsRow}>
+                  <Text style={[styles.coinsLabel, { color: colors.textSecondary }]}>Your Balance:</Text>
+                  <Text style={[styles.coinsBalance, { color: colors.text }]}>{userBalance.toLocaleString()} coins</Text>
+                </View>
+                <View style={styles.coinsRow}>
+                  <Text style={[styles.coinsLabel, { color: colors.textSecondary }]}>Need More:</Text>
+                  <Text style={[styles.coinsNeeded, { color: colors.primary }]}>{Math.max(0, postCost - userBalance)} coins</Text>
+                </View>
+              </View>
+            </View>
+            
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalCancelBtn, { borderColor: colors.border }]}
+                onPress={() => setShowInsufficientCoinsModal(false)}
+              >
+                <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBuyBtn, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  setShowInsufficientCoinsModal(false);
+                  navigation.navigate('WebsiteCoin');
+                }}
+              >
+                <Text style={[styles.modalBuyText, { color: colors.text }]}>Get Coins</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
@@ -517,4 +752,122 @@ const styles = StyleSheet.create({
     backgroundColor: '#333', borderRadius: 4, overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: GOLD },
+
+  // Coin Info Card
+  coinInfoCard: {
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  coinInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  coinInfoTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  coinInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  coinInfoLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  coinInfoValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  coinInfoNote: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+
+  // Insufficient Coins Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  insufficientCoinsModal: {
+    width: width * 0.9,
+    maxWidth: 400,
+    borderRadius: 20,
+    padding: 24,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 12,
+  },
+  modalContent: {
+    marginBottom: 24,
+  },
+  modalMessage: {
+    fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  coinsSummary: {
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  coinsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  coinsLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  coinsRequired: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  coinsBalance: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  coinsNeeded: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCancelBtn: {
+    borderWidth: 1,
+  },
+  modalBuyBtn: {},
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalBuyText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

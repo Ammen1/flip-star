@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,6 +13,7 @@ import { AppAlertProvider } from '../components/AppAlert';
 import { LanguageProvider } from '../contexts/LanguageContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { BlockProvider } from '../contexts/BlockContext';
+import SubscriptionGate from '../components/SubscriptionGate';
 
 // Import screens directly (no lazy loading) to prevent blank screen flash
 import LoginScreen from '../screens/auth/LoginScreen';
@@ -177,34 +178,37 @@ function MainTabs() {
 
 function MainStack() {
   const { colors } = useTheme();
+  const navigation = useNavigation();
   
   return (
-    <Stack.Navigator 
-      screenOptions={{ 
-        headerShown: false, 
-        cardStyle: { backgroundColor: colors.bg },
-        gestureEnabled: false,
-        animationEnabled: true,
-      }}
-    >
-      <Stack.Screen name="MainTabs"        component={MainTabs} />
-      <Stack.Screen name="Explore"         component={ExploreScreen} />
-      <Stack.Screen name="ReelsDetail"     component={ReelsDetailWrapper} />
-      <Stack.Screen name="ProfileStack"    component={ProfileScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="EditProfile"     component={EditProfileScreen} />
-      <Stack.Screen name="Settings"        component={SettingsScreen} />
-      <Stack.Screen name="MessagesStack"   component={MessagesScreen} options={{ headerShown: false }} />
-      <Stack.Screen name="FollowList"      component={FollowListScreen} />
-      <Stack.Screen name="Campaigns"       component={CampaignsScreen} />
-      <Stack.Screen name="CampaignDetail"  component={CampaignDetailScreen} />
-      <Stack.Screen name="Leaderboard"    component={LeaderboardScreen} />
-      <Stack.Screen name="Wallet"          component={WalletScreen} />
-      <Stack.Screen name="Subscription"    component={SubscriptionScreen} />
-      <Stack.Screen name="Gamification"    component={GamificationScreen} />
-      <Stack.Screen name="Notifications"   component={NotificationsScreen} />
-      <Stack.Screen name="WebsiteCoin"     component={WebsiteCoinScreen} />
-      <Stack.Screen name="CoinPurchase"    component={CoinPurchaseScreen} />
-    </Stack.Navigator>
+    <SubscriptionGate navigation={navigation}>
+      <Stack.Navigator 
+        screenOptions={{ 
+          headerShown: false, 
+          cardStyle: { backgroundColor: colors.bg },
+          gestureEnabled: false,
+          animationEnabled: true,
+        }}
+      >
+        <Stack.Screen name="MainTabs"        component={MainTabs} />
+        <Stack.Screen name="Explore"         component={ExploreScreen} />
+        <Stack.Screen name="ReelsDetail"     component={ReelsDetailWrapper} />
+        <Stack.Screen name="ProfileStack"    component={ProfileScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="EditProfile"     component={EditProfileScreen} />
+        <Stack.Screen name="Settings"        component={SettingsScreen} />
+        <Stack.Screen name="MessagesStack"   component={MessagesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="FollowList"      component={FollowListScreen} />
+        <Stack.Screen name="Campaigns"       component={CampaignsScreen} />
+        <Stack.Screen name="CampaignDetail"  component={CampaignDetailScreen} />
+        <Stack.Screen name="Leaderboard"    component={LeaderboardScreen} />
+        <Stack.Screen name="Wallet"          component={WalletScreen} />
+        <Stack.Screen name="Subscription"    component={SubscriptionScreen} />
+        <Stack.Screen name="Gamification"    component={GamificationScreen} />
+        <Stack.Screen name="Notifications"   component={NotificationsScreen} />
+        <Stack.Screen name="WebsiteCoin"     component={WebsiteCoinScreen} />
+        <Stack.Screen name="CoinPurchase"    component={CoinPurchaseScreen} />
+      </Stack.Navigator>
+    </SubscriptionGate>
   );
 }
 
@@ -220,14 +224,65 @@ function AuthStack() {
 function RootNavigator() {
   const { user, loading } = useAuth();
   const { colors } = useTheme();
+  const { subscriptionChecked, hasActiveSubscription, refreshSubscriptionStatus } = useAuth();
+  const navigation = useNavigation();
+  
+  console.log('[ROOT_NAV] Subscription status:', { user: !!user, loading, subscriptionChecked, hasActiveSubscription });
+  
+  // Check subscription status and redirect if needed (like website)
+  useEffect(() => {
+    console.log('[ROOT_NAV] Effect triggered:', { user: !!user, subscriptionChecked, hasActiveSubscription, hasNavigation: !!navigation });
+    
+    if (user && subscriptionChecked && !hasActiveSubscription && navigation) {
+      console.log('🔒 RootNavigator: No active subscription, redirecting to subscription page');
+      try {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Subscription' }],
+        });
+      } catch (error) {
+        console.log('[ROOT_NAV] Navigation reset error:', error.message);
+      }
+    }
+  }, [user, subscriptionChecked, hasActiveSubscription, navigation]);
+  
+  // Periodically check subscription status (every 30 seconds like website)
+  useEffect(() => {
+    if (!user || !api.hasToken()) return;
+    
+    const interval = setInterval(async () => {
+      console.log('[ROOT_NAV] Checking subscription status (30-second interval)...');
+      try {
+        await refreshSubscriptionStatus();
+        console.log('[ROOT_NAV] Subscription status refreshed');
+      } catch (error) {
+        console.log('[ROOT_NAV] Failed to refresh subscription status:', error.message);
+      }
+    }, 30 * 1000); // 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [user, refreshSubscriptionStatus]);
   
   if (loading) {
+    console.log('[ROOT_NAV] Still loading auth...');
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg }}>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
+  
+  // If user exists but no subscription, show subscription page directly
+  if (user && !hasActiveSubscription && subscriptionChecked) {
+    console.log('[ROOT_NAV] User has no subscription, showing subscription screen');
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+      </Stack.Navigator>
+    );
+  }
+  
+  console.log('[ROOT_NAV] Rendering normal navigation:', { user: !!user, hasActiveSubscription });
   return user ? <MainStack /> : <AuthStack />;
 }
 

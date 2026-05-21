@@ -282,6 +282,15 @@ export default function HomeScreen({ navigation, route }) {
   const [localGiftCounts, setLocalGiftCounts] = useState({}); // Track local gift count increments
   const localGiftCountsRef = useRef({}); // Ref so stale closures always read current value
   const [campaignToast, setCampaignToast] = useState(null); // wallet impact toast for campaign posts
+  
+  // Share modal states from Reels page
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareableUsers, setShareableUsers] = useState([]);
+  const [loadingShareableUsers, setLoadingShareableUsers] = useState(false);
+  const [shareSearch, setShareSearch] = useState('');
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [selectedPostForShare, setSelectedPostForShare] = useState(null);
+  const shareSearchTimer = useRef(null);
   const [showHorizontalSuggestions, setShowHorizontalSuggestions] = useState(true);
   const [suggestionPositions, setSuggestionPositions] = useState(new Set());
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -524,8 +533,13 @@ export default function HomeScreen({ navigation, route }) {
   const fetchPosts = async (offset = 0, reset = false) => {
     try {
       if (reset) setLoading(true); else setLoadingMore(true);
-      const data = await api.request(`/reels/?limit=${LIMIT}&offset=${offset}`, { skipCache: true });
+      
+      // Fetch regular posts and campaign posts
+      const data = await api.request(`/reels/?limit=${LIMIT}&offset=${offset}&include_campaigns=true`, { skipCache: true });
       const results = Array.isArray(data) ? data : (data.results || []);
+      
+      console.log('[HOMESCREEN] Fetched posts:', results.length);
+      console.log('[HOMESCREEN] Campaign posts in feed:', results.filter(p => p.is_campaign_post || p.campaign_id || p.campaign).length);
       
       // Insert suggestions at dynamic positions
       let finalResults = results;
@@ -575,7 +589,65 @@ export default function HomeScreen({ navigation, route }) {
   const onEndReached = useCallback(() => { if (!loadingMore && hasMore && activeTab === 'For You') fetchPosts(page + LIMIT); }, [loadingMore, hasMore, activeTab, page]);
 
   const sharePost = useCallback(async (post) => {
-    const isCampaign = !!(post.is_campaign_post || post.campaign_id || post.campaign);
+    setSelectedPostForShare(post);
+    setShareSearch('');
+    setShowShareModal(true);
+    loadShareableUsers(post);
+  }, []);
+
+  const handleShareSearch = (text) => {
+    setShareSearch(text);
+    clearTimeout(shareSearchTimer.current);
+    if (!text.trim()) {
+      loadShareableUsers(selectedPostForShare);
+      return;
+    }
+    setSearchingUsers(true);
+    shareSearchTimer.current = setTimeout(async () => {
+      try {
+        const res = await api.search(text.trim());
+        const users = Array.isArray(res?.users) ? res.users
+          : Array.isArray(res) ? res
+          : (res?.results || []);
+        setShareableUsers(users.filter(u => u.id !== user?.id && u.id !== selectedPostForShare?.user?.id));
+      } catch {
+        // keep existing list on error
+      } finally {
+        setSearchingUsers(false);
+      }
+    }, 400);
+  };
+
+  const loadShareableUsers = async (post) => {
+    setLoadingShareableUsers(true);
+    try {
+      // Primary: use follow suggestions
+      const response = await api.getUserSuggestions();
+      const allUsers = Array.isArray(response) ? response : (response.results || []);
+      const filtered = allUsers.filter(u => u.id !== user?.id && u.id !== post?.user?.id);
+      setShareableUsers(filtered);
+    } catch (error) {
+      // Fallback: general search
+      try {
+        const response2 = await api.search('', { type: 'users' });
+        const users2 = Array.isArray(response2?.users) ? response2.users
+          : Array.isArray(response2) ? response2
+          : (response2?.results || []);
+        const filtered2 = users2.filter(u => u.id !== user?.id && u.id !== post?.user?.id);
+        setShareableUsers(filtered2);
+      } catch {
+        setShareableUsers([]);
+      }
+    } finally {
+      setLoadingShareableUsers(false);
+    }
+  };
+
+  const handleShareExternal = async () => {
+    if (!selectedPostForShare) return;
+    
+    setShowShareModal(false);
+    const isCampaign = !!(selectedPostForShare.is_campaign_post || selectedPostForShare.campaign_id || selectedPostForShare.campaign);
     const SHARE_COST = 5;
 
     if (isCampaign && userCoins < SHARE_COST) {
@@ -590,10 +662,9 @@ export default function HomeScreen({ navigation, route }) {
       return;
     }
 
-    // Use both web URL and app URL for better compatibility
-    const webUrl = `https://uat.flipstar.et/post/${post.id}`;
-    const appUrl = `flipstar://post/${post.id}`;
-    const title = post.caption ? post.caption.slice(0, 80) : 'Check out this post on FlipStar';
+    const webUrl = `https://uat.flipstar.et/post/${selectedPostForShare.id}`;
+    const appUrl = `flipstar://post/${selectedPostForShare.id}`;
+    const title = selectedPostForShare.caption ? selectedPostForShare.caption.slice(0, 80) : 'Check out this post on FlipStar';
     
     try {
       await Share.share({
@@ -601,56 +672,111 @@ export default function HomeScreen({ navigation, route }) {
         url: webUrl,
         title: 'FlipStar Post',
       });
-      // Increment share count on backend
-      try { 
-        console.log('HomeScreen share - before - post shares:', post.shares);
-        console.log('HomeScreen share - before - localShareCounts:', localShareCounts[post.id]);
+      
+      // Optimistic share count increment
+      setLocalShareCounts(prev => ({
+        ...prev,
+        [selectedPostForShare.id]: (prev[selectedPostForShare.id] || 0) + 1
+      }));
+      
+      setPosts(prev => prev.map(p => 
+        p.id === selectedPostForShare.id ? { ...p, shares: (p.shares || 0) + 1 } : p
+      ));
+      
+      // Fire share count API in background
+      api.request(`/reels/${selectedPostForShare.id}/share/`, { method: 'POST' }).catch(() => {
+        // Revert on failure
+        setLocalShareCounts(prev => ({
+          ...prev,
+          [selectedPostForShare.id]: Math.max(0, (prev[selectedPostForShare.id] || 1) - 1)
+        }));
+        setPosts(prev => prev.map(p => 
+          p.id === selectedPostForShare.id ? { ...p, shares: Math.max(0, (p.shares || 1) - 1) } : p
+        ));
+      });
+      
+      if (isCampaign) {
+        setUserCoins(prev => Math.max(0, prev - SHARE_COST));
+        showCampaignToast(` −${SHARE_COST} coins · +${SHARE_COST} score earned by creator`);
         
-        await api.request(`/reels/${post.id}/share/`, { method: 'POST' });
-        
-        // Update persistent local share count
-        setLocalShareCounts(prev => {
-          const updated = {
-            ...prev,
-            [post.id]: (prev[post.id] || 0) + 1
-          };
-          console.log('HomeScreen share - updated localShareCounts:', updated[post.id]);
-          return updated;
-        });
-        
-        // Update local share count
-        setPosts(prev => {
-          const updated = prev.map(p => 
-            p.id === post.id ? { ...p, shares: (p.shares || 0) + 1 } : p
-          );
-          console.log('HomeScreen share - updated posts share count for post', post.id);
-          return updated;
-        });
-        
-        console.log('HomeScreen share increment successful');
-        if (isCampaign) {
-          setUserCoins(prev => Math.max(0, prev - SHARE_COST));
-          showCampaignToast(`🪙 −${SHARE_COST} coins · +${SHARE_COST} score earned by creator`);
-          
-          // Immediately update any campaign leaderboards that might be showing this entry
-          setTimeout(() => {
-            if (post?.campaign_id) {
-              console.log('[CAMPAIGN] Share added, triggering leaderboard update for campaign:', post.campaign_id);
-              CampaignEventEmitter.emit('campaign_interaction', { 
-                type: 'share', 
-                campaignId: post.campaign_id, 
-                postId: post.id 
-              });
-            }
-          }, 100);
-        }
-      } catch (err) {
-        console.log('HomeScreen share increment failed:', err);
+        setTimeout(() => {
+          if (selectedPostForShare?.campaign_id) {
+            CampaignEventEmitter.emit('campaign_interaction', { 
+              type: 'share', 
+              campaignId: selectedPostForShare.campaign_id, 
+              postId: selectedPostForShare.id 
+            });
+          }
+        }, 100);
       }
     } catch (error) {
-      console.log('Share error:', error);
+      if (error.message !== 'User did not share') {
+        console.log('External share error:', error);
+      }
     }
-  }, [userCoins, navigation, showCampaignToast]);
+  };
+
+  const handleShareWithUser = async (targetUserId) => {
+    if (!selectedPostForShare) return;
+    
+    try {
+      // Send the shared post as a message to the user
+      try {
+        // First create or get conversation with the user
+        const conversation = await api.request('/messages/conversations/', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: targetUserId })
+        });
+        
+        // Then send the post as a message
+        const caption = selectedPostForShare.caption || selectedPostForShare.description || 'Check out this post!';
+        const userName = selectedPostForShare.user?.username || selectedPostForShare.user?.first_name || 'Someone';
+        const messageText = ` ${userName} shared a post\n\n${caption}\n\n[POST_ID:${selectedPostForShare.id}]`;
+        const messageData = {
+          text: messageText
+        };
+        
+        await api.request(`/messages/conversations/${conversation.id}/messages/`, {
+          method: 'POST',
+          body: JSON.stringify(messageData),
+        });
+        
+        console.log('Shared post sent as message successfully with post_id:', selectedPostForShare.id);
+      } catch (messageError) {
+        console.log('Failed to send post as message:', messageError.message);
+        Alert.alert('Error', 'Failed to send post as message');
+        return;
+      }
+      
+      // Optimistic share count update
+      setLocalShareCounts(prev => ({
+        ...prev,
+        [selectedPostForShare.id]: (prev[selectedPostForShare.id] || 0) + 1
+      }));
+      
+      setPosts(prev => prev.map(p => 
+        p.id === selectedPostForShare.id ? { ...p, shares: (p.shares || 0) + 1 } : p
+      ));
+      
+      setShowShareModal(false);
+      Alert.alert('Shared!', 'Post shared with user successfully');
+
+      // Fire share count API in background
+      api.request(`/reels/${selectedPostForShare.id}/share/`, { method: 'POST' }).catch(() => {
+        // Revert on failure
+        setLocalShareCounts(prev => ({
+          ...prev,
+          [selectedPostForShare.id]: Math.max(0, (prev[selectedPostForShare.id] || 1) - 1)
+        }));
+        setPosts(prev => prev.map(p => 
+          p.id === selectedPostForShare.id ? { ...p, shares: Math.max(0, (p.shares || 1) - 1) } : p
+        ));
+      });
+    } catch (error) {
+      console.log('Share error:', error);
+      Alert.alert('Error', 'Failed to share post with user');
+    }
+  };
 
   const toggleFollow = useCallback(async (userId) => {
     if (!user) {
@@ -1404,6 +1530,33 @@ export default function HomeScreen({ navigation, route }) {
               {post.created_at ? (
                 <Text style={[styles.timeAgo, { color: colors.textSecondary }]}>{timeAgo(post.created_at)}</Text>
               ) : null}
+              
+              {/* Campaign Name - Top of Card */}
+              {isCampaignPost && (
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, backgroundColor: 'rgba(255,215,0,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#8fc441' }}
+                  onPress={() => {
+                    const campaignId = post.campaign_id || post.campaign?.id;
+                    if (campaignId) {
+                      console.log('Campaign name tapped, navigating to campaign detail:', campaignId);
+                      navigation.navigate('CampaignDetail', { campaignId });
+                    }
+                  }}
+                >
+                  <Ionicons name="trophy" size={14} color={GOLD} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: GOLD, fontWeight: '700' }}>
+                      {post.campaign?.title || post.campaign_title || post.campaign_name || 'Campaign Entry'}
+                    </Text>
+                    {(post.campaign?.total_entries || post.campaign?.entries_count || 0) > 0 && (
+                      <Text style={{ fontSize: 10, color: 'rgba(255,215,0,0.8)', fontWeight: '500' }}>
+                        {post.campaign?.total_entries || post.campaign?.entries_count || 0} participants
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={12} color={GOLD} />
+                </TouchableOpacity>
+              )}
             </View>
           </TouchableOpacity>
             
@@ -2138,6 +2291,72 @@ export default function HomeScreen({ navigation, route }) {
         </TouchableOpacity>
       </Modal>
 
+      {/* Share Modal */}
+      <Modal
+        visible={showShareModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.shareModal}>
+            <View style={styles.shareModalHeader}>
+              <Text style={styles.shareModalTitle}>Share Post</Text>
+              <TouchableOpacity onPress={() => setShowShareModal(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.shareSearchContainer}>
+              <Ionicons name="search" size={18} color="#666" style={styles.shareSearchIcon} />
+              <TextInput
+                style={styles.shareSearchInput}
+                placeholder="Search users..."
+                placeholderTextColor="#666"
+                value={shareSearch}
+                onChangeText={handleShareSearch}
+              />
+            </View>
+
+            {/* Users List */}
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {loadingShareableUsers ? (
+                <View style={{ padding: 32, alignItems: 'center' }}>
+                  <ActivityIndicator color={GOLD} />
+                  <Text style={{ color: '#666', marginTop: 12 }}>Loading users...</Text>
+                </View>
+              ) : shareableUsers.length === 0 ? (
+                <View style={{ padding: 32, alignItems: 'center' }}>
+                  <Text style={{ color: '#666' }}>No users found</Text>
+                </View>
+              ) : (
+                shareableUsers.map(userItem => (
+                  <TouchableOpacity
+                    key={userItem.id}
+                    style={styles.shareUserItem}
+                    onPress={() => handleShareWithUser(userItem.id)}
+                  >
+                    <Avatar uri={userItem.profile_photo} size={40} name={userItem.username} />
+                    <View style={styles.shareUserInfo}>
+                      <Text style={styles.shareUsername}>{userItem.username}</Text>
+                      <Text style={styles.shareUserBio}>{userItem.bio || 'Tap to share'}</Text>
+                    </View>
+                    <Ionicons name="send" size={18} color={GOLD} />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+
+            {/* External Share Button */}
+            <TouchableOpacity style={styles.shareExternalButton} onPress={handleShareExternal}>
+              <Ionicons name="share-social" size={20} color={GOLD} />
+              <Text style={styles.shareExternalButtonText}>Share externally</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       
     </View>
   );
@@ -2596,8 +2815,13 @@ const styles = StyleSheet.create({
     backgroundColor: CARD,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    height: '60%',
+    height: '45%',
+    width: '100%',
     paddingBottom: 20,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
   },
   infoSheet: {
     backgroundColor: CARD,
@@ -2822,6 +3046,90 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(249,224,139,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  // Share Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shareModal: {
+    width: '90%',
+    maxWidth: 400,
+    height: '70%',
+    maxHeight: 500,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  shareModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  shareModalTitle: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  shareSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+  },
+  shareSearchIcon: {
+    marginRight: 12,
+  },
+  shareSearchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+  },
+  shareUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  shareUserInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  shareUsername: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  shareUserBio: {
+    color: '#666',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  shareExternalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    gap: 8,
+  },
+  shareExternalButtonText: {
+    color: GOLD,
+    fontSize: 16,
+    fontWeight: '600',
   },
 
   // Toast
