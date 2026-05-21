@@ -32,7 +32,7 @@ export function ChargingDashboard({ theme }) {
   const loadStatistics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
+      const response = await api.request(`/charging/on-demand/statistics/?days=${days}`);
       setStatistics(response);
     } catch (err) {
       setError('Failed to load statistics');
@@ -44,7 +44,7 @@ export function ChargingDashboard({ theme }) {
 
   const loadTransactions = async () => {
     try {
-      const response = await api.request(`/admin/wallet/all-transactions/?type=purchase&page_size=50`);
+      const response = await api.request(`/charging/on-demand/transactions/?days=${days}&page=${page}&page_size=50`);
       setTransactions(response);
     } catch (err) {
       console.error('Failed to load transactions:', err);
@@ -54,7 +54,7 @@ export function ChargingDashboard({ theme }) {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await api.request(`/admin/subscriptions/charging/?type=ondemand`);
+      const response = await api.request(`/charging/on-demand/analytics/?period=${analyticsPeriod}`);
       setAnalyticsData(response);
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -72,16 +72,14 @@ export function ChargingDashboard({ theme }) {
 
     setSearching(true);
     try {
-      const response = await api.request(`/admin/wallet/all-transactions/?type=purchase&page_size=50`);
-      // Filter the results based on search query
-      const filteredTransactions = response.results?.filter(tx => {
-        if (searchType === 'phone') {
-          const q = searchQuery.toLowerCase();
-          return (tx.phone || '').toLowerCase().includes(q) || (tx.user || '').toLowerCase().includes(q);
-        }
-        return true;
-      }) || [];
-      setSearchResults(filteredTransactions);
+      let url = `/charging/on-demand/search/?`;
+      if (searchType === 'phone') {
+        url += `phone=${searchQuery}`;
+      } else {
+        url += `user_id=${searchQuery}`;
+      }
+      const response = await api.request(url);
+      setSearchResults(response);
     } catch (err) {
       console.error('Search failed:', err);
     } finally {
@@ -90,19 +88,18 @@ export function ChargingDashboard({ theme }) {
   };
 
   const handleExport = () => {
-    const dataToExport = searchResults || statistics?.results || [];
+    const dataToExport = searchResults?.transactions || statistics?.transactions || [];
     if (!dataToExport || dataToExport.length === 0) return;
 
-    const headers = ['Date', 'User', 'Email', 'Phone', 'Type', 'Coins', 'Payment Method', 'Description'];
+    const headers = ['Date', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Transaction ID'];
     const rows = dataToExport.map(t => [
       t.created_at || '',
       t.user || '',
-      t.email || '',
-      t.phone || '',
-      t.type_display || t.transaction_type || '',
-      t.coins || 0,
-      t.payment_method || '',
-      t.description || ''
+      t.phone_number || '',
+      t.subscription_tier || '',
+      t.amount_etb || 0,
+      t.status || '',
+      t.transaction_id || ''
     ]);
 
     const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
@@ -260,44 +257,51 @@ export function ChargingDashboard({ theme }) {
           }}>
             <StatCard
               icon={CreditCard}
-              label="Active Subscriptions"
-              value={statistics.active_subscriptions?.total || 0}
+              label="Total Transactions"
+              value={statistics.total_transactions || 0}
               color={theme.pri}
               theme={theme}
             />
             <StatCard
-              icon={TrendingUp}
-              label="MRR"
-              value={`ETB ${statistics.active_subscriptions?.mrr?.toFixed(2) || '0.00'}`}
+              icon={CheckCircle}
+              label="Successful"
+              value={statistics.successful_transactions || 0}
               color="#10B981"
               theme={theme}
             />
             <StatCard
-              icon={DollarSign}
-              label="Today's Revenue"
-              value={`ETB ${statistics.revenue?.today?.total?.toFixed(2) || '0.00'}`}
-              color="#3B82F6"
+              icon={XCircle}
+              label="Failed"
+              value={statistics.failed_transactions || 0}
+              color="#EF4444"
               theme={theme}
             />
             <StatCard
-              icon={Calendar}
-              label="Today's Transactions"
-              value={statistics.revenue?.today?.count || 0}
-              color="#8B5CF6"
-              theme={theme}
-            />
-            <StatCard
-              icon={TrendingUp}
-              label="Week Revenue"
-              value={`ETB ${statistics.revenue?.week?.total?.toFixed(2) || '0.00'}`}
+              icon={AlertCircle}
+              label="Insufficient Balance"
+              value={statistics.insufficient_balance || 0}
               color="#F59E0B"
               theme={theme}
             />
             <StatCard
-              icon={TrendingDown}
-              label="Month Revenue"
-              value={`ETB ${statistics.revenue?.month?.total?.toFixed(2) || '0.00'}`}
-              color="#EF4444"
+              icon={DollarSign}
+              label="Expected Collection"
+              value={`ETB ${statistics.expected_collection?.toFixed(2) || '0.00'}`}
+              color="#3B82F6"
+              theme={theme}
+            />
+            <StatCard
+              icon={TrendingUp}
+              label="Actual Collection"
+              value={`ETB ${statistics.actual_collection?.toFixed(2) || '0.00'}`}
+              color="#10B981"
+              theme={theme}
+            />
+            <StatCard
+              icon={Activity}
+              label="Success Rate"
+              value={`${statistics.success_rate?.toFixed(1) || 0}%`}
+              color="#8B5CF6"
               theme={theme}
             />
           </div>
@@ -318,7 +322,7 @@ export function ChargingDashboard({ theme }) {
               alignItems: 'center'
             }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: theme.txt }}>
-                Recent Transactions
+                Recent Charging Transactions
               </h2>
             </div>
 
@@ -329,7 +333,7 @@ export function ChargingDashboard({ theme }) {
                     background: theme.bg,
                     borderBottom: `1px solid ${theme.border}`
                   }}>
-                    {['Date', 'User', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Method', 'Status'].map(h => (
+                    {['Date', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Transaction ID'].map(h => (
                       <th key={h} style={{
                         padding: 12,
                         textAlign: h === 'Amount (ETB)' ? 'right' : 'left',
@@ -344,40 +348,37 @@ export function ChargingDashboard({ theme }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(!statistics.recent_transactions || statistics.recent_transactions.length === 0) ? (
+                  {(!statistics.transactions || statistics.transactions.length === 0) ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
+                      <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: theme.sub, fontSize: 13 }}>
                         No transactions yet.
                       </td>
                     </tr>
-                  ) : statistics.recent_transactions.map((t, idx) => (
+                  ) : statistics.transactions.map((t, idx) => (
                     <tr key={t.id || idx} style={{
-                      borderBottom: idx < statistics.recent_transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
+                      borderBottom: idx < statistics.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                     }}>
                       <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
-                        <div>{t.date}</div>
-                        {t.period_end && <div style={{ fontSize: 10 }}>ends {t.period_end}</div>}
+                        {new Date(t.created_at).toLocaleString()}
                       </td>
                       <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
                         <div style={{ fontWeight: 600 }}>@{t.user}</div>
-                        {t.email && <div style={{ fontSize: 11, color: theme.sub }}>{t.email}</div>}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone || '—'}</td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.tier}</td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
-                        {t.duration_type || '—'}{t.duration_days ? ` (${t.duration_days}d)` : ''}
-                      </td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone_number || '—'}</td>
+                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.subscription_tier || '—'}</td>
                       <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        {t.amount.toFixed(2)}
+                        {t.amount_etb?.toFixed(2) || '0.00'}
                       </td>
-                      <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.payment_method}</td>
                       <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
                         <span style={{
                           padding: '3px 8px', borderRadius: 999,
-                          background: t.status === 'completed' ? '#10B98122' : '#9CA3AF22',
-                          color: t.status === 'completed' ? '#10B981' : theme.sub,
+                          background: t.status === 'success' ? '#10B98122' : t.status === 'failed' ? '#EF444422' : '#F59E0B22',
+                          color: t.status === 'success' ? '#10B981' : t.status === 'failed' ? '#EF4444' : '#F59E0B',
                           fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
                         }}>{t.status || '—'}</span>
+                      </td>
+                      <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                        {t.transaction_id || '—'}
                       </td>
                     </tr>
                   ))}
@@ -487,7 +488,7 @@ export function ChargingDashboard({ theme }) {
                       background: theme.bg,
                       borderBottom: `1px solid ${theme.border}`
                     }}>
-                      {['Date', 'User', 'Phone', 'Tier', 'Duration', 'Amount (ETB)', 'Method', 'Status'].map(h => (
+                      {['Date', 'User', 'Phone', 'Tier', 'Amount (ETB)', 'Status', 'Transaction ID'].map(h => (
                         <th key={h} style={{
                           padding: 12,
                           textAlign: h === 'Amount (ETB)' ? 'right' : 'left',
@@ -507,29 +508,26 @@ export function ChargingDashboard({ theme }) {
                         borderBottom: idx < searchResults.transactions.length - 1 ? `1px solid ${theme.border}` : 'none'
                       }}>
                         <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
-                          <div>{t.date}</div>
-                          {t.period_end && <div style={{ fontSize: 10 }}>ends {t.period_end}</div>}
+                          {new Date(t.created_at).toLocaleString()}
                         </td>
                         <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>
                           <div style={{ fontWeight: 600 }}>@{t.user}</div>
-                          {t.email && <div style={{ fontSize: 11, color: theme.sub }}>{t.email}</div>}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone || '—'}</td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.tier}</td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
-                          {t.duration_type || '—'}{t.duration_days ? ` (${t.duration_days}d)` : ''}
-                        </td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.phone_number || '—'}</td>
+                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap' }}>{t.subscription_tier || '—'}</td>
                         <td style={{ padding: 12, fontSize: 13, color: theme.txt, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {t.amount.toFixed(2)}
+                          {t.amount_etb?.toFixed(2) || '0.00'}
                         </td>
-                        <td style={{ padding: 12, fontSize: 13, color: theme.txt, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{t.payment_method}</td>
                         <td style={{ padding: 12, fontSize: 13, whiteSpace: 'nowrap' }}>
                           <span style={{
                             padding: '3px 8px', borderRadius: 999,
-                            background: t.status === 'completed' ? '#10B98122' : '#9CA3AF22',
-                            color: t.status === 'completed' ? '#10B981' : theme.sub,
+                            background: t.status === 'success' ? '#10B98122' : t.status === 'failed' ? '#EF444422' : '#F59E0B22',
+                            color: t.status === 'success' ? '#10B981' : t.status === 'failed' ? '#EF4444' : '#F59E0B',
                             fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4,
                           }}>{t.status || '—'}</span>
+                        </td>
+                        <td style={{ padding: 12, fontSize: 12, color: theme.sub, whiteSpace: 'nowrap' }}>
+                          {t.transaction_id || '—'}
                         </td>
                       </tr>
                     ))}
@@ -563,29 +561,43 @@ export function ChargingDashboard({ theme }) {
           }}>
             <StatCard
               icon={CreditCard}
-              label="Active Subscriptions"
-              value={analyticsData.active_subscriptions?.total || 0}
+              label="Total Transactions"
+              value={analyticsData.total_transactions || 0}
               color={theme.pri}
               theme={theme}
             />
             <StatCard
-              icon={TrendingUp}
-              label="MRR"
-              value={`ETB ${analyticsData.active_subscriptions?.mrr?.toFixed(2) || '0.00'}`}
+              icon={CheckCircle}
+              label="Successful"
+              value={analyticsData.successful || 0}
               color="#10B981"
               theme={theme}
             />
             <StatCard
+              icon={XCircle}
+              label="Failed"
+              value={analyticsData.failed || 0}
+              color="#EF4444"
+              theme={theme}
+            />
+            <StatCard
+              icon={AlertCircle}
+              label="Insufficient Balance"
+              value={analyticsData.insufficient_balance || 0}
+              color="#F59E0B"
+              theme={theme}
+            />
+            <StatCard
               icon={DollarSign}
-              label="Today's Revenue"
-              value={`ETB ${analyticsData.revenue?.today?.total?.toFixed(2) || '0.00'}`}
+              label="Total Revenue"
+              value={`ETB ${analyticsData.total_revenue?.toFixed(2) || '0.00'}`}
               color="#8B5CF6"
               theme={theme}
             />
             <StatCard
               icon={Activity}
-              label="Today's Transactions"
-              value={analyticsData.revenue?.today?.count || 0}
+              label="Success Rate"
+              value={`${analyticsData.success_rate?.toFixed(1) || 0}%`}
               color="#10B981"
               theme={theme}
             />
