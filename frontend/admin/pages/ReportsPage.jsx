@@ -436,7 +436,7 @@ export function ReportsPage({ theme }) {
                 style={{ flex: 1, padding: 12, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.txt, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
                 Cancel
               </button>
-              <button onClick={executeModerate} disabled={moderating}
+              <button onClick={executeModeration} disabled={moderating}
                 style={{ flex: 1, padding: 12, background: '#EF4444', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 600, fontSize: 14, cursor: moderating ? 'not-allowed' : 'pointer', opacity: moderating ? 0.7 : 1 }}>
                 {moderating ? 'Applying...' : 'Confirm'}
               </button>
