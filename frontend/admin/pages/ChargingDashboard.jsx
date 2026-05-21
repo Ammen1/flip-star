@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, TrendingUp, TrendingDown, AlertCircle, CheckCircle, XCircle, Download, RefreshCw, Calendar, Filter, Search, User, Phone, BarChart3, PieChart, DollarSign, Activity, Users, Star } from 'lucide-react';
 import api from '../../api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart as RechartsPieChart, Cell } from 'recharts';
 
 export function ChargingDashboard({ theme }) {
   const [activeTab, setActiveTab] = useState('transactions'); // transactions, analytics_daily, analytics_monthly, analytics_yearly
@@ -607,7 +606,7 @@ export function ChargingDashboard({ theme }) {
 
           {/* Charts Section */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 24 }}>
-            {/* Transaction Trend Chart */}
+            {/* Transaction Trend Chart - CSS Bar Chart */}
             <div style={{
               background: theme.bg,
               borderRadius: 12,
@@ -617,32 +616,58 @@ export function ChargingDashboard({ theme }) {
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
                 Transaction Trend
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={analyticsData.breakdown}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme.border} />
-                  <XAxis 
-                    dataKey={activeTab === 'analytics_daily' ? 'date' : activeTab === 'analytics_monthly' ? 'month' : 'year'} 
-                    stroke={theme.sub}
-                    fontSize={12}
-                  />
-                  <YAxis stroke={theme.sub} fontSize={12} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      background: theme.card, 
-                      border: `1px solid ${theme.border}`,
-                      borderRadius: 8,
-                      color: theme.txt
-                    }}
-                  />
-                  <Legend />
-                  <Bar dataKey="total" name="Total" fill={theme.pri} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="success" name="Successful" fill="#10B981" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="failed" name="Failed" fill="#EF4444" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ height: 300, overflowX: 'auto' }}>
+                {analyticsData.breakdown && analyticsData.breakdown.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 400 }}>
+                    {analyticsData.breakdown.map((item, idx) => {
+                      const maxValue = Math.max(...analyticsData.breakdown.map(b => b.total || 0));
+                      const totalPercent = ((item.total || 0) / maxValue) * 100;
+                      const successPercent = ((item.success || 0) / maxValue) * 100;
+                      const failedPercent = ((item.failed || 0) / maxValue) * 100;
+                      const label = activeTab === 'analytics_daily' ? item.date : activeTab === 'analytics_monthly' ? item.month : item.year;
+                      
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 80, fontSize: 11, color: theme.sub, flexShrink: 0 }}>
+                            {label}
+                          </div>
+                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div style={{ display: 'flex', gap: 2, height: 20 }}>
+                              <div style={{ width: `${totalPercent}%`, background: theme.pri, borderRadius: 2, minWidth: item.total > 0 ? 2 : 0 }} title={`Total: ${item.total}`} />
+                              <div style={{ width: `${successPercent}%`, background: '#10B981', borderRadius: 2, minWidth: item.success > 0 ? 2 : 0 }} title={`Successful: ${item.success}`} />
+                              <div style={{ width: `${failedPercent}%`, background: '#EF4444', borderRadius: 2, minWidth: item.failed > 0 ? 2 : 0 }} title={`Failed: ${item.failed}`} />
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 11, color: theme.sub, minWidth: 60, textAlign: 'right' }}>
+                            {item.total || 0}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: theme.sub }}>
+                    No data available
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: theme.sub }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: theme.pri, borderRadius: 2 }} />
+                  <span>Total</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: '#10B981', borderRadius: 2 }} />
+                  <span>Successful</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: '#EF4444', borderRadius: 2 }} />
+                  <span>Failed</span>
+                </div>
+              </div>
             </div>
 
-            {/* Revenue Chart */}
+            {/* Revenue Chart - CSS Line/Bar Chart */}
             <div style={{
               background: theme.bg,
               borderRadius: 12,
@@ -652,39 +677,45 @@ export function ChargingDashboard({ theme }) {
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
                 Revenue Trend
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={analyticsData.breakdown}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={theme.border} />
-                  <XAxis 
-                    dataKey={activeTab === 'analytics_daily' ? 'date' : activeTab === 'analytics_monthly' ? 'month' : 'year'}
-                    stroke={theme.sub}
-                    fontSize={12}
-                  />
-                  <YAxis stroke={theme.sub} fontSize={12} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      background: theme.card, 
-                      border: `1px solid ${theme.border}`,
-                      borderRadius: 8,
-                      color: theme.txt
-                    }}
-                    formatter={(value) => `ETB ${value.toFixed(2)}`}
-                  />
-                  <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="#8B5CF6" 
-                    strokeWidth={2}
-                    dot={{ fill: '#8B5CF6', strokeWidth: 2, r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <div style={{ height: 300, overflowX: 'auto' }}>
+                {analyticsData.breakdown && analyticsData.breakdown.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 400 }}>
+                    {analyticsData.breakdown.map((item, idx) => {
+                      const maxValue = Math.max(...analyticsData.breakdown.map(b => b.revenue || 0)) || 1;
+                      const percent = ((item.revenue || 0) / maxValue) * 100;
+                      const label = activeTab === 'analytics_daily' ? item.date : activeTab === 'analytics_monthly' ? item.month : item.year;
+                      
+                      return (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 80, fontSize: 11, color: theme.sub, flexShrink: 0 }}>
+                            {label}
+                          </div>
+                          <div style={{ flex: 1, height: 20, background: theme.bg, borderRadius: 2, overflow: 'hidden' }}>
+                            <div style={{ width: `${percent}%`, height: '100%', background: '#8B5CF6', borderRadius: 2, minWidth: item.revenue > 0 ? 2 : 0, transition: 'width 0.3s' }} />
+                          </div>
+                          <div style={{ fontSize: 11, color: theme.sub, minWidth: 60, textAlign: 'right' }}>
+                            {item.revenue?.toFixed(2) || '0.00'}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: theme.sub }}>
+                    No data available
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 11, color: theme.sub }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 12, height: 12, background: '#8B5CF6', borderRadius: 2 }} />
+                  <span>Revenue (ETB)</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Success/Failure Pie Chart */}
+          {/* Success/Failure Distribution - CSS Pie Chart */}
           {analyticsData.total_transactions > 0 && (
             <div style={{
               background: theme.bg,
@@ -696,38 +727,50 @@ export function ChargingDashboard({ theme }) {
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
                 Transaction Status Distribution
               </h3>
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RechartsPieChart>
-                    <Pie
-                      data={[
-                        { name: 'Successful', value: analyticsData.successful, color: '#10B981' },
-                        { name: 'Failed', value: analyticsData.failed, color: '#EF4444' },
-                        { name: 'Insufficient Balance', value: analyticsData.insufficient_balance, color: '#F59E0B' }
-                      ]}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      <Cell fill="#10B981" />
-                      <Cell fill="#EF4444" />
-                      <Cell fill="#F59E0B" />
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ 
-                        background: theme.card, 
-                        border: `1px solid ${theme.border}`,
-                        borderRadius: 8,
-                        color: theme.txt
-                      }}
-                    />
-                    <Legend />
-                  </RechartsPieChart>
-                </ResponsiveContainer>
+              <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <div style={{ 
+                    width: 150, height: 150, borderRadius: '50%', 
+                    background: `conic-gradient(#10B981 ${((analyticsData.successful || 0) / analyticsData.total_transactions) * 360}deg, #EF4444 ${((analyticsData.successful || 0) / analyticsData.total_transactions) * 360}deg ${((analyticsData.successful || 0) + (analyticsData.failed || 0)) / analyticsData.total_transactions * 360}deg, #F59E0B ${((analyticsData.successful || 0) + (analyticsData.failed || 0)) / analyticsData.total_transactions * 360}deg 360deg)`,
+                    position: 'relative'
+                  }}>
+                    <div style={{ 
+                      position: 'absolute', inset: 30, borderRadius: '50%', 
+                      background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexDirection: 'column'
+                    }}>
+                      <div style={{ fontSize: 24, fontWeight: 700, color: theme.txt }}>
+                        {analyticsData.total_transactions}
+                      </div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>
+                        Total
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 16, height: 16, background: '#10B981', borderRadius: 4 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt }}>Successful</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{analyticsData.successful || 0} ({((analyticsData.successful || 0) / analyticsData.total_transactions * 100).toFixed(1)}%)</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 16, height: 16, background: '#EF4444', borderRadius: 4 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt }}>Failed</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{analyticsData.failed || 0} ({((analyticsData.failed || 0) / analyticsData.total_transactions * 100).toFixed(1)}%)</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 16, height: 16, background: '#F59E0B', borderRadius: 4 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt }}>Insufficient Balance</div>
+                      <div style={{ fontSize: 11, color: theme.sub }}>{analyticsData.insufficient_balance || 0} ({((analyticsData.insufficient_balance || 0) / analyticsData.total_transactions * 100).toFixed(1)}%)</div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
