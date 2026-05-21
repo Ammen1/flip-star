@@ -119,8 +119,8 @@ export function BoostModal({ reelId, onClose, onSuccess }) {
   }
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ background: T.cardBg || '#1a1a1a', borderRadius: 20, maxWidth: 500, width: '100%', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
+    <div onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()} style={{ background: T.cardBg || '#1a1a1a', borderRadius: 20, maxWidth: 500, width: '100%', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottom: `1px solid ${T.border || 'rgba(255,255,255,0.1)'}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
