@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { CreditCard, TrendingUp, TrendingDown, AlertCircle, CheckCircle, XCircle, Download, RefreshCw, Calendar, Filter, Search, User, Phone, BarChart3, PieChart, DollarSign, Activity, Users, Star } from 'lucide-react';
 import api from '../../api';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart as RechartsPieChart, Cell } from 'recharts';
 
 export function ChargingDashboard({ theme }) {
   const [activeTab, setActiveTab] = useState('transactions'); // transactions, analytics_daily, analytics_monthly, analytics_yearly
@@ -557,7 +558,8 @@ export function ChargingDashboard({ theme }) {
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-            gap: 16
+            gap: 16,
+            marginBottom: 32
           }}>
             <StatCard
               icon={CreditCard}
@@ -602,6 +604,133 @@ export function ChargingDashboard({ theme }) {
               theme={theme}
             />
           </div>
+
+          {/* Charts Section */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: 24 }}>
+            {/* Transaction Trend Chart */}
+            <div style={{
+              background: theme.bg,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                Transaction Trend
+              </h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analyticsData.breakdown}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.border} />
+                  <XAxis 
+                    dataKey={activeTab === 'analytics_daily' ? 'date' : activeTab === 'analytics_monthly' ? 'month' : 'year'} 
+                    stroke={theme.sub}
+                    fontSize={12}
+                  />
+                  <YAxis stroke={theme.sub} fontSize={12} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: theme.card, 
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 8,
+                      color: theme.txt
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="total" name="Total" fill={theme.pri} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="success" name="Successful" fill="#10B981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="failed" name="Failed" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Revenue Chart */}
+            <div style={{
+              background: theme.bg,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                Revenue Trend
+              </h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={analyticsData.breakdown}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={theme.border} />
+                  <XAxis 
+                    dataKey={activeTab === 'analytics_daily' ? 'date' : activeTab === 'analytics_monthly' ? 'month' : 'year'}
+                    stroke={theme.sub}
+                    fontSize={12}
+                  />
+                  <YAxis stroke={theme.sub} fontSize={12} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      background: theme.card, 
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: 8,
+                      color: theme.txt
+                    }}
+                    formatter={(value) => `ETB ${value.toFixed(2)}`}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="revenue" 
+                    stroke="#8B5CF6" 
+                    strokeWidth={2}
+                    dot={{ fill: '#8B5CF6', strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Success/Failure Pie Chart */}
+          {analyticsData.total_transactions > 0 && (
+            <div style={{
+              background: theme.bg,
+              borderRadius: 12,
+              padding: 24,
+              border: `1px solid ${theme.border}`,
+              marginTop: 24
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: theme.txt, marginBottom: 16 }}>
+                Transaction Status Distribution
+              </h3>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 300 }}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <RechartsPieChart>
+                    <Pie
+                      data={[
+                        { name: 'Successful', value: analyticsData.successful, color: '#10B981' },
+                        { name: 'Failed', value: analyticsData.failed, color: '#EF4444' },
+                        { name: 'Insufficient Balance', value: analyticsData.insufficient_balance, color: '#F59E0B' }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      <Cell fill="#10B981" />
+                      <Cell fill="#EF4444" />
+                      <Cell fill="#F59E0B" />
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ 
+                        background: theme.card, 
+                        border: `1px solid ${theme.border}`,
+                        borderRadius: 8,
+                        color: theme.txt
+                      }}
+                    />
+                    <Legend />
+                  </RechartsPieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
