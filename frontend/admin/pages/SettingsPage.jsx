@@ -145,17 +145,19 @@ export function SettingsPage({ theme }) {
         <div>
           <h1 style={{
             margin: 0,
-            fontSize: 32,
+            fontSize: 36,
             fontWeight: 700,
             color: theme.txt,
             marginBottom: 8,
+            letterSpacing: '-0.02em',
           }}>
             Platform Settings
           </h1>
           <p style={{
             margin: 0,
-            fontSize: 16,
+            fontSize: 15,
             color: theme.sub,
+            letterSpacing: '0.01em',
           }}>
             Configure your platform settings and preferences
           </p>
@@ -164,20 +166,23 @@ export function SettingsPage({ theme }) {
           onClick={handleSave}
           disabled={saving}
           style={{
-            padding: '12px 24px',
+            padding: '14px 28px',
             background: theme.pri,
             border: 'none',
-            borderRadius: 8,
+            borderRadius: 12,
             color: '#fff',
-            fontSize: 14,
+            fontSize: 15,
             fontWeight: 600,
             cursor: saving ? 'not-allowed' : 'pointer',
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 10,
+            transition: 'all 0.2s',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            opacity: saving ? 0.6 : 1,
           }}
         >
-          <Save size={16} />
+          <Save size={18} />
           {saving ? 'Saving...' : 'Save Changes'}
         </button>
       </div>
@@ -185,7 +190,7 @@ export function SettingsPage({ theme }) {
       {/* Tabs */}
       <div style={{
         display: 'flex',
-        gap: 8,
+        gap: 4,
         marginBottom: 24,
         borderBottom: `1px solid ${theme.border}`,
       }}>
@@ -197,11 +202,11 @@ export function SettingsPage({ theme }) {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               style={{
-                padding: '12px 20px',
-                background: 'none',
+                padding: '14px 20px',
+                background: isActive ? theme.pri : 'transparent',
                 border: 'none',
-                borderBottom: `2px solid ${isActive ? theme.pri : 'transparent'}`,
-                color: isActive ? theme.pri : theme.sub,
+                borderRadius: '8px 8px 0 0',
+                color: isActive ? '#fff' : theme.txt,
                 fontSize: 14,
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -209,7 +214,10 @@ export function SettingsPage({ theme }) {
                 alignItems: 'center',
                 gap: 8,
                 transition: 'all 0.2s',
+                opacity: isActive ? 1 : 0.7,
               }}
+              onMouseEnter={(e) => !isActive && (e.currentTarget.style.opacity = '1')}
+              onMouseLeave={(e) => !isActive && (e.currentTarget.style.opacity = '0.7')}
             >
               <Icon size={16} />
               {tab.label}
@@ -221,9 +229,10 @@ export function SettingsPage({ theme }) {
       {/* Settings Content */}
       <div style={{
         background: theme.card,
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 32,
         border: `1px solid ${theme.border}`,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
       }}>
         {activeTab === 'general' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -270,10 +279,11 @@ export function SettingsPage({ theme }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
               <div style={{
                 padding: 16,
-                background: `${theme.pri}10`,
-                borderRadius: 8,
+                background: `${theme.pri}15`,
+                borderRadius: 12,
+                border: `1px solid ${theme.pri}30`,
               }}>
-                <p style={{ margin: 0, fontSize: 14, color: theme.sub }}>
+                <p style={{ margin: 0, fontSize: 14, color: theme.txt, lineHeight: 1.6 }}>
                   Customize the fonts used throughout the platform. Changes preview in real-time on the right.
                 </p>
               </div>
@@ -328,6 +338,7 @@ export function SettingsPage({ theme }) {
                   fontWeight: 600,
                   color: theme.txt,
                   marginBottom: 8,
+                  letterSpacing: '0.02em',
                 }}>
                   Heading Font Weight
                 </label>
@@ -336,13 +347,18 @@ export function SettingsPage({ theme }) {
                   onChange={(e) => handleChange('font_weight_headings', e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
+                    padding: '14px 16px',
+                    border: `2px solid ${theme.border}`,
+                    borderRadius: 10,
                     fontSize: 14,
                     outline: 'none',
-                    background: '#fff',
+                    background: theme.bg,
+                    color: theme.txt,
+                    cursor: 'pointer',
+                    transition: 'border-color 0.2s',
                   }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+                  onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
                 >
                   <option value="400">Regular (400)</option>
                   <option value="500">Medium (500)</option>
@@ -359,6 +375,7 @@ export function SettingsPage({ theme }) {
                   fontWeight: 600,
                   color: theme.txt,
                   marginBottom: 8,
+                  letterSpacing: '0.02em',
                 }}>
                   Body Font Weight
                 </label>
@@ -367,13 +384,18 @@ export function SettingsPage({ theme }) {
                   onChange={(e) => handleChange('font_weight_body', e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '12px',
-                    border: `1px solid ${theme.border}`,
-                    borderRadius: 8,
+                    padding: '14px 16px',
+                    border: `2px solid ${theme.border}`,
+                    borderRadius: 10,
                     fontSize: 14,
                     outline: 'none',
-                    background: '#fff',
+                    background: theme.bg,
+                    color: theme.txt,
+                    cursor: 'pointer',
+                    transition: 'border-color 0.2s',
                   }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+                  onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
                 >
                   <option value="300">Light (300)</option>
                   <option value="400">Regular (400)</option>
@@ -601,19 +623,21 @@ export function SettingsPage({ theme }) {
               {/* Font Info */}
               <div style={{
                 marginTop: 16,
-                padding: 12,
-                background: `${theme.pri}10`,
-                borderRadius: 8,
-                fontSize: 12,
-                color: theme.sub,
+                padding: 16,
+                background: `${theme.pri}15`,
+                borderRadius: 12,
+                fontSize: 13,
+                color: theme.txt,
+                border: `1px solid ${theme.pri}30`,
               }}>
-                <div style={{ marginBottom: 4 }}>
+                <div style={{ marginBottom: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: theme.sub }}>Active Fonts</div>
+                <div style={{ marginBottom: 6 }}>
                   <strong>Primary:</strong> {settings.font_family_primary || 'Inter'}
                 </div>
-                <div style={{ marginBottom: 4 }}>
+                <div style={{ marginBottom: 6 }}>
                   <strong>Secondary:</strong> {settings.font_family_secondary || 'Inter'}
                 </div>
-                <div style={{ marginBottom: 4 }}>
+                <div style={{ marginBottom: 6 }}>
                   <strong>Username:</strong> {settings.font_family_username || 'Inter'}
                 </div>
                 <div>
@@ -624,16 +648,16 @@ export function SettingsPage({ theme }) {
               {/* Debug Info */}
               <div style={{
                 marginTop: 16,
-                padding: 12,
-                background: '#FEF3C7',
-                border: '2px solid #8fc441',
-                borderRadius: 8,
-                fontSize: 11,
+                padding: 16,
+                background: `${theme.pri}10`,
+                border: `2px solid ${theme.pri}40`,
+                borderRadius: 12,
+                fontSize: 12,
               }}>
-                <div style={{ fontWeight: 700, marginBottom: 8, color: '#92400E' }}>
+                <div style={{ fontWeight: 700, marginBottom: 10, color: theme.txt }}>
                   ⚠️ Preview Status
                 </div>
-                <div style={{ color: '#78350F', marginBottom: 4 }}>
+                <div style={{ color: theme.sub, marginBottom: 8, lineHeight: 1.5 }}>
                   Fonts loaded in admin panel. After saving, refresh the main app to see changes.
                 </div>
                 <button
@@ -643,15 +667,16 @@ export function SettingsPage({ theme }) {
                   }}
                   style={{
                     marginTop: 8,
-                    padding: '6px 12px',
-                    background: '#8fc441',
+                    padding: '10px 16px',
+                    background: theme.pri,
                     border: 'none',
-                    borderRadius: 6,
+                    borderRadius: 10,
                     color: '#fff',
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: 600,
                     cursor: 'pointer',
                     width: '100%',
+                    transition: 'all 0.2s',
                   }}
                 >
                   Check Font Status
@@ -906,24 +931,24 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
       {/* ── Left: Controls ── */}
       <div>
         {/* Dark mode toggle */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', background: theme.bg, borderRadius: 12, border: `1px solid ${theme.border}`, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {isDark ? <Moon size={18} color={theme.pri} /> : <Sun size={18} color={theme.pri} />}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 20px', background: theme.bg, borderRadius: 12, border: `2px solid ${theme.border}`, marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {isDark ? <Moon size={20} color={theme.pri} /> : <Sun size={20} color={theme.pri} />}
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt }}>Dark Mode</div>
-              <div style={{ fontSize: 12, color: theme.sub }}>{isDark ? 'Currently showing dark variant' : 'Currently showing light variant'}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: theme.txt, letterSpacing: '0.02em' }}>Dark Mode</div>
+              <div style={{ fontSize: 13, color: theme.sub, marginTop: 2 }}>{isDark ? 'Currently showing dark variant' : 'Currently showing light variant'}</div>
             </div>
           </div>
           <button onClick={toggleDarkMode}
-            style={{ width: 48, height: 28, borderRadius: 14, background: isDark ? theme.pri : theme.border, border: 'none', cursor: 'pointer', position: 'relative', transition: 'all 0.2s', flexShrink: 0 }}>
-            <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: isDark ? 22 : 2, transition: 'all 0.2s' }} />
+            style={{ width: 52, height: 30, borderRadius: 15, background: isDark ? theme.pri : theme.border, border: 'none', cursor: 'pointer', position: 'relative', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', flexShrink: 0 }}>
+            <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: isDark ? 24 : 2, transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }} />
           </button>
         </div>
 
 
         {/* Preset grid */}
         <div style={{ fontSize: 13, fontWeight: 700, color: theme.txt, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Choose Preset</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12, marginBottom: 28 }}>
           {presetKeys.map(key => {
             const p = PRESET_THEMES[key];
             const c = isDark ? p.dark : p.light;
@@ -953,19 +978,22 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
 
         {/* Custom primary color override */}
         <div style={{ fontSize: 13, fontWeight: 700, color: theme.txt, marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Custom Accent Color</div>
-        <div style={{ padding: 16, background: theme.bg, borderRadius: 12, border: `1px solid ${theme.border}`, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: theme.sub, marginBottom: 12 }}>Override the preset's primary color with your own brand color.</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ padding: 20, background: theme.bg, borderRadius: 12, border: `2px solid ${theme.border}`, marginBottom: 20 }}>
+          <div style={{ fontSize: 14, color: theme.txt, marginBottom: 12, lineHeight: 1.5 }}>Override the preset's primary color with your own brand color.</div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <input type="color" value={settings.primary_color_override || previewColors.pri}
               onChange={(e) => updateCustomColor(e.target.value)}
-              style={{ width: 44, height: 44, border: `1px solid ${theme.border}`, borderRadius: 8, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
+              style={{ width: 48, height: 48, border: `2px solid ${theme.border}`, borderRadius: 10, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
             <input type="text" value={settings.primary_color_override || ''}
               onChange={(e) => updateCustomColor(e.target.value)}
               placeholder="Leave blank to use preset color"
-              style={{ flex: 1, padding: '10px 12px', border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13, outline: 'none', background: theme.card, color: theme.txt }} />
+              style={{ flex: 1, padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 10, fontSize: 14, outline: 'none', background: theme.card, color: theme.txt, transition: 'border-color 0.2s' }}
+              onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+              onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
+            />
             {settings.primary_color_override && (
               <button onClick={() => updateCustomColor(null)}
-                style={{ padding: '10px 14px', background: '#EF444420', border: '1px solid #EF4444', borderRadius: 8, color: '#EF4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                style={{ padding: '12px 18px', background: '#EF444415', border: '2px solid #EF4444', borderRadius: 10, color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}>
                 Reset
               </button>
             )}
@@ -973,24 +1001,27 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
         </div>
 
         {/* Secondary (legacy) */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 4 }}>
           <input type="color" value={settings.secondary_color || '#8fc441'}
             onChange={(e) => handleChange('secondary_color', e.target.value)}
-            style={{ width: 36, height: 36, border: `1px solid ${theme.border}`, borderRadius: 6, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
+            style={{ width: 44, height: 44, border: `2px solid ${theme.border}`, borderRadius: 10, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: theme.txt, marginBottom: 2 }}>Secondary / Accent Color</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: theme.txt, marginBottom: 8, letterSpacing: '0.02em' }}>Secondary / Accent Color</div>
             <input type="text" value={settings.secondary_color || '#8fc441'}
               onChange={(e) => handleChange('secondary_color', e.target.value)}
-              style={{ width: '100%', padding: '8px 10px', border: `1px solid ${theme.border}`, borderRadius: 6, fontSize: 13, outline: 'none', background: theme.card, color: theme.txt }} />
+              style={{ width: '100%', padding: '12px 16px', border: `2px solid ${theme.border}`, borderRadius: 10, fontSize: 14, outline: 'none', background: theme.card, color: theme.txt, transition: 'border-color 0.2s' }}
+              onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+              onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
+            />
           </div>
         </div>
       </div>
 
       {/* ── Right: Live Preview ── */}
       <div style={{ position: 'sticky', top: 20, height: 'fit-content' }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: theme.sub, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 10 }}>Live Preview</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: theme.txt, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>Live Preview</div>
         {/* Phone mockup */}
-        <div style={{ background: '#111', borderRadius: 28, padding: '10px 6px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', width: 220, margin: '0 auto' }}>
+        <div style={{ background: '#111', borderRadius: 32, padding: '12px 8px', boxShadow: '0 12px 40px rgba(0,0,0,0.4)', width: 240, margin: '0 auto' }}>
           <div style={{ background: previewColors.bg, borderRadius: 22, overflow: 'hidden', minHeight: 380 }}>
             {/* App bar */}
             <div style={{ background: previewColors.cardBg, padding: '14px 14px 10px', borderBottom: `1px solid ${previewColors.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1028,7 +1059,7 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
           </div>
         </div>
         {/* Swatch strip */}
-        <div style={{ marginTop: 14, padding: 12, background: theme.bg, borderRadius: 10, border: `1px solid ${theme.border}` }}>
+        <div style={{ marginTop: 16, padding: 16, background: theme.bg, borderRadius: 12, border: `2px solid ${theme.border}` }}>
           {[
             { label: 'Primary', color: previewColors.pri },
             { label: 'Background', color: previewColors.bg },
@@ -1036,9 +1067,9 @@ function ThemeTab({ settings, handleChange, setSettings, theme }) {
             { label: 'Text', color: previewColors.txt },
             { label: 'Border', color: previewColors.border },
           ].map(({ label, color }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-              <div style={{ width: 14, height: 14, borderRadius: 4, background: color, border: `1px solid ${theme.border}`, flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: theme.sub, flex: 1 }}>{label}</span>
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 18, height: 18, borderRadius: 6, background: color, border: `2px solid ${theme.border}`, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: theme.txt, flex: 1, fontWeight: 500 }}>{label}</span>
               <span style={{ fontSize: 10, color: theme.sub, fontFamily: 'monospace' }}>{color}</span>
             </div>
           ))}
@@ -1063,6 +1094,7 @@ function SettingField({ label, value, onChange, type = 'text', multiline = false
         fontWeight: 600,
         color: theme.txt,
         marginBottom: 8,
+        letterSpacing: '0.02em',
       }}>
         {label}
       </label>
@@ -1074,14 +1106,19 @@ function SettingField({ label, value, onChange, type = 'text', multiline = false
           rows={3}
           style={{
             width: '100%',
-            padding: '12px',
-            border: `1px solid ${theme.border}`,
-            borderRadius: 8,
+            padding: '14px 16px',
+            border: `2px solid ${theme.border}`,
+            borderRadius: 10,
             fontSize: 14,
             fontFamily: 'inherit',
             outline: 'none',
             resize: 'vertical',
+            background: theme.bg,
+            color: theme.txt,
+            transition: 'border-color 0.2s',
           }}
+          onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+          onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
         />
       ) : (
         <input
@@ -1091,12 +1128,17 @@ function SettingField({ label, value, onChange, type = 'text', multiline = false
           placeholder={placeholder}
           style={{
             width: '100%',
-            padding: '12px',
-            border: `1px solid ${theme.border}`,
-            borderRadius: 8,
+            padding: '14px 16px',
+            border: `2px solid ${theme.border}`,
+            borderRadius: 10,
             fontSize: 14,
             outline: 'none',
+            background: theme.bg,
+            color: theme.txt,
+            transition: 'border-color 0.2s',
           }}
+          onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+          onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
         />
       )}
     </div>
@@ -1109,22 +1151,26 @@ function SettingToggle({ label, description, value, onChange, theme }) {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: '16px',
+      padding: '20px',
       background: theme.bg,
-      borderRadius: 8,
+      borderRadius: 12,
+      border: `1px solid ${theme.border}`,
+      transition: 'all 0.2s',
     }}>
-      <div>
+      <div style={{ flex: 1 }}>
         <div style={{
-          fontSize: 14,
+          fontSize: 15,
           fontWeight: 600,
           color: theme.txt,
           marginBottom: 4,
+          letterSpacing: '0.02em',
         }}>
           {label}
         </div>
         <div style={{
           fontSize: 13,
           color: theme.sub,
+          lineHeight: 1.5,
         }}>
           {description}
         </div>
@@ -1132,25 +1178,28 @@ function SettingToggle({ label, description, value, onChange, theme }) {
       <button
         onClick={() => onChange(!value)}
         style={{
-          width: 48,
-          height: 28,
-          borderRadius: 14,
+          width: 52,
+          height: 30,
+          borderRadius: 15,
           background: value ? theme.pri : theme.border,
           border: 'none',
           cursor: 'pointer',
           position: 'relative',
-          transition: 'all 0.2s',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          flexShrink: 0,
+          marginLeft: 16,
         }}
       >
         <div style={{
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           borderRadius: '50%',
           background: '#fff',
           position: 'absolute',
           top: 2,
-          left: value ? 22 : 2,
-          transition: 'all 0.2s',
+          left: value ? 24 : 2,
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
         }} />
       </button>
     </div>
@@ -1166,6 +1215,7 @@ function FontSelect({ label, value, onChange, theme }) {
         fontWeight: 600,
         color: theme.txt,
         marginBottom: 8,
+        letterSpacing: '0.02em',
       }}>
         {label}
       </label>
@@ -1174,14 +1224,19 @@ function FontSelect({ label, value, onChange, theme }) {
         onChange={(e) => onChange(e.target.value)}
         style={{
           width: '100%',
-          padding: '12px',
-          border: `1px solid ${theme.border}`,
-          borderRadius: 8,
+          padding: '14px 16px',
+          border: `2px solid ${theme.border}`,
+          borderRadius: 10,
           fontSize: 14,
           outline: 'none',
-          background: '#fff',
+          background: theme.bg,
+          color: theme.txt,
           fontFamily: `"${value}", sans-serif`,
+          cursor: 'pointer',
+          transition: 'border-color 0.2s',
         }}
+        onFocus={(e) => e.currentTarget.style.borderColor = theme.pri}
+        onBlur={(e) => e.currentTarget.style.borderColor = theme.border}
       >
         {AVAILABLE_FONTS.map(font => (
           <option key={font} value={font} style={{ fontFamily: `"${font}", sans-serif` }}>
@@ -1190,13 +1245,14 @@ function FontSelect({ label, value, onChange, theme }) {
         ))}
       </select>
       <div style={{
-        marginTop: 8,
-        padding: '8px 12px',
+        marginTop: 10,
+        padding: '12px 16px',
         background: theme.bg,
-        borderRadius: 6,
+        borderRadius: 10,
         fontFamily: `"${value}", sans-serif`,
         fontSize: 14,
         color: theme.sub,
+        border: `1px solid ${theme.border}`,
       }}>
         The quick brown fox jumps over the lazy dog
       </div>
