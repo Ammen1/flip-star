@@ -310,8 +310,8 @@ function ConfigTab({ theme: T, config, setConfig, onSave, saving, result, loadin
     localStorage.setItem('adminCoinConfigSubTab', activeSubTab);
   }, [activeSubTab]);
 
-  if (loading) return <LoadingState theme={T} />;
-  if (!config) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
+  if (!config) return <LoadingState theme={T} />;
+  if (!config && error) return <ErrorState theme={T} error={error} onRetry={onRetry} />;
 
   const updateField = (section, field, value) => {
     setConfig({ 
