@@ -397,6 +397,7 @@ export function GiftManagementPage({ theme }) {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  position: 'relative',
                 }}>
                   {gift.image_url ? (
                     <img
@@ -407,6 +408,23 @@ export function GiftManagementPage({ theme }) {
                   ) : (
                     <GiftIcon size={32} color={theme.sub} />
                   )}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    background: 'rgba(0,0,0,0.7)',
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    color: '#fff',
+                    fontWeight: '600',
+                    textAlign: 'center',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {gift.name}
+                  </div>
                 </div>
 
                 <div style={{
