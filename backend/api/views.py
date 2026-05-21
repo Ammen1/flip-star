@@ -1207,6 +1207,18 @@ class ReelViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Generate thumbnail for video uploads using FFmpeg"""
+        # Check if user is banned before allowing content creation
+        if self.request.user.is_authenticated:
+            profile = getattr(self.request.user, 'profile', None)
+            if profile:
+                # Check for permanent ban
+                if not self.request.user.is_active:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('Your account has been permanently banned.')
+                # Check for temp ban
+                if profile.ban_expires_at and profile.ban_expires_at > timezone.now():
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied(f'Your account is temporarily banned until {profile.ban_expires_at.strftime("%Y-%m-%d %H:%M")}.')
         instance = serializer.save()
         
         # Generate thumbnail if video is uploaded
@@ -1279,8 +1291,10 @@ class ReelViewSet(viewsets.ModelViewSet):
                         Q(
                             Q(user__is_active=True) &  # User is active
                             Q(user__profile__is_shadowbanned=False) &  # Not shadowbanned
-                            Q(user__profile__ban_expires_at__isnull=True) |  # Not temp banned
-                            Q(user__profile__ban_expires_at__lte=timezone.now())  # OR temp ban expired
+                            (
+                                Q(user__profile__ban_expires_at__isnull=True) |  # Not temp banned
+                                Q(user__profile__ban_expires_at__lte=timezone.now())  # OR temp ban expired
+                            )
                         )
                     )
                 )
@@ -1290,7 +1304,10 @@ class ReelViewSet(viewsets.ModelViewSet):
                     is_hidden=False,
                     user__is_active=True,
                     user__profile__is_shadowbanned=False,
-                    user__profile__ban_expires_at__isnull=True
+                    (
+                        Q(user__profile__ban_expires_at__isnull=True) |
+                        Q(user__profile__ban_expires_at__lte=timezone.now())
+                    )
                 )
             
             # Skip NotInterested filter to prevent crashes - it's causing performance issues
