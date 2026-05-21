@@ -19,6 +19,7 @@ import {
   Play,
   Pause,
   Gift,
+  Zap,
 } from 'lucide-react';
 import api from '../api';
 import config from '../config';
@@ -30,6 +31,7 @@ import { SearchBar } from './SearchBar';
 import { UserSuggestions } from './UserSuggestions';
 import { AlertModal } from './AlertModal';
 import GiftPage from './GiftPage';
+import { BoostModal } from './BoostModal';
 import { getRelativeTime } from '../utils/timeUtils';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -152,6 +154,7 @@ export const TikTokLayout = memo(function TikTokLayout({
   const LIMIT = 5; // Reduced from 10 to 5 for faster initial load
   const [showMenu, setShowMenu] = useState(null);
   const [showReportModal, setShowReportModal] = useState(null);
+  const [showBoostModal, setShowBoostModal] = useState(null);
   const [showComments, setShowComments] = useState(null);
   const [showGiftModal, setShowGiftModal] = useState(null);
   const [giftReelId, setGiftReelId] = useState(null);
@@ -1832,6 +1835,24 @@ export const TikTokLayout = memo(function TikTokLayout({
                               }}
                             >
                               <button
+                                onClick={() => { setShowMenu(null); setShowBoostModal(video.id); }}
+                                style={{
+                                  width: '100%',
+                                  padding: '14px 16px',
+                                  background: 'none',
+                                  border: 'none',
+                                  textAlign: 'left',
+                                  fontSize: 14,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 12,
+                                  color: T.txt,
+                                }}
+                              >
+                                <Zap size={18} color="#8fc441" /> Boost
+                              </button>
+                              <button
                                 onClick={() => handleShare(video.id)}
                                 style={{
                                   width: '100%',
@@ -2338,6 +2359,31 @@ export const TikTokLayout = memo(function TikTokLayout({
                             zIndex: 1000,
                           }}
                         >
+                          <button
+                            onClick={() => { setShowMenu(null); setShowBoostModal(video.id); }}
+                            style={{
+                              width: '100%',
+                              padding: '12px 16px',
+                              border: 'none',
+                              background: 'none',
+                              textAlign: 'left',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              fontSize: 14,
+                              color: T.txt,
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.target.style.background = '#f5f5f5')
+                            }
+                            onMouseLeave={(e) =>
+                              (e.target.style.background = 'none')
+                            }
+                          >
+                            <Zap size={16} color="#8fc441" />
+                            Boost
+                          </button>
                           <button
                             onClick={() => handleShowVideoInfo(video)}
                             style={{
@@ -2897,6 +2943,17 @@ export const TikTokLayout = memo(function TikTokLayout({
             setShowGiftModal(null);
             setGiftReelId(null);
             onShowCoinPurchase?.();
+          }}
+        />
+      )}
+
+      {/* Boost Modal */}
+      {showBoostModal && (
+        <BoostModal
+          reelId={showBoostModal}
+          onClose={() => setShowBoostModal(null)}
+          onSuccess={() => {
+            setShowBoostModal(null);
           }}
         />
       )}
