@@ -76,12 +76,18 @@ class UserSubscriptionStatusView(APIView):
             from django.utils import timezone
             from .models import Subscription
             
+            print(f'[SUBSCRIPTION STATUS] Checking subscription for user: {request.user.username} (ID: {request.user.id})')
+            
             # First check new UserSubscription model
             active_subscription = UserSubscription.objects.filter(
                 user=request.user,
                 status='active',
                 end_date__gt=timezone.now()
             ).first()
+            
+            print(f'[SUBSCRIPTION STATUS] UserSubscription active found: {active_subscription is not None}')
+            if active_subscription:
+                print(f'[SUBSCRIPTION STATUS] UserSubscription: ID={active_subscription.id}, status={active_subscription.status}, end_date={active_subscription.end_date}')
             
             if active_subscription:
                 return Response({
@@ -107,6 +113,10 @@ class UserSubscriptionStatusView(APIView):
                 expires_at__gt=timezone.now()
             ).first()
             
+            print(f'[SUBSCRIPTION STATUS] Old Subscription active found: {old_subscription is not None}')
+            if old_subscription:
+                print(f'[SUBSCRIPTION STATUS] Old Subscription: ID={old_subscription.id}, plan={old_subscription.plan}, expires_at={old_subscription.expires_at}')
+            
             if old_subscription:
                 return Response({
                     'has_subscription': True,
@@ -125,18 +135,32 @@ class UserSubscriptionStatusView(APIView):
                     }
                 })
             
-            # No active subscription found
-            any_subscription = UserSubscription.objects.filter(user=request.user).first()
-            any_old_subscription = Subscription.objects.filter(user=request.user).first()
+            # No active subscription found - check for any subscriptions
+            any_subscription = UserSubscription.objects.filter(user=request.user)
+            any_old_subscription = Subscription.objects.filter(user=request.user)
+            
+            print(f'[SUBSCRIPTION STATUS] Any UserSubscription count: {any_subscription.count()}')
+            print(f'[SUBSCRIPTION STATUS] Any old Subscription count: {any_old_subscription.count()}')
+            
+            if any_subscription.exists():
+                for sub in any_subscription:
+                    print(f'[SUBSCRIPTION STATUS] UserSubscription: status={sub.status}, end_date={sub.end_date}')
+            
+            if any_old_subscription.exists():
+                for sub in any_old_subscription:
+                    print(f'[SUBSCRIPTION STATUS] Old Subscription: plan={sub.plan}, expires_at={sub.expires_at}')
             
             return Response({
                 'has_subscription': False,
                 'subscription': None,
-                'has_had_subscription': any_subscription is not None or any_old_subscription is not None,
+                'has_had_subscription': any_subscription.exists() or any_old_subscription.exists(),
                 'message': 'No active subscription found'
             }, status=status.HTTP_200_OK)
         
         except Exception as e:
+            print(f'[SUBSCRIPTION STATUS] Error: {e}')
+            import traceback
+            traceback.print_exc()
             return Response({
                 'error': str(e),
                 'has_subscription': False
