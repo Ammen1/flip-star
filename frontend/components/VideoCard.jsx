@@ -39,6 +39,7 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [toast, setToast] = useState('');
   const longPressTimer = useRef(null);
 
@@ -92,8 +93,14 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
 
   const handleBoost = () => { setShowMenu(false); setShowBoostModal(true); };
 
+  const handleReport = () => { showToast('Report submitted'); setShowDropdown(false); };
+
+  const handleDropdownNotInterested = () => { showToast('Got it — fewer like this'); setShowDropdown(false); };
+
+  const handleDropdownBoost = () => { setShowDropdown(false); setShowBoostModal(true); };
+
   return (
-    <div style={{ background: T?.cardBg || '#1A1A1A', borderRadius: 16, overflow: "hidden", marginBottom: 20, position: "relative", display: "flex", flexDirection: "column", maxWidth: 560, border: '1.5px solid rgba(226,179,85,0.22)' }}>
+    <div style={{ background: T?.cardBg || '#1A1A1A', borderRadius: 16, overflow: "hidden", marginBottom: 20, position: "relative", display: "flex", flexDirection: "column", maxWidth: 560, border: '1.5px solid rgba(226,179,85,0.22)' }} onClick={() => setShowDropdown(false)}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 8, flexShrink: 0 }}>
@@ -107,10 +114,27 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
           <div style={{ fontSize: 11, color: T?.sub || '#666' }}>@{video?.handle || "handle"}</div>
         </div>
         <button
-          onClick={() => setShowMenu(true)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: T?.sub || '#666', display: 'flex', alignItems: 'center' }}
+          onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown); }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: T?.sub || '#666', display: 'flex', alignItems: 'center', position: 'relative' }}
         >
           <MoreHorizontal size={18} />
+          {/* Dropdown menu */}
+          {showDropdown && (
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: T?.cardBg || '#1a1a1a', border: '1px solid ' + (T?.border || 'rgba(255,255,255,0.1)'), borderRadius: 12, minWidth: 160, zIndex: 10000, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+              <button onClick={handleDropdownBoost} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: T?.txt || '#fff', fontSize: 13, textAlign: 'left' }}>
+                <Zap size={16} color={T?.pri || '#8fc441'} />
+                <span>Boost</span>
+              </button>
+              <button onClick={handleDropdownNotInterested} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: T?.txt || '#fff', fontSize: 13, textAlign: 'left', borderTop: '1px solid ' + (T?.border || 'rgba(255,255,255,0.1)') }}>
+                <span style={{ fontSize: 16 }}>🚫</span>
+                <span>Not interested</span>
+              </button>
+              <button onClick={handleReport} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: '#EF4444', fontSize: 13, textAlign: 'left', borderTop: '1px solid ' + (T?.border || 'rgba(255,255,255,0.1)') }}>
+                <span style={{ fontSize: 16 }}>🚨</span>
+                <span>Report</span>
+              </button>
+            </div>
+          )}
         </button>
       </div>
 
