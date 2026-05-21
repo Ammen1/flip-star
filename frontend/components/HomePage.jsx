@@ -773,7 +773,6 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
 
   const submitReport = async (category) => {
     setShowReportModal(false);
-    onClose();
     try {
       await api.request('/reports/create/', {
         method: 'POST',
@@ -784,6 +783,7 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
         }),
         headers: { 'Content-Type': 'application/json' }
       });
+      onClose();
       alert('Report submitted successfully. Thank you for helping keep our community safe.');
     } catch (error) {
       console.error('Failed to submit report:', error);
@@ -886,6 +886,7 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 10000,
+            pointerEvents: 'auto',
           }}
           onClick={() => setShowReportModal(false)}
         >
@@ -897,6 +898,7 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
               maxWidth: 400,
               width: '90%',
               boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+              pointerEvents: 'auto',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -955,6 +957,7 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
                     fontSize: 14,
                     color: T?.txt,
                     transition: 'background 0.2s',
+                    pointerEvents: 'auto',
                   }}
                   onMouseEnter={(e) => (e.target.style.background = 'rgba(226,179,85,0.12)')}
                   onMouseLeave={(e) => (e.target.style.background = T?.cardBg || '#1A1A1A')}
@@ -971,12 +974,13 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
                 padding: '12px',
                 marginTop: 12,
                 borderRadius: 8,
-                border: `1px solid ${T?.border}`,
-                background: 'transparent',
-                color: T?.txt,
+                border: 'none',
+                background: T?.border,
+                cursor: 'pointer',
                 fontSize: 14,
                 fontWeight: 600,
-                cursor: 'pointer',
+                color: T?.txt,
+                pointerEvents: 'auto',
               }}
             >
               Cancel

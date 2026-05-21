@@ -2976,6 +2976,7 @@ export const TikTokLayout = memo(function TikTokLayout({
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 10000,
+            pointerEvents: 'auto',
           }}
           onClick={() => setShowReportModal(null)}
         >
@@ -2987,6 +2988,7 @@ export const TikTokLayout = memo(function TikTokLayout({
               maxWidth: 400,
               width: '90%',
               boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+              pointerEvents: 'auto',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3045,6 +3047,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                     fontSize: 14,
                     color: T.txt,
                     transition: 'background 0.2s',
+                    pointerEvents: 'auto',
                   }}
                   onMouseEnter={(e) => (e.target.style.background = 'rgba(226,179,85,0.12)')}
                   onMouseLeave={(e) => (e.target.style.background = T.cardBg || '#1A1A1A')}
@@ -3067,6 +3070,7 @@ export const TikTokLayout = memo(function TikTokLayout({
                   fontSize: 14,
                   fontWeight: 600,
                   color: T.txt,
+                  pointerEvents: 'auto',
                 }}
               >
                 Cancel
