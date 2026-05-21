@@ -89,6 +89,7 @@ export function ReportsPage({ theme }) {
   const fetchModerationActions = async (reportId) => {
     try {
       const response = await api.request(`/admin/reports/${reportId}/`);
+      console.log('[MODERATION ACTIONS] Fetched:', response.moderation_actions);
       setModerationActions(response.moderation_actions || []);
     } catch (error) {
       console.error('Failed to fetch moderation actions:', error);
@@ -100,11 +101,13 @@ export function ReportsPage({ theme }) {
     if (!confirm('Are you sure you want to undo this moderation action?')) return;
     setUndoing(true);
     try {
-      await api.request(`/admin/moderation-actions/${actionId}/undo/`, {
+      const response = await api.request(`/admin/moderation-actions/${actionId}/undo/`, {
         method: 'POST',
       });
+      console.log('[UNDO] Response:', response);
       showToast('Moderation action undone successfully');
-      fetchModerationActions(selectedReport.id);
+      // Refresh moderation actions to show the updated state
+      await fetchModerationActions(selectedReport.id);
       fetchReports();
       fetchStats();
     } catch (error) {
@@ -425,9 +428,9 @@ export function ReportsPage({ theme }) {
                           <button
                             onClick={() => handleUndoAction(action.id)}
                             disabled={undoing}
-                            style={{ padding: '6px 12px', background: theme.card, border: `1px solid ${theme.border}`, borderRadius: 6, color: theme.txt, fontSize: 12, fontWeight: 600, cursor: undoing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 4, opacity: undoing ? 0.5 : 1 }}
+                            style={{ padding: '6px 12px', background: undoing ? theme.pri : theme.card, border: `1px solid ${theme.border}`, borderRadius: 6, color: undoing ? '#fff' : theme.txt, fontSize: 12, fontWeight: 600, cursor: undoing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 4, opacity: undoing ? 0.8 : 1 }}
                           >
-                            <RotateCcw size={12} /> Undo
+                            {undoing ? 'Undoing...' : <><RotateCcw size={12} /> Undo</>}
                           </button>
                         )}
                       </div>
