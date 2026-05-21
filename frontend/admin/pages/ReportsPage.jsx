@@ -45,6 +45,9 @@ export function ReportsPage({ theme }) {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [moderationActions, setModerationActions] = useState([]);
+  const [showUndoConfirmModal, setShowUndoConfirmModal] = useState(false);
+  const [undoingActionId, setUndoingActionId] = useState(null);
+  const [showUndoSuccessModal, setShowUndoSuccessModal] = useState(false);
 
   const showToast = (msg, isError = false) => {
     setToast({ msg, isError });
@@ -98,23 +101,29 @@ export function ReportsPage({ theme }) {
   };
 
   const handleUndoAction = async (actionId) => {
-    if (!confirm('Are you sure you want to undo this moderation action?')) return;
+    setUndoingActionId(actionId);
+    setShowUndoConfirmModal(true);
+  };
+
+  const confirmUndoAction = async () => {
+    setShowUndoConfirmModal(false);
     setUndoing(true);
     try {
-      const response = await api.request(`/admin/moderation-actions/${actionId}/undo/`, {
+      const response = await api.request(`/admin/moderation-actions/${undoingActionId}/undo/`, {
         method: 'POST',
       });
       console.log('[UNDO] Response:', response);
-      showToast('Moderation action undone successfully');
       // Refresh moderation actions to show the updated state
       await fetchModerationActions(selectedReport.id);
       fetchReports();
       fetchStats();
+      setShowUndoSuccessModal(true);
     } catch (error) {
       console.error('Failed to undo action:', error);
       showToast('Failed to undo action', true);
     } finally {
       setUndoing(false);
+      setUndoingActionId(null);
     }
   };
 
@@ -520,6 +529,78 @@ export function ReportsPage({ theme }) {
                 {moderating ? 'Applying...' : 'Confirm'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Confirmation Modal */}
+      {showUndoConfirmModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1002, padding: 16 }}
+          onClick={() => setShowUndoConfirmModal(false)}>
+          <div style={{ background: theme.card, borderRadius: 20, padding: 28, width: '100%', maxWidth: 480 }}
+            onClick={e => e.stopPropagation()}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#F59E0B20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <RotateCcw size={24} color="#F59E0B" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>Undo Moderation Action</h3>
+                <p style={{ fontSize: 13, color: theme.sub, margin: '4px 0 0 0' }}>
+                  Are you sure you want to undo this moderation action?
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: 14, background: '#F59E0B10', borderRadius: 10, marginBottom: 20, border: '1px solid #F59E0B' }}>
+              <p style={{ fontSize: 14, color: theme.txt, margin: 0, lineHeight: 1.6 }}>
+                This will reverse the moderation action and restore the user's content or account status. This action cannot be undone.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setShowUndoConfirmModal(false)}
+                style={{ flex: 1, padding: 12, background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, color: theme.txt, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={confirmUndoAction} disabled={undoing}
+                style={{ flex: 1, padding: 12, background: '#F59E0B', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 600, fontSize: 14, cursor: undoing ? 'not-allowed' : 'pointer', opacity: undoing ? 0.7 : 1 }}>
+                {undoing ? 'Undoing...' : 'Confirm Undo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Undo Success Modal */}
+      {showUndoSuccessModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1003, padding: 16 }}
+          onClick={() => setShowUndoSuccessModal(false)}>
+          <div style={{ background: theme.card, borderRadius: 20, padding: 28, width: '100%', maxWidth: 480 }}
+            onClick={e => e.stopPropagation()}>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#10B98120', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <CheckCircle size={24} color="#10B981" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 700, color: theme.txt, margin: 0 }}>Action Undone Successfully</h3>
+                <p style={{ fontSize: 13, color: theme.sub, margin: '4px 0 0 0' }}>
+                  The moderation action has been reversed.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ padding: 14, background: '#10B98110', borderRadius: 10, marginBottom: 20, border: '1px solid #10B981' }}>
+              <p style={{ fontSize: 14, color: theme.txt, margin: 0, lineHeight: 1.6 }}>
+                The user's content or account status has been restored. The moderation history has been updated to reflect this change.
+              </p>
+            </div>
+
+            <button onClick={() => setShowUndoSuccessModal(false)}
+              style={{ width: '100%', padding: 12, background: '#10B981', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              Done
+            </button>
           </div>
         </div>
       )}
