@@ -96,6 +96,7 @@ export function BoostDashboard({ onClose }) {
       <div style={{ background: T.cardBg || '#1a1a1a', borderRadius: 20, maxWidth: 800, width: '100%', maxHeight: '90vh', overflowY: 'auto', position: 'relative' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottom: '1px solid ' + (T.border || 'rgba(255,255,255,0.1)') }}>
+          <div style={{ width: 32 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: getPrimaryColor20(), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Zap size={20} color={getPrimaryColor()} />
@@ -105,7 +106,7 @@ export function BoostDashboard({ onClose }) {
               <div style={{ fontSize: 12, color: T.sub || 'rgba(255,255,255,0.5)' }}>{campaigns.length} active campaign{campaigns.length !== 1 ? 's' : ''}</div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, color: T.sub || 'rgba(255,255,255,0.5)' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, color: T.sub || 'rgba(255,255,255,0.5)', width: 32, display: 'flex', justifyContent: 'center' }}>
             <X size={24} />
           </button>
         </div>
