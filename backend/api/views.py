@@ -2266,6 +2266,7 @@ def create_report(request):
     """Create a new report for inappropriate content"""
     try:
         data = request.data.copy()
+        print(f'[REPORT] Received report data: {data}')
 
         # Map legacy field names sent by frontend (reported_reel -> reported_reel_id)
         if 'reported_reel' in data and 'reported_reel_id' not in data:
@@ -2293,9 +2294,11 @@ def create_report(request):
         else:
             data['priority'] = 'medium'
 
+        print(f'[REPORT] Data after processing: {data}')
         serializer = ReportSerializer(data=data)
         if serializer.is_valid():
             report = serializer.save(reported_by=request.user)
+            print(f'[REPORT] Report created successfully: ID {report.id}')
 
             # Auto-flag if target has 5+ pending reports
             if report.reported_reel:
