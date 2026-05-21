@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
-import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Gift } from "lucide-react";
+import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Gift, Zap } from "lucide-react";
 import config from "../config";
 import { useLegacyT } from "../contexts/ThemeContext";
+import { BoostModal } from "./BoostModal";
 
 const mediaUrl = (url) => {
   if (!url) return null;
@@ -88,6 +89,8 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
   };
 
   const handleNotInterested = () => { showToast('Got it — fewer like this'); setShowMenu(false); };
+
+  const handleBoost = () => { setShowMenu(false); setShowBoostModal(true); };
 
   return (
     <div style={{ background: T?.cardBg || '#1A1A1A', borderRadius: 16, overflow: "hidden", marginBottom: 20, position: "relative", display: "flex", flexDirection: "column", maxWidth: 560, border: '1.5px solid rgba(226,179,85,0.22)' }}>
@@ -260,11 +263,12 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
               </div>
             </div>
             {/* Action grid */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:8, marginBottom:16 }}>
               {[
                 { icon:'⬇️', label:'Save', action: handleDownload },
                 { icon:'🔗', label:'Copy link', action: handleCopyLink },
                 { icon:'📤', label:'Share', action: handleShare },
+                { icon:'⚡', label:'Boost', action: handleBoost },
                 { icon:'🚫', label:'Not interested', action: handleNotInterested },
               ].map(item => (
                 <button key={item.label} onClick={item.action}
@@ -290,6 +294,18 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
           backdropFilter:'blur(12px)', whiteSpace:'nowrap' }}>
           {toast}
         </div>
+      )}
+
+      {/* ── Boost Modal ── */}
+      {showBoostModal && (
+        <BoostModal
+          reelId={video.id}
+          onClose={() => setShowBoostModal(false)}
+          onSuccess={() => {
+            setShowBoostModal(false);
+            showToast('⚡ Boost started!');
+          }}
+        />
       )}
     </div>
   );
