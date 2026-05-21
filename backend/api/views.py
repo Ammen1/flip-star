@@ -2300,6 +2300,12 @@ def create_report(request):
             report = serializer.save(reported_by=request.user)
             print(f'[REPORT] Report created successfully: ID {report.id}')
 
+            # Auto-set reported_user from reel owner if not provided
+            if report.reported_reel and not report.reported_user:
+                report.reported_user = report.reported_reel.user
+                report.save(update_fields=['reported_user'])
+                print(f'[REPORT] Auto-set reported_user to reel owner: {report.reported_user.id}')
+
             # Auto-flag if target has 5+ pending reports
             if report.reported_reel:
                 count = Report.objects.filter(reported_reel=report.reported_reel, status='pending').count()
@@ -2410,6 +2416,12 @@ def admin_moderate_report(request, report_id):
 
     # Execute the action based on type
     print(f'[MODERATION] Executing action: {action_taken}')
+    # Fallback: if reported_user is not set but reported_reel is, get the reel owner
+    if not report.reported_user and report.reported_reel:
+        report.reported_user = report.reported_reel.user
+        report.save(update_fields=['reported_user'])
+        print(f'[MODERATION] Auto-set reported_user from reel owner: {report.reported_user.id}')
+
     if action_taken == 'warning':
         # Send warning notification to user
         if report.reported_user:
