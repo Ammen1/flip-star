@@ -1834,24 +1834,26 @@ export const TikTokLayout = memo(function TikTokLayout({
                                 overflow: 'hidden',
                               }}
                             >
-                              <button
-                                onClick={() => { setShowMenu(null); setShowBoostModal(video.id); }}
-                                style={{
-                                  width: '100%',
-                                  padding: '14px 16px',
-                                  background: 'none',
-                                  border: 'none',
-                                  textAlign: 'left',
-                                  fontSize: 14,
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 12,
-                                  color: T.txt,
-                                }}
-                              >
-                                <Zap size={18} color="#8fc441" /> Boost
-                              </button>
+                              {user?.id === video.user?.id && (
+                                <button
+                                  onClick={() => { setShowMenu(null); setShowBoostModal(video.id); }}
+                                  style={{
+                                    width: '100%',
+                                    padding: '14px 16px',
+                                    background: 'none',
+                                    border: 'none',
+                                    textAlign: 'left',
+                                    fontSize: 14,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    color: T.txt,
+                                  }}
+                                >
+                                  <Zap size={18} color="#8fc441" /> Boost
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleShare(video.id)}
                                 style={{
@@ -2359,31 +2361,33 @@ export const TikTokLayout = memo(function TikTokLayout({
                             zIndex: 1000,
                           }}
                         >
-                          <button
-                            onClick={() => { setShowMenu(null); setShowBoostModal(video.id); }}
-                            style={{
-                              width: '100%',
-                              padding: '12px 16px',
-                              border: 'none',
-                              background: 'none',
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              fontSize: 14,
-                              color: T.txt,
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.target.style.background = '#f5f5f5')
-                            }
-                            onMouseLeave={(e) =>
-                              (e.target.style.background = 'none')
-                            }
-                          >
-                            <Zap size={16} color="#8fc441" />
-                            Boost
-                          </button>
+                          {user?.id === video.user?.id && (
+                            <button
+                              onClick={() => { setShowMenu(null); setShowBoostModal(video.id); }}
+                              style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                border: 'none',
+                                background: 'none',
+                                textAlign: 'left',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                fontSize: 14,
+                                color: T.txt,
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.target.style.background = '#f5f5f5')
+                              }
+                              onMouseLeave={(e) =>
+                                (e.target.style.background = 'none')
+                              }
+                            >
+                              <Zap size={16} color="#8fc441" />
+                              Boost
+                            </button>
+                          )}
                           <button
                             onClick={() => handleShowVideoInfo(video)}
                             style={{

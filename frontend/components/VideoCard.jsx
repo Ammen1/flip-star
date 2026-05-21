@@ -34,7 +34,7 @@ const overlayCSS = (ov) => {
 
 const LONG_PRESS_MS = 500;
 
-export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
+export function VideoCard({ video, onLike, onComment, onShare, onGift, currentUser }) {
   const T = useLegacyT();
   const [liked, setLiked] = useState(false);
   const [showComments, setShowComments] = useState(false);
@@ -121,10 +121,12 @@ export function VideoCard({ video, onLike, onComment, onShare, onGift }) {
           {/* Dropdown menu */}
           {showDropdown && (
             <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: T?.cardBg || '#1a1a1a', border: '1px solid ' + (T?.border || 'rgba(255,255,255,0.1)'), borderRadius: 12, minWidth: 160, zIndex: 10000, boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
-              <button onClick={handleDropdownBoost} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: T?.txt || '#fff', fontSize: 13, textAlign: 'left' }}>
-                <Zap size={16} color={T?.pri || '#8fc441'} />
-                <span>Boost</span>
-              </button>
+              {currentUser?.id === video.user?.id && (
+                <button onClick={handleDropdownBoost} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: T?.txt || '#fff', fontSize: 13, textAlign: 'left' }}>
+                  <Zap size={16} color={T?.pri || '#8fc441'} />
+                  <span>Boost</span>
+                </button>
+              )}
               <button onClick={handleDropdownNotInterested} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: T?.txt || '#fff', fontSize: 13, textAlign: 'left', borderTop: '1px solid ' + (T?.border || 'rgba(255,255,255,0.1)') }}>
                 <span style={{ fontSize: 16 }}>🚫</span>
                 <span>Not interested</span>

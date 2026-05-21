@@ -803,7 +803,10 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
 
   const groups = [
     [
-      { Icon: Zap,      label: 'Boost',             action: handleBoost },
+      ...(currentUser?.id === post.user?.id
+        ? [{ Icon: Zap, label: 'Boost', action: handleBoost }]
+        : []
+      ),
       { Icon: Info,     label: 'Post Info',        action: handlePostInfo },
       { Icon: Link2,    label: 'Copy Link',         action: handleCopy },
       { Icon: Bookmark, label: 'Save to Favorites', action: handleSaveFav },
