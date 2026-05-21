@@ -621,6 +621,7 @@ const api = {
   // Subscription
   getSubscription: () => api.request('/subscriptions/'),
   getSubscriptionTiers: () => api.request('/subscriptions/tiers/active/'),
+  checkSubscriptionStatus: () => api.request('/subscription/status'),
   subscribeToTier: (tierId, paymentMethod = 'sms') =>
     api.request('/subscriptions/subscribe/', {
       method: 'POST',

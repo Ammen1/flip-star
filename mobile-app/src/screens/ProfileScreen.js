@@ -260,10 +260,23 @@ export default function ProfileScreen({ navigation, route }) {
 
   const loadReels = async () => {
     try {
+      console.log('[PROFILE] Loading reels for user:', targetUserId);
       const reelsData = await api.request(`/reels/?user=${targetUserId}`);
       const reelsList = Array.isArray(reelsData) ? reelsData : (reelsData.results || []);
-      setReels(reelsList.filter(p => p.media));
-    } catch (e) { /* silent */ }
+      console.log('[PROFILE] Raw reels data:', reelsList.length, 'items');
+      
+      // Filter for posts with media (videos) OR show all posts if no videos found
+      const videoPosts = reelsList.filter(p => p.media && p.media.includes('.mp4'));
+      console.log('[PROFILE] Video posts:', videoPosts.length);
+      
+      // If no videos, show all posts as reels (like Instagram)
+      const filteredReels = videoPosts.length > 0 ? videoPosts : reelsList;
+      console.log('[PROFILE] Final reels count:', filteredReels.length);
+      
+      setReels(filteredReels);
+    } catch (e) { 
+      console.log('[PROFILE] Failed to load reels:', e);
+    }
   };
 
   const loadSavedPosts = async () => {
@@ -287,22 +300,60 @@ export default function ProfileScreen({ navigation, route }) {
 
   const loadCampaignPosts = async () => {
     try {
+      console.log('[PROFILE] Loading campaign posts for user:', targetUserId);
       // First try the campaign endpoint, but if it doesn't work properly, filter all posts
       const campaignPostsData = await api.request(`/reels/?user=${targetUserId}`);
       const allPosts = Array.isArray(campaignPostsData) ? campaignPostsData : (campaignPostsData.results || []);
       
-      // Filter posts to show only campaign posts
+      console.log('[PROFILE] All posts count:', allPosts.length);
+      console.log('[PROFILE] Sample post data:', allPosts.slice(0, 2).map(p => ({
+        id: p.id,
+        is_campaign_post: p.is_campaign_post,
+        campaign_id: p.campaign_id,
+        campaign: p.campaign,
+        campaign_name: p.campaign_name,
+        campaign_title: p.campaign_title,
+        media: p.media ? 'has media' : 'no media'
+      })));
+      
+      // Filter posts to show only campaign posts - check multiple possible field names
       const campaignPostsList = allPosts.filter(post => 
-        post.is_campaign_post || post.campaign_id || post.campaign
+        post.is_campaign_post || 
+        post.campaign_id || 
+        post.campaign || 
+        post.campaign_name || 
+        post.campaign_title ||
+        (post.campaign && Object.keys(post.campaign).length > 0)
       );
       
-      console.log('All posts count:', allPosts.length);
-      console.log('Campaign posts count:', campaignPostsList.length);
-      console.log('Campaign posts:', campaignPostsList.map(p => ({ id: p.id, is_campaign_post: p.is_campaign_post, campaign_id: p.campaign_id })));
+      console.log('[PROFILE] Campaign posts count:', campaignPostsList.length);
+      console.log('[PROFILE] Campaign posts:', campaignPostsList.map(p => ({ 
+        id: p.id, 
+        is_campaign_post: p.is_campaign_post, 
+        campaign_id: p.campaign_id,
+        campaign_name: p.campaign_name,
+        campaign_title: p.campaign_title
+      })));
+      
+      // If no campaign posts found, try to load from campaign-specific endpoint
+      if (campaignPostsList.length === 0) {
+        console.log('[PROFILE] No campaign posts found, trying campaign-specific endpoint...');
+        try {
+          const campaignData = await api.request(`/campaigns/profile/${targetUserId || ''}`);
+          console.log('[PROFILE] Campaign profile data:', campaignData);
+          // If campaign data has posts, use those
+          if (campaignData.campaign_posts && campaignData.campaign_posts.length > 0) {
+            setCampaignPosts(campaignData.campaign_posts);
+            return;
+          }
+        } catch (campaignError) {
+          console.log('[PROFILE] Campaign endpoint failed:', campaignError);
+        }
+      }
       
       setCampaignPosts(campaignPostsList);
     } catch (e) { 
-      console.log('Failed to load campaign posts:', e);
+      console.log('[PROFILE] Failed to load campaign posts:', e);
       setCampaignPosts([]);
     }
   };
@@ -683,7 +734,19 @@ export default function ProfileScreen({ navigation, route }) {
     const isVideo = !!(item.media || '').match(/\.(mp4|webm|ogg|mov)/i) || (item.media && item.media.includes('/video/'));
     const thumbnail = item.thumbnail || item.image || item.media;
     
-    console.log('ProfileScreen - renderPost item:', { id: item.id, media: item.media, thumbnail, isVideo });
+    console.log('ProfileScreen - renderPost item:', { 
+      id: item.id, 
+      media: item.media, 
+      thumbnail, 
+      isVideo,
+      likes: item.likes,
+      votes: item.votes,
+      comment_count: item.comment_count,
+      gifts_count: item.gifts_count,
+      gifts: item.gifts,
+      engagement: item.engagement,
+      shares: item.shares
+    });
     
     return (
       <View key={`${item.id || index}`} style={styles.gridItemWrapper}>
@@ -714,6 +777,32 @@ export default function ProfileScreen({ navigation, route }) {
               <Ionicons name="play" size={9} color="#fff" />
             </View>
           )}
+          
+          {/* Engagement Stats Overlay */}
+          <View style={styles.engagementOverlay}>
+            <View style={styles.engagementStats}>
+              <View style={styles.engagementItem}>
+                <Ionicons name="heart" size={10} color="#fff" />
+                <Text style={styles.engagementText}>{item.likes || item.votes || 0}</Text>
+              </View>
+              <View style={styles.engagementItem}>
+                <Ionicons name="chatbubble" size={10} color="#fff" />
+                <Text style={styles.engagementText}>{item.comment_count || 0}</Text>
+              </View>
+              <View style={styles.engagementItem}>
+                <Ionicons name="gift-outline" size={10} color="#fff" />
+                <Text style={styles.engagementText}>
+                  {(item.gifts_count || item.gifts || item.engagement?.gifts || 0) > 0 
+                    ? (item.gifts_count || item.gifts || item.engagement?.gifts) 
+                    : ''}
+                </Text>
+              </View>
+              <View style={styles.engagementItem}>
+                <Ionicons name="share-social-outline" size={10} color="#fff" />
+                <Text style={styles.engagementText}>{item.shares || 0}</Text>
+              </View>
+            </View>
+          </View>
           
           {/* Options button for own posts */}
           {isOwnProfile && (
@@ -2322,5 +2411,30 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
+  },
+  // Engagement Stats Overlay
+  engagementOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  engagementStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  engagementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  engagementText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '600',
   },
 });
