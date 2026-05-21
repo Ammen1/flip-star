@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
-import { Heart, Trophy, MessageCircle, Share2, Bookmark, MoreHorizontal, Eye, CheckCircle, Play, X, Send, Info, Link2, Download, Flag, Trash2, User, Gift, AtSign, Search } from 'lucide-react';
+import { Heart, Trophy, MessageCircle, Share2, Bookmark, MoreHorizontal, Eye, CheckCircle, Play, X, Send, Info, Link2, Download, Flag, Trash2, User, Gift, AtSign, Search, Zap } from 'lucide-react';
 import api from '../api';
 import config from '../config';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,6 +9,7 @@ import { HorizontalUserSuggestions } from './HorizontalUserSuggestions';
 import { UserSuggestions } from './UserSuggestions';
 import { SidebarCampaigns } from './SidebarCampaigns';
 import { SearchBar } from './SearchBar';
+import { BoostModal } from './BoostModal';
 
 const BACKEND = config.API_BASE_URL.replace('/api', '');
 
@@ -707,6 +708,7 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
   const [hoveredIdx, setHoveredIdx] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showBoostModal, setShowBoostModal] = useState(false);
   const menuRef = useRef(null);
 
   // Calculate position: appear to the left of the button, align top
@@ -794,8 +796,14 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
     onClose();
   };
 
+  const handleBoost = () => {
+    if (!api.hasToken()) { onRequireAuth?.(); onClose(); return; }
+    setShowBoostModal(true);
+  };
+
   const groups = [
     [
+      { Icon: Zap,      label: 'Boost',             action: handleBoost },
       { Icon: Info,     label: 'Post Info',        action: handlePostInfo },
       { Icon: Link2,    label: 'Copy Link',         action: handleCopy },
       { Icon: Bookmark, label: 'Save to Favorites', action: handleSaveFav },
@@ -972,6 +980,18 @@ const PostOptionsMenu = memo(function PostOptionsMenu({ post, currentUser, onClo
             </button>
           </div>
         </div>
+      )}
+
+      {/* Boost Modal */}
+      {showBoostModal && (
+        <BoostModal
+          reelId={post.id}
+          onClose={() => setShowBoostModal(false)}
+          onSuccess={() => {
+            setShowBoostModal(false);
+            onClose();
+          }}
+        />
       )}
     </>
   );
