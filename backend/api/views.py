@@ -2409,9 +2409,11 @@ def admin_moderate_report(request, report_id):
     )
 
     # Execute the action based on type
+    print(f'[MODERATION] Executing action: {action_taken}')
     if action_taken == 'warning':
         # Send warning notification to user
         if report.reported_user:
+            print(f'[MODERATION] Sending warning to user {report.reported_user.id}')
             _create_moderation_notification(
                 user=report.reported_user,
                 action_type='warning',
@@ -2420,12 +2422,17 @@ def admin_moderate_report(request, report_id):
                 report_id=report.id,
                 moderator=request.user
             )
-    
+            print(f'[MODERATION] Warning notification sent')
+        else:
+            print(f'[MODERATION] No reported_user found for warning')
+
     elif action_taken == 'content_removed':
         # Soft-delete the reel (mark as hidden instead of deleting)
         if report.reported_reel:
+            print(f'[MODERATION] Hiding reel {report.reported_reel.id}')
             report.reported_reel.is_hidden = True
             report.reported_reel.save(update_fields=['is_hidden'])
+            print(f'[MODERATION] Reel hidden successfully')
             # Notify the user
             if report.reported_user:
                 _create_moderation_notification(
@@ -2436,14 +2443,20 @@ def admin_moderate_report(request, report_id):
                     report_id=report.id,
                     moderator=request.user
                 )
-    
+                print(f'[MODERATION] Content removal notification sent')
+        else:
+            print(f'[MODERATION] No reported_reel found for content_removed')
+
     elif action_taken == 'shadowban':
         # Shadow ban the user - content hidden from others but visible to self
         if report.reported_user:
+            print(f'[MODERATION] Shadowbanning user {report.reported_user.id}')
             profile = getattr(report.reported_user, 'profile', None)
             if profile:
+                print(f'[MODERATION] Profile found, setting is_shadowbanned=True')
                 profile.is_shadowbanned = True
                 profile.save(update_fields=['is_shadowbanned'])
+                print(f'[MODERATION] Shadowban saved successfully')
                 _create_moderation_notification(
                     user=report.reported_user,
                     action_type='shadowban',
@@ -2452,16 +2465,24 @@ def admin_moderate_report(request, report_id):
                     report_id=report.id,
                     moderator=request.user
                 )
-    
+                print(f'[MODERATION] Shadowban notification sent')
+            else:
+                print(f'[MODERATION] No profile found for user {report.reported_user.id}')
+        else:
+            print(f'[MODERATION] No reported_user found for shadowban')
+
     elif action_taken == 'temp_ban':
         # Temporary ban - set expiration (default 72 hours)
         if report.reported_user:
+            print(f'[MODERATION] Temporarily banning user {report.reported_user.id}')
             profile = getattr(report.reported_user, 'profile', None)
             if profile:
                 # Default to 72 hours from now, can be customized
                 ban_duration_hours = 72
                 profile.ban_expires_at = timezone.now() + timedelta(hours=ban_duration_hours)
+                print(f'[MODERATION] Setting ban_expires_at to {profile.ban_expires_at}')
                 profile.save(update_fields=['ban_expires_at'])
+                print(f'[MODERATION] Temp ban saved successfully')
                 _create_moderation_notification(
                     user=report.reported_user,
                     action_type='temp_ban',
@@ -2470,12 +2491,19 @@ def admin_moderate_report(request, report_id):
                     report_id=report.id,
                     moderator=request.user
                 )
-    
+                print(f'[MODERATION] Temp ban notification sent')
+            else:
+                print(f'[MODERATION] No profile found for user {report.reported_user.id}')
+        else:
+            print(f'[MODERATION] No reported_user found for temp_ban')
+
     elif action_taken == 'permanent_ban':
         # Permanent ban - deactivate account
         if report.reported_user:
+            print(f'[MODERATION] Permanently banning user {report.reported_user.id}')
             report.reported_user.is_active = False
             report.reported_user.save(update_fields=['is_active'])
+            print(f'[MODERATION] Permanent ban saved successfully')
             _create_moderation_notification(
                 user=report.reported_user,
                 action_type='permanent_ban',
@@ -2484,9 +2512,13 @@ def admin_moderate_report(request, report_id):
                 report_id=report.id,
                 moderator=request.user
             )
-    
+            print(f'[MODERATION] Permanent ban notification sent')
+        else:
+            print(f'[MODERATION] No reported_user found for permanent_ban')
+
     elif action_taken == 'no_action':
         # No action taken - just resolve the report
+        print(f'[MODERATION] No action taken, just resolving report')
         pass
 
     # Mark report resolved
