@@ -1,7 +1,6 @@
 """
-Gamification API - Daily Spin, Coin Gifts, Login Bonuses, Streaks
+Gamification API - Daily Login Streak and Coin Gifts
 """
-import random
 from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import transaction
@@ -58,27 +57,17 @@ def debug_gamification(request):
             'message': 'Gamification system not working'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Spin reward tiers
-SPIN_REWARDS = [
-    {'type': 'coins_small', 'amount': 10, 'weight': 40, 'label': '10 Coins', 'emoji': '🪙'},
-    {'type': 'coins_medium', 'amount': 25, 'weight': 30, 'label': '25 Coins', 'emoji': '🪙🪙'},
-    {'type': 'coins_large', 'amount': 50, 'weight': 15, 'label': '50 Coins', 'emoji': '💰'},
-    {'type': 'coins_jackpot', 'amount': 100, 'weight': 5, 'label': '100 Coins', 'emoji': '🏆'},
-    {'type': 'xp_boost', 'amount': 50, 'weight': 8, 'label': '50 XP', 'emoji': '⚡'},
-    {'type': 'streak_save', 'amount': 1, 'weight': 2, 'label': 'Streak Saver', 'emoji': '🛡️'},
-]
-
 DAILY_LOGIN_BONUS = {
     'daily': {'coins': 3, 'label': 'Daily Bonus'},
     7: {'coins': 50, 'label': '7 Day Streak Bonus! 🎉'},
-    30: {'coins': 150, 'label': '30 Day Streak Bonus! �'},
+    30: {'coins': 150, 'label': '30 Day Streak Bonus! 🎉'},
 }
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_gamification_status(request):
-    """Get user's gamification status - coins, streaks, spin availability"""
+    """Get user's gamification status - coins, streaks"""
     try:
         profile, created = UserProfile.objects.get_or_create(user=request.user)
         if created:
@@ -94,9 +83,6 @@ def get_gamification_status(request):
 
     try:
         today = timezone.localdate()
-
-        # Check if can spin today
-        can_spin = profile.last_spin_date != today
 
         # Check login bonus for today
         login_bonus_available = profile.last_login_date != today
@@ -122,12 +108,6 @@ def get_gamification_status(request):
                 'earned_total': coin_balance.total_earned,
                 'spent_total': coin_balance.total_spent,
             },
-            'spin': {
-                'can_spin': can_spin,
-                'last_spin_date': profile.last_spin_date,
-                'spins_total': profile.spins_total,
-                'rewards_preview': SPIN_REWARDS,
-            },
             'login_streak': {
                 'current': profile.login_streak,
                 'longest': profile.longest_login_streak,
@@ -151,102 +131,11 @@ def get_gamification_status(request):
         print(f'[gamification_status] Error: {e}')
         return Response({
             'coins': {'balance': 0, 'earned_total': 0, 'spent_total': 0},
-            'spin': {'can_spin': False, 'rewards_preview': SPIN_REWARDS},
             'login_streak': {'current': 0, 'longest': 0, 'bonus_available': False},
             'gifts': {'sent_today': 0, 'received_today': 0, 'sent_total': 0, 'received_total': 0},
             'points': {'balance': 0, 'earned_total': 0, 'withdrawn_total': 0}
         })
 
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def daily_spin(request):
-    """Perform daily spin wheel"""
-    profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    coin_balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-    today = timezone.localdate()
-    
-    # Check if already spun today
-    if profile.last_spin_date == today:
-        return Response({
-            'error': 'Already spun today',
-            'next_spin': 'tomorrow'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Improved weighted random selection with better randomness
-    weights = [r['weight'] for r in SPIN_REWARDS]
-    total_weight = sum(weights)
-    
-    # Use cryptographically secure random for better randomness
-    random_num = random.SystemRandom().uniform(0, total_weight)
-    
-    # Shuffle rewards to avoid pattern bias
-    shuffled_rewards = SPIN_REWARDS.copy()
-    random.SystemRandom().shuffle(shuffled_rewards)
-    
-    cumulative = 0
-    selected_reward = None
-    for reward in shuffled_rewards:
-        cumulative += reward['weight']
-        if random_num <= cumulative:
-            selected_reward = reward
-            break
-    
-    if not selected_reward:
-        selected_reward = SPIN_REWARDS[0]  # Default fallback
-    
-    # Process reward
-    coins_earned = 0
-    xp_earned = 0
-    streak_saved = False
-    
-    with transaction.atomic():
-        if selected_reward['type'] == 'coins_small':
-            coins_earned = selected_reward['amount']
-        elif selected_reward['type'] == 'coins_medium':
-            coins_earned = selected_reward['amount']
-        elif selected_reward['type'] == 'coins_large':
-            coins_earned = selected_reward['amount']
-        elif selected_reward['type'] == 'coins_jackpot':
-            coins_earned = selected_reward['amount']
-        elif selected_reward['type'] == 'xp_boost':
-            xp_earned = selected_reward['amount']
-            profile.xp += xp_earned
-        elif selected_reward['type'] == 'streak_save':
-            streak_saved = True
-        
-        # Update coin balance using UserCoinBalance
-        if coins_earned > 0:
-            coin_balance.add_earned(coins_earned, transaction_type='spin_reward', description=f'Daily spin reward: {selected_reward["label"]}')
-        
-        # Update profile
-        profile.spins_total += 1
-        profile.last_spin_date = today
-        profile.save()
-        
-        # Log activity for campaign scoring
-        GamificationActivity.objects.create(
-            user=request.user,
-            activity_type='spin_reward',
-            points_value=coins_earned,
-            activity_date=today,
-            metadata={
-                'spin_type': selected_reward['type'],
-                'label': selected_reward['label'],
-                'streak_saved': streak_saved
-            }
-        )
-    
-    return Response({
-        'reward': selected_reward,
-        'coins_earned': coins_earned,
-        'xp_earned': xp_earned,
-        'streak_saved': streak_saved,
-        'new_balance': coin_balance.balance,
-        'spins_total': profile.spins_total,
-        'can_spin_again': False,
-        'next_spin': 'tomorrow'
-    })
 
 
 @api_view(['POST'])
@@ -258,8 +147,11 @@ def claim_login_bonus(request):
     today = timezone.localdate()
     now = timezone.now()
 
+    print(f"[STREAK DEBUG] User: {request.user.username}, Today: {today}, Last login: {profile.last_login_date}, Current streak: {profile.login_streak}")
+
     # Check if already claimed today
     if profile.last_login_date == today:
+        print(f"[STREAK DEBUG] Already claimed today")
         return Response({
             'error': 'Login bonus already claimed today',
             'next_claim': 'tomorrow'
@@ -268,16 +160,24 @@ def claim_login_bonus(request):
     # Check streak continuity (use local calendar days)
     if profile.last_login_date:
         days_since_last = (today - profile.last_login_date).days
+        print(f"[STREAK DEBUG] Days since last login: {days_since_last}")
         if days_since_last > 1:
-            # Streak broken — reset before increment (so it lands on 1)
+            # Streak broken — reset to 0 before increment
+            print(f"[STREAK DEBUG] Streak broken, resetting to 0")
             profile.login_streak = 0
+        elif days_since_last == 1:
+            # Consecutive day - keep current streak, will increment below
+            print(f"[STREAK DEBUG] Consecutive day, keeping streak at {profile.login_streak}")
+        # days_since_last == 0 means already claimed (handled above)
     else:
-        # First-ever claim — start fresh
+        # First-ever claim — start at 0, will increment to 1
+        print(f"[STREAK DEBUG] First ever claim, setting streak to 0")
         profile.login_streak = 0
 
     # Increment streak (capped at 30)
     profile.login_streak = min(profile.login_streak + 1, 30)
     profile.last_login_date = today
+    print(f"[STREAK DEBUG] New streak: {profile.login_streak}")
     
     # Update longest streak
     if profile.login_streak > profile.longest_login_streak:
@@ -287,13 +187,15 @@ def claim_login_bonus(request):
     coins_earned = DAILY_LOGIN_BONUS['daily']['coins']  # Base daily bonus
     label = DAILY_LOGIN_BONUS['daily']['label']
     
-    # Add milestone bonuses
+    # Add milestone bonuses (REPLACE daily bonus, not add to it)
     if profile.login_streak == 7:
         coins_earned = DAILY_LOGIN_BONUS[7]['coins']
         label = DAILY_LOGIN_BONUS[7]['label']
+        print(f"[STREAK DEBUG] 7 day milestone! Earning {coins_earned} coins")
     elif profile.login_streak == 30:
         coins_earned = DAILY_LOGIN_BONUS[30]['coins']
         label = DAILY_LOGIN_BONUS[30]['label']
+        print(f"[STREAK DEBUG] 30 day milestone! Earning {coins_earned} coins")
     
     with transaction.atomic():
         # Update coin balance using UserCoinBalance
@@ -313,6 +215,8 @@ def claim_login_bonus(request):
                 'label': label
             }
         )
+    
+    print(f"[STREAK DEBUG] Bonus claimed: {coins_earned} coins, New balance: {coin_balance.balance}")
     
     return Response({
         'streak_day': profile.login_streak,
