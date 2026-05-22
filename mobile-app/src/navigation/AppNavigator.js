@@ -37,6 +37,12 @@ import NotificationsScreen from '../screens/NotificationsScreen';
 import WebsiteCoinScreen from '../screens/WebsiteCoinScreen';
 import CoinPurchaseScreen from '../screens/CoinPurchaseScreen';
 
+// Privacy screens
+import ConsentDashboardScreen from '../screens/ConsentDashboard';
+import DataExportScreen from '../screens/DataExportScreen';
+import PrivacyPolicyScreen from '../screens/PrivacyPolicyScreen';
+import EURightsScreen from '../screens/EURightsScreen';
+
 // Configure deep linking
 const linking = {
   prefixes: [
@@ -207,6 +213,12 @@ function MainStack() {
         <Stack.Screen name="Notifications"   component={NotificationsScreen} />
         <Stack.Screen name="WebsiteCoin"     component={WebsiteCoinScreen} />
         <Stack.Screen name="CoinPurchase"    component={CoinPurchaseScreen} />
+        
+        {/* Privacy screens */}
+        <Stack.Screen name="ConsentDashboard" component={ConsentDashboardScreen} />
+        <Stack.Screen name="DataExport"      component={DataExportScreen} />
+        <Stack.Screen name="PrivacyPolicy"   component={PrivacyPolicyScreen} />
+        <Stack.Screen name="EURights"        component={EURightsScreen} />
       </Stack.Navigator>
     </SubscriptionGate>
   );
