@@ -45,6 +45,177 @@ Flipstar is a gamified social media platform deployed on Ethio Telecom cloud inf
 
 ### Authentication Methods
 
+<<<<<<< HEAD
+**JWT Token Authentication:**
+```
+POST /api/auth/login/
+{
+  "username": "user@example.com",
+  "password": "password"
+}
+
+Response:
+{
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "user": {
+    "id": 123,
+    "username": "username",
+    "email": "user@example.com"
+  }
+}
+```
+
+**Token Usage:**
+```
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+```
+
+### Public APIs
+
+**Content APIs:**
+- `GET /api/posts/` - List posts with pagination
+- `POST /api/posts/create/` - Create new post (authenticated)
+- `GET /api/posts/{id}/` - Get post details
+- `POST /api/posts/{id}/like/` - Like a post
+- `POST /api/posts/{id}/comment/` - Comment on post
+
+**User APIs:**
+- `GET /api/users/profile/` - Get user profile
+- `PUT /api/users/profile/` - Update profile
+- `GET /api/users/{id}/posts/` - Get user posts
+
+**Campaign APIs:**
+- `GET /api/campaigns/` - List active campaigns
+- `GET /api/campaigns/{id}/` - Campaign details
+- `POST /api/campaigns/{id}/enter/` - Join campaign
+- `GET /api/campaigns/{id}/leaderboard/` - Campaign leaderboard
+
+### Admin/Internal APIs
+
+**Content Moderation:**
+- `POST /api/admin/posts/{id}/moderate/` - Moderate content
+- `GET /api/admin/reports/` - Get reported content
+- `POST /api/admin/users/{id}/suspend/` - Suspend user
+
+**Coin Management:**
+- `POST /api/admin/coins/adjust/` - Adjust user coin balance
+- `GET /api/admin/transactions/` - View transaction history
+- `POST /api/admin/coins/tax-calculation/` - Calculate taxes
+
+**User Management:**
+- `GET /api/admin/users/` - List all users
+- `POST /api/admin/users/{id}/verify/` - Verify user KYC
+- `PUT /api/admin/users/{id}/role/` - Update user role
+
+## Backend Infrastructure Details
+
+### Server Architecture
+
+**Application Servers:**
+- **Web Server:** Nginx (SSL termination, static file serving)
+- **Application Server:** Django with Gunicorn/uWSGI
+- **Database Server:** PostgreSQL (primary database)
+- **Cache Server:** Redis (sessions, caching)
+
+**Service Tiers:**
+```
+Load Balancer (Nginx)
+├── Web Servers (Django)
+│   ├── API Endpoints
+│   ├── Business Logic
+│   └── Authentication
+├── Database Servers (PostgreSQL)
+│   ├── Primary Database
+│   ├── Read Replicas
+│   └── Backup Servers
+└── Cache Servers (Redis)
+    ├── Session Storage
+    ├── Application Cache
+    └── Message Queue
+```
+
+**Note:** Specific IP addresses are not provided in this documentation for security reasons. IP addresses should be obtained from your cloud provider's console or infrastructure documentation.
+
+## Encryption & Security Standards
+
+### In Transit Encryption
+
+**HTTPS/TLS:**
+- **Protocol:** TLS 1.2 and 1.3
+- **Cipher Suites:** Strong encryption (AES-256)
+- **Certificates:** Valid SSL certificates from trusted CA
+- **HSTS:** HTTP Strict Transport Security enabled
+
+**API Communication:**
+- **REST APIs:** HTTPS only
+- **WebSocket:** WSS (Secure WebSocket)
+- **File Uploads:** Encrypted transfer
+- **Database Connections:** SSL/TLS enabled
+
+### At Rest Encryption
+
+**Database Encryption:**
+- **PostgreSQL:** Transparent Data Encryption (TDE)
+- **Sensitive Fields:** Column-level encryption
+- **Backups:** Encrypted backup files
+- **Connection Strings:** Encrypted configuration
+
+**File Storage:**
+- **Cloud Storage:** Server-side encryption (AES-256)
+- **User Files:** Encrypted at rest
+- **Thumbnails:** Encrypted storage
+- **CDN:** Secure distribution
+
+**Application Data:**
+- **Environment Variables:** Encrypted secrets
+- **Configuration Files:** Encrypted storage
+- **Logs:** Sensitive data redaction
+- **Cache:** Encrypted Redis data
+
+### Security Measures
+
+**Access Control:**
+- **Authentication:** JWT tokens with expiration
+- **Authorization:** Role-based access control (RBAC)
+- **API Rate Limiting:** Prevent abuse
+- **Input Validation:** Sanitize all inputs
+
+**Data Protection:**
+- **PII Protection:** Personal data encryption
+- **GDPR Compliance:** Data handling policies
+- **Audit Logging:** All actions logged
+- **Data Retention:** Automatic cleanup policies
+
+**Monitoring & Alerting:**
+- **Security Events:** Real-time monitoring
+- **Failed Logins:** Account lockout
+- **Anomaly Detection:** Unusual activity alerts
+- **Compliance Reports:** Regular security audits
+
+## Security Best Practices
+
+### Development Security
+- Code reviews for security vulnerabilities
+- Dependency scanning for known issues
+- Secure coding practices training
+- Regular penetration testing
+
+### Operational Security
+- Regular security updates and patches
+- Backup encryption and testing
+- Incident response procedures
+- Security team training
+
+### Compliance
+- Data protection regulations compliance
+- Industry security standards
+- Third-party security certifications
+- Regular compliance audits
+
+---
+
+**Note:** This documentation is based on the current codebase and architecture. For production deployment, additional security measures and infrastructure details should be implemented based on your specific requirements and compliance needs.
+=======
 #### Primary Authentication: Phone OTP (Onevas SMS)
 
 **Method:** SMS-based OTP verification via Onevas service  
@@ -827,3 +998,4 @@ DATABASES = {
 **Document Classification:** Confidential  
 **Distribution:** Authorized personnel only  
 **Next Review Date:** August 22, 2026 (90 days)
+>>>>>>> 5a9d93d435d5235ce3ff71a3385efd56876254de
