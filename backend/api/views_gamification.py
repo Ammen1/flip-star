@@ -13,6 +13,7 @@ from django.contrib.auth.models import User
 
 from .models import UserProfile
 from .models_campaign_extended import GamificationActivity
+from .models_contest import UserCoinBalance
 
 
 @api_view(['GET'])
@@ -82,6 +83,8 @@ def get_gamification_status(request):
         profile, created = UserProfile.objects.get_or_create(user=request.user)
         if created:
             print(f"Created new UserProfile for user {request.user.username}")
+        
+        coin_balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
     except Exception as e:
         print(f"Error creating UserProfile for {request.user.username}: {e}")
         return Response(
@@ -115,9 +118,9 @@ def get_gamification_status(request):
 
         return Response({
             'coins': {
-                'balance': profile.coins,
-                'earned_total': profile.coins_earned_total,
-                'spent_total': profile.coins_spent_total,
+                'balance': coin_balance.balance,
+                'earned_total': coin_balance.total_earned,
+                'spent_total': coin_balance.total_spent,
             },
             'spin': {
                 'can_spin': can_spin,
@@ -160,6 +163,7 @@ def get_gamification_status(request):
 def daily_spin(request):
     """Perform daily spin wheel"""
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    coin_balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
     today = timezone.localdate()
     
     # Check if already spun today
@@ -211,9 +215,11 @@ def daily_spin(request):
         elif selected_reward['type'] == 'streak_save':
             streak_saved = True
         
+        # Update coin balance using UserCoinBalance
+        if coins_earned > 0:
+            coin_balance.add_earned(coins_earned, transaction_type='spin_reward', description=f'Daily spin reward: {selected_reward["label"]}')
+        
         # Update profile
-        profile.coins += coins_earned
-        profile.coins_earned_total += coins_earned
         profile.spins_total += 1
         profile.last_spin_date = today
         profile.save()
@@ -236,7 +242,7 @@ def daily_spin(request):
         'coins_earned': coins_earned,
         'xp_earned': xp_earned,
         'streak_saved': streak_saved,
-        'new_balance': profile.coins,
+        'new_balance': coin_balance.balance,
         'spins_total': profile.spins_total,
         'can_spin_again': False,
         'next_spin': 'tomorrow'
@@ -248,6 +254,7 @@ def daily_spin(request):
 def claim_login_bonus(request):
     """Claim daily login bonus"""
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    coin_balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
     today = timezone.localdate()
     now = timezone.now()
 
@@ -289,8 +296,10 @@ def claim_login_bonus(request):
         label = DAILY_LOGIN_BONUS[30]['label']
     
     with transaction.atomic():
-        profile.coins += coins_earned
-        profile.coins_earned_total += coins_earned
+        # Update coin balance using UserCoinBalance
+        coin_balance.add_earned(coins_earned, transaction_type='daily_login', description=f'Login bonus: {label}')
+        
+        # Update profile
         profile.save()
         
         # Log activity
@@ -309,7 +318,7 @@ def claim_login_bonus(request):
         'streak_day': profile.login_streak,
         'coins_earned': coins_earned,
         'label': label,
-        'new_balance': profile.coins,
+        'new_balance': coin_balance.balance,
         'login_streak': profile.login_streak,
         'longest_streak': profile.longest_login_streak,
         'next_bonus': DAILY_LOGIN_BONUS.get('daily')
@@ -343,6 +352,8 @@ def send_coin_gift(request):
     
     sender_profile, _ = UserProfile.objects.get_or_create(user=request.user)
     recipient_profile, _ = UserProfile.objects.get_or_create(user=recipient)
+    sender_coin_balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+    recipient_coin_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
     
     today = timezone.localdate()
     
@@ -359,25 +370,29 @@ def send_coin_gift(request):
             'sent_today': sender_profile.gifts_sent_today
         }, status=status.HTTP_400_BAD_REQUEST)
     
-    # Check sender balance
-    if sender_profile.coins < amount:
+    # Check sender balance using UserCoinBalance
+    if sender_coin_balance.balance < amount:
         return Response({
             'error': 'Insufficient coins',
-            'balance': sender_profile.coins,
+            'balance': sender_coin_balance.balance,
             'required': amount
         }, status=status.HTTP_400_BAD_REQUEST)
     
     with transaction.atomic():
-        # Deduct from sender
-        sender_profile.coins -= amount
-        sender_profile.coins_spent_total += amount
+        # Deduct from sender using UserCoinBalance (restrict to purchased coins for gifting)
+        try:
+            sender_coin_balance.spend_coins(amount, transaction_type='gift_sent', restrict_earned=True, description=f'Gift to {recipient.username}')
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Add to recipient using UserCoinBalance
+        recipient_coin_balance.add_earned(amount, transaction_type='gift_received', description=f'Gift from {request.user.username}')
+        
+        # Update profile counters
         sender_profile.gifts_sent_today += 1
         sender_profile.gifts_sent_total += 1
         sender_profile.save()
         
-        # Add to recipient
-        recipient_profile.coins += amount
-        recipient_profile.coins_earned_total += amount
         recipient_profile.gifts_received_today += 1
         recipient_profile.gifts_received_total += 1
         recipient_profile.save()
@@ -415,7 +430,7 @@ def send_coin_gift(request):
             'id': recipient.id,
             'username': recipient.username
         },
-        'new_balance': sender_profile.coins,
+        'new_balance': sender_coin_balance.balance,
         'gifts_sent_today': sender_profile.gifts_sent_today,
         'gifts_remaining_today': 10 - sender_profile.gifts_sent_today
     })
