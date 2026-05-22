@@ -1122,33 +1122,12 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Invalid payment method'}, status=400)
     
     def send_onevas_charge(self, user, tier):
-        """Send charging request to Onevas"""
-        profile = user.profile
-        
-        # Onevas charging endpoint
-        url = 'https://onevas.alet.io/api/partner/charge'
-        
-        payload = {
-            'application_key': tier.application_key,
-            'phone_number': profile.phone_number,
-            'product_number': tier.product_id
-        }
-        
-        try:
-            response = requests.post(url, json=payload, timeout=30)
-            
-            if response.status_code == 200:
-                return Response({
-                    'status': 'pending',
-                    'message': 'Charging request sent. Please confirm via SMS.',
-                    'onevas_code': tier.onevas_code,
-                    'short_code': tier.short_code
-                })
-            else:
-                return Response({'error': 'Failed to send charging request'}, status=500)
-        
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+        """DISABLED: Ethio Telecom SIM cards are only accessible for SMS OTP purposes.
+        Onevas charging has been disabled to ensure phone numbers are used solely for OTP verification."""
+        return Response(
+            {'error': 'Onevas charging is disabled. Ethio Telecom SIM cards are only accessible for SMS OTP verification.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
     
     def initiate_telebirr_payment(self, user, tier):
         """Initiate Telebirr payment for subscription"""
