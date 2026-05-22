@@ -198,7 +198,7 @@ from .views_scoring import (
     admin_calculate_final_scores, get_finalists_for_voting, cast_vote, get_user_votes
 )
 from .views_gamification import (
-    get_gamification_status, daily_spin, claim_login_bonus,
+    get_gamification_status, claim_login_bonus,
     send_coin_gift, get_gift_history, get_recent_activity, check_in,
     debug_gamification
 )
@@ -369,7 +369,6 @@ urlpatterns = [
     # Gamification
     path('gamification/status/', get_gamification_status, name='gamification-status'),
     path('gamification/debug/', debug_gamification, name='gamification-debug'),
-    path('gamification/spin/', daily_spin, name='daily-spin'),
     path('gamification/login-bonus/', claim_login_bonus, name='claim-login-bonus'),
     path('gamification/gift/', send_coin_gift, name='send-coin-gift'),
     path('gamification/gifts/history/', get_gift_history, name='gift-history'),
