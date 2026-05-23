@@ -710,32 +710,6 @@ const api = {
       method: 'POST',
     }),
 
-  // Privacy settings
-  getPrivacySettings: () =>
-    api.request('/auth/privacy-settings/'),
-  
-  updatePrivacySettings: (settings) =>
-    api.request('/auth/privacy-settings/update/', {
-      method: 'PATCH',
-      body: JSON.stringify(settings),
-    }),
-
-  // Data export
-  exportUserData: () =>
-    api.request('/auth/export-data/', {
-      method: 'POST',
-    }),
-
-  // Consent management
-  getConsentStatus: () =>
-    api.request('/auth/consent-status/'),
-  
-  updateConsent: (consentType, granted) =>
-    api.request('/auth/update-consent/', {
-      method: 'POST',
-      body: JSON.stringify({ type: consentType, granted }),
-    }),
-
 };
 
 // Initialize on load

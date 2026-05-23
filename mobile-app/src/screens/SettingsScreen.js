@@ -272,20 +272,6 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        // Load privacy settings from backend
-        try {
-          const privacyData = await api.getPrivacySettings();
-          if (privacyData && !privacyData.error) {
-            setPrivacy({
-              privateAccount: privacyData.privateAccount || false,
-              showActivity: privacyData.showActivity || true,
-              allowMessages: privacyData.allowMessages || true,
-            });
-          }
-        } catch (error) {
-          console.log('Failed to load privacy settings:', error);
-        }
-        
         // Load notification settings from backend
         try {
           const notifData = await api.getNotificationSettings();
@@ -371,26 +357,18 @@ export default function SettingsScreen({ navigation }) {
     
     // Map frontend keys to backend keys
     const backendKeyMap = {
-      privateAccount: 'privateAccount',
-      showActivity: 'showActivity', 
-      allowMessages: 'allowMessages',
+      privateAccount: 'private_account',
+      showActivity: 'show_activity_status', 
+      allowMessages: 'allow_messages_from_anyone',
     };
     
     // Sync with backend
     try {
-      const response = await api.updatePrivacySettings({ [backendKeyMap[key]]: newVal });
-      
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      
-      // Show success feedback
-      Alert.alert('Success', 'Privacy setting updated successfully');
+      await api.updatePrivacySettings({ [backendKeyMap[key]]: newVal });
     } catch (error) {
-      console.error('Failed to update privacy setting:', error);
       // Revert on error
       setPrivacy({ ...privacy, [key]: !newVal });
-      Alert.alert('Error', 'Failed to update privacy settings. Please try again.');
+      Alert.alert('Error', 'Failed to update privacy settings');
     }
   };
 
@@ -527,10 +505,6 @@ export default function SettingsScreen({ navigation }) {
         {/* Privacy */}
         <SectionLabel colors={colors}>{t('privacy')}</SectionLabel>
         <SectionCard colors={colors}>
-          <SettingRow icon="shield-checkmark" label="Privacy Dashboard" subtitle="Manage your data sharing preferences" onPress={() => navigation.navigate('ConsentDashboard')} colors={colors} />
-          <SettingRow icon="download" label="Export My Data" subtitle="Download a copy of your personal information" onPress={() => navigation.navigate('DataExport')} colors={colors} />
-          <SettingRow icon="document-text" label="Privacy Policy" subtitle="Read our privacy policy" onPress={() => navigation.navigate('PrivacyPolicy')} colors={colors} />
-          <SettingRow icon="scale-outline" label="EU Privacy Rights" subtitle="Your GDPR rights and protections" onPress={() => navigation.navigate('EURights')} colors={colors} />
           <SettingRow icon="eye-off-outline" label={t('privateAccount')} subtitle="Only followers can see your posts" isSwitch switchValue={privacy.privateAccount} onSwitch={() => handlePrivacyToggle('privateAccount')} colors={colors} />
           <SettingRow icon="pulse-outline" label={t('showActivity')} subtitle="Show your activity status" isSwitch switchValue={privacy.showActivity} onSwitch={() => handlePrivacyToggle('showActivity')} colors={colors} />
           <SettingRow icon="mail-outline" label={t('allowMessages')} subtitle="Receive messages from anyone" isSwitch switchValue={privacy.allowMessages} onSwitch={() => handlePrivacyToggle('allowMessages')} colors={colors} />
@@ -542,7 +516,7 @@ export default function SettingsScreen({ navigation }) {
         <SectionCard colors={colors}>
           <SettingRow icon={darkMode ? "moon-outline" : "sunny-outline"} label={t('darkMode')} isSwitch switchValue={darkMode} onSwitch={handleDarkModeToggle} colors={colors} />
           <SettingRow icon="globe-outline" label={t('language')} subtitle="English" onPress={() => setShowLangModal(true)} colors={colors} />
-          <SettingRow icon="notifications-outline" label="Notification Sound" subtitle="Choose a notification sound" onPress={() => console.log('Notification Sound')} colors={colors} />
+          <SettingRow icon="ios-notifications-outline" label="Notification Sound" subtitle="Choose a notification sound" onPress={() => console.log('Notification Sound')} colors={colors} />
         </SectionCard>
 
         {/* FAQ */}
