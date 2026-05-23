@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   ActivityIndicator, Alert, Modal, TextInput, RefreshControl, FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../api';
 
@@ -33,52 +34,38 @@ export default function WalletScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('overview');
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [showReinvestModal, setShowReinvestModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawAccount, setWithdrawAccount] = useState('');
   const [withdrawMethod, setWithdrawMethod] = useState('telebirr');
+  const [reinvestAmount, setReinvestAmount] = useState('1');
   const [processing, setProcessing] = useState(false);
   const [packages, setPackages] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [phone, setPhone] = useState('');
 
-  useEffect(() => { loadAll(); }, []);
-
-  const loadAll = async (silent = false) => {
+  const loadAll = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true); else setRefreshing(true);
       const [s, c, pkgs, profile] = await Promise.all([
-        api.request('/wallet/'),
-        api.request('/wallet/config/').catch(() => ({})),
-        api.request('/coins/packages/').catch(() => []),
-        api.request('/profile/me/').catch(() => ({})),
+        api.request('/wallet/', { skipCache: true }),
+        api.request('/wallet/config/', { skipCache: true }).catch(() => ({})),
+        api.request('/coins/packages/', { skipCache: true }).catch(() => []),
+        api.request('/profile/me/', { skipCache: true }).catch(() => ({})),
       ]);
       console.log('Wallet data:', s);
       console.log('Profile data:', profile);
       setSummary({ ...s, profile });
       setConfig(c);
       setPackages(Array.isArray(pkgs) ? pkgs : (pkgs.results || []));
-      
-      // Always load all transactions to match website behavior
-      if (!transactions.length) {
-        loadTransactions();
-      } else if (silent) {
-        // If refreshing silently, still load all transactions to get latest
-        loadTransactions();
-      }
     } catch (e) { 
       console.error('Wallet load error:', e);
       Alert.alert('Error', 'Failed to load wallet'); 
     }
     finally { setLoading(false); setRefreshing(false); }
-  };
+  }, []);
 
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    if (tab === 'transactions' && transactions.length === 0) loadTransactions();
-    if (tab === 'withdrawals' && withdrawals.length === 0) loadWithdrawals();
-  };
-
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     try {
       let allTransactions = [];
       let page = 1;
@@ -87,7 +74,7 @@ export default function WalletScreen({ navigation }) {
       
       while (hasMore && consecutiveEmptyPages < 3) {
         try {
-          const data = await api.request(`/wallet/transactions/?page=${page}&page_size=100`);
+          const data = await api.request(`/wallet/transactions/?page=${page}&page_size=100`, { skipCache: true });
           const pageTransactions = data.results || [];
           
           if (pageTransactions.length > 0) {
@@ -128,9 +115,9 @@ export default function WalletScreen({ navigation }) {
       // Fallback to empty array to prevent UI issues
       setTransactions([]);
     }
-  };
+  }, []);
 
-  const loadWithdrawals = async () => {
+  const loadWithdrawals = useCallback(async () => {
     try {
       let allWithdrawals = [];
       let page = 1;
@@ -138,7 +125,7 @@ export default function WalletScreen({ navigation }) {
       
       while (hasMore) {
         try {
-          const data = await api.request(`/wallet/withdrawals/?page=${page}&page_size=100`);
+          const data = await api.request(`/wallet/withdrawals/?page=${page}&page_size=100`, { skipCache: true });
           const pageWithdrawals = data.results || [];
           
           if (pageWithdrawals.length > 0) {
@@ -159,6 +146,34 @@ export default function WalletScreen({ navigation }) {
       console.error('Error loading withdrawals:', e);
       setWithdrawals([]);
     }
+  }, []);
+
+  const refreshWalletData = useCallback(async (silent = true) => {
+    api.invalidateCache('/wallet/');
+    api.invalidateCache('/wallet/transactions/');
+    api.invalidateCache('/wallet/withdrawals/');
+    api.invalidateCache('/profile/me/');
+    await Promise.all([
+      loadAll(silent),
+      loadTransactions(),
+      activeTab === 'withdrawals' || withdrawals.length > 0 ? loadWithdrawals() : Promise.resolve(),
+    ]);
+  }, [activeTab, withdrawals.length, loadAll, loadTransactions, loadWithdrawals]);
+
+  useEffect(() => {
+    refreshWalletData(false);
+  }, [refreshWalletData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshWalletData(true);
+    }, [refreshWalletData])
+  );
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'transactions' && transactions.length === 0) loadTransactions();
+    if (tab === 'withdrawals' && withdrawals.length === 0) loadWithdrawals();
   };
 
   const handleWithdraw = async () => {
@@ -178,7 +193,7 @@ export default function WalletScreen({ navigation }) {
       Alert.alert('Success', 'Withdrawal request submitted');
       setShowWithdrawModal(false);
       setWithdrawAmount(''); setWithdrawAccount('');
-      loadAll(true);
+      await refreshWalletData(true);
     } catch (e) { Alert.alert('Error', e.message || 'Withdrawal failed'); }
     finally { setProcessing(false); }
   };
@@ -211,7 +226,7 @@ export default function WalletScreen({ navigation }) {
                 'Success', 
                 `Monetization request submitted!\n${availableCoins} coins will be converted to ${(availableCoins * 0.08).toFixed(2)} ETB`
               );
-              loadAll();
+              refreshWalletData(true);
             } catch (error) {
               Alert.alert('Error', 'Monetization failed. Please try again.');
             }
@@ -219,6 +234,32 @@ export default function WalletScreen({ navigation }) {
         }
       ]
     );
+  };
+
+  const handleReinvest = async () => {
+    const amount = parseInt(reinvestAmount, 10);
+    const availablePoints = points.current || 0;
+
+    if (!amount || amount < 1 || amount > availablePoints) {
+      Alert.alert('Error', 'Enter a valid amount of points to convert.');
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const response = await api.request('/wallet/reinvest/', {
+        method: 'POST',
+        body: JSON.stringify({ points: amount }),
+      });
+      Alert.alert('Success', response.message || 'Points converted to coins');
+      setShowReinvestModal(false);
+      setReinvestAmount('1');
+      await refreshWalletData(true);
+    } catch (e) {
+      Alert.alert('Error', e.message || 'Conversion failed');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleTopUp = async () => {
@@ -233,7 +274,7 @@ export default function WalletScreen({ navigation }) {
       });
       Alert.alert('Payment Initiated', res.message || 'Complete payment in telebirr app');
       setShowTopUpModal(false);
-      loadAll(true);
+      await refreshWalletData(true);
     } catch (e) { Alert.alert('Error', e.message || 'Payment failed'); }
     finally { setProcessing(false); }
   };
@@ -331,13 +372,13 @@ export default function WalletScreen({ navigation }) {
           <Ionicons name="chevron-back" size={24} color={colors.primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Wallet</Text>
-        <TouchableOpacity onPress={() => loadAll(true)}>
+        <TouchableOpacity onPress={() => refreshWalletData(true)}>
           {refreshing ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="refresh" size={22} color={colors.primary} />}
         </TouchableOpacity>
       </View>
 
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadAll(true)} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => refreshWalletData(true)} tintColor={colors.primary} />}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       >
@@ -439,6 +480,12 @@ export default function WalletScreen({ navigation }) {
               <Text style={styles.actionText}>Buy Coins</Text>
             </View>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowReinvestModal(true)}>
+            <View style={[styles.actionGrad, { backgroundColor: GOLD }]}> 
+              <Ionicons name="repeat" size={24} color="#fff" />
+              <Text style={styles.actionText}>Re-invest</Text>
+            </View>
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => setShowWithdrawModal(true)}>
             <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
               <Ionicons name="arrow-up-circle" size={24} color="#fff" />
@@ -447,8 +494,8 @@ export default function WalletScreen({ navigation }) {
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.cardBg }]} onPress={() => handleTabChange('transactions')}>
             <View style={[styles.actionGrad, { backgroundColor: GOLD }]}>
-              <Ionicons name="receipt" size={24} color="#fff" />
-              <Text style={styles.actionText}>History</Text>
+              <Ionicons name="receipt" size={22} color="#fff" />
+              <Text style={styles.actionText}>Transactions</Text>
             </View>
           </TouchableOpacity>
         </View>
@@ -476,7 +523,7 @@ export default function WalletScreen({ navigation }) {
                   <Text style={{ fontSize: 12, color: colors.textSecondary, marginRight: 8 }}>
                     {transactions.length > 0 ? `${transactions.length} total` : ''}
                   </Text>
-                  <TouchableOpacity onPress={() => loadAll(true)} style={{ padding: 4 }}>
+                  <TouchableOpacity onPress={() => refreshWalletData(true)} style={{ padding: 4 }}>
                     <Ionicons name="refresh" size={16} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
@@ -527,7 +574,7 @@ export default function WalletScreen({ navigation }) {
                   <Text style={{ fontSize: 12, color: colors.textSecondary, marginRight: 8 }}>
                     {transactions.length > 0 ? `${transactions.length} loaded` : ''}
                   </Text>
-                  <TouchableOpacity onPress={() => loadAll(true)} style={{ padding: 4 }}>
+                  <TouchableOpacity onPress={() => refreshWalletData(true)} style={{ padding: 4 }}>
                     <Ionicons name="refresh" size={16} color={colors.primary} />
                   </TouchableOpacity>
                 </View>
@@ -667,6 +714,61 @@ export default function WalletScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Reinvest Modal */}
+      <Modal visible={showReinvestModal} transparent animationType="slide" onRequestClose={() => setShowReinvestModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Re-invest Points to Coins</Text>
+              <TouchableOpacity onPress={() => setShowReinvestModal(false)}>
+                <Ionicons name="close" size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.reinvestBanner}>
+              <View>
+                <Text style={styles.reinvestBannerLabel}>RATE</Text>
+                <Text style={styles.reinvestBannerTitle}>1 Point → 1 Coin</Text>
+              </View>
+              <Text style={styles.reinvestBannerMeta}>{(points.current || 0).toLocaleString()} pts available</Text>
+            </View>
+
+            <Text style={styles.fieldLabel}>Points to convert</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter points"
+              placeholderTextColor="#666"
+              value={reinvestAmount}
+              onChangeText={setReinvestAmount}
+              keyboardType="number-pad"
+            />
+
+            <View style={styles.reinvestPreview}>
+              <Text style={styles.reinvestPreviewLabel}>You will receive</Text>
+              <Text style={styles.reinvestPreviewValue}>{Math.max(parseInt(reinvestAmount || '0', 10) || 0, 0).toLocaleString()} coins</Text>
+            </View>
+
+            <View style={styles.reinvestActions}>
+              <TouchableOpacity
+                style={[styles.secondaryBtn, processing && { opacity: 0.6 }]}
+                onPress={() => setShowReinvestModal(false)}
+                disabled={processing}
+              >
+                <Text style={styles.secondaryBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, styles.reinvestSubmitBtn, (processing || (parseInt(reinvestAmount || '0', 10) || 0) < 1 || (parseInt(reinvestAmount || '0', 10) || 0) > (points.current || 0)) && { opacity: 0.6 }]}
+                onPress={handleReinvest}
+                disabled={processing || (parseInt(reinvestAmount || '0', 10) || 0) < 1 || (parseInt(reinvestAmount || '0', 10) || 0) > (points.current || 0)}
+              >
+                {processing ? <ActivityIndicator color="#000" /> : <Text style={styles.submitBtnText}>Reinvest</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -692,10 +794,10 @@ const styles = StyleSheet.create({
   dashCardStrong: { fontSize: 10, fontWeight: '700', color: '#1A1A1A' },
   dashCardBtn: { marginTop: 6, padding: 6, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', alignItems: 'center' },
   dashCardBtnText: { fontSize: 10, fontWeight: '700', color: '#fff' },
-  actionRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 8 },
-  actionBtn: { flex: 1, borderRadius: 14, overflow: 'hidden' },
-  actionGrad: { padding: 14, alignItems: 'center', gap: 6, backgroundColor: '#2A2A2A', borderRadius: 14 },
-  actionText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 16, gap: 10, marginBottom: 12 },
+  actionBtn: { width: '47%', borderRadius: 14, overflow: 'hidden' },
+  actionGrad: { minHeight: 78, paddingHorizontal: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: '#2A2A2A', borderRadius: 14 },
+  actionText: { color: '#fff', fontSize: 10, fontWeight: '700', textAlign: 'center' },
   tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: BORDER, paddingHorizontal: 16 },
   tabBtn: { flex: 1, paddingVertical: 12, alignItems: 'center', position: 'relative' },
   tabText: { fontSize: 13, color: '#666', fontWeight: '500' },
@@ -782,6 +884,17 @@ const styles = StyleSheet.create({
   submitBtn: { backgroundColor: GOLD, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20 },
   submitBtnText: { color: '#000', fontSize: 15, fontWeight: '800' },
   selectedPkg: { flexDirection: 'row', alignItems: 'center', backgroundColor: CARD, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: BORDER },
+    reinvestBanner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: GOLD, borderRadius: 14, padding: 16, marginBottom: 16 },
+    reinvestBannerLabel: { fontSize: 11, fontWeight: '700', color: 'rgba(0,0,0,0.7)', letterSpacing: 0.5 },
+    reinvestBannerTitle: { fontSize: 16, fontWeight: '800', color: '#000', marginTop: 2 },
+    reinvestBannerMeta: { fontSize: 12, fontWeight: '700', color: '#000' },
+    reinvestPreview: { backgroundColor: '#1F2A1A', borderRadius: 12, borderWidth: 1, borderColor: '#2E3D24', padding: 14, marginTop: 16 },
+    reinvestPreviewLabel: { fontSize: 12, color: '#999', marginBottom: 6 },
+    reinvestPreviewValue: { fontSize: 18, fontWeight: '800', color: '#fff' },
+    reinvestActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
+    secondaryBtn: { flex: 1, borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: BORDER, backgroundColor: CARD },
+    secondaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    reinvestSubmitBtn: { flex: 1, marginTop: 0 },
   monetizeSection: { margin: 16, padding: 20, borderRadius: 16, borderWidth: 1, marginTop: 20 },
   monetizeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   monetizeInfo: { flex: 1, marginLeft: 12 },

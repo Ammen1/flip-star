@@ -49,7 +49,7 @@ export default function CoinPurchaseScreen({ navigation, route }) {
       const response = await api.request('/charging/coin-purchase/', {
         method: 'POST',
         body: JSON.stringify({
-          phone_number: phoneNumber,
+          coins: COINS_AMOUNT,
         }),
       });
 

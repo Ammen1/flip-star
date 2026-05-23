@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 import { Linking } from 'react-native';
 
@@ -31,6 +32,7 @@ const BENEFITS = [
 export default function SubscriptionScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const { logout, hasActiveSubscription } = useAuth();
   const [tiers, setTiers] = useState(FALLBACK_TIERS);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPaymentTier, setSelectedPaymentTier] = useState(null);
@@ -38,7 +40,30 @@ export default function SubscriptionScreen({ navigation }) {
   const [selectedTier, setSelectedTier] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const handleBackPress = async () => {
+    if (!hasActiveSubscription) {
+      await logout();
+      return true;
+    }
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return true;
+    }
+
+    return false;
+  };
+
   useEffect(() => { loadData(); }, []);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBackPress();
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [hasActiveSubscription, navigation]);
 
   const loadData = async () => {
     try {
@@ -90,7 +115,7 @@ export default function SubscriptionScreen({ navigation }) {
     return (
       <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
         <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Subscription</Text>
@@ -107,7 +132,7 @@ export default function SubscriptionScreen({ navigation }) {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, paddingTop: insets.top }]}>
       <View style={[styles.header, { backgroundColor: colors.cardBg, borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={handleBackPress}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Subscription</Text>
