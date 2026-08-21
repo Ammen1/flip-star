@@ -1,0 +1,31 @@
+# Backend-only repository. Review is required from someone who owns the
+# area being changed -- GitHub enforces this automatically once branch
+# protection on main requires a review from code owners.
+#
+# Fill in real usernames/teams below before this has any effect; a
+# CODEOWNERS file with no owners is silently inert.
+
+# Default: unassigned. Replace with a general backend maintainer.
+* @REPLACE-ME-default-owner
+
+# CI/CD and deployment surface -- changes here affect how everything ships.
+/.github/                @REPLACE-ME-platform-owner
+/k8s/                     @REPLACE-ME-platform-owner
+/argocd/                  @REPLACE-ME-platform-owner
+/backend/Dockerfile        @REPLACE-ME-platform-owner
+/backend/Dockerfile.celery  @REPLACE-ME-platform-owner
+/docker-compose.yml        @REPLACE-ME-platform-owner
+
+# Payments / wallet -- the highest-consequence code in this repository.
+/backend/api/views/wallet.py       @REPLACE-ME-payments-owner
+/backend/api/views/direct_debit.py  @REPLACE-ME-payments-owner
+/backend/api/models/wallet.py       @REPLACE-ME-payments-owner
+/backend/api/models/contest.py      @REPLACE-ME-payments-owner
+/backend/api/integrations/telebirr/ @REPLACE-ME-payments-owner
+
+# Secrets / crypto -- security-sensitive, warrants a security-focused review.
+/backend/infrastructure/    @REPLACE-ME-security-owner
+/backend/common/security/    @REPLACE-ME-security-owner
+
+# Database migrations -- irreversible once applied to production.
+/backend/api/migrations/    @REPLACE-ME-backend-owner

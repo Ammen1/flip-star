@@ -1,0 +1,41 @@
+# Automated: staging is where every push to main lands automatically (see
+# .github/workflows/backend-ci-cd.yml's update-gitops-staging job) -- that's
+# the point of it. prune + selfHeal make Argo CD the actual source of truth:
+# prune removes resources deleted from k8s/overlays/staging, selfHeal reverts
+# any manual `kubectl edit` back to what's in git within its poll interval,
+# so the cluster can never silently drift from what's committed.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flipstar-backend-staging
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: flipstar-backend
+
+  source:
+    repoURL: https://github.com/Skykin-Technologies/flip-star.git
+    targetRevision: main
+    path: k8s/overlays/staging
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flipstar-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false   # namespace.yaml in the overlay creates it explicitly
+      - PrunePropagationPolicy=foreground
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  revisionHistoryLimit: 10

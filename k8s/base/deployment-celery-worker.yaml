@@ -1,0 +1,108 @@
+# Celery worker -- async task processing (video transcoding via ffmpeg,
+# notifications, scoring). Same image as the backend (Dockerfile.celery
+# shares its builder stage with Dockerfile so both resolve the same wheels),
+# different entrypoint, no exposed port, no Service.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-celery-worker
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: celery-worker
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: celery-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-backend
+        app.kubernetes.io/component: celery-worker
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      serviceAccountName: flipstar-backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: celery-worker
+          image: ghcr.io/skykin-technologies/flip-star-backend-celery:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: flipstar-backend-config
+            - secretRef:
+                name: flipstar-backend-vault-approle
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # IMPORTANT: exec probes are invoked directly via the container
+          # runtime's exec API -- unlike a container's own top-level
+          # `command`/`args`, they are NOT passed through Kubernetes'
+          # $(VAR_NAME) substitution. `celery@$(HOSTNAME)` here would reach
+          # celery as the nine literal characters "$(HOSTNAME)", never
+          # matching any real worker -- confirmed directly against a
+          # disposable cluster (100% reproducible "Error: No nodes replied
+          # within time constraint", regardless of restarts or an explicit
+          # env: HOSTNAME entry, since neither affects this exec path at
+          # all). Wrapping in `sh -c` gets genuine shell expansion of
+          # $HOSTNAME instead, which is also why Dockerfile.celery's own
+          # HEALTHCHECK (a real shell command, not a JSON exec array) has
+          # always worked correctly with this same pattern.
+          #
+          # --timeout=8 overrides celery inspect's own internal reply-wait
+          # (default 1.0s, independent of this probe's own timeoutSeconds) --
+          # also confirmed necessary: with the substitution bug fixed but
+          # this left at celery's default, the probe still intermittently
+          # reported "No nodes replied" against a genuinely healthy worker
+          # whenever the broker round-trip took slightly longer than a
+          # second, which routine scheduling/CPU jitter is enough to cause.
+          #
+          # startupProbe absorbs cold-start time (Django app loading, the
+          # Vault AppRole fetch, Redis connect, and autodiscover_tasks()
+          # scanning every installed app) before the liveness probe starts
+          # judging it.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "celery -A config inspect ping -d celery@$HOSTNAME --timeout=8"]
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 18
+          # Mirrors Dockerfile.celery's own HEALTHCHECK: confirms the worker
+          # is actually consuming from the broker, not just alive.
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A config inspect ping -d celery@$HOSTNAME --timeout=8"]
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1500m"
+              memory: 2Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      terminationGracePeriodSeconds: 60

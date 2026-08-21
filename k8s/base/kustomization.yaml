@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: flipstar
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true
+
+resources:
+  - serviceaccount.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - deployment-celery-worker.yaml
+  - deployment-celery-beat.yaml
+  - service.yaml
+  - pdb.yaml
+
+# secret.example.yaml is deliberately NOT listed here -- it's a template for
+# a Secret created out-of-band per namespace, never applied by Kustomize/Argo
+# CD. See that file's header comment.
+
+images:
+  - name: ghcr.io/skykin-technologies/flip-star-backend
+    newTag: unset-set-by-overlay
+  - name: ghcr.io/skykin-technologies/flip-star-backend-celery
+    newTag: unset-set-by-overlay

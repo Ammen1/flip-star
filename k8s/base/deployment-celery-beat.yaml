@@ -1,0 +1,80 @@
+# Celery beat -- periodic task scheduler. Must never run more than one
+# replica: two beat processes would each independently schedule every
+# periodic task, double-firing everything on the schedule. `replicas: 1` is
+# not enough on its own -- a RollingUpdate briefly runs old+new pods
+# together, which is exactly two beat processes at once. `strategy: Recreate`
+# guarantees the old pod is fully gone before the new one starts, trading a
+# short scheduling gap (acceptable for a periodic scheduler) for the
+# singleton guarantee (not acceptable to lose).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-celery-beat
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: celery-beat
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: celery-beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-backend
+        app.kubernetes.io/component: celery-beat
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      serviceAccountName: flipstar-backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: celery-beat
+          image: ghcr.io/skykin-technologies/flip-star-backend-celery:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          # --schedule points celery's default PersistentScheduler at the
+          # writable /tmp emptyDir. Without it, the scheduler tries to open
+          # its shelve db at the CWD (/app/celerybeat-schedule), which fails
+          # under readOnlyRootFilesystem: true -- confirmed directly against
+          # a disposable cluster (dial: shelve.open('/app/...') -> "Read-only
+          # file system"), not a theoretical concern.
+          command: ["celery", "-A", "config", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+          envFrom:
+            - configMapRef:
+                name: flipstar-backend-config
+            - secretRef:
+                name: flipstar-backend-vault-approle
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # No liveness probe: there's no lightweight, reliable way to ask
+          # beat "are you actually scheduling" the way `celery inspect ping`
+          # answers for a worker. Relying on kubelet's plain crash-restart
+          # behavior rather than inventing a fragile custom check.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

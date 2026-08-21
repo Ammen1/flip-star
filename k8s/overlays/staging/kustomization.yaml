@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: flipstar-staging
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - ingress.yaml
+
+labels:
+  - pairs:
+      environment: staging
+    includeSelectors: true
+
+patches:
+  - path: configmap-patch.yaml
+  - path: replicas-patch.yaml
+
+# CI updates these two lines via `kustomize edit set image` after each
+# successful build on the branch mapped to staging -- see
+# .github/workflows/backend-cd.yml. The tag is always a commit SHA, never
+# `latest`. Argo CD's staging Application (argocd/application-staging.yaml)
+# watches this file and syncs automatically on change.
+images:
+  - name: ghcr.io/skykin-technologies/flip-star-backend
+    newTag: "0000000000000000000000000000000000000000"
+  - name: ghcr.io/skykin-technologies/flip-star-backend-celery
+    newTag: "0000000000000000000000000000000000000000"

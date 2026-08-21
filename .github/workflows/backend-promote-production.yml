@@ -1,0 +1,117 @@
+name: Promote Backend to Production
+
+# Deliberately separate from backend-ci-cd.yml and deliberately manual
+# (workflow_dispatch only, no push/schedule trigger). This never builds a
+# new image -- it promotes an image that already went through the full CI
+# gate and has been running in staging, referenced by its immutable commit
+# SHA. It also never touches Argo CD: the production Argo CD Application
+# uses manual sync policy on purpose (see argocd/application-production.yaml)
+# so a human still has to explicitly sync after this workflow updates the
+# GitOps path. Two separate deliberate actions to reach production, not one.
+#
+# `environment: production` (on the job below) is what actually enforces
+# that second gate at the GitHub level: configure required reviewers on the
+# "production" environment (Settings -> Environments -> production) and this
+# workflow pauses for approval before the job runs at all, not just before
+# Argo CD syncs. Without that configuration this is a no-op label -- see
+# k8s/README.md for the setup step.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_sha:
+        description: "Commit SHA of the backend image to promote (must already exist in GHCR, e.g. currently deployed to staging)"
+        required: true
+        type: string
+
+concurrency:
+  group: backend-promote-production
+  cancel-in-progress: false # never cancel a promotion that's already running
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_API: ghcr.io/skykin-technologies/flip-star-backend
+  IMAGE_CELERY: ghcr.io/skykin-technologies/flip-star-backend-celery
+  KUSTOMIZE_VERSION: "5.4.3"
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - name: Validate input looks like a real commit SHA
+        env:
+          SHA: ${{ inputs.image_sha }}
+        run: |
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::'$SHA' doesn't look like a full 40-character commit SHA. Copy it from a successful backend-ci-cd.yml run, not typed by hand."
+            exit 1
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: main
+
+      - name: Verify the image exists in GHCR
+        env:
+          SHA: ${{ inputs.image_sha }}
+        run: |
+          for IMAGE in "${{ env.IMAGE_API }}" "${{ env.IMAGE_CELERY }}"; do
+            if ! docker manifest inspect "${IMAGE}:${SHA}" >/dev/null 2>&1; then
+              echo "::error::${IMAGE}:${SHA} not found in GHCR. Only promote a SHA that already built and pushed successfully via backend-ci-cd.yml."
+              exit 1
+            fi
+          done
+
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3.10.0
+
+      - name: Verify image signatures
+        env:
+          SHA: ${{ inputs.image_sha }}
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          for IMAGE in "${{ env.IMAGE_API }}" "${{ env.IMAGE_CELERY }}"; do
+            if ! cosign verify \
+                --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+                "${IMAGE}:${SHA}" >/dev/null; then
+              echo "::error::${IMAGE}:${SHA} has no valid signature from this repository's own CI. Refusing to promote an image that wasn't verifiably built by backend-ci-cd.yml."
+              exit 1
+            fi
+          done
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" /usr/local/bin
+
+      - name: Set image tags in the production overlay
+        working-directory: k8s/overlays/production
+        env:
+          SHA: ${{ inputs.image_sha }}
+        run: |
+          kustomize edit set image \
+            "${{ env.IMAGE_API }}=${{ env.IMAGE_API }}:${SHA}" \
+            "${{ env.IMAGE_CELERY }}=${{ env.IMAGE_CELERY }}:${SHA}"
+
+      - name: Commit and push
+        env:
+          SHA: ${{ inputs.image_sha }}
+        run: |
+          git config user.name "flipstar-ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add k8s/overlays/production/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No change -- production is already at ${SHA}."
+            exit 0
+          fi
+          git commit -m "chore(gitops): promote backend ${SHA} to production"
+          git push origin main
+
+      - name: Next step
+        run: |
+          echo "::notice::GitOps path updated. Production will NOT deploy until a human runs: argocd app sync flipstar-backend-production (or clicks Sync in the Argo CD UI). See k8s/README.md#rollback for the reasoning."

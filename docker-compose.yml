@@ -1,6 +1,131 @@
+# =============================================================================
+# FlipStar — local and single-host deployment stack
+# =============================================================================
+# Secrets are resolved by infrastructure/secrets: OS environment first, then
+# HashiCorp Vault, then .env, then the built-in default.
+#
+# The environment blocks below are split into three groups on purpose:
+#
+#   x-runtime-env  non-secret wiring. Always present.
+#   x-vault-env    how to reach Vault. Present once Vault is in use.
+#   x-secret-env   the secrets themselves. DELETE THIS BLOCK once Vault is
+#                  populated -- environment outranks Vault, so leaving it in
+#                  place means Vault is never consulted.
+#
+# Migration path is in docs/secrets.md.
+# =============================================================================
+
+# --- Non-secret runtime wiring ----------------------------------------------
+x-runtime-env: &runtime-env
+  DJANGO_SETTINGS_MODULE: config.settings.production
+  DJANGO_ENV: production
+  DEBUG: "False"
+  USE_DOCKER_DB: ${USE_DOCKER_DB:-true}
+  DB_ENGINE: django.db.backends.postgresql
+  DB_HOST: ${DB_HOST:-postgres}
+  DB_PORT: ${DB_PORT:-5432}
+  DB_CONN_MAX_AGE: ${DB_CONN_MAX_AGE:-60}
+  REDIS_HOST: ${REDIS_HOST:-redis}
+  REDIS_PORT: ${REDIS_PORT:-6379}
+  REGION_NAME: ${REGION_NAME:-us-east-1}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+  CORS_ALLOW_ALL_ORIGINS: ${CORS_ALLOW_ALL_ORIGINS:-false}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://uat.flipstar.et}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://uat.flipstar.et}
+  SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-true}
+  BACKEND_URL: ${BACKEND_URL:-https://uat.flipstar.et}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@flipstar.et}
+  TELEBIRR_PAYEE_ACCOUNT_NAME: ${TELEBIRR_PAYEE_ACCOUNT_NAME:-Flipstar}
+  TELEBIRR_CALLER_TYPE: ${TELEBIRR_CALLER_TYPE:-2}
+
+# --- Vault connection --------------------------------------------------------
+# VAULT_ADDR empty (the default) disables Vault entirely and resolution falls
+# back to environment + .env, exactly as before Vault was introduced.
+#
+# Production should use AppRole (VAULT_ROLE_ID + VAULT_SECRET_ID) and set
+# VAULT_REQUIRED=true so a Vault outage stops the container rather than letting
+# it start with partial configuration.
+x-vault-env: &vault-env
+  VAULT_ADDR: ${VAULT_ADDR:-}
+  VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
+  VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
+  VAULT_TOKEN: ${VAULT_TOKEN:-}
+  VAULT_NAMESPACE: ${VAULT_NAMESPACE:-}
+  VAULT_KV_MOUNT: ${VAULT_KV_MOUNT:-secret}
+  VAULT_SECRET_PATH: ${VAULT_SECRET_PATH:-flipstar/backend}
+  VAULT_REQUIRED: ${VAULT_REQUIRED:-false}
+  VAULT_PRECEDENCE: ${VAULT_PRECEDENCE:-env}
+  VAULT_SKIP_VERIFY: ${VAULT_SKIP_VERIFY:-}
+  VAULT_CACERT: ${VAULT_CACERT:-}
+  VAULT_TIMEOUT: ${VAULT_TIMEOUT:-5}
+
+# --- Secrets — DELETE once Vault holds them ----------------------------------
+# Until then these are required, and the `:?` guards stop the stack rather than
+# letting it boot with a known-bad default.
+x-secret-env: &secret-env
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env or moved to Vault}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS must be set}
+  DB_NAME: ${DB_NAME:?DB_NAME must be set}
+  DB_USER: ${DB_USER:?DB_USER must be set}
+  DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+  ACCESS_KEY_ID: ${ACCESS_KEY_ID:-}
+  SECRET_ACCESS_KEY: ${SECRET_ACCESS_KEY:-}
+  STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME:-}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  TELEBIRR_SOAP_URL: ${TELEBIRR_SOAP_URL:-}
+  TELEBIRR_THIRD_PARTY_ID: ${TELEBIRR_THIRD_PARTY_ID:-}
+  TELEBIRR_THIRD_PARTY_PASSWORD: ${TELEBIRR_THIRD_PARTY_PASSWORD:-}
+  TELEBIRR_SHORTCODE: ${TELEBIRR_SHORTCODE:-}
+  TELEBIRR_RESULT_URL: ${TELEBIRR_RESULT_URL:-}
+  TELEBIRR_SP_OPERATOR_ID: ${TELEBIRR_SP_OPERATOR_ID:-}
+  TELEBIRR_SP_OPERATOR_CREDENTIAL: ${TELEBIRR_SP_OPERATOR_CREDENTIAL:-}
+  TELEBIRR_ORG_OPERATOR_ID: ${TELEBIRR_ORG_OPERATOR_ID:-}
+  TELEBIRR_ORG_OPERATOR_CREDENTIAL: ${TELEBIRR_ORG_OPERATOR_CREDENTIAL:-}
+  ONEVAS_APPLICATION_KEY: ${ONEVAS_APPLICATION_KEY:-}
+  ONEVAS_PRODUCT_NUMBER: ${ONEVAS_PRODUCT_NUMBER:-}
+
+x-django-env: &django-env
+  <<: [*runtime-env, *vault-env, *secret-env]
+
 services:
-  # PostgreSQL Database
-  
+
+  # ---------------------------------------------------------------------------
+  # Secret store
+  # ---------------------------------------------------------------------------
+  # Opt-in: `docker compose --profile vault up -d vault`
+  #
+  # DEV MODE ONLY. Storage is in-memory, it is unsealed automatically, and the
+  # root token is whatever VAULT_DEV_ROOT_TOKEN_ID says. Everything is lost on
+  # restart. Production must use a real Vault with persistent storage, TLS and
+  # a documented unseal procedure -- see docs/secrets.md.
+
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: flipstar_vault
+    profiles: ["vault"]
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN_ID:-flipstar-dev-root}
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    ports:
+      - "127.0.0.1:8200:8200"
+    networks:
+      - flipstar_network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8200/v1/sys/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Datastores — bound to loopback only.
+  # ---------------------------------------------------------------------------
+
   postgres:
     image: postgres:15-alpine
     container_name: flipstar_postgres
@@ -11,7 +136,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     networks:
       - flipstar_network
     healthcheck:
@@ -20,8 +145,11 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
-  # Redis for caching and Celery broker
   redis:
     image: redis:7-alpine
     container_name: flipstar_redis
@@ -29,7 +157,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     networks:
       - flipstar_network
     healthcheck:
@@ -38,20 +166,23 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
-  # MinIO S3-compatible storage
   minio:
     image: minio/minio:latest
     container_name: flipstar_minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set}
     networks:
       - flipstar_network
     healthcheck:
@@ -60,147 +191,105 @@ services:
       timeout: 20s
       retries: 3
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Application
+  # ---------------------------------------------------------------------------
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flipstar_backend
+    environment: *django-env
+    volumes:
+      - backend_media:/app/media
+      - backend_static:/app/staticfiles
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - flipstar_network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/api/v1/health/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery
+    container_name: flipstar_celery_worker
+    environment: *django-env
+    volumes:
+      - backend_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - flipstar_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery
+    container_name: flipstar_celery_beat
+    command: ["celery", "-A", "config", "beat", "--loglevel=info"]
+    environment: *django-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flipstar_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Edge
+  # ---------------------------------------------------------------------------
+
   nginx:
-    image: nginx:latest
+    image: nginx:1.27-alpine
     container_name: flipstar_nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro # Mount the certs we just generated
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - backend_static:/app/staticfiles:ro
       - backend_media:/app/media:ro
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - flipstar_network
-    restart: unless-stopped
-
-  # Django Backend
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: flipstar_backend
-    environment:
-      DEBUG: ${DEBUG:-False}
-      SECRET_KEY: ${SECRET_KEY:-changeme}
-      USE_DOCKER_DB: ${USE_DOCKER_DB:-true}
-      DB_ENGINE: django.db.backends.postgresql
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD:-changeme}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      ACCESS_KEY_ID: ${ACCESS_KEY_ID}
-      SECRET_ACCESS_KEY: ${SECRET_ACCESS_KEY}
-      STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME}
-      REGION_NAME: ${REGION_NAME:-us-east-1}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1}
-      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
-      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
-      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@flipstar.et}
-    volumes:
-      - backend_media:/app/media
-      - backend_static:/app/staticfiles
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    networks:
-      - flipstar_network
-    restart: unless-stopped
-
-  # Celery Worker for async tasks
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.celery
-    container_name: flipstar_celery_worker
-    environment:
-      DEBUG: ${DEBUG:-False}
-      SECRET_KEY: ${SECRET_KEY:-changeme}
-      USE_DOCKER_DB: ${USE_DOCKER_DB:-true}
-      DB_ENGINE: django.db.backends.postgresql
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD:-changeme}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      ACCESS_KEY_ID: ${ACCESS_KEY_ID}
-      SECRET_ACCESS_KEY: ${SECRET_ACCESS_KEY}
-      STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME}
-      REGION_NAME: ${REGION_NAME:-us-east-1}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
-    volumes:
-      - backend_media:/app/media
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    networks:
-      - flipstar_network
-    restart: unless-stopped
-
-  # Celery Beat for scheduled tasks
-  celery_beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.celery
-    container_name: flipstar_celery_beat
-    command: celery -A config beat --loglevel=info
-    environment:
-      DEBUG: ${DEBUG:-False}
-      SECRET_KEY: ${SECRET_KEY:-changeme}
-      USE_DOCKER_DB: ${USE_DOCKER_DB:-true}
-      DB_ENGINE: django.db.backends.postgresql
-      DB_NAME: ${DB_NAME}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD:-changeme}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      ACCESS_KEY_ID: ${ACCESS_KEY_ID}
-      SECRET_ACCESS_KEY: ${SECRET_ACCESS_KEY}
-      STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME}
-      REGION_NAME: ${REGION_NAME:-us-east-1}
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - flipstar_network
-    restart: unless-stopped
-
-  # React Frontend with Nginx
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: flipstar_frontend
-    ports:
-      - "8080:80"
-    volumes:
-      - backend_media:/var/www/media:ro
     depends_on:
       - backend
     networks:

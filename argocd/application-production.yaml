@@ -1,0 +1,54 @@
+# Manual sync, deliberately: this is the payments-adjacent backend (wallet,
+# Telebirr direct debit, coin transactions). "Use automated sync only where
+# appropriate" -- appropriate here means a human explicitly promotes
+# (backend-promote-production.yml) AND a human explicitly syncs
+# (`argocd app sync flipstar-backend-production` or the UI button) before
+# anything actually rolls out. Two separate deliberate actions, not one
+# push. selfHeal stays on even without automated sync -- it only reverts
+# drift from what's already committed, it doesn't pull in new commits, so
+# it doesn't defeat the manual gate.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flipstar-backend-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: flipstar-backend
+
+  source:
+    repoURL: https://github.com/Skykin-Technologies/flip-star.git
+    targetRevision: main
+    path: k8s/overlays/production
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flipstar-production
+
+  syncPolicy:
+    # No `automated:` block -- this is what makes sync manual. A diff shows
+    # up in the Argo CD UI/CLI as OutOfSync as soon as
+    # backend-promote-production.yml commits, but nothing rolls out until
+    # someone runs `argocd app sync flipstar-backend-production`.
+    syncOptions:
+      - CreateNamespace=false
+      - PrunePropagationPolicy=foreground
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    # The HPA (production only) writes back the replica count it computed --
+    # don't have every sync fight it back to the static base value.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+      name: flipstar-backend
+
+  revisionHistoryLimit: 10

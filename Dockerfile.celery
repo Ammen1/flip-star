@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1
+#
+# FlipStar Celery image.
+#
+# Shares the builder stage layout with ./Dockerfile so both images resolve the
+# same wheels. Kept separate because the worker needs no HTTP server, no static
+# files and no exposed port.
+
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip wheel --wheel-dir /wheels --timeout 300 --retries 3 -r requirements.txt
+
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DJANGO_SETTINGS_MODULE=config.settings.production
+
+# ffmpeg is the worker's main job (transcoding); libpq5 for the DB driver.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 1001 flipstar \
+    && useradd --system --uid 1001 --gid flipstar --create-home flipstar
+
+WORKDIR /app
+
+COPY --from=builder /wheels /wheels
+RUN pip install --no-index --find-links=/wheels /wheels/* \
+    && rm -rf /wheels
+
+COPY --chown=flipstar:flipstar . .
+
+RUN mkdir -p /app/media && chown -R flipstar:flipstar /app/media
+
+USER flipstar
+
+# `celery inspect ping` confirms the worker is consuming, not merely running.
+# --timeout=8 overrides celery inspect's own internal reply-wait (default
+# 1.0s, independent of this HEALTHCHECK's --timeout=10s) -- confirmed via
+# disposable-cluster testing that the 1s default causes spurious "No nodes
+# replied" failures against an otherwise-healthy worker under normal
+# scheduling/CPU jitter, not just heavy load.
+HEALTHCHECK --interval=60s --timeout=10s --start-period=45s --retries=3 \
+    CMD celery -A config inspect ping -d celery@$HOSTNAME --timeout=8 || exit 1
+
+# --max-tasks-per-child recycles workers to bound memory growth from ffmpeg.
+CMD ["celery", "-A", "config", "worker", \
+     "--loglevel=info", \
+     "--concurrency=4", \
+     "--max-tasks-per-child=50"]

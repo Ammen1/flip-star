@@ -1,37 +1,69 @@
-# Dependencies
-node_modules/
-mobile-app/node_modules/
+# =============================================================================
+# Backend
+# =============================================================================
+# NOTE: .env files were tracked in this repository's history and every secret
+# they contained must be treated as compromised. See the restructure report.
 
-# Expo
-.expo/
-dist/
-web-build/
-
-# Native
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# macOS
-.DS_Store
+# --- Secrets -----------------------------------------------------------------
+.env
+.env.*
+!.env.example
 *.pem
+*.key
+!**/staticfiles/**/*.key
+render.env
+secrets/
 
-# local env files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
 
-# typescript
-*.tsbuildinfo
+# --- Virtual environments ----------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+
+# --- Django ------------------------------------------------------------------
+*.log
+db.sqlite3
+db.sqlite3-journal
+fallback_db.sqlite3
+local_settings.py
+
+# Collected static output is a build artifact, not source.
+staticfiles/
+
+# User-uploaded content must never be committed.
+media/
+
+# Database dumps
+*.sql
+*.dump
+flipstar_db
+neondb
+
+# --- Testing / tooling -------------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+
+# --- Editors / OS ------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
