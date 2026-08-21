@@ -18,7 +18,7 @@ spec:
   project: flipstar-backend
 
   source:
-    repoURL: https://github.com/Skykin-Technologies/flip-star.git
+    repoURL: https://github.com/Ammen1/flip-star.git
     targetRevision: main
     path: k8s/overlays/production
 

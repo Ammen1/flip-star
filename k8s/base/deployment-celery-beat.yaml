@@ -41,7 +41,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: celery-beat
-          image: ghcr.io/skykin-technologies/flip-star-backend-celery:__REPLACED_BY_KUSTOMIZE__
+          image: ghcr.io/ammen1/flip-star-backend-celery:__REPLACED_BY_KUSTOMIZE__
           imagePullPolicy: IfNotPresent
           # --schedule points celery's default PersistentScheduler at the
           # writable /tmp emptyDir. Without it, the scheduler tries to open

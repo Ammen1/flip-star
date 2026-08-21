@@ -21,7 +21,7 @@ resources:
 # CD. See that file's header comment.
 
 images:
-  - name: ghcr.io/skykin-technologies/flip-star-backend
+  - name: ghcr.io/ammen1/flip-star-backend
     newTag: unset-set-by-overlay
-  - name: ghcr.io/skykin-technologies/flip-star-backend-celery
+  - name: ghcr.io/ammen1/flip-star-backend-celery
     newTag: unset-set-by-overlay

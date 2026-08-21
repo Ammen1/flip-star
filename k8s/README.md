@@ -79,7 +79,7 @@ skip either one.
   Kustomize overlays exist precisely so one branch's history can serve
   multiple environments safely.
 - **Immutable image tags only.** Every image is tagged with the full commit
-  SHA it was built from (`ghcr.io/skykin-technologies/flip-star-backend:<sha>`).
+  SHA it was built from (`ghcr.io/ammen1/flip-star-backend:<sha>`).
   `latest` is never pushed, never referenced by any manifest, and Argo CD's
   sync is driven by the SHA actually written into `kustomization.yaml`, not
   by polling a registry tag.
@@ -126,7 +126,7 @@ credential (see below).
 
 ## Required cluster / Argo CD configuration
 
-1. **Argo CD installed**, with access to `https://github.com/Skykin-Technologies/flip-star.git` (public repo — no credential needed for reads).
+1. **Argo CD installed**, with access to `https://github.com/Ammen1/flip-star.git` (public repo — no credential needed for reads).
 2. **ingress-nginx** and **cert-manager** installed cluster-wide, with a `ClusterIssuer` named `letsencrypt-prod` (referenced by `k8s/overlays/*/ingress.yaml`). Neither is part of this Kustomize tree — they're cluster add-ons, not per-application resources.
 3. Apply the project once, out of band (not part of either Application's own sync, since an AppProject isn't itself an Application-managed resource):
    ```bash

@@ -52,7 +52,7 @@ spec:
                     app.kubernetes.io/component: api
       containers:
         - name: backend
-          image: ghcr.io/skykin-technologies/flip-star-backend:__REPLACED_BY_KUSTOMIZE__
+          image: ghcr.io/ammen1/flip-star-backend:__REPLACED_BY_KUSTOMIZE__
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

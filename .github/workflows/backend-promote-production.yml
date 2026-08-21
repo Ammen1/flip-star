@@ -32,8 +32,8 @@ permissions:
   contents: read
 
 env:
-  IMAGE_API: ghcr.io/skykin-technologies/flip-star-backend
-  IMAGE_CELERY: ghcr.io/skykin-technologies/flip-star-backend-celery
+  IMAGE_API: ghcr.io/ammen1/flip-star-backend
+  IMAGE_CELERY: ghcr.io/ammen1/flip-star-backend-celery
   KUSTOMIZE_VERSION: "5.4.3"
 
 jobs:

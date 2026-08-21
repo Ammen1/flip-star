@@ -26,7 +26,7 @@ patches:
 # production.yaml) uses manual sync -- see that file for why -- so a change
 # here needs an explicit "Sync" in the Argo CD UI/CLI, not just a commit.
 images:
-  - name: ghcr.io/skykin-technologies/flip-star-backend
+  - name: ghcr.io/ammen1/flip-star-backend
     newTag: "0000000000000000000000000000000000000000"
-  - name: ghcr.io/skykin-technologies/flip-star-backend-celery
+  - name: ghcr.io/ammen1/flip-star-backend-celery
     newTag: "0000000000000000000000000000000000000000"
