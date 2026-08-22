@@ -1,0 +1,61 @@
+# Dedicated AppProject rather than using Argo CD's "default" project.
+# "default" implicitly allows any repo, any destination, any resource kind --
+# fine for a single-app cluster, wrong for anything shared. Scoping this down
+# means a compromised or misconfigured flipstar-backend Application still
+# can't reach outside these two namespaces or manage cluster-scoped resources
+# beyond the one kind it actually needs (Namespace, for the namespace.yaml
+# each overlay creates).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: flipstar-backend
+  namespace: argocd
+spec:
+  description: FlipStar backend (API + Celery worker + Celery beat) -- staging and production.
+
+  sourceRepos:
+    - https://github.com/Ammen1/flip-star.git
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: flipstar-staging
+    - server: https://kubernetes.default.svc
+      namespace: flipstar-production
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  namespaceResourceWhitelist:
+    - group: "apps"
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: ServiceAccount
+    - group: "policy"
+      kind: PodDisruptionBudget
+    - group: "networking.k8s.io"
+      kind: Ingress
+    - group: "autoscaling"
+      kind: HorizontalPodAutoscaler
+    # Required by k8s/base/job-migrate.yaml, the PreSync hook that runs
+    # `manage.py migrate` before any Deployment is updated. Without Job in
+    # this list Argo CD refuses the whole sync with "resource batch:Job is
+    # not permitted in project flipstar-backend" -- confirmed directly.
+    - group: "batch"
+      kind: Job
+    # Required by k8s/base/networkpolicy.yaml (default-deny ingress + the
+    # single allow rule for the API).
+    - group: "networking.k8s.io"
+      kind: NetworkPolicy
+
+  # Secrets are deliberately absent from both whitelists above: this project
+  # never creates or touches a Secret. flipstar-backend-vault-approle (see
+  # k8s/base/secret.example.yaml) is created out-of-band, once, per
+  # namespace -- Argo CD doesn't manage it and doesn't need permission to.
+
+  orphanedResources:
+    warn: true

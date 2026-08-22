@@ -1,0 +1,101 @@
+# Ingress restriction for the FlipStar workloads.
+#
+# ---------------------------------------------------------------------------
+# Why podSelector is scoped rather than `{}` -- learned the hard way
+# ---------------------------------------------------------------------------
+# The obvious shape for a default-deny is `podSelector: {}`, which selects
+# every pod in the namespace. That was written first and it broke the
+# application outright: a NetworkPolicy is evaluated from the perspective of
+# the pod RECEIVING the connection, so a namespace-wide default-deny-ingress
+# also denies the backend's connections INTO an in-namespace PostgreSQL,
+# Redis or Vault. The staging overlay points DB_HOST at
+# postgres.flipstar-staging.svc.cluster.local, so this is not hypothetical.
+#
+# Observed directly on a disposable cluster running the real manifests:
+#   VaultUnavailable: ... Failed to resolve 'vault'
+#   ... Max retries exceeded with url: /v1/auth/approle/login
+# and every pod in CrashLoopBackOff. Deleting the two policies fixed it
+# immediately, which is also what confirmed the CNI enforces them at all
+# (kind's kindnetd does, as of the v1.31 node image -- worth knowing, since
+# older kind releases silently ignored NetworkPolicy and would have made
+# this look fine).
+#
+# Scoping the selector to `app.kubernetes.io/part-of: flipstar` restricts the
+# policy to the workloads this Kustomize tree owns and leaves anything else
+# sharing the namespace reachable.
+#
+# ---------------------------------------------------------------------------
+# Ingress-only, deliberately
+# ---------------------------------------------------------------------------
+# Egress is left unrestricted. The backend legitimately reaches a wide,
+# partly operator-supplied set of destinations -- managed PostgreSQL, managed
+# Redis, Vault, S3-compatible storage, Telebirr's SOAP endpoint, Onevas,
+# web-push endpoints -- whose addresses live in the ConfigMap and in Vault,
+# not here. An egress policy written against guessed CIDRs would either be
+# wrong or so broad it protects nothing, and getting it wrong breaks
+# payments. See k8s/README.md for what pinning those down would require.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flipstar-default-deny-ingress
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/part-of: flipstar
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: flipstar
+  policyTypes:
+    - Ingress
+---
+# The API is the only FlipStar workload that accepts inbound traffic, and
+# only on 8000. Celery worker, Celery beat and the migrate Job match no allow
+# rule, so the default-deny above leaves them unreachable -- correct: they
+# are outbound-only and have no Service.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flipstar-backend-allow-ingress
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: flipstar
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Verified on the staging k3s cluster: ingress-nginx is installed
+        # via Helm into the `ingress-nginx` namespace. A wrong value here does
+        # not fail loudly -- it silently drops all traffic to the API -- so
+        # re-verify against any other cluster before relying on it.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8000
+    # Kubelet probe traffic originates from the node, not from a pod, so it
+    # matches no podSelector/namespaceSelector rule above. Most CNIs permit
+    # host-to-pod traffic implicitly, but that is CNI-dependent and getting
+    # it wrong means every probe fails and the Deployment never becomes
+    # Ready. This rule states the requirement explicitly instead of relying
+    # on the CNI's default. Both CIDRs below are cluster-specific and must be
+    # re-derived for any other cluster.
+    - from:
+        - ipBlock:
+            # Node IP for kubelet probes, plus the k3s/flannel pod CIDR.
+            # Under flannel, probe traffic to a pod on the same node is
+            # sourced from the node's cni0 address inside the pod CIDR, not
+            # from the node's own InternalIP. Allowing only the InternalIP
+            # drops every probe and the Deployment never becomes Ready.
+            cidr: 10.0.0.93/32
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8000

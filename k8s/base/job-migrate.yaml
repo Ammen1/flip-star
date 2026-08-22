@@ -1,0 +1,143 @@
+# Database migrations.
+#
+# Why this exists: without it the deployment does not actually work. Verified
+# directly against the real image and a real PostgreSQL: the pods start and
+# /api/v1/health/ returns 200 (it deliberately never touches the database),
+# while the first request that does touch it fails with
+# `psycopg2.errors.UndefinedTable: relation "auth_user" does not exist`. A
+# green rollout on an unmigrated database is exactly the failure mode this
+# closes.
+#
+# Why a Job rather than an initContainer: an initContainer runs once per pod,
+# so N replicas race N concurrent `manage.py migrate` runs against one
+# database. This Job runs once, to completion, before the Deployments are
+# updated -- so a failed migration blocks the rollout instead of
+# half-deploying against a schema that was never applied.
+#
+# Rollback note: reverting the GitOps commit rolls the IMAGE back, never the
+# schema. Migrations are one-way here. See k8s/README.md#rollback.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flipstar-backend-migrate
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: migrate
+    app.kubernetes.io/part-of: flipstar
+  annotations:
+    # A sync WAVE, not a PreSync hook -- and that distinction was arrived at
+    # the hard way. As a PreSync hook this Job ran before the entire Sync
+    # phase, which meant it could not see anything the Sync phase creates.
+    # On a first deploy into a fresh namespace that failed twice, for two
+    # different reasons, one after the other:
+    #
+    #   pods "flipstar-backend-migrate-" is forbidden: error looking up
+    #   service account .../flipstar-backend: serviceaccount not found
+    #
+    #   CreateContainerConfigError: configmap "flipstar-backend-config"
+    #   not found
+    #
+    # Both were invisible in staging, where those resources already existed
+    # from an earlier deploy. Sync waves order resources *within* the Sync
+    # phase, so the ConfigMap and ServiceAccount (wave -2) are created first,
+    # this Job runs and must reach Complete (wave -1), and only then are the
+    # Deployments applied (wave 0, the default). That preserves exactly the
+    # property the PreSync hook was chosen for -- a failed migration blocks
+    # the rollout instead of half-applying it -- without the phase-ordering
+    # trap.
+    argocd.argoproj.io/sync-wave: "-1"
+    # A Job's spec.template is immutable, so a plain apply fails on the
+    # second deploy with "field is immutable" once the image tag changes.
+    # Replace=true makes Argo CD delete and recreate it instead. (This is
+    # what the hook mechanism was doing implicitly via its delete policy.)
+    argocd.argoproj.io/sync-options: Replace=true
+spec:
+  # 5, not the default 6 or a token 2. This Job gates the entire sync: if it
+  # exhausts its retries the rollout is blocked, so its retry budget has to
+  # absorb a transient infrastructure hiccup without hiding a real migration
+  # failure. Observed during validation: two consecutive pods died at startup
+  # with `could not translate host name "postgres" to address: Temporary
+  # failure in name resolution` -- a cold-start DNS blip, not a migration
+  # problem (the identical Job succeeded moments earlier and the same lookup
+  # succeeded 8/8 from a pod in the same namespace seconds later). At
+  # backoffLimit: 2 that was enough to fail the sync. Kubernetes backs off
+  # 10s/20s/40s/80s/160s between attempts, so 5 gives roughly five minutes of
+  # tolerance while still failing decisively on a genuinely broken migration,
+  # which fails identically on every attempt.
+  backoffLimit: 5
+  # Cleans up long after a human has had a chance to read the logs. Only
+  # applies to Jobs that reached a terminal state.
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-backend
+        app.kubernetes.io/component: migrate
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      restartPolicy: Never
+      # Safe again now that this is wave -1 and serviceaccount.yaml is wave
+      # -2: the ServiceAccount is guaranteed to exist before this Job runs.
+      # It was temporarily removed while this was still a PreSync hook --
+      # see the sync-wave comment above for what went wrong.
+      serviceAccountName: flipstar-backend
+      # (historical note, kept because it explains the annotation above)
+      # Deliberately NOT serviceAccountName under the old PreSync design.
+      #
+      # This Job is a PreSync hook, and Argo CD runs the entire PreSync phase
+      # before the Sync phase that creates serviceaccount.yaml. On a
+      # first-ever deploy into a fresh namespace the ServiceAccount therefore
+      # does not exist yet, and the Job cannot start at all:
+      #
+      #   Error creating: pods "flipstar-backend-migrate-" is forbidden:
+      #   error looking up service account
+      #   flipstar-production/flipstar-backend: serviceaccount
+      #   "flipstar-backend" not found
+      #
+      # Observed exactly that way on the first production sync into an empty
+      # namespace (staging had masked it -- the ServiceAccount already
+      # existed there from an earlier deploy, so the same manifests worked).
+      # The Job then retries until backoffLimit is exhausted and blocks the
+      # sync forever, on the one deploy where nothing has ever worked before
+      # and the failure is hardest to interpret.
+      #
+      # Falling back to the namespace default ServiceAccount costs nothing
+      # here: automountServiceAccountToken: false means no token is projected
+      # into the pod either way, so the identity is never used for anything.
+      # Migrations talk to PostgreSQL and Vault, never to the Kubernetes API.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: ghcr.io/ammen1/flip-star-backend:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: flipstar-backend-config
+            - secretRef:
+                name: flipstar-backend-vault-approle
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

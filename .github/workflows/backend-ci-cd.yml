@@ -1,0 +1,578 @@
+name: Backend CI/CD
+
+# Backend-only repository (frontend/ and mobile-app/ were removed -- see
+# k8s/README.md and docs/deployment.md). Path-filtered so unrelated
+# non-backend changes (docs at repo root, k8s/, argocd/) never trigger a build.
+#
+# Validation (secrets/lint/format/typecheck/dependency-audit/test/
+# django-checks/build/scan) runs on every PR and push. Only a push to main
+# additionally pushes signed images and updates the staging GitOps path --
+# PRs never publish anything. Production is a separate, manually-triggered
+# promotion (see backend-promote-production.yml) -- this workflow never
+# touches it.
+#
+# Third-party actions are pinned to a commit SHA, not a mutable version tag
+# -- a tag can be moved to point at different, potentially compromised code
+# after the fact; a SHA cannot. This is GitHub's own documented hardening
+# recommendation. The version is kept as a trailing comment so upgrades stay
+# legible; Dependabot (.github/dependabot.yml) opens a PR bumping the SHA
+# whenever a new release lands.
+
+on:
+  pull_request:
+    branches: [main]
+    paths: [
+      "api/**", "common/**", "config/**", "infrastructure/**", "scripts/**",
+      "tests/**", "docs/**", "requirements*.txt", "Dockerfile*", "manage.py", "pyproject.toml",
+      ".github/workflows/backend-ci-cd.yml", ".github/actions/setup-backend/**",
+    ]
+  push:
+    branches: [main]
+    paths: [
+      "api/**", "common/**", "config/**", "infrastructure/**", "scripts/**",
+      "tests/**", "docs/**", "requirements*.txt", "Dockerfile*", "manage.py", "pyproject.toml",
+      ".github/workflows/backend-ci-cd.yml", ".github/actions/setup-backend/**",
+    ]
+
+concurrency:
+  group: backend-ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_API: ghcr.io/ammen1/flip-star-backend
+  IMAGE_CELERY: ghcr.io/ammen1/flip-star-backend-celery
+  PYTHON_VERSION: "3.11"
+  GITLEAKS_VERSION: "8.30.1"
+  KUSTOMIZE_VERSION: "5.4.3"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Secret scan -- blocking. Scans the checked-out tree, not git history:
+  # history already contains real secrets from before this repo had a proper
+  # .gitignore (see docs/secrets.md -- "every secret that has ever
+  # been in this repository is compromised and must be rotated regardless").
+  # Rewriting history to scrub that is a separate, destructive decision this
+  # gate does not make. What it does guarantee is that nothing NEW slips in
+  # from here on -- confirmed necessary, not theoretical: .env,
+  # .env.production and render.env were tracked in this
+  # repo's current HEAD (not just old history) until this same change
+  # untracked them and closed the gitignore gap that allowed it.
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Install gitleaks
+        run: |
+          curl -sL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan working tree for secrets
+        # --config is required, not optional: without it this job reports 28
+        # pre-existing findings and fails on every run, which makes a blocking
+        # gate meaningless. .gitleaks.toml allowlists exactly those -- each one
+        # verified by hand as either a documentation example, a deliberate
+        # redaction-test fixture, or a known-compromised value already on the
+        # ROTATION REQUIRED list in k8s/README.md. Anything else still fails.
+        run: gitleaks detect --no-git --source . --config .gitleaks.toml --redact -v
+
+  # ---------------------------------------------------------------------------
+  # Lint + format -- scoped to changed files only.
+  # ---------------------------------------------------------------------------
+  # `ruff check .` across the whole backend currently reports ~3,020
+  # pre-existing findings (114 files need reformatting) that predate this
+  # pipeline and are out of scope to mass-fix here. Blocking on the full repo
+  # would make this gate permanently red and therefore meaningless. Instead:
+  # new/changed Python files are held to the standard as a hard gate, and the
+  # full-repo count is surfaced separately as a non-blocking report so the
+  # debt stays visible without blocking every PR.
+  lint-and-format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-backend
+        with:
+          install-requirements: "false"
+          extra-packages: "ruff==0.6.9"
+
+      - name: Determine changed Python files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.event.pull_request.base.ref }}"
+          else
+            BASE="${{ github.event.before }}"
+          fi
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "No usable base ref (first push on a new branch) -- skipping diff-scoped lint."
+            echo "files=" >> "$GITHUB_OUTPUT"
+          else
+            FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD -- '*.py' || true)
+            echo "files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$FILES" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --force-exclude is required, not optional. pyproject.toml's
+      # [tool.ruff] extend-exclude lists "api/migrations", but ruff ignores
+      # exclude rules for paths passed explicitly on the command line unless
+      # this flag is given -- and every path here comes from `git diff`, i.e.
+      # explicitly. Without it, a PR that touches a Django-generated migration
+      # fails the blocking gate on generated code the project has deliberately
+      # chosen not to lint. (The previous `grep -v '^migrations/'` filter was
+      # meant to prevent this but never matched: migrations live at
+      # `api/migrations/`, and the pattern was anchored to the start of the
+      # path.)
+      - name: Lint changed files (blocking)
+        if: steps.changed.outputs.files != ''
+        run: |
+          echo "${{ steps.changed.outputs.files }}" | xargs -r ruff check --force-exclude
+          echo "${{ steps.changed.outputs.files }}" | xargs -r ruff format --check --force-exclude
+
+      - name: Full-repo lint report (non-blocking)
+        continue-on-error: true
+        run: |
+          echo "::notice::Full-repo ruff findings are pre-existing debt, tracked but not blocking. See job summary."
+          {
+            echo "### Ruff full-repo debt report (informational)"
+            echo '```'
+            ruff check . --statistics
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Type checking -- non-blocking for now.
+  # ---------------------------------------------------------------------------
+  # pyproject.toml has had a [tool.mypy] config (scoped to common/,
+  # infrastructure/, config/settings/ -- api/* is explicitly exempted) that
+  # was never actually wired up: mypy wasn't a declared dependency and had
+  # never been run. Running it for the first time here surfaced 10
+  # pre-existing errors in infrastructure/keys/ and common/security/
+  # e2e_encryption.py -- security-sensitive key-management code that
+  # shouldn't be changed as a side effect of adding CI. continue-on-error
+  # keeps the check visible without blocking merges on pre-existing issues;
+  # flip this to blocking once those 10 are fixed and reviewed on their own.
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: ./.github/actions/setup-backend
+        with:
+          extra-packages: "mypy==1.11.2"
+
+      - name: mypy
+        run: mypy
+
+  # ---------------------------------------------------------------------------
+  # Python dependency vulnerability audit -- non-blocking for now.
+  # ---------------------------------------------------------------------------
+  # Never run against this codebase before this pipeline existed, so the
+  # current finding count (if any) is unknown rather than verified small --
+  # unlike the ruff/mypy gates above, this was not sized against real output
+  # before being wired in (tooling in the authoring environment hit an
+  # unrelated local disk-space failure). Starting non-blocking is the same
+  # calibrated approach as typecheck: visible immediately, not gating merges
+  # on an unknown-sized backlog. Tighten to blocking-on-critical once a real
+  # run's findings have actually been triaged.
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: ./.github/actions/setup-backend
+        with:
+          install-requirements: "false"
+          extra-packages: "pip-audit==2.7.3"
+
+      - name: pip-audit
+        run: |
+          {
+            echo "### pip-audit findings (informational -- see job comment for why)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          pip-audit -r requirements.txt --desc | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Dependency review -- PR-only. Flags newly-introduced dependencies with
+  # known vulnerabilities or incompatible licenses, using GitHub's own
+  # dependency graph (complements pip-audit's whole-file scan by focusing
+  # specifically on what a PR is about to add).
+  # ---------------------------------------------------------------------------
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: critical
+
+  # ---------------------------------------------------------------------------
+  # Unit tests -- no database, no network (pytest -m unit / not integration).
+  # ---------------------------------------------------------------------------
+  test-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      # dev-requirements, not a hand-listed extra-packages set: five test
+      # modules (tests/unit/test_key_management.py,
+      # tests/unit/test_encrypted_transport.py, tests/unit/test_e2e_encryption.py
+      # and two integration modules) `import fakeredis` at module scope.
+      # fakeredis is pinned in requirements-dev.txt but was not in the
+      # extra-packages list this job used to pass, so collection aborted with
+      # `ModuleNotFoundError: No module named 'fakeredis'` -- 5 collection
+      # errors, job red, and because docker-build `needs: test-unit`, the
+      # pipeline could never build or publish an image at all. Reproduced
+      # directly by running this job's exact install set in a container.
+      - uses: ./.github/actions/setup-backend
+        with:
+          dev-requirements: "true"
+
+      - name: pytest (unit + e2e, SQLite)
+        env:
+          USE_LOCMEM_CACHE: "true"
+        run: pytest -m "not integration" --cov=. --cov-report=term-missing --cov-report=xml
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "### Unit test coverage" >> "$GITHUB_STEP_SUMMARY"
+          python -c "import xml.etree.ElementTree as ET; r = ET.parse('coverage.xml').getroot(); print(f'**{float(r.attrib[\"line-rate\"]) * 100:.1f}%** line coverage')" >> "$GITHUB_STEP_SUMMARY" \
+            || echo "coverage.xml not found (test run likely failed before producing it)" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Integration tests -- real PostgreSQL, matching production's engine.
+  # ---------------------------------------------------------------------------
+  # Includes tests/integration/test_concurrency.py's real select_for_update()
+  # / conditional-UPDATE race tests, which self-skip without
+  # TEST_DB_ENGINE=postgresql -- SQLite's locking semantics don't exercise
+  # what those tests check, so this job is the only place they actually run.
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: flipstar_ci
+          POSTGRES_USER: flipstar_ci
+          POSTGRES_PASSWORD: flipstar_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U flipstar_ci -d flipstar_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: ./.github/actions/setup-backend
+        with:
+          dev-requirements: "true"
+
+      - name: Migrate CI database
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+          DB_ENGINE: django.db.backends.postgresql
+          DB_NAME: flipstar_ci
+          DB_USER: flipstar_ci
+          DB_PASSWORD: flipstar_ci
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          USE_LOCMEM_CACHE: "true"
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py migrate --noinput
+
+      - name: pytest (integration, real Postgres)
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.testing
+          TEST_DB_ENGINE: postgresql
+          TEST_DB_NAME: flipstar_ci
+          TEST_DB_USER: flipstar_ci
+          TEST_DB_PASSWORD: flipstar_ci
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: "5432"
+        run: pytest -m integration -v
+
+  # ---------------------------------------------------------------------------
+  # Django's own checks -- config validity and migration/model drift.
+  # ---------------------------------------------------------------------------
+  django-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: ./.github/actions/setup-backend
+
+      - name: manage.py check
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+          DB_ENGINE: django.db.backends.sqlite3
+          USE_LOCMEM_CACHE: "true"
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py check
+
+      - name: No missing migrations
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+          DB_ENGINE: django.db.backends.sqlite3
+          USE_LOCMEM_CACHE: "true"
+          SECRET_KEY: ci-only-not-a-real-secret
+        run: python manage.py makemigrations --check --dry-run
+
+  # ---------------------------------------------------------------------------
+  # Docker build -- always runs (validates the build on every PR); only
+  # pushed/scanned/deployed on a push to main (see push-image below). Also
+  # generates an SBOM per image, uploaded as a build artifact regardless of
+  # push -- useful for PR review even before an image is ever published.
+  # ---------------------------------------------------------------------------
+  docker-build:
+    needs: [secret-scan, lint-and-format, test-unit, test-integration, django-checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image-tag: ${{ steps.tag.outputs.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - id: tag
+        run: echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.11.1
+
+      - name: Build API image (validation only, not pushed)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.0
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Celery image (validation only, not pushed)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.0
+        with:
+          context: .
+          file: Dockerfile.celery
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate SBOMs (SPDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.17.9
+        with:
+          image: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
+          format: spdx-json
+          output-file: sbom-api.spdx.json
+
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.17.9
+        with:
+          image: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
+          format: spdx-json
+          output-file: sbom-celery.spdx.json
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sboms
+          path: sbom-*.spdx.json
+          retention-days: 90
+
+      - name: Save images for the scan/push jobs
+        run: |
+          docker save "${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}" -o /tmp/api-image.tar
+          docker save "${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}" -o /tmp/celery-image.tar
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: docker-images
+          path: /tmp/*.tar
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Vulnerability scan -- blocking on CRITICAL, informational on HIGH+.
+  # ---------------------------------------------------------------------------
+  security-scan:
+    needs: [docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: docker-images
+          path: /tmp
+
+      - run: |
+          docker load -i /tmp/api-image.tar
+          docker load -i /tmp/celery-image.tar
+
+      # Both images are scanned, not just the API. They are built from
+      # separate Dockerfiles and the Celery image carries its own runtime
+      # layer (ffmpeg, libpq5) -- a CRITICAL there is just as exploitable,
+      # and it runs the same application code with the same database and
+      # Vault credentials. Scanning only the API image left the worker and
+      # beat images entirely unscanned even though push-image publishes both.
+      - name: Trivy scan (API) -- fail on CRITICAL
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_API }}:${{ needs.docker-build.outputs.image-tag }}
+          severity: "CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Trivy scan (Celery) -- fail on CRITICAL
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_CELERY }}:${{ needs.docker-build.outputs.image-tag }}
+          severity: "CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Trivy scan -- full report (HIGH+, non-blocking)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        if: always()
+        with:
+          image-ref: ${{ env.IMAGE_API }}:${{ needs.docker-build.outputs.image-tag }}
+          severity: "HIGH,CRITICAL"
+          exit-code: "0"
+          format: "table"
+
+      - name: Trivy scan (Celery) -- full report (HIGH+, non-blocking)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        if: always()
+        with:
+          image-ref: ${{ env.IMAGE_CELERY }}:${{ needs.docker-build.outputs.image-tag }}
+          severity: "HIGH,CRITICAL"
+          exit-code: "0"
+          format: "table"
+
+  # ---------------------------------------------------------------------------
+  # Push -- only on push to main, only after every gate above has passed.
+  # Signs both images (keyless, via GitHub's own OIDC identity -- no signing
+  # key to generate, store, or rotate) so anyone can verify an image running
+  # in a cluster was actually built by this workflow from this commit,
+  # rather than pushed by hand or by a compromised credential.
+  # ---------------------------------------------------------------------------
+  push-image:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [docker-build, security-scan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # required for cosign keyless signing
+    outputs:
+      image-tag: ${{ needs.docker-build.outputs.image-tag }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: docker-images
+          path: /tmp
+
+      - run: |
+          docker load -i /tmp/api-image.tar
+          docker load -i /tmp/celery-image.tar
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.5.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push (immutable commit-SHA tag only -- never latest)
+        id: push
+        env:
+          SHA: ${{ needs.docker-build.outputs.image-tag }}
+        run: |
+          docker push "${{ env.IMAGE_API }}:${SHA}"
+          docker push "${{ env.IMAGE_CELERY }}:${SHA}"
+
+      - uses: sigstore/cosign-installer@f713795cb21599bc4e5c4b58cbad1da852d7eeb9 # v3.10.0
+
+      - name: Sign images (keyless)
+        env:
+          SHA: ${{ needs.docker-build.outputs.image-tag }}
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes "${{ env.IMAGE_API }}:${SHA}"
+          cosign sign --yes "${{ env.IMAGE_CELERY }}:${SHA}"
+
+  # ---------------------------------------------------------------------------
+  # GitOps update -- staging only. Production is a separate, manual
+  # promotion (backend-promote-production.yml) -- this job never touches it.
+  # `environment: staging` records this deployment in the repo's Environments
+  # tab (what SHA, when, by which run) and is where staging-specific
+  # protection rules (if any are ever wanted) would attach -- see
+  # k8s/README.md.
+  # ---------------------------------------------------------------------------
+  update-gitops-staging:
+    needs: [push-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: main
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" /usr/local/bin
+
+      - name: Set image tags in the staging overlay
+        working-directory: k8s/overlays/staging
+        env:
+          SHA: ${{ needs.push-image.outputs.image-tag }}
+        run: |
+          kustomize edit set image \
+            "${{ env.IMAGE_API }}=${{ env.IMAGE_API }}:${SHA}" \
+            "${{ env.IMAGE_CELERY }}=${{ env.IMAGE_CELERY }}:${SHA}"
+
+      - name: Commit and push
+        env:
+          SHA: ${{ needs.push-image.outputs.image-tag }}
+        run: |
+          git config user.name "flipstar-ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add k8s/overlays/staging/kustomization.yaml
+          if git diff --cached --quiet; then
+            echo "No change -- image tag already at ${SHA}."
+          else
+            git commit -m "chore(gitops): deploy backend ${SHA} to staging"
+            git push origin main
+          fi

@@ -1,0 +1,101 @@
+# Build context exclusions.
+#
+# Two jobs, and the first one is a security control, not an optimisation:
+# both Dockerfiles end with `COPY . .`, so anything reachable here lands in
+# the shipped image. `.git` was previously NOT excluded, which meant the
+# production image carried the repository's entire history -- including the
+# `.env` files (real Telebirr operator credentials, Neon Postgres password)
+# that were tracked in this repo before .gitignore covered them. `git log
+# --all -- .env` still lists them; untracking at HEAD does not remove them
+# from history, and history was being shipped. Verified directly: before
+# this rule, `/app/.git` existed inside the built image and those objects
+# were recoverable from it.
+#
+# The second job is size: the context was 231 MB (175 MB .git + 30 MB media
+# + 3 MB staticfiles), all of it uploaded to the daemon on every build and
+# most of it copied into the image.
+
+# --- Secrets and history (security) -----------------------------------------
+# Note there is deliberately NO `!.env.example` re-include. That exception used
+# to exist, and it mattered: .env.example was not a template at all below its
+# first ~210 lines -- a real production .env had been pasted in, carrying a
+# live Telebirr RSA private key, a live VAPID EC private key, the Django
+# SECRET_KEY, the database password, the admin password and the Onevas
+# application key. All of it shipped inside the image. The file is now
+# sanitised, but it has no runtime purpose (no Python code reads it), so it
+# stays out of the image on principle rather than on trust.
+.git
+.gitignore
+.gitattributes
+.github
+.env
+.env.*
+render.env
+*.pem
+*.key
+secrets/
+
+# --- Local databases and dumps ----------------------------------------------
+db.sqlite3
+db.sqlite3-journal
+fallback_db.sqlite3
+flipstar_db
+neondb
+*.sql
+*.dump
+
+# --- Runtime/user data: never belongs in an image ----------------------------
+# The image creates an empty /app/media itself; real media lives on object
+# storage (django-storages/S3) or a volume, never baked in.
+media/
+
+# --- Build artifacts regenerated during the build ----------------------------
+# collectstatic runs in the Dockerfile; shipping a stale copy of its output
+# into the context only risks it winning over the freshly generated one.
+staticfiles/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# --- Virtualenvs -------------------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+
+# --- Test/tooling caches and reports ----------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+
+# --- Deployment surface: not needed by the application at runtime ------------
+k8s/
+argocd/
+docker-compose.yml
+Dockerfile
+Dockerfile.celery
+.dockerignore
+
+# --- Docs ---------------------------------------------------------------------
+docs/
+*.md
+!README.md
+
+# --- Editors / OS ------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log

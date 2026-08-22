@@ -1,0 +1,151 @@
+# Backend API (Daphne/ASGI -- serves HTTP and WebSocket traffic via Django
+# Channels; a WSGI server would silently drop the WebSocket support, see
+# Dockerfile). Image tag is set per-deploy by `kustomize edit set
+# image` in CI -- see .github/workflows/backend-ci-cd.yml -- never `latest`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-backend
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-backend
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      serviceAccountName: flipstar-backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      # Spreads pods across nodes on a best-effort basis; not a hard
+      # requirement since small clusters may only have one node available.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: flipstar-backend
+                    app.kubernetes.io/component: api
+      containers:
+        - name: backend
+          image: ghcr.io/ammen1/flip-star-backend:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: flipstar-backend-config
+            - secretRef:
+                name: flipstar-backend-vault-approle
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # /api/v1/health/ deliberately does not touch the database (see
+          # api/urls.py::health_check) so a database blip doesn't cause a
+          # restart loop.
+          #
+          # The two httpHeaders below are REQUIRED, not decoration. A kubelet
+          # httpGet probe sends `Host: <pod-ip>:8000` and plain HTTP, and
+          # this app's production settings reject both:
+          #
+          #   * ALLOWED_HOSTS never contains the pod IP (it can't -- pod IPs
+          #     are assigned at schedule time), so Django raises DisallowedHost
+          #     and returns 400.
+          #   * SECURE_SSL_REDIRECT=true (configmap.yaml) makes SecurityMiddleware
+          #     301-redirect any request it considers insecure, before routing.
+          #
+          # Measured directly against the real image, production settings, and
+          # a real Vault/Redis/Postgres:
+          #     no headers ................... 400  (probe fails -> CrashLoopBackOff)
+          #     Host only .................... 301  (passes, but never reaches the view)
+          #     X-Forwarded-Proto only ....... 400
+          #     both (this config) ........... 200  {"status":"ok"}
+          #
+          # `Host: localhost` is always valid: config/settings/base.py appends
+          # REQUIRED_HOSTS = ['localhost', '127.0.0.1'] to ALLOWED_HOSTS no
+          # matter what the environment supplies, precisely so health checks
+          # keep working. X-Forwarded-Proto: https satisfies
+          # SECURE_PROXY_SSL_HEADER (base.py) so is_secure() is true and the
+          # redirect is skipped -- the probe then exercises the real view and
+          # a broken app actually fails the probe, instead of every request
+          # being short-circuited into a 301 that always looks healthy.
+          startupProbe:
+            httpGet:
+              path: /api/v1/health/
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
+            failureThreshold: 12
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health/
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
+            initialDelaySeconds: 0
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health/
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
+            initialDelaySeconds: 0
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

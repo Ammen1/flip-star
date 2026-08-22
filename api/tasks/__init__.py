@@ -1,0 +1,34 @@
+"""Celery tasks.
+
+Celery's ``autodiscover_tasks()`` imports ``api.tasks``; every task must be
+reachable from this module for it to be registered.
+
+Task functions are thin: they resolve arguments, call into ``api/services`` or
+``api/integrations``, and handle retries. Business rules do not live here.
+"""
+
+from api.tasks.leaderboards import (
+    auto_select_campaign_winners,
+    generate_daily_leaderboards,
+    generate_monthly_leaderboards,
+    generate_weekly_leaderboards,
+)
+from api.tasks.media import (
+    cleanup_typing_indicators,
+    generate_reel_blurhash,
+    optimize_profile_image,
+    process_reel_media,
+    send_push_notification,
+)
+
+__all__ = [
+    'auto_select_campaign_winners',
+    'cleanup_typing_indicators',
+    'generate_daily_leaderboards',
+    'generate_monthly_leaderboards',
+    'generate_reel_blurhash',
+    'generate_weekly_leaderboards',
+    'optimize_profile_image',
+    'process_reel_media',
+    'send_push_notification',
+]

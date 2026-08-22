@@ -1,0 +1,117 @@
+# Celery beat -- periodic task scheduler. Must never run more than one
+# replica: two beat processes would each independently schedule every
+# periodic task, double-firing everything on the schedule. `replicas: 1` is
+# not enough on its own -- a RollingUpdate briefly runs old+new pods
+# together, which is exactly two beat processes at once. `strategy: Recreate`
+# guarantees the old pod is fully gone before the new one starts, trading a
+# short scheduling gap (acceptable for a periodic scheduler) for the
+# singleton guarantee (not acceptable to lose).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-celery-beat
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: celery-beat
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: celery-beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-backend
+        app.kubernetes.io/component: celery-beat
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      serviceAccountName: flipstar-backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: celery-beat
+          image: ghcr.io/ammen1/flip-star-backend-celery:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          # --schedule points celery's default PersistentScheduler at the
+          # writable /tmp emptyDir. Without it, the scheduler tries to open
+          # its shelve db at the CWD (/app/celerybeat-schedule), which fails
+          # under readOnlyRootFilesystem: true -- confirmed directly against
+          # a disposable cluster (dial: shelve.open('/app/...') -> "Read-only
+          # file system"), not a theoretical concern.
+          command: ["celery", "-A", "config", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+          envFrom:
+            - configMapRef:
+                name: flipstar-backend-config
+            - secretRef:
+                name: flipstar-backend-vault-approle
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # Beat probes. `celery inspect ping` is NOT usable here -- it asks
+          # workers to reply over the broker, and beat is not a worker, so it
+          # never answers. (Dockerfile.celery's own HEALTHCHECK uses exactly
+          # that command, which is correct for the worker and is why a beat
+          # container run from that image reports "unhealthy" forever --
+          # observed directly. These probes override it in Kubernetes.)
+          #
+          # What beat does give us is its PersistentScheduler shelve file.
+          # Measured against a real beat process: the file is created at
+          # startup and re-synced every 180s exactly (celery's
+          # Scheduler.sync_every = 3 * 60) -- two consecutive writes observed
+          # 180s apart.
+          #
+          # startupProbe: the file existing at all proves beat got far enough
+          # to open its schedule database and that the path is writable. This
+          # is precisely the read-only-root-filesystem failure that
+          # --schedule=/tmp/... above exists to avoid, so it is worth
+          # asserting rather than assuming.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "test -f /tmp/celerybeat-schedule"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
+          # livenessProbe: catches a beat that is still a live process but has
+          # stopped scheduling -- the failure kubelet's crash-restart cannot
+          # see, since the process never exits. 900s is 5x the measured 180s
+          # sync interval, so ordinary jitter cannot trip it; combined with
+          # periodSeconds/failureThreshold below, a genuinely wedged beat is
+          # restarted within ~20 minutes. Verified in all three states against
+          # a real container: live beat -> exit 0; schedule file backdated 20
+          # minutes -> non-zero; schedule file removed -> non-zero.
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - test -f /tmp/celerybeat-schedule && test $(( $(date +%s) - $(stat -c %Y /tmp/celerybeat-schedule) )) -lt 900
+            periodSeconds: 120
+            timeoutSeconds: 10
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

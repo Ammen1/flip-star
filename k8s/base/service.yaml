@@ -1,0 +1,21 @@
+# Only the backend API receives inbound traffic (HTTP + WebSocket, both over
+# the same Daphne port). Celery worker/beat are outbound-only and get no
+# Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flipstar-backend
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: flipstar
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

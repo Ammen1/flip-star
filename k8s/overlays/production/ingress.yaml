@@ -1,0 +1,34 @@
+# See staging/ingress.yaml for the full rationale (ingress-nginx +
+# cert-manager assumed pre-installed; every path routes to the backend
+# Service since the frontend deploys to Vercel separately).
+#
+# CHANGEME-production-backend-domain is a placeholder, not an invented
+# domain: this project has no confirmed production domain today (only
+# uat.flipstar.et exists, see docker-compose.yml/nginx.conf). Replace with
+# the real domain, and secretName below with whatever cert-manager Secret
+# naming convention the cluster actually uses, before applying.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flipstar-backend
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - CHANGEME-production-backend-domain
+      secretName: flipstar-production-tls
+  rules:
+    - host: CHANGEME-production-backend-domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http

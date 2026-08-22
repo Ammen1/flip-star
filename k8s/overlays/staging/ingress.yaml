@@ -1,0 +1,36 @@
+# Assumes an ingress-nginx controller and cert-manager are already installed
+# on the cluster (neither is part of this Kustomize tree -- they're
+# cluster-wide add-ons, not per-application). ingress-nginx proxies WebSocket
+# upgrade headers automatically on every path, which also fixes the /ws/
+# routing gap documented in docs/deployment.md for the current
+# nginx.conf -- no special WebSocket location block needed here.
+#
+# This cluster hosts backend only (see k8s/README.md for why) -- the React
+# frontend deploys to Vercel separately, so every path here routes to the
+# backend Service, matching how nginx.conf currently proxies /api/ and would
+# need to proxy /admin/ (also a documented, currently-missing route there).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flipstar-backend
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - uat.flipstar.et
+      secretName: flipstar-staging-tls
+  rules:
+    - host: uat.flipstar.et
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http

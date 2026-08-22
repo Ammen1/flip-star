@@ -1,0 +1,15 @@
+# Staging runs single replicas to save cost -- it's not expected to survive
+# a node loss without a brief gap, unlike production.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-backend
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-celery-worker
+spec:
+  replicas: 1
