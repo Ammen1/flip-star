@@ -107,9 +107,7 @@ class SecretProvider:
 
         if not self.vault_enabled:
             if self.vault_required:
-                raise VaultUnavailable(
-                    'VAULT_REQUIRED=true but VAULT_ADDR is not set.'
-                )
+                raise VaultUnavailable('VAULT_REQUIRED=true but VAULT_ADDR is not set.')
             self._vault_secrets = {}
             return {}
 
