@@ -38,8 +38,20 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
 
       - name: Install kustomize
+        # Installed into RUNNER_TEMP rather than /usr/local/bin. The
+        # GitHub-hosted runner image ships its own kustomize there, and
+        # upstream's install_kustomize.sh refuses to overwrite an existing
+        # binary -- it prints "/usr/local/bin/kustomize exists. Remove it
+        # first." and exits 1, failing the job. Deleting the runner's copy
+        # would also work, but installing elsewhere and prepending via
+        # GITHUB_PATH is what actually guarantees the pinned
+        # KUSTOMIZE_VERSION is the one that runs: the runner's bundled
+        # version is unpinned and can change under us without notice.
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" /usr/local/bin
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/bin/kustomize" version
 
       - name: Build ${{ matrix.overlay }}
         run: kustomize build "k8s/overlays/${{ matrix.overlay }}" > "rendered-${{ matrix.overlay }}.yaml"
@@ -65,6 +77,20 @@ jobs:
             exit 1
           fi
 
+      - name: Confirm no Secret is rendered
+        # This is the property the secret.example.yaml guard below is really
+        # protecting, tested against the rendered result rather than against
+        # file text. Secrets are created out-of-band per namespace, and
+        # argocd/project.yaml deliberately omits Secret from its allowed
+        # resource kinds -- so a rendered Secret would be rejected at sync
+        # time anyway. Catching it here gives a legible error instead.
+        run: |
+          if grep -nE '^kind:[[:space:]]*Secret[[:space:]]*$' "rendered-${{ matrix.overlay }}.yaml"; then
+            echo "::error::The rendered ${{ matrix.overlay }} manifests contain a Secret. Secrets must be created out-of-band, never through Kustomize/Argo CD."
+            exit 1
+          fi
+          echo "OK: no Secret in the rendered ${{ matrix.overlay }} output"
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rendered-${{ matrix.overlay }}
@@ -89,8 +115,22 @@ jobs:
         # It's a template (see its own header comment) -- if it's ever
         # accidentally added to a kustomization.yaml resources: list, the
         # placeholder REPLACE-ME values would actually get applied.
+        #
+        # Matches an actual list entry, with comments stripped first. The
+        # previous form was `grep -rl "secret.example.yaml"`, which matches
+        # the string anywhere in the file -- so it fired on
+        # k8s/base/kustomization.yaml's own comment explaining that
+        # secret.example.yaml is deliberately NOT a resource. The guard
+        # failed on a correct tree, which is worse than not having it: a
+        # check that cannot pass gets disabled rather than fixed.
         run: |
-          if grep -rl "secret.example.yaml" k8s/base/kustomization.yaml k8s/overlays/*/kustomization.yaml 2>/dev/null; then
-            echo "::error::secret.example.yaml is referenced from a real kustomization.yaml -- it must stay a template only, applied manually, never through Kustomize/Argo CD."
-            exit 1
-          fi
+          fail=0
+          for f in k8s/base/kustomization.yaml k8s/overlays/*/kustomization.yaml; do
+            [ -f "$f" ] || continue
+            if sed 's/#.*//' "$f" | grep -qE '^[[:space:]]*-[[:space:]]*\.?/?secret\.example\.yaml[[:space:]]*$'; then
+              echo "::error file=$f::secret.example.yaml is listed as a Kustomize resource -- it must stay a template only, applied manually, never through Kustomize/Argo CD."
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] || exit 1
+          echo "OK: secret.example.yaml is not a resource in any kustomization"
