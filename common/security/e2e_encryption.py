@@ -79,7 +79,11 @@ def _b64decode(value: str, *, field: str) -> bytes:
         raise DecryptionError(f'{field} is not valid base64.')
     try:
         return base64.b64decode(value, validate=True)
-    except (ValueError, base64.binascii.Error) as exc:
+    # binascii.Error subclasses ValueError (verified: its MRO is
+    # Error -> ValueError -> Exception), so ValueError alone catches exactly
+    # the same exceptions. The old form also reached through `base64.binascii`,
+    # which exists at runtime but is not part of base64's declared API.
+    except ValueError as exc:
         raise DecryptionError(f'{field} could not be decoded.') from exc
 
 

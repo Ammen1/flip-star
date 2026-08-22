@@ -19,6 +19,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import cast
 
 import redis
 from django.conf import settings
@@ -62,16 +63,23 @@ _CONNECT_TIMEOUT_S = 5
 def get_client() -> redis.Redis:
     """The shared Redis client for keypair storage, built once per process."""
     global _client
-    if _client is not None:
-        return _client
+    client = _client
+    if client is not None:
+        return client
     with _client_lock:
-        if _client is None:
-            _client = redis.Redis.from_url(
+        # Re-read under the lock: another thread may have built it between the
+        # unlocked check above and acquiring the lock. Assigning through a
+        # local keeps the double-checked-locking behaviour identical while
+        # letting the type checker see a non-Optional return.
+        client = _client
+        if client is None:
+            client = redis.Redis.from_url(
                 settings.REDIS_CRYPTO_URL,
                 decode_responses=True,
                 socket_connect_timeout=_CONNECT_TIMEOUT_S,
             )
-    return _client
+            _client = client
+        return client
 
 
 def set_client(client: redis.Redis) -> None:
@@ -89,7 +97,14 @@ def reset_client() -> None:
 
 def read_both() -> StoredKeyPair:
     client = get_client()
-    public_key, private_key = client.mget([PUBLIC_KEY_REDIS_KEY, PRIVATE_KEY_REDIS_KEY])
+    # redis-py types mget() as Awaitable because one class backs both the sync
+    # and async clients. This client is the sync one, so the call returns a
+    # list; the cast states that without changing anything at runtime.
+    values = cast(
+        'list[str | None]',
+        client.mget([PUBLIC_KEY_REDIS_KEY, PRIVATE_KEY_REDIS_KEY]),
+    )
+    public_key, private_key = values
     return StoredKeyPair(public_key=public_key, private_key=private_key)
 
 

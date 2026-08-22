@@ -166,30 +166,36 @@ class KeyManagementService:
 
     def _load_and_reconcile(self) -> tuple[str, str]:
         stored = redis_store.read_both()
-        has_public = bool(stored.public_key)
-        has_private = bool(stored.private_key)
+        # Bound to locals and tested directly rather than through
+        # `has_public`/`has_private` booleans. Both fields are `str | None`,
+        # and a type checker narrows an Optional only when the value itself is
+        # tested -- not when a bool derived from it is. `bool(x)` and `x` are
+        # identical in a boolean context, so the branch conditions are
+        # unchanged; only the narrowing improves.
+        stored_public = stored.public_key
+        stored_private = stored.private_key
 
-        if has_public and has_private:
-            self._validate_pair(stored.public_key, stored.private_key)
+        if stored_public and stored_private:
+            self._validate_pair(stored_public, stored_private)
             logger.info('Existing cryptographic keypair found and validated.')
-            return stored.public_key, stored.private_key
+            return stored_public, stored_private
 
-        if not has_public and not has_private:
+        if not stored_public and not stored_private:
             logger.info('No keypair found; generating new keypair.')
             public_key, private_key = generate_keypair()
             redis_store.write_both(public_key, private_key)
             logger.info('Cryptographic keypair generated and stored successfully.')
             return public_key, private_key
 
-        if has_private and not has_public:
+        if stored_private and not stored_public:
             logger.warning(
                 'Public key missing from Redis but private key present; '
                 'deriving the public key from the stored private key.'
             )
-            private_raw = _decode_key(stored.private_key, label='private key')
+            private_raw = _decode_key(stored_private, label='private key')
             public_key = _b64encode(_derive_public(private_raw))
             redis_store.write_public_only(public_key)
-            return public_key, stored.private_key
+            return public_key, stored_private
 
         # has_public and not has_private: the one state that can never be
         # safely repaired automatically -- the public half may already be in
@@ -226,7 +232,10 @@ class KeyManagementService:
     def get_public_key(self) -> str:
         """The server's own public key, base64-encoded. Safe to hand out freely."""
         self._require_initialized()
-        return self._public_key
+        key = self._public_key
+        if key is None:  # invariant violation, not reachable via initialize()
+            raise KeyManagementError('Public key is unset despite the service being initialized.')
+        return key
 
     def get_private_key(self) -> str:
         """
@@ -235,7 +244,10 @@ class KeyManagementService:
         this through a serializer, a log call, or an exception message.
         """
         self._require_initialized()
-        return self._private_key
+        key = self._private_key
+        if key is None:  # invariant violation, not reachable via initialize()
+            raise KeyManagementError('Private key is unset despite the service being initialized.')
+        return key
 
     def _require_initialized(self) -> None:
         if not self._initialized:
