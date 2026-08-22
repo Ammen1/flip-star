@@ -63,23 +63,32 @@ _CONNECT_TIMEOUT_S = 5
 def get_client() -> redis.Redis:
     """The shared Redis client for keypair storage, built once per process."""
     global _client
-    client = _client
-    if client is not None:
-        return client
+    cached = _client
+    if cached is not None:
+        return cached
     with _client_lock:
-        # Re-read under the lock: another thread may have built it between the
-        # unlocked check above and acquiring the lock. Assigning through a
-        # local keeps the double-checked-locking behaviour identical while
-        # letting the type checker see a non-Optional return.
-        client = _client
-        if client is None:
-            client = redis.Redis.from_url(
+        # Re-read under the lock: another thread may have built the client
+        # between the unlocked check above and acquiring the lock.
+        cached = _client
+        if cached is not None:
+            return cached
+        # The cast works around an upstream typing bug: redis-py 5.0.1 (the
+        # pinned version) annotates Redis.from_url as `-> None`, while its own
+        # docstring says "Return a Redis client object". Taken at face value
+        # that makes this whole function look like it returns Optional. The
+        # cast asserts what from_url actually returns and costs nothing at
+        # runtime. Drop it if the pin moves to a release that fixes the
+        # annotation.
+        created = cast(
+            redis.Redis,
+            redis.Redis.from_url(
                 settings.REDIS_CRYPTO_URL,
                 decode_responses=True,
                 socket_connect_timeout=_CONNECT_TIMEOUT_S,
-            )
-            _client = client
-        return client
+            ),
+        )
+        _client = created
+        return created
 
 
 def set_client(client: redis.Redis) -> None:
