@@ -551,8 +551,18 @@ jobs:
           ref: main
 
       - name: Install kustomize
+        # Installed into RUNNER_TEMP rather than /usr/local/bin. The
+        # GitHub-hosted runner image ships its own kustomize there, and
+        # upstream's install_kustomize.sh refuses to overwrite an existing
+        # binary -- it prints "/usr/local/bin/kustomize exists. Remove it
+        # first." and exits 1, failing the job. Prepending via GITHUB_PATH
+        # also guarantees the pinned KUSTOMIZE_VERSION is the one that runs,
+        # rather than the runner's unpinned bundled copy.
         run: |
-          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" /usr/local/bin
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/bin/kustomize" version
 
       - name: Set image tags in the staging overlay
         working-directory: k8s/overlays/staging
