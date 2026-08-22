@@ -12,7 +12,14 @@
 *.key
 !**/staticfiles/**/*.key
 render.env
-secrets/
+# Leading slash matters: an unanchored `secrets/` matches a directory of
+# that name at ANY depth, which silently excluded infrastructure/secrets/ --
+# the Vault client and secret-resolution provider imported by every settings
+# module. The repository was pushed without it and nothing that loads Django
+# settings could run. This anchors the rule to a top-level secrets/ only.
+# (Note: .dockerignore's identical-looking `secrets/` is already root-anchored
+# -- Docker's ignore patterns do not match at arbitrary depth the way git's do.)
+/secrets/
 
 # --- Python ------------------------------------------------------------------
 __pycache__/
