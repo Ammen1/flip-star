@@ -1,0 +1,55 @@
+name: Setup backend Python environment
+description: >
+  Checks out the repo, installs Python with pip caching keyed on
+  requirements.txt, installs requirements.txt, and optionally
+  installs extra job-specific packages (ruff/mypy/pytest/pip-audit). Shared
+  by every job in backend-ci-cd.yml so the setup sequence is defined once
+  rather than repeated per job.
+
+inputs:
+  python-version:
+    description: Python version to install
+    required: false
+    default: "3.11"
+  extra-packages:
+    description: Space-separated extra pip packages to install (e.g. "ruff==0.6.9")
+    required: false
+    default: ""
+  install-requirements:
+    description: Whether to install requirements.txt
+    required: false
+    default: "true"
+  dev-requirements:
+    description: >
+      Install requirements-dev.txt instead of requirements.txt. Use this for
+      any job that runs pytest -- requirements-dev.txt already includes
+      requirements.txt via `-r`, plus the test-only dependencies (notably
+      fakeredis, which five test modules import at module scope).
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+        cache-dependency-path: |
+          requirements.txt
+          requirements-dev.txt
+
+    - name: Install backend requirements
+      if: inputs.install-requirements == 'true' && inputs.dev-requirements != 'true'
+      shell: bash
+      run: pip install -r requirements.txt
+
+    - name: Install backend + dev requirements
+      if: inputs.dev-requirements == 'true'
+      shell: bash
+      run: pip install -r requirements-dev.txt
+
+    - name: Install extra packages
+      if: inputs.extra-packages != ''
+      shell: bash
+      run: pip install ${{ inputs.extra-packages }}

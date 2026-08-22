@@ -1,0 +1,22 @@
+# Strategic-merge patch onto k8s/base/configmap.yaml -- only the keys that
+# differ for staging.
+#
+# DB_HOST/REDIS_HOST/VAULT_ADDR are the in-cluster Services deployed on the
+# sky-staging-server k3s node (namespace flipstar-staging), verified reachable
+# from a pod there. VAULT_ADDR is http, not https: the staging Vault listener
+# runs with tls_disable = 1. Production must not copy that -- it needs a real
+# TLS listener and an https:// address here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flipstar-backend-config
+data:
+  ALLOWED_HOSTS: "uat.flipstar.et"
+  DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
+  REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
+  CORS_ALLOWED_ORIGINS: "https://uat.flipstar.et"
+  CSRF_TRUSTED_ORIGINS: "https://uat.flipstar.et"
+  BACKEND_URL: "https://uat.flipstar.et"
+  LOG_LEVEL: "DEBUG"
+  VAULT_ADDR: "http://vault.flipstar-staging.svc.cluster.local:8200"
+  VAULT_SECRET_PATH: "flipstar/backend/staging"

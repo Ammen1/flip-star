@@ -1,0 +1,230 @@
+from django.conf import settings
+from django.core.management.base import BaseCommand
+
+from api.models.subscription import SubscriptionTier
+
+# Onevas provisioning (spid / service_id / product_id / application_key) is
+# resolved from settings, which read environment -> Vault -> .env. These four
+# tiers previously carried live application keys as literals in this file.
+ONEVAS = settings.ONEVAS_PRODUCTS
+
+
+class Command(BaseCommand):
+    help = 'Seed subscription tiers with Onevas configuration'
+
+    def handle(self, *args, **options):
+        tiers_data = [
+            {
+                'name': 'Daily Premium',
+                'slug': 'daily',
+                'description': '24-hour access to premium features',
+                'duration_type': 'daily',
+                'duration_days': 1,
+                'price_etb': 3.00,
+                'price_coins': None,
+                'onevas_code': 'A',
+                'spid': ONEVAS['daily']['spid'],
+                'service_id': ONEVAS['daily']['service_id'],
+                'product_id': ONEVAS['daily']['product_id'],
+                'application_key': ONEVAS['daily']['application_key'],
+                'short_code': '9286',
+                'features': ['View all content', 'Basic interactions'],
+                'privileges': {
+                    'max_posts_per_day': 10,
+                    'max_reels_per_day': 5,
+                    'max_campaigns_per_month': 0,
+                    'max_likes_per_day': 100,
+                    'max_comments_per_day': 50,
+                    'max_follows_per_day': 20,
+                    'priority_support': False,
+                    'custom_themes': False,
+                    'analytics_access': False,
+                    'api_access': False,
+                    'ad_free': False,
+                    'watermark_free': False,
+                    'hd_quality': False,
+                    'download_videos': False,
+                    'profile_badge': 'Daily Premium'
+                },
+                'max_posts_per_day': 10,
+                'max_reels_per_day': 5,
+                'max_campaigns_per_month': 0,
+                'max_likes_per_day': 100,
+                'max_comments_per_day': 50,
+                'max_follows_per_day': 20,
+                'priority_support': False,
+                'custom_themes': False,
+                'analytics_access': False,
+                'api_access': False,
+                'ad_free': False,
+                'watermark_free': False,
+                'hd_quality': False,
+                'download_videos': False,
+                'is_active': True,
+                'sort_order': 1,
+            },
+            {
+                'name': 'Weekly Premium',
+                'slug': 'weekly',
+                'description': '7-day access to premium features',
+                'duration_type': 'weekly',
+                'duration_days': 7,
+                'price_etb': 20.00,
+                'price_coins': None,
+                'onevas_code': 'B',
+                'spid': ONEVAS['weekly']['spid'],
+                'service_id': ONEVAS['weekly']['service_id'],
+                'product_id': ONEVAS['weekly']['product_id'],
+                'application_key': ONEVAS['weekly']['application_key'],
+                'short_code': '9286',
+                'features': ['View all content', 'Extended interactions', 'HD quality'],
+                'privileges': {
+                    'max_posts_per_day': 15,
+                    'max_reels_per_day': 8,
+                    'max_campaigns_per_month': 1,
+                    'max_likes_per_day': 200,
+                    'max_comments_per_day': 100,
+                    'max_follows_per_day': 50,
+                    'priority_support': False,
+                    'custom_themes': False,
+                    'analytics_access': False,
+                    'api_access': False,
+                    'ad_free': False,
+                    'watermark_free': False,
+                    'hd_quality': True,
+                    'download_videos': False,
+                    'profile_badge': 'Weekly Premium'
+                },
+                'max_posts_per_day': 15,
+                'max_reels_per_day': 8,
+                'max_campaigns_per_month': 1,
+                'max_likes_per_day': 200,
+                'max_comments_per_day': 100,
+                'max_follows_per_day': 50,
+                'priority_support': False,
+                'custom_themes': False,
+                'analytics_access': False,
+                'api_access': False,
+                'ad_free': False,
+                'watermark_free': False,
+                'hd_quality': True,
+                'download_videos': False,
+                'is_active': True,
+                'sort_order': 2,
+            },
+            {
+                'name': 'Monthly Premium',
+                'slug': 'monthly',
+                'description': '30-day access to all premium features',
+                'duration_type': 'monthly',
+                'duration_days': 30,
+                'price_etb': 70.00,
+                'price_coins': None,
+                'onevas_code': 'C',
+                'spid': ONEVAS['monthly']['spid'],
+                'service_id': ONEVAS['monthly']['service_id'],
+                'product_id': ONEVAS['monthly']['product_id'],
+                'application_key': ONEVAS['monthly']['application_key'],
+                'short_code': '9286',
+                'features': ['All features', 'Priority support', 'Custom themes', 'Analytics', 'Ad-free', 'Download videos'],
+                'privileges': {
+                    'max_posts_per_day': 30,
+                    'max_reels_per_day': 15,
+                    'max_campaigns_per_month': 5,
+                    'max_likes_per_day': 500,
+                    'max_comments_per_day': 250,
+                    'max_follows_per_day': 100,
+                    'priority_support': True,
+                    'custom_themes': True,
+                    'analytics_access': True,
+                    'api_access': False,
+                    'ad_free': True,
+                    'watermark_free': True,
+                    'hd_quality': True,
+                    'download_videos': True,
+                    'profile_badge': 'Monthly Premium'
+                },
+                'max_posts_per_day': 30,
+                'max_reels_per_day': 15,
+                'max_campaigns_per_month': 5,
+                'max_likes_per_day': 500,
+                'max_comments_per_day': 250,
+                'max_follows_per_day': 100,
+                'priority_support': True,
+                'custom_themes': True,
+                'analytics_access': True,
+                'api_access': False,
+                'ad_free': True,
+                'watermark_free': True,
+                'hd_quality': True,
+                'download_videos': True,
+                'is_active': True,
+                'sort_order': 3,
+            },
+            {
+                'name': 'OnDemand Premium',
+                'slug': 'ondemand',
+                'description': 'One-time purchase with 100 coins',
+                'duration_type': 'ondemand',
+                'duration_days': None,
+                'price_etb': 10.00,
+                'price_coins': 100,
+                'onevas_code': 'D',
+                'spid': ONEVAS['ondemand']['spid'],
+                'service_id': ONEVAS['ondemand']['service_id'],
+                'product_id': ONEVAS['ondemand']['product_id'],
+                'application_key': ONEVAS['ondemand']['application_key'],
+                'short_code': '9286',
+                'features': ['All features', 'API access', 'Lifetime access'],
+                'privileges': {
+                    'max_posts_per_day': 50,
+                    'max_reels_per_day': 25,
+                    'max_campaigns_per_month': 10,
+                    'max_likes_per_day': 1000,
+                    'max_comments_per_day': 500,
+                    'max_follows_per_day': 200,
+                    'priority_support': True,
+                    'custom_themes': True,
+                    'analytics_access': True,
+                    'api_access': True,
+                    'ad_free': True,
+                    'watermark_free': True,
+                    'hd_quality': True,
+                    'download_videos': True,
+                    'profile_badge': 'OnDemand Premium'
+                },
+                'max_posts_per_day': 50,
+                'max_reels_per_day': 25,
+                'max_campaigns_per_month': 10,
+                'max_likes_per_day': 1000,
+                'max_comments_per_day': 500,
+                'max_follows_per_day': 200,
+                'priority_support': True,
+                'custom_themes': True,
+                'analytics_access': True,
+                'api_access': True,
+                'ad_free': True,
+                'watermark_free': True,
+                'hd_quality': True,
+                'download_videos': True,
+                'is_active': True,
+                'sort_order': 4,
+            },
+        ]
+
+        for tier_data in tiers_data:
+            tier, created = SubscriptionTier.objects.get_or_create(
+                slug=tier_data['slug'],
+                defaults=tier_data
+            )
+            
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'Created tier: {tier.name}'))
+            else:
+                # Update existing tier
+                for key, value in tier_data.items():
+                    setattr(tier, key, value)
+                tier.save()
+                self.stdout.write(self.style.WARNING(f'Updated tier: {tier.name}'))
+
+        self.stdout.write(self.style.SUCCESS('Subscription tiers seeded successfully'))

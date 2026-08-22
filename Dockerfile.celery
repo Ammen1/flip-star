@@ -1,0 +1,83 @@
+# syntax=docker/dockerfile:1
+#
+# FlipStar Celery image.
+#
+# Shares the builder stage layout with ./Dockerfile so both images resolve the
+# same wheels. Kept separate because the worker needs no HTTP server, no static
+# files and no exposed port.
+
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip wheel --wheel-dir /wheels --timeout 300 --retries 3 -r requirements.txt
+
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DJANGO_SETTINGS_MODULE=config.settings.production
+
+# ffmpeg is the worker's main job (transcoding); libpq5 for the DB driver.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 1001 flipstar \
+    && useradd --system --uid 1001 --gid flipstar --create-home flipstar
+
+WORKDIR /app
+
+COPY --from=builder /wheels /wheels
+RUN pip install --no-index --find-links=/wheels /wheels/* \
+    && rm -rf /wheels
+
+COPY --chown=flipstar:flipstar . .
+
+RUN mkdir -p /app/media && chown -R flipstar:flipstar /app/media
+
+USER flipstar
+
+# `celery inspect ping` confirms the worker is consuming, not merely running.
+# --timeout=8 overrides celery inspect's own internal reply-wait (default
+# 1.0s, independent of this HEALTHCHECK's own --timeout) -- confirmed via
+# disposable-cluster testing that the 1s default causes spurious "No nodes
+# replied" failures against an otherwise-healthy worker under normal
+# scheduling/CPU jitter, not just heavy load.
+#
+# --timeout raised from 10s to 40s: `-A config` imports Django settings, so
+# each invocation boots Django and performs a full Vault AppRole login before
+# pinging. Measured inside a running worker: ~17.9s per invocation. At the
+# previous 10s the check could never pass and the container was permanently
+# reported unhealthy. --interval raised to 180s so successive runs cannot
+# overlap.
+#
+# NOTE: this HEALTHCHECK is correct for the WORKER only. Running the beat
+# process from this same image (as docker-compose.yml and
+# k8s/base/deployment-celery-beat.yaml both do) inherits it, and beat never
+# answers `inspect ping` because it is not a worker -- a beat container from
+# this image therefore reports "unhealthy" forever. Observed directly. The
+# Kubernetes beat Deployment overrides it with its own probes; docker-compose
+# should set `healthcheck: disable: true` on its beat service.
+HEALTHCHECK --interval=180s --timeout=40s --start-period=60s --retries=3 \
+    CMD celery -A config inspect ping -d celery@$HOSTNAME --timeout=8 || exit 1
+
+# --max-tasks-per-child recycles workers to bound memory growth from ffmpeg.
+CMD ["celery", "-A", "config", "worker", \
+     "--loglevel=info", \
+     "--concurrency=4", \
+     "--max-tasks-per-child=50"]

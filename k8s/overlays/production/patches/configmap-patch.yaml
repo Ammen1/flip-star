@@ -1,0 +1,19 @@
+# Strategic-merge patch onto k8s/base/configmap.yaml -- only the keys that
+# differ for production. CHANGEME values are placeholders: this project has
+# no confirmed production domain yet (only uat.flipstar.et exists today, see
+# docker-compose.yml/nginx.conf) -- replace before applying to a real
+# production cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flipstar-backend-config
+data:
+  ALLOWED_HOSTS: "CHANGEME-production-backend-domain"
+  DB_HOST: "CHANGEME-production-postgres-host"
+  REDIS_HOST: "CHANGEME-production-redis-host"
+  CORS_ALLOWED_ORIGINS: "https://CHANGEME-production-frontend-domain"
+  CSRF_TRUSTED_ORIGINS: "https://CHANGEME-production-frontend-domain"
+  BACKEND_URL: "https://CHANGEME-production-backend-domain"
+  LOG_LEVEL: "INFO"
+  VAULT_ADDR: "https://CHANGEME-production-vault-addr:8200"
+  VAULT_SECRET_PATH: "flipstar/backend/production"

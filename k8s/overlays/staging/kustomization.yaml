@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: flipstar-staging
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - ingress.yaml
+
+labels:
+  - pairs:
+      environment: staging
+    includeSelectors: true
+
+patches:
+  - path: patches/configmap-patch.yaml
+  - path: patches/replicas-patch.yaml
+  - path: patches/pdb-patch.yaml
+    target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: flipstar-backend
+  - path: patches/pdb-patch.yaml
+    target:
+      group: policy
+      version: v1
+      kind: PodDisruptionBudget
+      name: flipstar-celery-worker
+
+# CI updates these two lines via `kustomize edit set image` after each
+# successful build on the branch mapped to staging -- see
+# .github/workflows/backend-ci-cd.yml. The tag is always a commit SHA, never
+# `latest`. Argo CD's staging Application (argocd/application-staging.yaml)
+# watches this file and syncs automatically on change.
+images:
+  - name: ghcr.io/ammen1/flip-star-backend
+    newTag: "0000000000000000000000000000000000000000"
+  - name: ghcr.io/ammen1/flip-star-backend-celery
+    newTag: "0000000000000000000000000000000000000000"

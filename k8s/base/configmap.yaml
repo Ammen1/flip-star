@@ -1,0 +1,64 @@
+# Non-secret runtime configuration only. Mirrors docker-compose.yml's
+# x-runtime-env and the non-secret half of x-vault-env -- see
+# docs/secrets.md for the full resolution order (env > Vault > .env >
+# default). Every value here is safe to read in `kubectl describe configmap`.
+#
+# Overridden per environment by k8s/overlays/<env>/configmap-patch.yaml.
+# Values below are placeholders and must not be deployed as-is.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  annotations:
+    # Wave -2: must exist before the migrate Job (wave -1), which reads its
+    # configuration from this ConfigMap and runs under this ServiceAccount.
+    # See k8s/base/job-migrate.yaml for why the ordering is explicit.
+    argocd.argoproj.io/sync-wave: "-2"
+  name: flipstar-backend-config
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/part-of: flipstar
+data:
+  DJANGO_SETTINGS_MODULE: "config.settings.production"
+  DJANGO_ENV: "production"
+  DEBUG: "False"
+
+  # REQUIRED. Django rejects any request whose Host header isn't listed here
+  # with a bare 400 -- and config/settings/base.py defaults this to
+  # "localhost,127.0.0.1" only. Without an explicit value the pods come up
+  # healthy (probes send Host: localhost, which base.py's REQUIRED_HOSTS
+  # always keeps valid) while every real request arriving through the
+  # Ingress gets 400. Verified directly against the real image: with
+  # ALLOWED_HOSTS unset, `Host: uat.flipstar.et` -> 400; with it set -> 200.
+  # Each overlay must override this with its own domain.
+  ALLOWED_HOSTS: "CHANGEME-set-per-environment"
+  USE_DOCKER_DB: "false"
+  DB_ENGINE: "django.db.backends.postgresql"
+  DB_HOST: "CHANGEME-set-per-environment"
+  DB_PORT: "5432"
+  DB_CONN_MAX_AGE: "60"
+  REDIS_HOST: "CHANGEME-set-per-environment"
+  REDIS_PORT: "6379"
+  REGION_NAME: "us-east-1"
+  S3_ENDPOINT_URL: ""
+  CORS_ALLOW_ALL_ORIGINS: "false"
+  CORS_ALLOWED_ORIGINS: "https://CHANGEME.flipstar.et"
+  CSRF_TRUSTED_ORIGINS: "https://CHANGEME.flipstar.et"
+  SECURE_SSL_REDIRECT: "true"
+  BACKEND_URL: "https://CHANGEME.flipstar.et"
+  LOG_LEVEL: "INFO"
+  VAPID_SUBJECT: "mailto:admin@flipstar.et"
+  TELEBIRR_PAYEE_ACCOUNT_NAME: "Flipstar"
+  TELEBIRR_CALLER_TYPE: "2"
+
+  # --- Vault wiring (non-secret half) ---
+  # VAULT_ROLE_ID / VAULT_SECRET_ID are NOT here -- they come from the
+  # flipstar-backend-vault-approle Secret (see secret.example.yaml). Every
+  # actual application secret (SECRET_KEY, DB_PASSWORD, Telebirr/Onevas
+  # credentials, ...) is resolved from Vault at process start, never set as
+  # a plain env var here.
+  VAULT_ADDR: "https://vault.CHANGEME.internal:8200"
+  VAULT_KV_MOUNT: "secret"
+  VAULT_SECRET_PATH: "flipstar/backend/CHANGEME-environment"
+  VAULT_REQUIRED: "true"
+  VAULT_PRECEDENCE: "env"
+  VAULT_TIMEOUT: "5"

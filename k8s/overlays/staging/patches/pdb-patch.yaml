@@ -1,0 +1,19 @@
+# Staging runs one replica of each workload (replicas-patch.yaml), and the
+# base PDBs use minAvailable: 1. Those two together mean "never allow the
+# only pod to be evicted", which does not protect availability -- it just
+# blocks `kubectl drain` indefinitely, so node upgrades and autoscaler
+# scale-downs hang on a namespace nobody is paging about.
+#
+# maxUnavailable: 1 is the correct shape for a single-replica environment:
+# voluntary disruption is permitted (staging is allowed a brief gap), while
+# the PDB still exists so the semantics stay uniform across environments.
+#
+# JSON 6902 rather than a strategic merge: minAvailable and maxUnavailable
+# are mutually exclusive in a PodDisruptionBudget, so the old field has to be
+# removed, not merely overridden. A merge patch would leave both set and the
+# API server would reject it.
+- op: remove
+  path: /spec/minAvailable
+- op: add
+  path: /spec/maxUnavailable
+  value: 1

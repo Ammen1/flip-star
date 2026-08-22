@@ -1,0 +1,16 @@
+# Production runs more replicas than the base default for headroom under
+# load and to tolerate a node loss without dropping below the PDB's
+# minAvailable:1.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-backend
+spec:
+  replicas: 3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-celery-worker
+spec:
+  replicas: 3

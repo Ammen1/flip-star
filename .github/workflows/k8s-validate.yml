@@ -1,0 +1,96 @@
+name: K8s Manifest Validation
+
+# Separate from backend-ci-cd.yml on purpose -- this validates the
+# deployment surface (Kustomize overlays + Argo CD manifests), not the
+# application, and shouldn't block or be blocked by application-level test
+# runs. Catches exactly the class of mistake a previous disposable-cluster
+# audit found by hand: overlays that don't build, or Argo CD manifests that
+# aren't even valid YAML -- before either reaches a real cluster.
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["k8s/**", "argocd/**", ".github/workflows/k8s-validate.yml"]
+  push:
+    branches: [main]
+    paths: ["k8s/**", "argocd/**", ".github/workflows/k8s-validate.yml"]
+
+concurrency:
+  group: k8s-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  KUSTOMIZE_VERSION: "5.4.3"
+  KUBECONFORM_VERSION: "0.6.7"
+
+jobs:
+  build-overlays:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        overlay: [staging, production]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: Install kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- "${KUSTOMIZE_VERSION}" /usr/local/bin
+
+      - name: Build ${{ matrix.overlay }}
+        run: kustomize build "k8s/overlays/${{ matrix.overlay }}" > "rendered-${{ matrix.overlay }}.yaml"
+
+      - name: Install kubeconform
+        run: |
+          curl -sL "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz kubeconform
+          sudo mv kubeconform /usr/local/bin/kubeconform
+
+      - name: Validate against upstream Kubernetes schemas
+        # -summary keeps output short; -strict catches unknown fields (a
+        # typo'd key that would otherwise be silently ignored by the API
+        # server); PodDisruptionBudget/HorizontalPodAutoscaler resolve fine
+        # against the default (recent) Kubernetes schema set.
+        run: |
+          kubeconform -strict -summary -output text "rendered-${{ matrix.overlay }}.yaml"
+
+      - name: Confirm no `latest` tag anywhere in the rendered output
+        run: |
+          if grep -E ':(latest)"?$' "rendered-${{ matrix.overlay }}.yaml"; then
+            echo "::error::Found a ':latest' image tag in the rendered ${{ matrix.overlay }} manifests -- production must only ever run immutable commit-SHA tags."
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rendered-${{ matrix.overlay }}
+          path: rendered-${{ matrix.overlay }}.yaml
+          retention-days: 14
+
+  validate-argocd-manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - name: YAML syntax check
+        run: |
+          for f in argocd/*.yaml; do
+            python3 -c "import sys, yaml; list(yaml.safe_load_all(open(sys.argv[1])))" "$f" \
+              && echo "$f: OK" \
+              || { echo "::error file=$f::not valid YAML"; exit 1; }
+          done
+
+      - name: secret.example.yaml must never be a live Kustomize resource
+        # It's a template (see its own header comment) -- if it's ever
+        # accidentally added to a kustomization.yaml resources: list, the
+        # placeholder REPLACE-ME values would actually get applied.
+        run: |
+          if grep -rl "secret.example.yaml" k8s/base/kustomization.yaml k8s/overlays/*/kustomization.yaml 2>/dev/null; then
+            echo "::error::secret.example.yaml is referenced from a real kustomization.yaml -- it must stay a template only, applied manually, never through Kustomize/Argo CD."
+            exit 1
+          fi

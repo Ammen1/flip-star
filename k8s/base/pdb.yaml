@@ -1,0 +1,32 @@
+# No PDB for celery-beat: it runs a single replica by design (see
+# deployment-celery-beat.yaml), and a minAvailable:1 PDB on a 1-replica
+# workload would block node drains entirely rather than protect availability.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: flipstar-backend
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: flipstar
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: flipstar-celery-worker
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: celery-worker
+    app.kubernetes.io/part-of: flipstar
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: celery-worker

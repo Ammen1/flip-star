@@ -1,0 +1,40 @@
+# Backend-only repository. Review is required from someone who owns the
+# area being changed -- GitHub enforces this automatically once branch
+# protection on main requires a review from code owners.
+#
+# Fill in real usernames/teams below before this has any effect; a
+# CODEOWNERS file with no owners is silently inert.
+#
+# NOTE: every path below was previously prefixed with a backend/ directory,
+# left over from before the frontend/mobile split. There is no backend/
+# directory any more -- this repository
+# root IS the backend -- so those rules matched nothing and the payments,
+# security and migration paths they claim to protect were unowned.
+# Branch protection's "require review from code owners" would have passed
+# them straight through. Paths are now repo-root-relative and verified to
+# exist.
+
+# Default: unassigned. Replace with a general backend maintainer.
+* @REPLACE-ME-default-owner
+
+# CI/CD and deployment surface -- changes here affect how everything ships.
+/.github/                @REPLACE-ME-platform-owner
+/k8s/                     @REPLACE-ME-platform-owner
+/argocd/                  @REPLACE-ME-platform-owner
+/Dockerfile        @REPLACE-ME-platform-owner
+/Dockerfile.celery  @REPLACE-ME-platform-owner
+/docker-compose.yml        @REPLACE-ME-platform-owner
+
+# Payments / wallet -- the highest-consequence code in this repository.
+/api/views/wallet.py       @REPLACE-ME-payments-owner
+/api/views/direct_debit.py  @REPLACE-ME-payments-owner
+/api/models/wallet.py       @REPLACE-ME-payments-owner
+/api/models/contest.py      @REPLACE-ME-payments-owner
+/api/integrations/telebirr/ @REPLACE-ME-payments-owner
+
+# Secrets / crypto -- security-sensitive, warrants a security-focused review.
+/infrastructure/    @REPLACE-ME-security-owner
+/common/security/    @REPLACE-ME-security-owner
+
+# Database migrations -- irreversible once applied to production.
+/api/migrations/    @REPLACE-ME-backend-owner

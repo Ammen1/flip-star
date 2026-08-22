@@ -1,0 +1,38 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: flipstar-production
+
+resources:
+  - namespace.yaml
+  - ../../base
+  - ingress.yaml
+  - hpa.yaml
+
+labels:
+  - pairs:
+      environment: production
+    includeSelectors: true
+
+patches:
+  - path: patches/configmap-patch.yaml
+  - path: patches/replicas-patch.yaml
+  - path: patches/resources-patch.yaml
+
+# These two lines are updated ONLY by the manually-triggered
+# .github/workflows/backend-promote-production.yml -- never by
+# backend-ci-cd.yml, which touches the staging overlay and nothing else. The
+# promotion workflow does not build anything: it verifies the requested SHA
+# already exists in GHCR, carries a valid cosign signature from this repo's
+# own CI, and is the SHA the staging overlay is currently running, then
+# rewrites these lines. The tag is always a full commit SHA, never `latest`.
+#
+# Argo CD's production Application (argocd/application-production.yaml) uses
+# manual sync -- see that file for why -- so a change here shows up as
+# OutOfSync and needs an explicit "Sync" in the Argo CD UI/CLI before it
+# rolls out.
+images:
+  - name: ghcr.io/ammen1/flip-star-backend
+    newTag: "0000000000000000000000000000000000000000"
+  - name: ghcr.io/ammen1/flip-star-backend-celery
+    newTag: "0000000000000000000000000000000000000000"
