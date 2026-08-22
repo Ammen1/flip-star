@@ -4,30 +4,30 @@ kind: Kustomization
 namespace: flipstar-staging
 
 resources:
-  - namespace.yaml
-  - ../../base
-  - ingress.yaml
+- namespace.yaml
+- ../../base
+- ingress.yaml
 
 labels:
-  - pairs:
-      environment: staging
-    includeSelectors: true
+- includeSelectors: true
+  pairs:
+    environment: staging
 
 patches:
-  - path: patches/configmap-patch.yaml
-  - path: patches/replicas-patch.yaml
-  - path: patches/pdb-patch.yaml
-    target:
-      group: policy
-      version: v1
-      kind: PodDisruptionBudget
-      name: flipstar-backend
-  - path: patches/pdb-patch.yaml
-    target:
-      group: policy
-      version: v1
-      kind: PodDisruptionBudget
-      name: flipstar-celery-worker
+- path: patches/configmap-patch.yaml
+- path: patches/replicas-patch.yaml
+- path: patches/pdb-patch.yaml
+  target:
+    group: policy
+    kind: PodDisruptionBudget
+    name: flipstar-backend
+    version: v1
+- path: patches/pdb-patch.yaml
+  target:
+    group: policy
+    kind: PodDisruptionBudget
+    name: flipstar-celery-worker
+    version: v1
 
 # CI updates these two lines via `kustomize edit set image` after each
 # successful build on the branch mapped to staging -- see
@@ -35,7 +35,9 @@ patches:
 # `latest`. Argo CD's staging Application (argocd/application-staging.yaml)
 # watches this file and syncs automatically on change.
 images:
-  - name: ghcr.io/ammen1/flip-star-backend
-    newTag: "0000000000000000000000000000000000000000"
-  - name: ghcr.io/ammen1/flip-star-backend-celery
-    newTag: "0000000000000000000000000000000000000000"
+- name: ghcr.io/ammen1/flip-star-backend
+  newName: ghcr.io/ammen1/flip-star-backend
+  newTag: 3563bc86e537e3ac9ec7a1429e63d88f33ee6632
+- name: ghcr.io/ammen1/flip-star-backend-celery
+  newName: ghcr.io/ammen1/flip-star-backend-celery
+  newTag: 3563bc86e537e3ac9ec7a1429e63d88f33ee6632
