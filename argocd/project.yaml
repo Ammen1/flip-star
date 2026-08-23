@@ -51,6 +51,22 @@ spec:
     # single allow rule for the API).
     - group: "networking.k8s.io"
       kind: NetworkPolicy
+    # Neither of the next two is ever deployed from git -- nothing under k8s/
+    # declares a bare Pod or ReplicaSet, and the Deployments above create both.
+    # They are listed because Argo CD filters the resource tree to kinds the
+    # project permits, so without them the UI shows the Deployments with no
+    # children: no ReplicaSet, no Pod, "your application has no pod groups",
+    # and no LOGS tab anywhere in the application. Adding them is what makes
+    # pod logs readable in the UI.
+    #
+    # The cost is honest but small: a manifest committed to k8s/ could now
+    # create a bare Pod or ReplicaSet in these two namespaces and Argo CD would
+    # sync it. That is a narrower capability than the Deployment permission
+    # already granted above, which can create pods with any spec at all.
+    - group: "apps"
+      kind: ReplicaSet
+    - group: ""
+      kind: Pod
 
   # Secrets are deliberately absent from both whitelists above: this project
   # never creates or touches a Secret. flipstar-backend-vault-approle (see
