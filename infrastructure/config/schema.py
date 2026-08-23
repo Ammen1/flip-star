@@ -241,6 +241,16 @@ SCHEMA: tuple[Key, ...] = (
     # -- sms ------------------------------------------------------------------
     _k('AT_USERNAME', group='sms'),
     _k('AT_API_KEY', group='sms'),
+    # -- admin bootstrap ------------------------------------------------------
+    _k(
+        'ADMIN_PASSWORD',
+        group='core',
+        doc='Password for the superuser created by `manage.py create_superadmin` '
+        'and the setup-admin endpoint. Deliberately optional: an environment '
+        'that has already been bootstrapped does not need it, and a default '
+        'here once produced a superuser whose password was published in this '
+        'repository.',
+    ),
     # -- object storage -------------------------------------------------------
     _k('S3_ENDPOINT_URL', group='storage'),
     _k('STORAGE_BUCKET_NAME', group='storage'),
@@ -249,6 +259,13 @@ SCHEMA: tuple[Key, ...] = (
     _k('REGION_NAME', group='storage'),
     _k('S3_USE_SSL', kind='bool', group='storage'),
     _k('S3_DEFAULT_ACL', group='storage'),
+    _k(
+        'MINIO_ROOT_USER',
+        group='storage',
+        doc='Local MinIO console/API user (docker-compose only; the Kubernetes '
+        'deployment uses S3-compatible credentials above).',
+    ),
+    _k('MINIO_ROOT_PASSWORD', group='storage'),
 )
 
 BY_NAME: dict[str, Key] = {k.name: k for k in SCHEMA}
