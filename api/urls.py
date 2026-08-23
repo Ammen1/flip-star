@@ -1,88 +1,165 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from django.urls import include, path
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from api.views.core import (
-    register, login, reset_password, change_password, delete_account, download_data,
-    send_phone_otp, verify_phone_otp, register_with_phone, login_with_phone,
-    forgot_password_request, forgot_password_confirm, forgot_password_phone_request, forgot_password_phone_verify,
-    login_with_subscription_otp, send_login_otp, login_with_otp, resend_subscription_otp,
-    check_phone_account, dev_create_subscription, get_categories,
-    create_post, search, UserProfileViewSet, DraftViewSet, ReelViewSet, QuestViewSet,
-    SubscriptionViewSet, NotificationPreferenceViewSet, CompetitionViewSet, WinnerViewSet, FollowViewSet, BlockViewSet, UserSearchViewSet,
-    get_user_notifications, mark_notifications_read, get_unread_notification_count,
-    mark_single_notification_read, create_report, admin_reports_list, admin_report_detail,
-    admin_reports_stats, admin_moderate_report, admin_undo_moderation_action, get_trending_reels, mark_not_interested, undo_not_interested,
-    get_trending_hashtags, get_reels_by_hashtag, track_view,
-    get_notification_settings, update_notification_settings, get_privacy_settings, update_privacy_settings,
-    privacy_policy,
-)
-from api.views.privacy import (
-    get_consent_status,
-    update_consent,
-    get_consent_history,
-    get_privacy_policy_summary,
-    get_eu_rights_summary,
-)
-from api.views.subscription import (
-    OnevasWebhookView, SubscriptionTierViewSet, SubscriptionViewSet as NewSubscriptionViewSet,
-    TrialPopupViewSet, CoinTransactionViewSet, AdminSubscriptionViewSet, UserSubscriptionStatusView,
-    telebirr_one_time_initiate, telebirr_one_time_callback, telebirr_one_time_query,
-    check_superapp_subscription, validate_subscription_token,
-    telebirr_ussd_subscription_initiate, telebirr_ussd_subscription_status, telebirr_ussd_subscription_webhook,
-)
-from api.views.master_campaign import (
-    master_campaign_list, master_campaign_detail, master_campaign_participants,
-    join_master_campaign, master_campaign_stats, test_generate_endpoint, generate_sub_campaigns,
-    update_generation_config
-)
-from api.views.messaging import (
-    list_or_create_conversations, conversation_messages, edit_or_delete_message,
-    mark_conversation_read, unread_dm_count, search_users_for_dm,
+from rest_framework.routers import DefaultRouter
+
+from api.views.boost import (
+    calculate_boost_cost,
+    cancel_boost_campaign,
+    check_pacing_engine,
+    create_boost_campaign,
+    get_boost_campaign_detail,
+    get_boost_config,
+    get_eligible_boosts,
+    get_user_boost_campaigns,
+    pause_boost_campaign,
+    record_boost_engagement,
+    record_boost_impression,
+    resume_boost_campaign,
 )
 from api.views.charging import (
-    initiate_on_demand_charging, get_charging_statistics, get_charging_transactions,
-    purchase_coins_on_demand, search_charging_transactions, get_charging_analytics,
+    get_charging_analytics,
+    get_charging_statistics,
+    get_charging_transactions,
+    initiate_on_demand_charging,
+    purchase_coins_on_demand,
+    search_charging_transactions,
 )
-from api.views.push import push_public_key, push_subscribe, push_unsubscribe
-from api.views.crypto import crypto_public_key
-from api.views.support import (
-    my_support_requests, admin_support_requests, admin_update_support_request,
-)
-from api.views.direct_debit import (
-    create_direct_debit_mandate,
-    activate_direct_debit_mandate,
-    cancel_direct_debit_mandate,
-    list_user_mandates,
-    telebirr_direct_debit_webhook,
-    initiate_direct_debit,
-    create_one_off_coin_purchase,
-    create_one_off_subscription,
-    check_mandate_status,
-    initiate_b2c_payment,
-    list_b2c_payments,
-    query_mandate_from_telebirr,
-    telebirr_b2c_webhook,
+from api.views.client_log import clear_pending_mandate, client_log
+from api.views.core import (
+    BlockViewSet,
+    CompetitionViewSet,
+    DraftViewSet,
+    FollowViewSet,
+    NotificationPreferenceViewSet,
+    QuestViewSet,
+    ReelViewSet,
+    SubscriptionViewSet,
+    UserProfileViewSet,
+    UserSearchViewSet,
+    WinnerViewSet,
+    admin_moderate_report,
+    admin_report_detail,
+    admin_reports_list,
+    admin_reports_stats,
+    admin_undo_moderation_action,
+    change_password,
+    check_phone_account,
+    create_post,
+    create_report,
+    delete_account,
+    dev_create_subscription,
+    download_data,
+    forgot_password_confirm,
+    forgot_password_phone_request,
+    forgot_password_phone_verify,
+    forgot_password_request,
+    get_categories,
+    get_notification_settings,
+    get_privacy_settings,
+    get_reels_by_hashtag,
+    get_trending_hashtags,
+    get_trending_reels,
+    get_unread_notification_count,
+    get_user_notifications,
+    login,
+    login_with_otp,
+    login_with_phone,
+    login_with_subscription_otp,
+    mark_not_interested,
+    mark_notifications_read,
+    mark_single_notification_read,
+    privacy_policy,
+    register,
+    register_with_phone,
+    resend_subscription_otp,
+    reset_password,
+    search,
+    send_login_otp,
+    send_phone_otp,
+    track_view,
+    undo_not_interested,
+    update_notification_settings,
+    update_privacy_settings,
+    verify_phone_otp,
 )
 from api.views.crm import (
-    CRMGiftPackageViewSet, CRMGiftTransactionViewSet, CRMGiftAwardViewSet, CRMGiftAuditLogViewSet,
+    CRMGiftAuditLogViewSet,
+    CRMGiftAwardViewSet,
+    CRMGiftPackageViewSet,
+    CRMGiftTransactionViewSet,
 )
-from api.views.client_log import client_log, clear_pending_mandate
-from api.views.boost import (
-    get_boost_config,
-    calculate_boost_cost,
-    create_boost_campaign,
-    get_user_boost_campaigns,
-    get_boost_campaign_detail,
-    cancel_boost_campaign,
-    pause_boost_campaign,
-    resume_boost_campaign,
-    get_eligible_boosts,
-    record_boost_impression,
-    record_boost_engagement,
-    check_pacing_engine,
+from api.views.crypto import (
+    crypto_public_key,
+    crypto_test_decrypt,
+    crypto_test_encrypt,
+    crypto_test_keypair,
 )
+from api.views.direct_debit import (
+    activate_direct_debit_mandate,
+    cancel_direct_debit_mandate,
+    check_mandate_status,
+    create_direct_debit_mandate,
+    create_one_off_coin_purchase,
+    create_one_off_subscription,
+    initiate_b2c_payment,
+    initiate_direct_debit,
+    list_b2c_payments,
+    list_user_mandates,
+    query_mandate_from_telebirr,
+    telebirr_b2c_webhook,
+    telebirr_direct_debit_webhook,
+)
+from api.views.master_campaign import (
+    generate_sub_campaigns,
+    master_campaign_detail,
+    master_campaign_list,
+    master_campaign_participants,
+    master_campaign_stats,
+    test_generate_endpoint,
+    update_generation_config,
+)
+from api.views.messaging import (
+    conversation_messages,
+    edit_or_delete_message,
+    list_or_create_conversations,
+    mark_conversation_read,
+    search_users_for_dm,
+    unread_dm_count,
+)
+from api.views.privacy import (
+    get_consent_history,
+    get_consent_status,
+    get_eu_rights_summary,
+    get_privacy_policy_summary,
+    update_consent,
+)
+from api.views.push import push_public_key, push_subscribe, push_unsubscribe
+from api.views.subscription import (
+    AdminSubscriptionViewSet,
+    CoinTransactionViewSet,
+    OnevasWebhookView,
+    SubscriptionTierViewSet,
+    UserSubscriptionStatusView,
+    check_superapp_subscription,
+    telebirr_one_time_callback,
+    telebirr_one_time_initiate,
+    telebirr_one_time_query,
+    telebirr_ussd_subscription_initiate,
+    telebirr_ussd_subscription_status,
+    telebirr_ussd_subscription_webhook,
+    validate_subscription_token,
+)
+from api.views.subscription import (
+    SubscriptionViewSet as NewSubscriptionViewSet,
+)
+from api.views.support import (
+    admin_support_requests,
+    admin_update_support_request,
+    my_support_requests,
+)
+
 
 @api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
@@ -100,8 +177,9 @@ def health_check(request):
 @permission_classes([AllowAny])
 def health_check_deep(request):
     """Full diagnostic health check — DOES touch the DB. Don't use for keep-alive."""
-    from django.contrib.auth.models import User
     from django.conf import settings
+    from django.contrib.auth.models import User
+
     from .models import Reel
     from .models.campaign import Campaign
 
@@ -115,30 +193,33 @@ def health_check_deep(request):
 
     usernames = list(User.objects.values_list('username', flat=True)[:3])
 
-    return Response({
-        'status': 'ok',
-        'database': {
-            'engine': db_engine,
-            'name': db_name,
-            'host': db_host[:30] + '...' if len(str(db_host)) > 30 else db_host,
-        },
-        'counts': {
-            'users': user_count,
-            'reels': reel_count,
-            'campaigns': campaign_count,
-        },
-        'sample_usernames': usernames,
-        'message': 'API is running'
-    })
+    return Response(
+        {
+            'status': 'ok',
+            'database': {
+                'engine': db_engine,
+                'name': db_name,
+                'host': db_host[:30] + '...' if len(str(db_host)) > 30 else db_host,
+            },
+            'counts': {
+                'users': user_count,
+                'reels': reel_count,
+                'campaigns': campaign_count,
+            },
+            'sample_usernames': usernames,
+            'message': 'API is running',
+        }
+    )
+
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def cleanup_broken_reels(request):
     """Delete all reels that don't have valid Cloudinary URLs, and clear broken campaign images"""
+
     from .models import Reel
     from .models.campaign import Campaign
-    from django.db.models import Q
-    
+
     try:
         fixed_count = 0
 
@@ -170,86 +251,198 @@ def cleanup_broken_reels(request):
                 campaign.save()
                 campaign_fixed += 1
 
-        return Response({
-            'fixed_reels': fixed_count,
-            'fixed_campaigns': campaign_fixed,
-            'total_reels': Reel.objects.count()
-        })
+        return Response(
+            {
+                'fixed_reels': fixed_count,
+                'fixed_campaigns': campaign_fixed,
+                'total_reels': Reel.objects.count(),
+            }
+        )
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         return Response({'error': str(e)}, status=500)
-from api.views.extended import CommentViewSet, CommentReplyViewSet, SavedPostViewSet, ProfilePhotoViewSet
+
+
 from api.views.admin import (
-    admin_dashboard_stats, admin_users_list, admin_user_detail, admin_user_update, 
-    admin_user_delete, admin_reels_list, admin_reel_delete, admin_reel_boost,
-    admin_subscription_upgrade, admin_comments_list, admin_comment_delete,
-    admin_analytics_export, admin_wipe_all_posts, admin_reel_detail, admin_reel_moderate,
-    admin_security_events, admin_log_security_event, admin_resolve_security_event,
-    admin_mark_all_security_events_read, admin_security_stats,
-    admin_user_role, admin_user_logs, admin_grant_admin, admin_privilege_audit,
-)
-from api.views.settings import (
-    get_platform_settings, update_platform_settings, get_public_settings, get_api_keys, create_api_key,
-    delete_api_key, toggle_api_key, get_system_logs, clear_system_logs,
-    get_security_overview, get_platform_performance,
-    get_admin_notifications, mark_notification_read, send_platform_notification,
-    bulk_user_action, get_database_stats
+    admin_analytics_export,
+    admin_comment_delete,
+    admin_comments_list,
+    admin_dashboard_stats,
+    admin_grant_admin,
+    admin_log_security_event,
+    admin_mark_all_security_events_read,
+    admin_privilege_audit,
+    admin_reel_boost,
+    admin_reel_delete,
+    admin_reel_detail,
+    admin_reel_moderate,
+    admin_reels_list,
+    admin_resolve_security_event,
+    admin_security_events,
+    admin_security_stats,
+    admin_subscription_upgrade,
+    admin_user_delete,
+    admin_user_detail,
+    admin_user_logs,
+    admin_user_role,
+    admin_user_update,
+    admin_users_list,
+    admin_wipe_all_posts,
 )
 from api.views.campaign import (
-    admin_campaigns_list, admin_campaign_create, admin_campaign_update, admin_campaign_delete,
-    admin_campaign_entries, admin_announce_winners, user_campaigns_list, user_campaign_enter,
-    user_campaign_vote, user_campaign_detail
+    admin_announce_winners,
+    admin_campaign_create,
+    admin_campaign_delete,
+    admin_campaign_entries,
+    admin_campaign_update,
+    admin_campaigns_list,
+    user_campaign_detail,
+    user_campaign_enter,
+    user_campaign_vote,
+    user_campaigns_list,
 )
 from api.views.campaign_admin import (
-    admin_campaign_themes, admin_campaign_theme_detail, admin_activate_theme,
-    admin_campaign_posts_pending, admin_moderate_post, admin_update_post_scores,
-    admin_generate_leaderboard, get_leaderboard as get_campaign_leaderboard, admin_select_winners, get_campaign_winners,
-    admin_campaign_analytics
+    admin_activate_theme,
+    admin_campaign_analytics,
+    admin_campaign_posts_pending,
+    admin_campaign_theme_detail,
+    admin_campaign_themes,
+    admin_generate_leaderboard,
+    admin_moderate_post,
+    admin_select_winners,
+    admin_update_post_scores,
+    get_campaign_winners,
 )
+from api.views.campaign_admin import get_leaderboard as get_campaign_leaderboard
 from api.views.campaign_user import (
-    get_active_campaigns, get_campaign_detail_extended, create_campaign_post,
-    get_campaign_feed, get_user_campaign_profile, update_engagement_scores,
-    update_consistency_scores, get_campaign_notifications, global_leaderboard
+    create_campaign_post,
+    get_active_campaigns,
+    get_campaign_detail_extended,
+    get_campaign_feed,
+    get_campaign_notifications,
+    get_user_campaign_profile,
+    global_leaderboard,
+    update_consistency_scores,
+    update_engagement_scores,
 )
-from api.views.scoring_config import (
-    admin_scoring_config, get_scoring_config, reset_scoring_config
+from api.views.contest import (
+    admin_contest_dashboard,
+    admin_judging_portal,
+    anti_cheat_flags,
+    boost_post,
+    check_upload_eligibility,
+    get_coin_balance,
+    get_coin_packages,
+    get_grand_finale,
+    get_leaderboard,
+    get_post_score,
+    get_user_subscription,
+    gift_creator,
+    judge_post,
+    purchase_coins,
+    purchase_extra_entry,
+    review_flag,
+    send_gift,
+    toggle_flash_challenge,
+    upgrade_subscription,
+    verify_age,
+    verify_phone,
+    vote_grand_finale,
 )
-from api.views.scoring import (
-    admin_scoring_config as admin_scoring_config_full,
-    admin_update_scoring_config as admin_update_scoring_config_full,
-    admin_calculate_scores, admin_save_scores,
-    admin_get_finalists, admin_qualify_finalists, admin_submit_judge_score,
-    admin_calculate_final_scores, get_finalists_for_voting, cast_vote, get_user_votes
+from api.views.extended import (
+    CommentReplyViewSet,
+    CommentViewSet,
+    ProfilePhotoViewSet,
+    SavedPostViewSet,
 )
 from api.views.gamification import (
-    get_gamification_status, claim_login_bonus,
-    send_coin_gift, get_gift_history, get_recent_activity, check_in,
-    debug_gamification
+    check_in,
+    claim_login_bonus,
+    debug_gamification,
+    get_gamification_status,
+    get_gift_history,
+    get_recent_activity,
+    send_coin_gift,
 )
-from api.views.reels import reels_following, reels_saved, reels_trending
-from api.views.contest import (
-    get_user_subscription, upgrade_subscription, get_coin_packages, get_coin_balance,
-    purchase_coins, gift_creator, send_gift, boost_post, purchase_extra_entry, get_post_score,
-    judge_post, get_leaderboard, admin_contest_dashboard, toggle_flash_challenge,
-    admin_judging_portal, verify_phone, verify_age, anti_cheat_flags, review_flag,
-    get_grand_finale, vote_grand_finale, check_upload_eligibility
+from api.views.gift import (
+    GiftTransactionViewSet,
+    GiftViewSet,
+    PublicGiftViewSet,
+    UserGiftStatsViewSet,
 )
 from api.views.legal import (
-    admin_legal_documents_list, admin_legal_document_detail, admin_legal_document_create,
-    admin_legal_document_update, admin_legal_document_delete, admin_legal_document_publish,
-    admin_legal_document_archive, admin_legal_document_acceptances, admin_legal_stats,
-    get_legal_document, get_all_legal_documents, accept_legal_document,
-    get_pending_acceptances, get_user_acceptances
+    accept_legal_document,
+    admin_legal_document_acceptances,
+    admin_legal_document_archive,
+    admin_legal_document_create,
+    admin_legal_document_delete,
+    admin_legal_document_detail,
+    admin_legal_document_publish,
+    admin_legal_document_update,
+    admin_legal_documents_list,
+    admin_legal_stats,
+    get_all_legal_documents,
+    get_legal_document,
+    get_pending_acceptances,
+    get_user_acceptances,
 )
-from api.views.gift import GiftViewSet, PublicGiftViewSet, GiftTransactionViewSet, UserGiftStatsViewSet
+from api.views.reels import reels_following, reels_saved, reels_trending
+from api.views.scoring import (
+    admin_calculate_final_scores,
+    admin_calculate_scores,
+    admin_get_finalists,
+    admin_qualify_finalists,
+    admin_save_scores,
+    admin_submit_judge_score,
+    cast_vote,
+    get_finalists_for_voting,
+)
+from api.views.scoring import admin_scoring_config as admin_scoring_config_full
+from api.views.scoring import admin_update_scoring_config as admin_update_scoring_config_full
+from api.views.scoring_config import get_scoring_config
+from api.views.settings import (
+    bulk_user_action,
+    clear_system_logs,
+    create_api_key,
+    delete_api_key,
+    get_admin_notifications,
+    get_api_keys,
+    get_database_stats,
+    get_platform_performance,
+    get_platform_settings,
+    get_public_settings,
+    get_security_overview,
+    get_system_logs,
+    mark_notification_read,
+    send_platform_notification,
+    toggle_api_key,
+    update_platform_settings,
+)
 from api.views.wallet import (
-    wallet_summary, wallet_transactions, withdrawal_info, request_withdrawal,
-    my_withdrawals, cancel_withdrawal, public_wallet_config, reinvest_points,
-    admin_wallet_config, admin_withdrawals_list, admin_withdrawal_analytics, admin_withdrawal_action, admin_adjust_balance,
-    admin_user_wallet, admin_user_transactions, admin_all_coin_transactions,
-    telebirr_initiate_payment, telebirr_callback,
-    telebirr_auth, telebirr_query_order, telebirr_ussd_purchase, telebirr_ussd_webhook,
+    admin_adjust_balance,
+    admin_all_coin_transactions,
+    admin_user_transactions,
+    admin_user_wallet,
+    admin_wallet_config,
+    admin_withdrawal_action,
+    admin_withdrawal_analytics,
+    admin_withdrawals_list,
+    cancel_withdrawal,
+    my_withdrawals,
+    public_wallet_config,
+    reinvest_points,
+    request_withdrawal,
+    telebirr_auth,
+    telebirr_callback,
+    telebirr_initiate_payment,
+    telebirr_query_order,
+    telebirr_ussd_purchase,
+    telebirr_ussd_webhook,
+    wallet_summary,
+    wallet_transactions,
+    withdrawal_info,
 )
 
 router = DefaultRouter()
@@ -297,32 +490,79 @@ urlpatterns = [
     path('auth/send-phone-otp/', send_phone_otp, name='auth-send-otp'),
     path('auth/verify-phone-otp/', verify_phone_otp, name='auth-verify-otp'),
     path('auth/register-with-phone/', register_with_phone, name='auth-register-phone'),
-    path('auth/login-with-subscription-otp/', login_with_subscription_otp, name='auth-login-subscription-otp'),
-    path('auth/resend-subscription-otp/', resend_subscription_otp, name='auth-resend-subscription-otp'),
+    path(
+        'auth/login-with-subscription-otp/',
+        login_with_subscription_otp,
+        name='auth-login-subscription-otp',
+    ),
+    path(
+        'auth/resend-subscription-otp/',
+        resend_subscription_otp,
+        name='auth-resend-subscription-otp',
+    ),
     path('auth/send-login-otp/', send_login_otp, name='auth-send-login-otp'),
     path('auth/login-with-otp/', login_with_otp, name='auth-login-with-otp'),
     path('auth/check-phone-account/', check_phone_account, name='auth-check-phone-account'),
-    path('auth/dev-create-subscription/', dev_create_subscription, name='auth-dev-create-subscription'),
+    path(
+        'auth/dev-create-subscription/',
+        dev_create_subscription,
+        name='auth-dev-create-subscription',
+    ),
     path('auth/forgot-password/', forgot_password_request, name='auth-forgot-password'),
-    path('auth/forgot-password/confirm/', forgot_password_confirm, name='auth-forgot-password-confirm'),
-    path('auth/forgot-password-phone/', forgot_password_phone_request, name='auth-forgot-password-phone'),
-    path('auth/forgot-password-phone/verify/', forgot_password_phone_verify, name='auth-forgot-password-phone-verify'),
+    path(
+        'auth/forgot-password/confirm/',
+        forgot_password_confirm,
+        name='auth-forgot-password-confirm',
+    ),
+    path(
+        'auth/forgot-password-phone/',
+        forgot_password_phone_request,
+        name='auth-forgot-password-phone',
+    ),
+    path(
+        'auth/forgot-password-phone/verify/',
+        forgot_password_phone_verify,
+        name='auth-forgot-password-phone-verify',
+    ),
     path('setup-admin/', setup_admin, name='setup-admin'),
     path('posts/create/', create_post, name='create-post'),
     path('notifications/', get_user_notifications, name='user-notifications'),
-    path('notifications/unread-count/', get_unread_notification_count, name='notifications-unread-count'),
+    path(
+        'notifications/unread-count/',
+        get_unread_notification_count,
+        name='notifications-unread-count',
+    ),
     path('notifications/read/', mark_notifications_read, name='mark-notifications-read'),
-    path('notifications/<int:notification_id>/read/', mark_single_notification_read, name='notification-single-read'),
+    path(
+        'notifications/<int:notification_id>/read/',
+        mark_single_notification_read,
+        name='notification-single-read',
+    ),
     path('search/', search, name='search'),
     # Web Push (VAPID) endpoints
     path('push/public-key/', push_public_key, name='push-public-key'),
     path('crypto/public-key/', crypto_public_key, name='crypto-public-key'),
+    # Test helpers, served only when settings.CRYPTO_TEST_ENDPOINTS_ENABLED
+    # is true (404 otherwise). They do the client half of the encryption
+    # server-side so Postman/curl can drive the encrypted endpoints -- which
+    # is why they must stay off in production. See api/views/crypto.py.
+    path('crypto/test/keypair/', crypto_test_keypair, name='crypto-test-keypair'),
+    path('crypto/test/encrypt/', crypto_test_encrypt, name='crypto-test-encrypt'),
+    path('crypto/test/decrypt/', crypto_test_decrypt, name='crypto-test-decrypt'),
     path('push/subscribe/', push_subscribe, name='push-subscribe'),
     path('push/unsubscribe/', push_unsubscribe, name='push-unsubscribe'),
     # Messaging endpoints
     path('messages/conversations/', list_or_create_conversations, name='dm-conversations'),
-    path('messages/conversations/<int:conversation_id>/messages/', conversation_messages, name='dm-conv-messages'),
-    path('messages/conversations/<int:conversation_id>/read/', mark_conversation_read, name='dm-conv-read'),
+    path(
+        'messages/conversations/<int:conversation_id>/messages/',
+        conversation_messages,
+        name='dm-conv-messages',
+    ),
+    path(
+        'messages/conversations/<int:conversation_id>/read/',
+        mark_conversation_read,
+        name='dm-conv-read',
+    ),
     path('messages/<int:message_id>/', edit_or_delete_message, name='dm-message'),
     path('messages/unread-count/', unread_dm_count, name='dm-unread-count'),
     path('messages/users/search/', search_users_for_dm, name='dm-user-search'),
@@ -331,8 +571,16 @@ urlpatterns = [
     path('admin/reports/', admin_reports_list, name='admin-reports-list'),
     path('admin/reports/stats/', admin_reports_stats, name='admin-reports-stats'),
     path('admin/reports/<int:report_id>/', admin_report_detail, name='admin-report-detail'),
-    path('admin/reports/<int:report_id>/moderate/', admin_moderate_report, name='admin-report-moderate'),
-    path('admin/moderation-actions/<int:action_id>/undo/', admin_undo_moderation_action, name='admin-undo-moderation-action'),
+    path(
+        'admin/reports/<int:report_id>/moderate/',
+        admin_moderate_report,
+        name='admin-report-moderate',
+    ),
+    path(
+        'admin/moderation-actions/<int:action_id>/undo/',
+        admin_undo_moderation_action,
+        name='admin-undo-moderation-action',
+    ),
     # Admin endpoints
     path('admin/dashboard/', admin_dashboard_stats, name='admin-dashboard'),
     path('admin/users/', admin_users_list, name='admin-users-list'),
@@ -349,13 +597,27 @@ urlpatterns = [
     path('admin/reels/<int:reel_id>/delete/', admin_reel_delete, name='admin-reel-delete'),
     path('admin/security-events/', admin_security_events, name='admin-security-events'),
     path('admin/security-events/log/', admin_log_security_event, name='admin-log-security-event'),
-    path('admin/security-events/<int:event_id>/resolve/', admin_resolve_security_event, name='admin-resolve-security-event'),
-    path('admin/security-events/mark-all-read/', admin_mark_all_security_events_read, name='admin-mark-all-security-events-read'),
+    path(
+        'admin/security-events/<int:event_id>/resolve/',
+        admin_resolve_security_event,
+        name='admin-resolve-security-event',
+    ),
+    path(
+        'admin/security-events/mark-all-read/',
+        admin_mark_all_security_events_read,
+        name='admin-mark-all-security-events-read',
+    ),
     path('admin/security-stats/', admin_security_stats, name='admin-security-stats'),
     path('admin/reels/<int:reel_id>/boost/', admin_reel_boost, name='admin-reel-boost'),
-    path('admin/subscriptions/<int:user_id>/upgrade/', admin_subscription_upgrade, name='admin-subscription-upgrade'),
+    path(
+        'admin/subscriptions/<int:user_id>/upgrade/',
+        admin_subscription_upgrade,
+        name='admin-subscription-upgrade',
+    ),
     path('admin/comments/', admin_comments_list, name='admin-comments-list'),
-    path('admin/comments/<int:comment_id>/delete/', admin_comment_delete, name='admin-comment-delete'),
+    path(
+        'admin/comments/<int:comment_id>/delete/', admin_comment_delete, name='admin-comment-delete'
+    ),
     path('admin/analytics/export/', admin_analytics_export, name='admin-analytics-export'),
     path('admin/wipe-all-posts/', admin_wipe_all_posts, name='admin-wipe-all-posts'),
     # Settings & Configuration
@@ -375,46 +637,160 @@ urlpatterns = [
     path('admin/database/', get_database_stats, name='admin-database'),
     # Notifications
     path('admin/notifications/', get_admin_notifications, name='admin-notifications'),
-    path('admin/notifications/<int:notification_id>/read/', mark_notification_read, name='admin-notification-read'),
+    path(
+        'admin/notifications/<int:notification_id>/read/',
+        mark_notification_read,
+        name='admin-notification-read',
+    ),
     path('admin/notifications/send/', send_platform_notification, name='admin-send-notification'),
     # Bulk Actions
     path('admin/users/bulk/', bulk_user_action, name='admin-bulk-action'),
     # Master Campaign Management (Admin)
     path('admin/master-campaigns/', master_campaign_list, name='admin-master-campaigns-list'),
-    path('admin/master-campaigns/<int:pk>/', master_campaign_detail, name='admin-master-campaign-detail'),
-    path('admin/master-campaigns/<int:pk>/participants/', master_campaign_participants, name='admin-master-campaign-participants'),
-    path('admin/master-campaigns/<int:pk>/stats/', master_campaign_stats, name='admin-master-campaign-stats'),
-    path('admin/master-campaigns/<int:pk>/test/', test_generate_endpoint, name='admin-test-generate'),
-    path('admin/master-campaigns/<int:pk>/generate/', generate_sub_campaigns, name='admin-generate-sub-campaigns'),
-    path('admin/master-campaigns/<int:pk>/config/', update_generation_config, name='admin-update-generation-config'),
+    path(
+        'admin/master-campaigns/<int:pk>/',
+        master_campaign_detail,
+        name='admin-master-campaign-detail',
+    ),
+    path(
+        'admin/master-campaigns/<int:pk>/participants/',
+        master_campaign_participants,
+        name='admin-master-campaign-participants',
+    ),
+    path(
+        'admin/master-campaigns/<int:pk>/stats/',
+        master_campaign_stats,
+        name='admin-master-campaign-stats',
+    ),
+    path(
+        'admin/master-campaigns/<int:pk>/test/', test_generate_endpoint, name='admin-test-generate'
+    ),
+    path(
+        'admin/master-campaigns/<int:pk>/generate/',
+        generate_sub_campaigns,
+        name='admin-generate-sub-campaigns',
+    ),
+    path(
+        'admin/master-campaigns/<int:pk>/config/',
+        update_generation_config,
+        name='admin-update-generation-config',
+    ),
     # Campaign Management (Admin)
     path('admin/campaigns/', admin_campaigns_list, name='admin-campaigns-list'),
     path('admin/campaigns/create/', admin_campaign_create, name='admin-campaign-create'),
-    path('admin/campaigns/<int:campaign_id>/update/', admin_campaign_update, name='admin-campaign-update'),
-    path('admin/campaigns/<int:campaign_id>/delete/', admin_campaign_delete, name='admin-campaign-delete'),
-    path('admin/campaigns/<int:campaign_id>/entries/', admin_campaign_entries, name='admin-campaign-entries'),
-    path('admin/campaigns/<int:campaign_id>/announce-winners/', admin_announce_winners, name='admin-announce-winners'),
+    path(
+        'admin/campaigns/<int:campaign_id>/update/',
+        admin_campaign_update,
+        name='admin-campaign-update',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/delete/',
+        admin_campaign_delete,
+        name='admin-campaign-delete',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/entries/',
+        admin_campaign_entries,
+        name='admin-campaign-entries',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/announce-winners/',
+        admin_announce_winners,
+        name='admin-announce-winners',
+    ),
     # Campaign Extended Admin
-    path('admin/campaigns/<int:campaign_id>/themes/', admin_campaign_themes, name='admin-campaign-themes'),
-    path('admin/campaigns/themes/<int:theme_id>/', admin_campaign_theme_detail, name='admin-campaign-theme-detail'),
-    path('admin/campaigns/themes/<int:theme_id>/activate/', admin_activate_theme, name='admin-activate-theme'),
-    path('admin/campaigns/<int:campaign_id>/posts/pending/', admin_campaign_posts_pending, name='admin-campaign-posts-pending'),
-    path('admin/campaigns/posts/<int:score_id>/moderate/', admin_moderate_post, name='admin-moderate-post'),
-    path('admin/campaigns/posts/<int:score_id>/scores/', admin_update_post_scores, name='admin-update-post-scores'),
-    path('admin/campaigns/<int:campaign_id>/leaderboard/generate/', admin_generate_leaderboard, name='admin-generate-leaderboard'),
-    path('admin/campaigns/<int:campaign_id>/winners/select/', admin_select_winners, name='admin-select-winners'),
-    path('admin/campaigns/<int:campaign_id>/analytics/', admin_campaign_analytics, name='admin-campaign-analytics'),
-    path('admin/campaigns/<int:campaign_id>/scoring-config/', admin_scoring_config_full, name='admin-scoring-config-full'),
-    path('admin/campaigns/<int:campaign_id>/scoring-config/update/', admin_update_scoring_config_full, name='admin-update-scoring-config-full'),
-    path('admin/campaigns/<int:campaign_id>/scoring/calculate/', admin_calculate_scores, name='admin-calculate-scores'),
-    path('admin/campaigns/<int:campaign_id>/scoring/save/', admin_save_scores, name='admin-save-scores'),
+    path(
+        'admin/campaigns/<int:campaign_id>/themes/',
+        admin_campaign_themes,
+        name='admin-campaign-themes',
+    ),
+    path(
+        'admin/campaigns/themes/<int:theme_id>/',
+        admin_campaign_theme_detail,
+        name='admin-campaign-theme-detail',
+    ),
+    path(
+        'admin/campaigns/themes/<int:theme_id>/activate/',
+        admin_activate_theme,
+        name='admin-activate-theme',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/posts/pending/',
+        admin_campaign_posts_pending,
+        name='admin-campaign-posts-pending',
+    ),
+    path(
+        'admin/campaigns/posts/<int:score_id>/moderate/',
+        admin_moderate_post,
+        name='admin-moderate-post',
+    ),
+    path(
+        'admin/campaigns/posts/<int:score_id>/scores/',
+        admin_update_post_scores,
+        name='admin-update-post-scores',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/leaderboard/generate/',
+        admin_generate_leaderboard,
+        name='admin-generate-leaderboard',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/winners/select/',
+        admin_select_winners,
+        name='admin-select-winners',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/analytics/',
+        admin_campaign_analytics,
+        name='admin-campaign-analytics',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/scoring-config/',
+        admin_scoring_config_full,
+        name='admin-scoring-config-full',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/scoring-config/update/',
+        admin_update_scoring_config_full,
+        name='admin-update-scoring-config-full',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/scoring/calculate/',
+        admin_calculate_scores,
+        name='admin-calculate-scores',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/scoring/save/',
+        admin_save_scores,
+        name='admin-save-scores',
+    ),
     # Grand Campaign Phase 2 - Judge Scoring
-    path('admin/campaigns/<int:campaign_id>/finalists/', admin_get_finalists, name='admin-get-finalists'),
-    path('admin/campaigns/<int:campaign_id>/finalists/qualify/', admin_qualify_finalists, name='admin-qualify-finalists'),
-    path('admin/campaigns/<int:campaign_id>/judge-score/', admin_submit_judge_score, name='admin-submit-judge-score'),
-    path('admin/campaigns/<int:campaign_id>/final-scores/calculate/', admin_calculate_final_scores, name='admin-calculate-final-scores'),
+    path(
+        'admin/campaigns/<int:campaign_id>/finalists/',
+        admin_get_finalists,
+        name='admin-get-finalists',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/finalists/qualify/',
+        admin_qualify_finalists,
+        name='admin-qualify-finalists',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/judge-score/',
+        admin_submit_judge_score,
+        name='admin-submit-judge-score',
+    ),
+    path(
+        'admin/campaigns/<int:campaign_id>/final-scores/calculate/',
+        admin_calculate_final_scores,
+        name='admin-calculate-final-scores',
+    ),
     # Grand Campaign Phase 2 - Public Voting
-    path('campaigns/<int:campaign_id>/finalists/voting/', get_finalists_for_voting, name='get-finalists-voting'),
+    path(
+        'campaigns/<int:campaign_id>/finalists/voting/',
+        get_finalists_for_voting,
+        name='get-finalists-voting',
+    ),
     path('campaigns/<int:campaign_id>/vote/', cast_vote, name='cast-vote'),
     # Gamification
     path('gamification/status/', get_gamification_status, name='gamification-status'),
@@ -424,25 +800,48 @@ urlpatterns = [
     path('gamification/gifts/history/', get_gift_history, name='gift-history'),
     path('gamification/activity/', get_recent_activity, name='recent-activity'),
     path('gamification/checkin/', check_in, name='check-in'),
-    
     # Campaign (User)
     path('campaigns/', user_campaigns_list, name='campaigns-list'),
     path('campaigns/active/', get_active_campaigns, name='campaigns-active'),
     path('campaigns/<int:campaign_id>/', user_campaign_detail, name='campaign-detail'),
-    path('campaigns/<int:campaign_id>/extended/', get_campaign_detail_extended, name='campaign-detail-extended'),
+    path(
+        'campaigns/<int:campaign_id>/extended/',
+        get_campaign_detail_extended,
+        name='campaign-detail-extended',
+    ),
     path('campaigns/<int:campaign_id>/enter/', user_campaign_enter, name='campaign-enter'),
     path('campaigns/entries/<int:entry_id>/vote/', user_campaign_vote, name='campaign-vote'),
-    path('campaigns/<int:campaign_id>/leaderboard/', get_campaign_leaderboard, name='campaign-leaderboard'),
+    path(
+        'campaigns/<int:campaign_id>/leaderboard/',
+        get_campaign_leaderboard,
+        name='campaign-leaderboard',
+    ),
     path('campaigns/<int:campaign_id>/winners/', get_campaign_winners, name='campaign-winners'),
     path('campaigns/<int:campaign_id>/feed/', get_campaign_feed, name='campaign-feed'),
-    path('campaigns/<int:campaign_id>/scoring-config/', get_scoring_config, name='campaign-scoring-config'),
+    path(
+        'campaigns/<int:campaign_id>/scoring-config/',
+        get_scoring_config,
+        name='campaign-scoring-config',
+    ),
     path('campaigns/posts/create/', create_campaign_post, name='create-campaign-post'),
     path('campaigns/notifications/', get_campaign_notifications, name='campaign-notifications'),
     path('leaderboard/global/', global_leaderboard, name='global-leaderboard'),
     path('campaigns/profile/', get_user_campaign_profile, name='user-campaign-profile'),
-    path('campaigns/profile/<int:user_id>/', get_user_campaign_profile, name='user-campaign-profile-detail'),
-    path('campaigns/<int:campaign_id>/engagement/update/', update_engagement_scores, name='update-engagement-scores'),
-    path('campaigns/<int:campaign_id>/consistency/update/', update_consistency_scores, name='update-consistency-scores'),
+    path(
+        'campaigns/profile/<int:user_id>/',
+        get_user_campaign_profile,
+        name='user-campaign-profile-detail',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/engagement/update/',
+        update_engagement_scores,
+        name='update-engagement-scores',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/consistency/update/',
+        update_consistency_scores,
+        name='update-consistency-scores',
+    ),
     # Reels Feeds
     path('reels/following/', reels_following, name='reels-following'),
     path('reels/saved/', reels_saved, name='reels-saved'),
@@ -452,7 +851,11 @@ urlpatterns = [
     path('reels/<int:reel_id>/view/', track_view, name='track-view'),
     # Notification and Privacy Settings
     path('notifications/me/', get_notification_settings, name='get-notification-settings'),
-    path('notifications/me/update/', update_notification_settings, name='update-notification-settings'),
+    path(
+        'notifications/me/update/',
+        update_notification_settings,
+        name='update-notification-settings',
+    ),
     path('profile/privacy/', get_privacy_settings, name='get-privacy-settings'),
     path('profile/privacy/update/', update_privacy_settings, name='update-privacy-settings'),
     path('explorer/trending/', get_trending_reels, name='explorer-trending'),
@@ -488,11 +891,31 @@ urlpatterns = [
     path('admin/legal/stats/', admin_legal_stats, name='admin-legal-stats'),
     path('admin/legal/create/', admin_legal_document_create, name='admin-legal-create'),
     path('admin/legal/<int:document_id>/', admin_legal_document_detail, name='admin-legal-detail'),
-    path('admin/legal/<int:document_id>/update/', admin_legal_document_update, name='admin-legal-update'),
-    path('admin/legal/<int:document_id>/delete/', admin_legal_document_delete, name='admin-legal-delete'),
-    path('admin/legal/<int:document_id>/publish/', admin_legal_document_publish, name='admin-legal-publish'),
-    path('admin/legal/<int:document_id>/archive/', admin_legal_document_archive, name='admin-legal-archive'),
-    path('admin/legal/<int:document_id>/acceptances/', admin_legal_document_acceptances, name='admin-legal-acceptances'),
+    path(
+        'admin/legal/<int:document_id>/update/',
+        admin_legal_document_update,
+        name='admin-legal-update',
+    ),
+    path(
+        'admin/legal/<int:document_id>/delete/',
+        admin_legal_document_delete,
+        name='admin-legal-delete',
+    ),
+    path(
+        'admin/legal/<int:document_id>/publish/',
+        admin_legal_document_publish,
+        name='admin-legal-publish',
+    ),
+    path(
+        'admin/legal/<int:document_id>/archive/',
+        admin_legal_document_archive,
+        name='admin-legal-archive',
+    ),
+    path(
+        'admin/legal/<int:document_id>/acceptances/',
+        admin_legal_document_acceptances,
+        name='admin-legal-acceptances',
+    ),
     # ============ WALLET (User) ============
     path('wallet/', wallet_summary, name='wallet-summary'),
     path('wallet/transactions/', wallet_transactions, name='wallet-transactions'),
@@ -500,7 +923,11 @@ urlpatterns = [
     path('wallet/withdrawal-info/', withdrawal_info, name='wallet-withdrawal-info'),
     path('wallet/withdraw/', request_withdrawal, name='wallet-withdraw'),
     path('wallet/withdrawals/', my_withdrawals, name='wallet-my-withdrawals'),
-    path('wallet/withdrawals/<int:withdrawal_id>/cancel/', cancel_withdrawal, name='wallet-cancel-withdrawal'),
+    path(
+        'wallet/withdrawals/<int:withdrawal_id>/cancel/',
+        cancel_withdrawal,
+        name='wallet-cancel-withdrawal',
+    ),
     path('wallet/reinvest/', reinvest_points, name='wallet-reinvest'),
     path('wallet/telebirr/initiate/', telebirr_initiate_payment, name='telebirr-initiate'),
     path('wallet/telebirr-callback/', telebirr_callback, name='telebirr-callback'),
@@ -512,84 +939,258 @@ urlpatterns = [
     path('admin/wallet/config/', admin_wallet_config, name='admin-wallet-config'),
     path('admin/wallet/user/<int:user_id>/', admin_user_wallet, name='admin-user-wallet'),
     path('admin/wallet/transactions/', admin_user_transactions, name='admin-user-transactions'),
-    path('admin/wallet/all-transactions/', admin_all_coin_transactions, name='admin-all-transactions'),
+    path(
+        'admin/wallet/all-transactions/', admin_all_coin_transactions, name='admin-all-transactions'
+    ),
     path('admin/wallet/adjust-balance/', admin_adjust_balance, name='admin-adjust-balance'),
     path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-withdrawals-list'),
-    path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-withdrawal-action'),
-    path('admin/withdrawal-analytics/', admin_withdrawal_analytics, name='admin-withdrawal-analytics'),
+    path(
+        'admin/wallet/withdrawals/<int:withdrawal_id>/action/',
+        admin_withdrawal_action,
+        name='admin-withdrawal-action',
+    ),
+    path(
+        'admin/withdrawal-analytics/', admin_withdrawal_analytics, name='admin-withdrawal-analytics'
+    ),
     # ============ SUBSCRIPTION SYSTEM ============
     # Subscription Status Check
     path('subscription/status/', UserSubscriptionStatusView.as_view(), name='subscription-status'),
     # Onevas Webhooks
-    path('onevas/subscription/', OnevasWebhookView.as_view(), {'webhook_type': 'subscription'}, name='onevas-subscription'),
-    path('onevas/unsubscription/', OnevasWebhookView.as_view(), {'webhook_type': 'unsubscription'}, name='onevas-unsubscription'),
-    path('onevas/renewal/', OnevasWebhookView.as_view(), {'webhook_type': 'renewal'}, name='onevas-renewal'),
+    path(
+        'onevas/subscription/',
+        OnevasWebhookView.as_view(),
+        {'webhook_type': 'subscription'},
+        name='onevas-subscription',
+    ),
+    path(
+        'onevas/unsubscription/',
+        OnevasWebhookView.as_view(),
+        {'webhook_type': 'unsubscription'},
+        name='onevas-unsubscription',
+    ),
+    path(
+        'onevas/renewal/',
+        OnevasWebhookView.as_view(),
+        {'webhook_type': 'renewal'},
+        name='onevas-renewal',
+    ),
     path('onevas/stop/', OnevasWebhookView.as_view(), {'webhook_type': 'stop'}, name='onevas-stop'),
     # Subscription Tiers
-    path('subscriptions/tiers/', SubscriptionTierViewSet.as_view({'get': 'list'}), name='subscription-tiers'),
-    path('subscriptions/tiers/active/', SubscriptionTierViewSet.as_view({'get': 'active'}), name='subscription-tiers-active'),
+    path(
+        'subscriptions/tiers/',
+        SubscriptionTierViewSet.as_view({'get': 'list'}),
+        name='subscription-tiers',
+    ),
+    path(
+        'subscriptions/tiers/active/',
+        SubscriptionTierViewSet.as_view({'get': 'active'}),
+        name='subscription-tiers-active',
+    ),
     # User Subscriptions
-    path('subscriptions/', NewSubscriptionViewSet.as_view({'get': 'list', 'post': 'create'}), name='subscriptions'),
-    path('subscriptions/subscribe/', NewSubscriptionViewSet.as_view({'post': 'subscribe'}), name='subscription-subscribe'),
-    path('subscriptions/unsubscribe/', NewSubscriptionViewSet.as_view({'post': 'unsubscribe'}), name='subscription-unsubscribe'),
-    path('subscriptions/history/', NewSubscriptionViewSet.as_view({'get': 'history'}), name='subscription-history'),
+    path(
+        'subscriptions/',
+        NewSubscriptionViewSet.as_view({'get': 'list', 'post': 'create'}),
+        name='subscriptions',
+    ),
+    path(
+        'subscriptions/subscribe/',
+        NewSubscriptionViewSet.as_view({'post': 'subscribe'}),
+        name='subscription-subscribe',
+    ),
+    path(
+        'subscriptions/unsubscribe/',
+        NewSubscriptionViewSet.as_view({'post': 'unsubscribe'}),
+        name='subscription-unsubscribe',
+    ),
+    path(
+        'subscriptions/history/',
+        NewSubscriptionViewSet.as_view({'get': 'history'}),
+        name='subscription-history',
+    ),
     # Telebirr one-time subscription (mimics coin purchase; api/views/wallet.py's
     # telebirr_callback delegates every 'SUB'-prefixed order here)
-    path('subscription/telebirr/one-time/initiate/', telebirr_one_time_initiate, name='telebirr-one-time-initiate'),
-    path('subscription/telebirr/one-time/callback/', telebirr_one_time_callback, name='telebirr-one-time-callback'),
-    path('subscription/telebirr/one-time/query/', telebirr_one_time_query, name='telebirr-one-time-query'),
-    path('subscription/telebirr/ussd/initiate/', telebirr_ussd_subscription_initiate, name='telebirr-ussd-subscription-initiate'),
-    path('subscription/telebirr/ussd/status/', telebirr_ussd_subscription_status, name='telebirr-ussd-subscription-status'),
-    path('webhooks/telebirrSubscriptionUssd/', telebirr_ussd_subscription_webhook, name='telebirr-ussd-subscription-webhook'),
-    path('subscription/validate-token/', validate_subscription_token, name='validate-subscription-token'),
-    path('subscription/check-superapp/', check_superapp_subscription, name='check-superapp-subscription'),
+    path(
+        'subscription/telebirr/one-time/initiate/',
+        telebirr_one_time_initiate,
+        name='telebirr-one-time-initiate',
+    ),
+    path(
+        'subscription/telebirr/one-time/callback/',
+        telebirr_one_time_callback,
+        name='telebirr-one-time-callback',
+    ),
+    path(
+        'subscription/telebirr/one-time/query/',
+        telebirr_one_time_query,
+        name='telebirr-one-time-query',
+    ),
+    path(
+        'subscription/telebirr/ussd/initiate/',
+        telebirr_ussd_subscription_initiate,
+        name='telebirr-ussd-subscription-initiate',
+    ),
+    path(
+        'subscription/telebirr/ussd/status/',
+        telebirr_ussd_subscription_status,
+        name='telebirr-ussd-subscription-status',
+    ),
+    path(
+        'webhooks/telebirrSubscriptionUssd/',
+        telebirr_ussd_subscription_webhook,
+        name='telebirr-ussd-subscription-webhook',
+    ),
+    path(
+        'subscription/validate-token/',
+        validate_subscription_token,
+        name='validate-subscription-token',
+    ),
+    path(
+        'subscription/check-superapp/',
+        check_superapp_subscription,
+        name='check-superapp-subscription',
+    ),
     # Telebirr Direct Debit
     path('direct-debit/create/', create_direct_debit_mandate, name='direct-debit-create'),
     path('direct-debit/activate/', activate_direct_debit_mandate, name='direct-debit-activate'),
     path('direct-debit/cancel/', cancel_direct_debit_mandate, name='direct-debit-cancel'),
     path('direct-debit/mandates/', list_user_mandates, name='direct-debit-mandates'),
     path('direct-debit/initiate/', initiate_direct_debit, name='direct-debit-initiate'),
-    path('direct-debit/one-off-coin-purchase/', create_one_off_coin_purchase, name='one-off-coin-purchase'),
-    path('direct-debit/one-off-subscription/', create_one_off_subscription, name='one-off-subscription'),
+    path(
+        'direct-debit/one-off-coin-purchase/',
+        create_one_off_coin_purchase,
+        name='one-off-coin-purchase',
+    ),
+    path(
+        'direct-debit/one-off-subscription/',
+        create_one_off_subscription,
+        name='one-off-subscription',
+    ),
     path('direct-debit/check-status/', check_mandate_status, name='direct-debit-check-status'),
-    path('admin/direct-debit/query-mandate/', query_mandate_from_telebirr, name='admin-query-mandate'),
-    path('webhooks/telebirr-direct-debit/', telebirr_direct_debit_webhook, name='telebirr-direct-debit-webhook'),
+    path(
+        'admin/direct-debit/query-mandate/', query_mandate_from_telebirr, name='admin-query-mandate'
+    ),
+    path(
+        'webhooks/telebirr-direct-debit/',
+        telebirr_direct_debit_webhook,
+        name='telebirr-direct-debit-webhook',
+    ),
     path('telebirr/b2c/initiate/', initiate_b2c_payment, name='telebirr-b2c-initiate'),
     path('telebirr/b2c/payments/', list_b2c_payments, name='telebirr-b2c-payments'),
     path('webhooks/telebirrB2C/', telebirr_b2c_webhook, name='telebirr-b2c-webhook'),
     # CRM Gift Integration (data gifts) + Telebirr B2C winner gifts (cash)
-    path('admin/crm/packages/', CRMGiftPackageViewSet.as_view({'get': 'list', 'post': 'create'}), name='admin-crm-packages'),
-    path('admin/crm/packages/active/', CRMGiftPackageViewSet.as_view({'get': 'active'}), name='admin-crm-packages-active'),
-    path('admin/crm/packages/<int:pk>/', CRMGiftPackageViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='admin-crm-package-detail'),
-    path('admin/crm/transactions/', CRMGiftTransactionViewSet.as_view({'get': 'list'}), name='admin-crm-transactions'),
-    path('admin/crm/transactions/<int:pk>/', CRMGiftTransactionViewSet.as_view({'get': 'retrieve', 'post': 'retry'}), name='admin-crm-transaction-detail'),
-    path('admin/crm/audit-logs/', CRMGiftAuditLogViewSet.as_view({'get': 'list'}), name='admin-crm-audit-logs'),
-    path('admin/crm/award/', CRMGiftAwardViewSet.as_view({'post': 'award'}), name='admin-crm-award'),
-    path('admin/crm/award-by-phone/', CRMGiftAwardViewSet.as_view({'post': 'award_by_phone'}), name='admin-crm-award-phone'),
-    path('admin/crm/campaign-winners/', CRMGiftAwardViewSet.as_view({'get': 'campaign_winners'}), name='admin-crm-campaign-winners'),
-    path('admin/crm/award-campaign-winners/', CRMGiftAwardViewSet.as_view({'post': 'award_campaign_winners'}), name='admin-crm-award-campaign-winners'),
-    path('admin/crm/send-b2c-gift/', CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'}), name='admin-crm-send-b2c-gift'),
-    path('admin/crm/send-b2c-bulk/', CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'}), name='admin-crm-send-b2c-bulk'),
+    path(
+        'admin/crm/packages/',
+        CRMGiftPackageViewSet.as_view({'get': 'list', 'post': 'create'}),
+        name='admin-crm-packages',
+    ),
+    path(
+        'admin/crm/packages/active/',
+        CRMGiftPackageViewSet.as_view({'get': 'active'}),
+        name='admin-crm-packages-active',
+    ),
+    path(
+        'admin/crm/packages/<int:pk>/',
+        CRMGiftPackageViewSet.as_view(
+            {'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}
+        ),
+        name='admin-crm-package-detail',
+    ),
+    path(
+        'admin/crm/transactions/',
+        CRMGiftTransactionViewSet.as_view({'get': 'list'}),
+        name='admin-crm-transactions',
+    ),
+    path(
+        'admin/crm/transactions/<int:pk>/',
+        CRMGiftTransactionViewSet.as_view({'get': 'retrieve', 'post': 'retry'}),
+        name='admin-crm-transaction-detail',
+    ),
+    path(
+        'admin/crm/audit-logs/',
+        CRMGiftAuditLogViewSet.as_view({'get': 'list'}),
+        name='admin-crm-audit-logs',
+    ),
+    path(
+        'admin/crm/award/', CRMGiftAwardViewSet.as_view({'post': 'award'}), name='admin-crm-award'
+    ),
+    path(
+        'admin/crm/award-by-phone/',
+        CRMGiftAwardViewSet.as_view({'post': 'award_by_phone'}),
+        name='admin-crm-award-phone',
+    ),
+    path(
+        'admin/crm/campaign-winners/',
+        CRMGiftAwardViewSet.as_view({'get': 'campaign_winners'}),
+        name='admin-crm-campaign-winners',
+    ),
+    path(
+        'admin/crm/award-campaign-winners/',
+        CRMGiftAwardViewSet.as_view({'post': 'award_campaign_winners'}),
+        name='admin-crm-award-campaign-winners',
+    ),
+    path(
+        'admin/crm/send-b2c-gift/',
+        CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'}),
+        name='admin-crm-send-b2c-gift',
+    ),
+    path(
+        'admin/crm/send-b2c-bulk/',
+        CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'}),
+        name='admin-crm-send-b2c-bulk',
+    ),
     # Coin Transactions
-    path('coins/transactions/', CoinTransactionViewSet.as_view({'get': 'list'}), name='coin-transactions'),
-    path('coins/purchase/', CoinTransactionViewSet.as_view({'post': 'purchase'}), name='coin-purchase'),
+    path(
+        'coins/transactions/',
+        CoinTransactionViewSet.as_view({'get': 'list'}),
+        name='coin-transactions',
+    ),
+    path(
+        'coins/purchase/',
+        CoinTransactionViewSet.as_view({'post': 'purchase'}),
+        name='coin-purchase',
+    ),
     # Admin Subscription Management
-    path('admin/subscriptions/', AdminSubscriptionViewSet.as_view({'get': 'list'}), name='admin-subscriptions'),
-    path('admin/subscriptions/analytics/', AdminSubscriptionViewSet.as_view({'get': 'analytics'}), name='admin-subscriptions-analytics'),
-    path('admin/subscriptions/revenue/', AdminSubscriptionViewSet.as_view({'get': 'revenue'}), name='admin-subscriptions-revenue'),
-    path('admin/subscriptions/charging/', AdminSubscriptionViewSet.as_view({'get': 'charging_analytics'}), name='admin-subscriptions-charging'),
+    path(
+        'admin/subscriptions/',
+        AdminSubscriptionViewSet.as_view({'get': 'list'}),
+        name='admin-subscriptions',
+    ),
+    path(
+        'admin/subscriptions/analytics/',
+        AdminSubscriptionViewSet.as_view({'get': 'analytics'}),
+        name='admin-subscriptions-analytics',
+    ),
+    path(
+        'admin/subscriptions/revenue/',
+        AdminSubscriptionViewSet.as_view({'get': 'revenue'}),
+        name='admin-subscriptions-revenue',
+    ),
+    path(
+        'admin/subscriptions/charging/',
+        AdminSubscriptionViewSet.as_view({'get': 'charging_analytics'}),
+        name='admin-subscriptions-charging',
+    ),
     # ============ SUPPORT REQUESTS ============
     path('support/requests/', my_support_requests, name='support-requests'),
     path('admin/support/requests/', admin_support_requests, name='admin-support-requests'),
-    path('admin/support/requests/<int:request_id>/', admin_update_support_request, name='admin-support-request-update'),
-
+    path(
+        'admin/support/requests/<int:request_id>/',
+        admin_update_support_request,
+        name='admin-support-request-update',
+    ),
     path('admin/wallet/withdrawals/', admin_withdrawals_list, name='admin-wallet-withdrawals'),
-    path('admin/wallet/withdrawals/<int:withdrawal_id>/action/', admin_withdrawal_action, name='admin-wallet-withdrawal-action'),
+    path(
+        'admin/wallet/withdrawals/<int:withdrawal_id>/action/',
+        admin_withdrawal_action,
+        name='admin-wallet-withdrawal-action',
+    ),
     path('admin/wallet/adjust-balance/', admin_adjust_balance, name='admin-wallet-adjust-balance'),
     # On-Demand Charging
     path('charging/on-demand/', initiate_on_demand_charging, name='on-demand-charging'),
     path('charging/on-demand/statistics/', get_charging_statistics, name='charging-statistics'),
-    path('charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'),
+    path(
+        'charging/on-demand/transactions/', get_charging_transactions, name='charging-transactions'
+    ),
     path('charging/on-demand/search/', search_charging_transactions, name='charging-search'),
     path('charging/on-demand/analytics/', get_charging_analytics, name='charging-analytics'),
     path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),

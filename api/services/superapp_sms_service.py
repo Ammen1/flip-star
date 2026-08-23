@@ -1,4 +1,5 @@
 """SuperApp SMS Service - Dedicated SMS notifications for Telebirr SuperApp subscriptions"""
+
 import logging
 
 import requests
@@ -10,11 +11,15 @@ logger = logging.getLogger(__name__)
 class SuperAppSMSService:
     """Service to send SMS notifications for SuperApp subscription events"""
 
-    ONEVAS_SMS_URL = "https://onevas.et/api/partnerSms/send"
+    # Read from settings, which resolve through Vault -> environment -> .env,
+    # rather than hardcoding the endpoint. See config/settings/base.py:445.
+    ONEVAS_SMS_URL = settings.ONEVAS_SMS_URL  # Onevas SMS API endpoint
 
     def __init__(self):
         self.timeout = 10
-        self.short_code = settings.ONEVAS_SHORT_CODE if hasattr(settings, 'ONEVAS_SHORT_CODE') else '9286'
+        self.short_code = (
+            settings.ONEVAS_SHORT_CODE if hasattr(settings, 'ONEVAS_SHORT_CODE') else '9286'
+        )
         # Use the same ONEVAS_PRODUCTS configuration as Direct Debit
         self.ONEVAS_PRODUCTS = getattr(settings, 'ONEVAS_PRODUCTS', {})
         self.ONEVAS_APPLICATION_KEY = getattr(settings, 'ONEVAS_APPLICATION_KEY', '')
@@ -29,7 +34,7 @@ class SuperAppSMSService:
             # Fallback to default configuration
             return {
                 'application_key': self.ONEVAS_APPLICATION_KEY,
-                'product_id': self.ONEVAS_PRODUCT_NUMBER
+                'product_id': self.ONEVAS_PRODUCT_NUMBER,
             }
 
     def _send_sms(self, phone_number, text, duration_type='weekly'):
@@ -48,38 +53,39 @@ class SuperAppSMSService:
             config = self._get_product_config(duration_type)
 
             payload = {
-                "application_key": config['application_key'],
-                "phone_number": phone_number,
-                "product_number": config['product_id'],
-                "text": text
+                'application_key': config['application_key'],
+                'phone_number': phone_number,
+                'product_number': config['product_id'],
+                'text': text,
             }
 
-            logger.info(f"[SuperApp SMS] Sending SMS to {phone_number}")
-            logger.info(f"[SuperApp SMS] Message: {text[:100]}...")
-            logger.info(f"[SuperApp SMS] Using app_key: {config['application_key'][:10]}..., product: {config['product_id']}")
+            logger.info(f'[SuperApp SMS] Sending SMS to {phone_number}')
+            logger.info(f'[SuperApp SMS] Message: {text[:100]}...')
+            logger.info(
+                f"[SuperApp SMS] Using app_key: {config['application_key'][:10]}..., product: {config['product_id']}"
+            )
 
             response = requests.post(
                 self.ONEVAS_SMS_URL,
                 json=payload,
                 timeout=self.timeout,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
             )
 
-            logger.info(f"[SuperApp SMS] Response status: {response.status_code}")
-            logger.info(f"[SuperApp SMS] Response body: {response.text}")
+            logger.info(f'[SuperApp SMS] Response status: {response.status_code}')
+            logger.info(f'[SuperApp SMS] Response body: {response.text}')
 
             if response.status_code == 200:
-                logger.info(f"[SuperApp SMS] SMS sent successfully to {phone_number}")
+                logger.info(f'[SuperApp SMS] SMS sent successfully to {phone_number}')
                 return True
             else:
-                logger.error(f"[SuperApp SMS] Failed to send SMS. Status: {response.status_code}, Response: {response.text}")
+                logger.error(
+                    f'[SuperApp SMS] Failed to send SMS. Status: {response.status_code}, Response: {response.text}'
+                )
                 return False
 
         except Exception as e:
-            logger.error(f"[SuperApp SMS] Error sending SMS: {str(e)}")
+            logger.error(f'[SuperApp SMS] Error sending SMS: {str(e)}')
             return False
 
     def send_subscription_success(self, phone_number, plan_name, amount, duration_type, end_date):
@@ -93,11 +99,9 @@ class SuperAppSMSService:
             duration_type: Plan duration (daily, weekly, monthly)
             end_date: Date when subscription expires (for one-time payments)
         """
-        duration_text = {
-            'daily': '24 hours',
-            'weekly': '7 days',
-            'monthly': '30 days'
-        }.get(duration_type, 'unknown period')
+        duration_text = {'daily': '24 hours', 'weekly': '7 days', 'monthly': '30 days'}.get(
+            duration_type, 'unknown period'
+        )
 
         message = (
             f"Thank you for subscribing to the {plan_name} plan. "
@@ -109,7 +113,9 @@ class SuperAppSMSService:
 
         return self._send_sms(phone_number, message, duration_type)
 
-    def send_subscription_renewal(self, phone_number, plan_name, amount, duration_type, next_renewal_date):
+    def send_subscription_renewal(
+        self, phone_number, plan_name, amount, duration_type, next_renewal_date
+    ):
         """
         Send SMS when SuperApp subscription is renewed
 
@@ -120,11 +126,9 @@ class SuperAppSMSService:
             duration_type: Plan duration (daily, weekly, monthly)
             next_renewal_date: Date of next renewal
         """
-        duration_text = {
-            'daily': '24 hours',
-            'weekly': '7 days',
-            'monthly': '30 days'
-        }.get(duration_type, 'unknown period')
+        duration_text = {'daily': '24 hours', 'weekly': '7 days', 'monthly': '30 days'}.get(
+            duration_type, 'unknown period'
+        )
 
         message = (
             f"Your {plan_name} subscription has been renewed. "
@@ -146,9 +150,9 @@ class SuperAppSMSService:
             duration_type: Plan duration (daily, weekly, monthly)
         """
         message = (
-            f"Your {plan_name} subscription has been cancelled. "
-            f"Thank you for using FlipStar. "
-            f"To resubscribe, open the Telebirr SuperApp, navigate to FlipStar service, and select Subscribe."
+            f'Your {plan_name} subscription has been cancelled. '
+            f'Thank you for using FlipStar. '
+            f'To resubscribe, open the Telebirr SuperApp, navigate to FlipStar service, and select Subscribe.'
         )
 
         return self._send_sms(phone_number, message, duration_type)
@@ -164,10 +168,10 @@ class SuperAppSMSService:
             duration_type: Plan duration (daily, weekly, monthly)
         """
         message = (
-            f"FlipStar: Your {plan_name} subscription renewal failed due to insufficient balance. "
-            f"Required amount: {amount} ETB. "
-            f"Please recharge and the renewal will be retried. "
-            f"To cancel, send STOP to {self.short_code}."
+            f'FlipStar: Your {plan_name} subscription renewal failed due to insufficient balance. '
+            f'Required amount: {amount} ETB. '
+            f'Please recharge and the renewal will be retried. '
+            f'To cancel, send STOP to {self.short_code}.'
         )
 
         return self._send_sms(phone_number, message, duration_type)
@@ -182,9 +186,9 @@ class SuperAppSMSService:
             days_remaining: Days remaining before expiry
         """
         message = (
-            f"FlipStar: Your {plan_name} subscription will expire in {days_remaining} day(s). "
-            f"Please renew to continue enjoying FlipStar. "
-            f"To renew, visit the app or send OK to {self.short_code}."
+            f'FlipStar: Your {plan_name} subscription will expire in {days_remaining} day(s). '
+            f'Please renew to continue enjoying FlipStar. '
+            f'To renew, visit the app or send OK to {self.short_code}.'
         )
 
         return self._send_sms(phone_number, message, 'daily')

@@ -38,7 +38,9 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 REQUIRED_HOSTS = ['localhost', '127.0.0.1']
 
 ALLOWED_HOSTS = [
-    h.strip() for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',') if h.strip()
+    h.strip()
+    for h in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+    if h.strip()
 ]
 for _host in REQUIRED_HOSTS:
     if _host not in ALLOWED_HOSTS:
@@ -252,8 +254,8 @@ mimetypes.add_type('video/ogg', '.ogv', True)
 
 STREAMING_CONTENT_LENGTH = 4096
 
-FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024   # 50 MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024   # 50 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 # ---------------------------------------------------------------------------
@@ -310,9 +312,18 @@ CORS_ALLOWED_ORIGINS = [
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
-    'accept', 'accept-encoding', 'authorization', 'content-type', 'dnt',
-    'origin', 'user-agent', 'x-csrftoken', 'x-requested-with',
-    'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto',
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-forwarded-for',
+    'x-forwarded-host',
+    'x-forwarded-proto',
 ]
 CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
 
@@ -343,6 +354,25 @@ TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='')
 TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='')
 TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='')
 TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='')
+
+# ---------------------------------------------------------------------------
+# Crypto test endpoints -- DEVELOPMENT AND STAGING ONLY
+# ---------------------------------------------------------------------------
+# When true, /api/v1/crypto/test/* is served: helpers that generate a client
+# keypair, encrypt an arbitrary payload, and decrypt a response. They exist so
+# the encrypted endpoints can be exercised from Postman or curl without a
+# crypto-capable client.
+#
+# This MUST be false in production. The helpers hand out a private key and
+# perform the client half of the exchange server-side, which removes the
+# end-to-end property the encryption exists to provide: an attacker who can
+# reach them can mint valid envelopes for any payload. Gated on its own flag
+# rather than DEBUG because staging runs config.settings.production with
+# DEBUG=False, and staging is precisely where these need to work.
+#
+# When false the routes return 404, not 403 -- a disabled endpoint should not
+# advertise that it exists.
+CRYPTO_TEST_ENDPOINTS_ENABLED = config('CRYPTO_TEST_ENDPOINTS_ENABLED', default=False, cast=bool)
 TELEBIRR_PAYEE_ACCOUNT_NAME = config('TELEBIRR_PAYEE_ACCOUNT_NAME', default='Flipstar')
 TELEBIRR_CALLER_TYPE = config('TELEBIRR_CALLER_TYPE', default='2')
 TELEBIRR_SP_OPERATOR_ID = config('TELEBIRR_SP_OPERATOR_ID', default='')
@@ -354,7 +384,9 @@ TELEBIRR_ORG_OPERATOR_CREDENTIAL = config('TELEBIRR_ORG_OPERATOR_CREDENTIAL', de
 # Falls back to the direct-debit org-operator/third-party credentials above
 # when unset -- see TelebirrDirectDebitService.initiate_b2c_payment.
 TELEBIRR_B2C_SERVICE_CODE = config('TELEBIRR_B2C_SERVICE_CODE', default='2304')
-TELEBIRR_B2C_REASON_TYPE = config('TELEBIRR_B2C_REASON_TYPE', default='Pay for Individual B2C_VDF_Demo')
+TELEBIRR_B2C_REASON_TYPE = config(
+    'TELEBIRR_B2C_REASON_TYPE', default='Pay for Individual B2C_VDF_Demo'
+)
 TELEBIRR_B2C_RESULT_URL = config('TELEBIRR_B2C_RESULT_URL', default='')
 TELEBIRR_B2C_ORG_OPERATOR_ID = config('TELEBIRR_B2C_ORG_OPERATOR_ID', default='')
 TELEBIRR_B2C_ORG_OPERATOR_CREDENTIAL = config('TELEBIRR_B2C_ORG_OPERATOR_CREDENTIAL', default='')

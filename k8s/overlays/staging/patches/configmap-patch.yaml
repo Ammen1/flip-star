@@ -18,5 +18,11 @@ data:
   CSRF_TRUSTED_ORIGINS: "https://api.uat.flipstar.et"
   BACKEND_URL: "https://api.uat.flipstar.et"
   LOG_LEVEL: "DEBUG"
+  # Serves /api/v1/crypto/test/* so the encrypted endpoints can be driven
+  # from Postman without a crypto-capable client. STAGING ONLY -- these do
+  # the client half of the exchange server-side and hand out a private key,
+  # which defeats the end-to-end property entirely. Absent from the
+  # production overlay on purpose; the setting defaults to False.
+  CRYPTO_TEST_ENDPOINTS_ENABLED: "true"
   VAULT_ADDR: "http://vault.flipstar-staging.svc.cluster.local:8200"
   VAULT_SECRET_PATH: "flipstar/backend/staging"

@@ -107,10 +107,21 @@ def test_route_resolves_to_expected_view(name, path, view_name):
 
 #: Router basenames backed by a ModelViewSet, which generate a ``-list`` route.
 COLLECTION_BASENAMES = [
-    'profile', 'reel', 'quest', 'subscription', 'notification',
-    'competition', 'winner', 'follow', 'block',
-    'comment', 'comment-reply', 'saved',
-    'gift', 'gift-transaction', 'gift-stats',
+    'profile',
+    'reel',
+    'quest',
+    'subscription',
+    'notification',
+    'competition',
+    'winner',
+    'follow',
+    'block',
+    'comment',
+    'comment-reply',
+    'saved',
+    'gift',
+    'gift-transaction',
+    'gift-stats',
 ]
 
 #: Registered as plain ViewSets exposing only custom @action routes, so they
@@ -166,11 +177,17 @@ def test_total_route_count_is_stable():
     parallel to the existing H5/InApp telebirr_initiate_payment flow,
     keyed by originator_conversation_id and payment_method='telebirr_ussd'
     instead of merch_order_id/'telebirr' so the two never collide).
+    +3 for the crypto test helpers (api/views/crypto.py: crypto_test_keypair,
+    crypto_test_encrypt, crypto_test_decrypt). They are always routed, but the
+    views raise Http404 unless settings.CRYPTO_TEST_ENDPOINTS_ENABLED is true,
+    which defaults to False and is set only in the staging overlay. The count
+    is therefore the same in every environment.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 297, (
+    assert len(urlpatterns) == 300, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )
