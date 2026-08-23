@@ -128,7 +128,7 @@ SECURE_REFERRER_POLICY = 'same-origin'
 X_FRAME_OPTIONS = 'DENY'
 
 CSRF_TRUSTED_ORIGINS = [
-    o.strip() for o in config('CSRF_TRUSTED_ORIGINS', default='https://uat.flipstar.et').split(',') if o.strip()
+    o.strip() for o in config('CSRF_TRUSTED_ORIGINS', default='https://api.uat.flipstar.et').split(',') if o.strip()
 ]
 
 

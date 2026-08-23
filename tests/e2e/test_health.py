@@ -111,7 +111,7 @@ def test_authenticated_wallet_summary_round_trip(auth_client, encrypted_client_k
 @pytest.mark.django_db
 def test_cors_headers_present_on_response(api_client):
     """The CORS middleware must still run ahead of everything else."""
-    response = api_client.get('/api/v1/health/', HTTP_ORIGIN='https://uat.flipstar.et')
+    response = api_client.get('/api/v1/health/', HTTP_ORIGIN='https://api.uat.flipstar.et')
 
     assert 'Access-Control-Allow-Origin' in response
 

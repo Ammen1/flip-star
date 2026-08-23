@@ -28,7 +28,7 @@ data:
   # healthy (probes send Host: localhost, which base.py's REQUIRED_HOSTS
   # always keeps valid) while every real request arriving through the
   # Ingress gets 400. Verified directly against the real image: with
-  # ALLOWED_HOSTS unset, `Host: uat.flipstar.et` -> 400; with it set -> 200.
+  # ALLOWED_HOSTS unset, `Host: api.uat.flipstar.et` -> 400; with it set -> 200.
   # Each overlay must override this with its own domain.
   ALLOWED_HOSTS: "CHANGEME-set-per-environment"
   USE_DOCKER_DB: "false"

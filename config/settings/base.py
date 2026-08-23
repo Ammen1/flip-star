@@ -223,7 +223,7 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Absolute base used by serializers when building media URLs in API responses.
-BACKEND_URL = config('BACKEND_URL', default='https://uat.flipstar.et')
+BACKEND_URL = config('BACKEND_URL', default='https://api.uat.flipstar.et')
 
 # Object storage (S3 / MinIO). Resolved centrally so the same values are used
 # by Django's storage backend and by the Celery upload helpers.
@@ -302,7 +302,7 @@ CORS_ALLOWED_ORIGINS = [
     o.strip()
     for o in config(
         'CORS_ALLOWED_ORIGINS',
-        default='https://uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174',
+        default='https://api.uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174',
     ).split(',')
     if o.strip()
 ]

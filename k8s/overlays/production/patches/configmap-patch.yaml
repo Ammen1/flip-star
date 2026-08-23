@@ -1,6 +1,6 @@
 # Strategic-merge patch onto k8s/base/configmap.yaml -- only the keys that
 # differ for production. CHANGEME values are placeholders: this project has
-# no confirmed production domain yet (only uat.flipstar.et exists today, see
+# no confirmed production domain yet (only api.uat.flipstar.et exists today, see
 # docker-compose.yml/nginx.conf) -- replace before applying to a real
 # production cluster.
 apiVersion: v1

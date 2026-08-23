@@ -30,10 +30,10 @@ x-runtime-env: &runtime-env
   REGION_NAME: ${REGION_NAME:-us-east-1}
   S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
   CORS_ALLOW_ALL_ORIGINS: ${CORS_ALLOW_ALL_ORIGINS:-false}
-  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://uat.flipstar.et}
-  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://uat.flipstar.et}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://api.uat.flipstar.et}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://api.uat.flipstar.et}
   SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-true}
-  BACKEND_URL: ${BACKEND_URL:-https://uat.flipstar.et}
+  BACKEND_URL: ${BACKEND_URL:-https://api.uat.flipstar.et}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@flipstar.et}
   TELEBIRR_PAYEE_ACCOUNT_NAME: ${TELEBIRR_PAYEE_ACCOUNT_NAME:-Flipstar}
@@ -90,7 +90,6 @@ x-django-env: &django-env
   <<: [*runtime-env, *vault-env, *secret-env]
 
 services:
-
   # ---------------------------------------------------------------------------
   # Secret store
   # ---------------------------------------------------------------------------
@@ -116,7 +115,8 @@ services:
     networks:
       - flipstar_network
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8200/v1/sys/health"]
+      test:
+        ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8200/v1/sys/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -221,7 +221,14 @@ services:
     networks:
       - flipstar_network
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/api/v1/health/"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "http://localhost:8000/api/v1/health/",
+        ]
       interval: 30s
       timeout: 5s
       start_period: 40s

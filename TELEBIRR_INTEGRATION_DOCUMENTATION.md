@@ -1,6 +1,7 @@
 # Telebirr Direct Debit Integration Documentation
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Architecture](#architecture)
 3. [Files and Components](#files-and-components)
@@ -19,6 +20,7 @@
 This document provides a comprehensive explanation of the Telebirr Direct Debit integration for the Flipstar platform. The integration enables users to subscribe to premium plans using Telebirr's mobile money system, with automatic recurring payments via direct debit mandates.
 
 ### Key Features
+
 - **Mandate Creation**: Create direct debit mandates for daily, weekly, or monthly subscriptions
 - **Mandate Activation**: User confirms mandate via Telebirr app
 - **Automatic Debit**: System initiates recurring payments based on mandate
@@ -50,6 +52,7 @@ This document provides a comprehensive explanation of the Telebirr Direct Debit 
 ```
 
 ### Data Flow
+
 1. **Frontend**: React components handle user interactions and API calls
 2. **Backend**: Django REST API processes requests and manages business logic
 3. **Telebirr Service**: Python service constructs SOAP envelopes and communicates with Telebirr
@@ -62,29 +65,34 @@ This document provides a comprehensive explanation of the Telebirr Direct Debit 
 ### Frontend Files
 
 #### 1. `frontend/components/SubscriptionPage.jsx`
+
 **Purpose**: Main subscription interface for users to view plans and subscribe via Telebirr.
 
 **Key Components**:
+
 - **State Management**: Manages subscription tiers, modal states, processing status
 - **Telebirr Modal**: Shows phone number input (auto-filled from user profile)
 - **Success Modal**: Displays confirmation after successful mandate creation
 - **Cancel Button**: Allows users to cancel active Telebirr subscriptions
 
 **Code Block - Telebirr Modal**:
+
 ```javascript
 const [telebirrModalOpen, setTelebirrModalOpen] = useState(false);
-const [telebirrPhone, setTelebirrPhone] = useState('');
+const [telebirrPhone, setTelebirrPhone] = useState("");
 const [successModalOpen, setSuccessModalOpen] = useState(false);
 
 // Fetch phone number from API (like coin purchase modal)
 const handleTelebirrSubscribe = async (tier) => {
   setSelectedTierForTelebirr(tier);
   try {
-    const profile = await api.request('/profile/me/');
-    setTelebirrPhone(profile?.phone_number || user?.profile?.phone_number || '');
+    const profile = await api.request("/profile/me/");
+    setTelebirrPhone(
+      profile?.phone_number || user?.profile?.phone_number || "",
+    );
   } catch (error) {
-    console.error('Failed to fetch phone number:', error);
-    setTelebirrPhone(user?.profile?.phone_number || '');
+    console.error("Failed to fetch phone number:", error);
+    setTelebirrPhone(user?.profile?.phone_number || "");
   }
   setTelebirrModalOpen(true);
 };
@@ -93,6 +101,7 @@ const handleTelebirrSubscribe = async (tier) => {
 **Usage**: When user clicks "Subscribe via Telebirr", this function fetches the user's phone number from the backend and displays it in a modal for confirmation.
 
 **Code Block - Success Modal**:
+
 ```javascript
 if (response.success) {
   setSuccessModalOpen(true);
@@ -104,32 +113,36 @@ if (response.success) {
 **Usage**: Displays a centered modal with green checkmark after successful mandate creation. Auto-dismisses after 3 seconds.
 
 **Code Block - Cancel Handler**:
+
 ```javascript
 const handleCancelTelebirrSubscription = async () => {
   if (!currentSubscription?.mandate_id) {
-    showToast('error', 'No Telebirr mandate found');
+    showToast("error", "No Telebirr mandate found");
     return;
   }
 
-  if (confirm('Are you sure you want to cancel your Telebirr subscription?')) {
+  if (confirm("Are you sure you want to cancel your Telebirr subscription?")) {
     setProcessing(true);
     try {
-      const response = await api.request('/direct-debit/cancel/', {
-        method: 'POST',
+      const response = await api.request("/direct-debit/cancel/", {
+        method: "POST",
         body: JSON.stringify({
           mandate_id: currentSubscription.mandate_id,
         }),
       });
 
       if (response.success) {
-        showToast('success', 'Telebirr subscription cancelled successfully');
+        showToast("success", "Telebirr subscription cancelled successfully");
         loadSubscriptionData();
       } else {
-        showToast('error', response.error || 'Failed to cancel Telebirr subscription');
+        showToast(
+          "error",
+          response.error || "Failed to cancel Telebirr subscription",
+        );
       }
     } catch (error) {
-      console.error('Cancel Telebirr subscription error:', error);
-      showToast('error', 'Failed to cancel Telebirr subscription');
+      console.error("Cancel Telebirr subscription error:", error);
+      showToast("error", "Failed to cancel Telebirr subscription");
     } finally {
       setProcessing(false);
     }
@@ -144,22 +157,25 @@ const handleCancelTelebirrSubscription = async () => {
 ### Backend Files
 
 #### 2. `backend/api/telebirr_direct_debit_service.py`
+
 **Purpose**: Python service class that handles all SOAP API communication with Telebirr.
 
 **Key Components**:
+
 - **Raw SOAP Requests**: Uses Python `requests` library to send SOAP envelopes
 - **Envelope Construction**: Builds XML envelopes matching Telebirr documentation structure
 - **Response Parsing**: Extracts response codes and messages from SOAP responses
 - **Four Operations**: create_mandate, activate_mandate, initiate_debit, cancel_mandate
 
 **Code Block - SOAP Envelope Construction**:
+
 ```python
 def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml):
     """Build SOAP envelope for Telebirr Direct Debit API"""
     originator_conversation_id = self._generate_originator_conversation_id()
     conversation_id = self._generate_conversation_id()
     timestamp = self._generate_timestamp()
-    
+
     soap_envelope = f'''<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:api="http://cps.huawei.com/cpsinterface/api_requestmgr" xmlns:req="http://cps.huawei.com/cpsinterface/request" xmlns:com="http://cps.huawei.com/cpsinterface/common">
   <soapenv:Header/>
@@ -196,11 +212,12 @@ def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml):
     </api:Request>
   </soapenv:Body>
 </soapenv:Envelope>'''
-    
+
     return soap_envelope, originator_conversation_id, conversation_id
 ```
 
 **Usage**: Constructs the complete SOAP envelope with all required headers and body content according to Telebirr's XML schema. The envelope includes:
+
 - **Caller Information**: Third-party credentials for authentication
 - **Identity**: Initiator (SP Operator) and Receiver Party (Customer MSISDN)
 - **Command ID**: Specific operation being performed
@@ -209,10 +226,11 @@ def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml):
 **Why Raw SOAP?** The Telebirr test server doesn't provide a WSDL file, so we cannot use automated SOAP clients like `zeep`. Instead, we manually construct the XML envelope following the Telebirr API documentation.
 
 **Code Block - Create Mandate**:
+
 ```python
-def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
+def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
                   first_payment_date, expiry_date, payee_shortcode=None,
-                  payee_account_name=None, start_range_of_days=1, 
+                  payee_account_name=None, start_range_of_days=1,
                   end_range_of_days=22):
     """Create Direct Debit Mandate"""
     try:
@@ -222,16 +240,16 @@ def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
             'Identifier': self.sp_operator_id or self.third_party_id,
             'SecurityCredential': self.sp_operator_credential or self.third_party_password,
         }
-        
+
         # Build receiver party (Payer MSISDN)
         receiver_party = {
             'IdentifierType': 1,  # MSISDN
             'Identifier': payer_msisdn,
         }
-        
+
         # Build body XML according to Telebirr documentation
         body_xml = f'''<req:CreateDirectDebitMandateByPayerRequest>
-          <req:Payee> 
+          <req:Payee>
             <com:IdentifierType>4</com:IdentifierType>
             <com:IdentifierValue>{payee_shortcode}</com:IdentifierValue>
           </req:Payee>
@@ -247,7 +265,7 @@ def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
             <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
           </req:DirectDebitMandateInfo>
         </req:CreateDirectDebitMandateByPayerRequest>'''
-        
+
         # Build SOAP envelope and make request
         soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
             command_id='CreateDirectDebitMandateByCustomer',
@@ -255,23 +273,23 @@ def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
             receiver_party=receiver_party,
             body_xml=body_xml
         )
-        
+
         headers = {
             'Content-Type': 'text/xml; charset=utf-8',
             'SOAPAction': 'CreateDirectDebitMandateByCustomer'
         }
-        
+
         response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-        
+
         # Parse response and return result
         if response.status_code == 200:
             # Extract ResponseCode and ResponseDesc using regex
             response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
             response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
-            
+
             response_code = response_code_match.group(1) if response_code_match else '1'
             response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
-            
+
             if response_code == '0':
                 return {
                     'success': True,
@@ -290,12 +308,14 @@ def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
 ```
 
 **Usage**: Creates a direct debit mandate with Telebirr. The mandate specifies:
+
 - **Payer Information**: Customer's phone number and reference
 - **Payee Information**: Flipstar's shortcode and account name
 - **Payment Schedule**: Frequency (02=daily, 03=weekly, 05=monthly), dates, and ranges
 - **Terms**: User agreement flag (AgreedTC=1)
 
 **Why These Parameters?** Telebirr requires these fields to establish the direct debit agreement:
+
 - **Frequency**: Determines how often to debit the account
 - **Date Ranges**: Valid days for debiting (1-22) to avoid month-end issues
 - **Expiry Date**: When the mandate automatically expires
@@ -304,15 +324,18 @@ def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
 ---
 
 #### 3. `backend/api/views_direct_debit.py`
+
 **Purpose**: Django REST API views that handle HTTP requests and coordinate with the Telebirr service.
 
 **Key Endpoints**:
+
 - **`/direct-debit/create/`**: Creates a new direct debit mandate
 - **`/direct-debit/activate/`**: Activates a mandate (webhook callback)
 - **`/direct-debit/cancel/`**: Cancels an existing mandate
 - **`/direct-debit/initiate/`**: Manually initiates a debit transaction
 
 **Code Block - Create Mandate View**:
+
 ```python
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -323,14 +346,14 @@ def create_direct_debit_mandate(request):
         tier_id = request.data.get('tier_id')
         payer_msisdn = request.data.get('payer_msisdn')
         frequency = request.data.get('frequency')
-        
+
         # Validate required fields
         if not all([tier_id, payer_msisdn, frequency]):
             return Response(
                 {'error': 'tier_id, payer_msisdn, and frequency are required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Get tier
         try:
             tier = SubscriptionTier.objects.get(id=tier_id)
@@ -339,14 +362,14 @@ def create_direct_debit_mandate(request):
                 {'error': 'Subscription tier not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         # Calculate dates
         first_payment_date = (timezone.now() + timedelta(days=1)).strftime('%Y%m%d')
         expiry_date = (timezone.now() + timedelta(days=365)).strftime('%Y%m%d')
-        
+
         # Generate reference number
         payer_reference_number = f"FLIPSTAR_{user.id}_{tier_id}_{int(timezone.now().timestamp())}"
-        
+
         # Call Telebirr service to create mandate
         result = telebirr_direct_debit_service.create_mandate(
             payer_msisdn=payer_msisdn,
@@ -355,13 +378,13 @@ def create_direct_debit_mandate(request):
             first_payment_date=first_payment_date,
             expiry_date=expiry_date
         )
-        
+
         if not result.get('success'):
             return Response(
                 {'error': result.get('error', 'Mandate creation failed')},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
         # Create mandate record in database
         mandate = DirectDebitMandate.objects.create(
             user=user,
@@ -375,7 +398,7 @@ def create_direct_debit_mandate(request):
             originator_conversation_id=result.get('originator_conversation_id'),
             conversation_id=result.get('conversation_id')
         )
-        
+
         return Response({
             'success': True,
             'mandate_id': str(mandate.id),
@@ -383,7 +406,7 @@ def create_direct_debit_mandate(request):
             'status': mandate.status,
             'message': 'Mandate created successfully. Please confirm via Telebirr app.'
         })
-        
+
     except Exception as e:
         return Response(
             {'error': f'Failed to create mandate: {str(e)}'},
@@ -392,6 +415,7 @@ def create_direct_debit_mandate(request):
 ```
 
 **Usage**: This API endpoint:
+
 1. Validates the request parameters
 2. Retrieves the subscription tier
 3. Calculates payment dates
@@ -400,6 +424,7 @@ def create_direct_debit_mandate(request):
 6. Returns the mandate details to the frontend
 
 **Why This Flow?** The backend acts as an intermediary to:
+
 - Validate user permissions (IsAuthenticated)
 - Enforce business rules (tier validation, date calculations)
 - Maintain database records for tracking
@@ -408,16 +433,18 @@ def create_direct_debit_mandate(request):
 ---
 
 #### 4. `backend/config/settings.py`
+
 **Purpose**: Django configuration including Telebirr API credentials and settings.
 
 **Code Block - Telebirr Settings**:
+
 ```python
 # Telebirr SOAP API Configuration
 TELEBIRR_SOAP_URL = config('TELEBIRR_SOAP_URL', default='http://10.180.79.13:30001/payment/services/APIRequestMgrService')
 TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='TestMer')
 TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=')
 TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='232323')
-TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://uat.flipstar.et/api/webhooks/telebirr-direct-debit')
+TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit')
 TELEBIRR_PAYEE_ACCOUNT_NAME = config('TELEBIRR_PAYEE_ACCOUNT_NAME', default='Flipstar')
 TELEBIRR_CALLER_TYPE = config('TELEBIRR_CALLER_TYPE', default='2')  # 2 = Third Party
 
@@ -427,6 +454,7 @@ TELEBIRR_SP_OPERATOR_CREDENTIAL = config('TELEBIRR_SP_OPERATOR_CREDENTIAL', defa
 ```
 
 **Usage**: These settings configure the Telebirr integration:
+
 - **SOAP URL**: Telebirr API endpoint
 - **Third Party ID/Password**: Authentication credentials
 - **Shortcode**: Flipstar's merchant identifier
@@ -434,6 +462,7 @@ TELEBIRR_SP_OPERATOR_CREDENTIAL = config('TELEBIRR_SP_OPERATOR_CREDENTIAL', defa
 - **SP Operator Credentials**: Service provider authentication
 
 **Why Environment Variables?** Using `config()` from `python-decouple` allows:
+
 - Different credentials for test/production environments
 - Secure credential management (not hardcoded)
 - Easy configuration changes without code deployment
@@ -449,6 +478,7 @@ SOAP (Simple Object Access Protocol) is a protocol for exchanging structured inf
 ### Why SOAP for Telebirr?
 
 Telebirr uses SOAP because:
+
 - **Industry Standard**: Mobile money systems often use SOAP for enterprise integration
 - **Structured Contracts**: XML schemas ensure strict message validation
 - **Security**: Built-in WS-Security support
@@ -479,6 +509,7 @@ Telebirr SOAP requests follow this structure:
 ```
 
 **Components Explained**:
+
 - **Envelope**: Root element wrapping the entire message
 - **Header**: Contains metadata (command, timestamps, authentication)
 - **Identity**: Specifies the initiator and receiver of the operation
@@ -487,12 +518,14 @@ Telebirr SOAP requests follow this structure:
 ### Namespaces
 
 Telebirr uses XML namespaces to avoid naming conflicts:
+
 - `soapenv`: SOAP envelope namespace
 - `api`: Telebirr API request manager
 - `req`: Request elements
 - `com`: Common/shared elements
 
 **Why Namespaces?** They allow:
+
 - Multiple systems to use the same element names
 - Clear separation of concerns
 - XML validation against schemas
@@ -536,6 +569,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 16. **Frontend**: Starts polling for mandate activation
 
 **Expected Success Response**:
+
 ```json
 {
   "success": true,
@@ -547,6 +581,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 ```
 
 **Why This Flow?** The multi-step process ensures:
+
 - **User Confirmation**: User must verify phone number before proceeding
 - **Database Tracking**: Mandate is stored locally for reference
 - **Pending State**: Mandate requires user confirmation in Telebirr app
@@ -585,6 +620,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 11. **Frontend**: Updates UI to show active subscription
 
 **Expected Success Response**:
+
 ```json
 {
   "success": true,
@@ -596,6 +632,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 ```
 
 **Why Webhook?** Asynchronous notifications allow:
+
 - **Real-time Updates**: System reacts immediately to user confirmation
 - **Decoupling**: Frontend doesn't need to constantly poll
 - **Reliability**: Telebirr retries failed webhook deliveries
@@ -625,6 +662,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 11. **Backend**: Sends notification to user
 
 **Expected Success Response**:
+
 ```json
 {
   "success": true,
@@ -637,6 +675,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 ```
 
 **Why Automated Debit?** Scheduled processing ensures:
+
 - **Timely Payments**: Payments are processed on schedule
 - **No Manual Intervention**: System handles recurring payments automatically
 - **Audit Trail**: Each payment is recorded in the database
@@ -677,6 +716,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 17. **Frontend**: Reloads subscription data
 
 **Expected Success Response**:
+
 ```json
 {
   "success": true,
@@ -685,6 +725,7 @@ Telebirr uses XML namespaces to avoid naming conflicts:
 ```
 
 **Why In-Platform Cancellation?** Providing cancellation in the app:
+
 - **Better UX**: Users don't need to contact support
 - **Immediate Effect**: Cancellation is processed instantly
 - **Consistency**: All subscription management happens in one place
@@ -719,6 +760,7 @@ SubscriptionPage.jsx
 ### State Management
 
 **Why React State?** React's state management allows:
+
 - **Reactive UI**: Interface updates automatically when state changes
 - **User Feedback**: Show loading states and errors
 - **Modal Control**: Open/close modals based on user actions
@@ -726,9 +768,10 @@ SubscriptionPage.jsx
 ### API Communication
 
 **Code Block - API Helper**:
+
 ```javascript
-const response = await api.request('/direct-debit/create/', {
-  method: 'POST',
+const response = await api.request("/direct-debit/create/", {
+  method: "POST",
   body: JSON.stringify({
     tier_id: selectedTierForTelebirr.id,
     payer_msisdn: telebirrPhone,
@@ -738,12 +781,14 @@ const response = await api.request('/direct-debit/create/', {
 ```
 
 **Usage**: The `api.request()` helper:
+
 - Automatically adds authentication token to headers
 - Handles JSON serialization/deserialization
 - Manages error responses
 - Returns typed response objects
 
 **Why Centralized API Helper?** Benefits include:
+
 - **Consistency**: All API calls use the same authentication
 - **Error Handling**: Centralized error processing
 - **Token Management**: Automatic token refresh
@@ -756,6 +801,7 @@ const response = await api.request('/direct-debit/create/', {
 ### Django REST Framework
 
 **Why DRF?** Django REST Framework provides:
+
 - **Serialization**: Automatic model-to-JSON conversion
 - **Authentication**: Token-based authentication out of the box
 - **Permissions**: Fine-grained access control
@@ -764,6 +810,7 @@ const response = await api.request('/direct-debit/create/', {
 ### Database Models
 
 **DirectDebitMandate Model**:
+
 ```python
 class DirectDebitMandate(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -782,6 +829,7 @@ class DirectDebitMandate(models.Model):
 ```
 
 **Why These Fields?** Each field serves a specific purpose:
+
 - **user/tier**: Link to user and subscription plan
 - **payer_msisdn**: Customer's phone number for Telebirr
 - **payer_reference_number**: Unique identifier for the mandate
@@ -793,6 +841,7 @@ class DirectDebitMandate(models.Model):
 ### Celery Integration
 
 **Why Celery?** Celery enables:
+
 - **Scheduled Tasks**: Automatic payment processing
 - **Asynchronous Processing**: Non-blocking API responses
 - **Retry Logic**: Automatic retry on failures
@@ -805,6 +854,7 @@ class DirectDebitMandate(models.Model):
 ### Django Shell Testing
 
 **Test 1: Create Daily Mandate**
+
 ```python
 from api.telebirr_direct_debit_service import telebirr_direct_debit_service
 
@@ -819,6 +869,7 @@ print(result)
 ```
 
 **Expected Success Output**:
+
 ```python
 {
   'success': True,
@@ -830,6 +881,7 @@ print(result)
 ```
 
 **Test 2: Create Weekly Mandate**
+
 ```python
 result = telebirr_direct_debit_service.create_mandate(
     payer_msisdn='251955111111',
@@ -842,6 +894,7 @@ print(result)
 ```
 
 **Expected Success Output**:
+
 ```python
 {
   'success': True,
@@ -853,6 +906,7 @@ print(result)
 ```
 
 **Test 3: Create Monthly Mandate**
+
 ```python
 result = telebirr_direct_debit_service.create_mandate(
     payer_msisdn='251955111111',
@@ -865,6 +919,7 @@ print(result)
 ```
 
 **Expected Success Output**:
+
 ```python
 {
   'success': True,
@@ -876,6 +931,7 @@ print(result)
 ```
 
 **Test 4: Cancel Mandate**
+
 ```python
 result = telebirr_direct_debit_service.cancel_mandate(
     mandate_id='TEST_MANDATE_001',
@@ -885,6 +941,7 @@ print(result)
 ```
 
 **Expected Success Output**:
+
 ```python
 {
   'success': True,
@@ -896,6 +953,7 @@ print(result)
 ```
 
 **Test 5: Initiate Debit Transaction**
+
 ```python
 result = telebirr_direct_debit_service.initiate_debit(
     mandate_id='TEST_MANDATE_001',
@@ -908,6 +966,7 @@ print(result)
 ```
 
 **Expected Success Output**:
+
 ```python
 {
   'success': True,
@@ -922,6 +981,7 @@ print(result)
 ### Test Credentials
 
 **Test Environment Configuration**:
+
 - **URL**: `http://10.180.79.13:30001/payment/services/APIRequestMgrService`
 - **Third Party ID**: `TestMer`
 - **Third Party Password**: `jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=`
@@ -930,6 +990,7 @@ print(result)
 - **Short Code**: `232323`
 
 **Why Test Credentials?** Test environment allows:
+
 - **Safe Testing**: No real money transactions
 - **Development**: Test all operations without production risk
 - **Validation**: Verify SOAP envelope structure
@@ -942,11 +1003,13 @@ print(result)
 ### Authentication
 
 **Token-Based Authentication**:
+
 - Frontend stores JWT token in localStorage
 - Backend validates token on each request
 - Token includes user permissions and expiration
 
 **Why Tokens?** Benefits include:
+
 - **Stateless**: No server-side session storage
 - **Scalable**: Works across multiple servers
 - **Secure**: Encrypted and signed tokens
@@ -954,11 +1017,13 @@ print(result)
 ### Credential Management
 
 **Environment Variables**:
+
 ```python
 TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD')
 ```
 
 **Why Environment Variables?** Security best practices:
+
 - **Not in Code**: Credentials not committed to git
 - **Separate Configs**: Different credentials per environment
 - **Easy Rotation**: Change credentials without code deployment
@@ -966,11 +1031,13 @@ TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD')
 ### SSL/TLS
 
 **Production Requirement**:
+
 - All SOAP requests should use HTTPS
 - SSL certificates valid and up-to-date
 - Disable SSL verification only for testing
 
 **Why HTTPS?** Encryption ensures:
+
 - **Confidentiality**: Credentials not intercepted
 - **Integrity**: Data not tampered with
 - **Authentication**: Server identity verified
@@ -982,9 +1049,11 @@ TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD')
 ### Common Issues
 
 **Issue 1: SOAP Client Initialization Error**
+
 ```
 Failed to initialize SOAP client: 500 Server Error
 ```
+
 **Solution**: The Telebirr server may not provide a WSDL. Use raw SOAP requests instead of zeep.
 
 **Issue 2: Mandate Not Activating**
@@ -999,17 +1068,20 @@ Failed to initialize SOAP client: 500 Server Error
 ### Debugging Tips
 
 **Enable Debug Logging**:
+
 ```python
 import logging
 logging.basicConfig(level=logging.DEBUG)
 ```
 
 **Check Backend Logs**:
+
 ```bash
 docker-compose logs backend -f
 ```
 
 **Test SOAP Request Manually**:
+
 ```python
 import requests
 # Test connectivity
@@ -1024,25 +1096,30 @@ print(response.status_code)
 The Telebirr Direct Debit integration provides a complete subscription payment solution:
 
 ### Key Components
+
 - **Frontend**: React components for user interaction
 - **Backend**: Django REST API for request processing
 - **SOAP Service**: Python service for Telebirr communication
 - **Database**: Models for mandate and subscription tracking
 
 ### Four Main Operations
+
 1. **Create Mandate**: Establish direct debit agreement
 2. **Activate Mandate**: User confirms via Telebirr app
 3. **Initiate Debit**: Process recurring payments
 4. **Cancel Mandate**: User cancels subscription
 
 ### Why This Architecture?
+
 - **Separation of Concerns**: Each layer has a specific responsibility
 - **Scalability**: Can handle increased load
 - **Maintainability**: Easy to debug and update
 - **Security**: Proper authentication and credential management
 
 ### Testing
+
 All operations have been tested successfully with Telebirr test credentials, confirming:
+
 - SOAP envelope structure is correct
 - API communication works as expected
 - Error handling is robust

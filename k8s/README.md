@@ -85,7 +85,7 @@ skip either one.
 - **Same branch (`main`), different overlay paths** for staging vs.
   production — not branch-per-environment. This repo's `main` and `master`
   have diverged significantly (see prior session notes / `git log
-  main..origin/master`) and `uat` is a third branch on top of that;
+main..origin/master`) and `uat` is a third branch on top of that;
   building environment routing on top of that divergence would be fragile.
   Kustomize overlays exist precisely so one branch's history can serve
   multiple environments safely.
@@ -124,12 +124,12 @@ this application's production settings reject both:
 
 Measured against the real image and real dependencies:
 
-| Request | Result |
-|---|---|
-| no headers (what kubelet sends) | `400` — probe fails |
-| `Host: localhost` only | `301` — passes, but never reaches the view |
-| `X-Forwarded-Proto: https` only | `400` |
-| **both** (the fix) | `200 {"status":"ok"}` |
+| Request                         | Result                                     |
+| ------------------------------- | ------------------------------------------ |
+| no headers (what kubelet sends) | `400` — probe fails                        |
+| `Host: localhost` only          | `301` — passes, but never reaches the view |
+| `X-Forwarded-Proto: https` only | `400`                                      |
+| **both** (the fix)              | `200 {"status":"ok"}`                      |
 
 Fixed by adding `httpHeaders` to all three probes. `Host: localhost` is always
 valid because `config/settings/base.py` unconditionally appends
@@ -143,7 +143,7 @@ Separate from the probes, and worse: the ConfigMap never set `ALLOWED_HOSTS`,
 and `base.py` defaults it to `localhost,127.0.0.1`. Pods would have come up
 **green** (probes send `Host: localhost`) while every request arriving through
 the Ingress got a bare `400 Bad Request`. Verified directly: with it unset,
-`Host: uat.flipstar.et` → 400; with it set → 200. It is now a required key in
+`Host: api.uat.flipstar.et` → 400; with it set → 200. It is now a required key in
 `k8s/base/configmap.yaml` with a per-environment override in each overlay.
 
 ### 3. The production image shipped the entire git history, including secrets
@@ -198,9 +198,9 @@ and the reasoning recorded in the manifest so it is not re-added.
 ### 7. A namespace-wide default-deny NetworkPolicy broke the application
 
 The first version of `k8s/base/networkpolicy.yaml` used `podSelector: {}`. A
-NetworkPolicy is evaluated from the perspective of the pod *receiving* the
+NetworkPolicy is evaluated from the perspective of the pod _receiving_ the
 connection, so a namespace-wide default-deny-ingress also denied the backend's
-connections *into* an in-namespace PostgreSQL, Redis and Vault — and the
+connections _into_ an in-namespace PostgreSQL, Redis and Vault — and the
 staging overlay points `DB_HOST` at
 `postgres.flipstar-staging.svc.cluster.local`. Every pod went into
 CrashLoopBackOff with `Failed to resolve 'vault'`; deleting the two policies
@@ -282,7 +282,7 @@ there — staging had masked it completely, because the resources involved
 already existed there from an earlier deploy.
 
 The migration Job was originally an Argo CD **PreSync hook**. Argo CD runs the
-entire PreSync phase *before* the Sync phase, so a PreSync hook cannot
+entire PreSync phase _before_ the Sync phase, so a PreSync hook cannot
 reference anything the Sync phase creates. In a fresh namespace that failed
 twice, for two different reasons in succession:
 
@@ -302,12 +302,12 @@ sync permanently — on the one deploy where nothing has ever worked before and
 the error is hardest to interpret.
 
 **Fixed by replacing the phase hook with sync-wave ordering**, which orders
-resources *within* the Sync phase so they can see each other:
+resources _within_ the Sync phase so they can see each other:
 
-| Wave | Resources |
-|---|---|
-| `-2` | `ConfigMap`, `ServiceAccount` |
-| `-1` | `Job/flipstar-backend-migrate` — must reach Complete |
+| Wave          | Resources                                                           |
+| ------------- | ------------------------------------------------------------------- |
+| `-2`          | `ConfigMap`, `ServiceAccount`                                       |
+| `-1`          | `Job/flipstar-backend-migrate` — must reach Complete                |
 | `0` (default) | `Deployment` ×3, `Service`, PDBs, NetworkPolicies, `Ingress`, `HPA` |
 
 Argo CD waits for each wave to become Healthy before starting the next, and a
@@ -368,8 +368,8 @@ always true — the top-level fallback could never run. A callback carrying a
 top-level `TransactionID` parsed as `None`.
 
 That is not cosmetic. `new_mandate_id` is `MandateID or TransactionID`, and it
-is what separates Telebirr's *transaction-result* callback ("the debit
-completed — credit the coins") from the *mandate-acceptance* callback ("now
+is what separates Telebirr's _transaction-result_ callback ("the debit
+completed — credit the coins") from the _mandate-acceptance_ callback ("now
 initiate the debit"). With `TransactionID` lost, a genuine transaction-result
 callback fell through to the acceptance branch, re-issued `initiate_debit` for
 a payment that had already succeeded, and then marked the mandate `failed`.
@@ -402,7 +402,7 @@ the ROTATION REQUIRED list.
 ### 18. CODEOWNERS protected nothing
 
 Every rule was prefixed `/backend/`, left over from before the frontend/mobile
-split. There is no `backend/` directory — this repository root *is* the
+split. There is no `backend/` directory — this repository root _is_ the
 backend — so none of the patterns matched, and the payments, security and
 migration paths they claim to protect were unowned. Branch protection's
 "require review from code owners" would have passed changes to
@@ -426,14 +426,14 @@ material to generate or store). Nothing else is needed unless GHCR's default
 visibility is changed to private and the cluster needs its own pull
 credential (see below).
 
-| Setting | Where | Why |
-|---|---|---|
-| Actions → General → Workflow permissions | Repo settings | Ensure "Read and write permissions" is enabled, or the `contents: write` step in `update-gitops-staging` / `backend-promote-production.yml` will fail even though the workflow requests it. |
-| Branch protection on `main` | Repo settings | Require `backend-ci-cd.yml`'s and `k8s-validate.yml`'s gates to pass before merge, and require a CODEOWNERS review — the pipeline enforces gates on its own runs, but only branch protection stops someone bypassing it via direct push. |
-| **Environments → `staging`** | Repo settings → Environments | Not required to be protected — `push-image`/`update-gitops-staging` use it mainly so every staging deploy shows up in the repo's Environments tab (which SHA, when, which run). Add required reviewers here too if staging should ever need a gate. |
-| **Environments → `production`** | Repo settings → Environments | **This is what actually makes production promotion a two-person action, not just a two-*step* one.** Add required reviewers; `backend-promote-production.yml`'s `promote` job (`environment: production`) then pauses for approval before it runs at all — before the GitOps commit, before Argo CD ever sees a diff. Without this configured, `environment: production` is present but toothless. |
-| `.github/CODEOWNERS` | This repo, already added | Every owner in it is a `@REPLACE-ME-*` placeholder — replace with real GitHub usernames/teams before branch protection's "require review from code owners" has any effect. An unfilled CODEOWNERS file is silently inert, not an error. |
-| `.github/dependabot.yml` | This repo, already added | Nothing to configure — Dependabot is enabled by the file's presence. It keeps `requirements.txt`, the pinned Action SHAs, and both Dockerfiles' base image current on a weekly schedule. |
+| Setting                                  | Where                        | Why                                                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Actions → General → Workflow permissions | Repo settings                | Ensure "Read and write permissions" is enabled, or the `contents: write` step in `update-gitops-staging` / `backend-promote-production.yml` will fail even though the workflow requests it.                                                                                                                                                                                                        |
+| Branch protection on `main`              | Repo settings                | Require `backend-ci-cd.yml`'s and `k8s-validate.yml`'s gates to pass before merge, and require a CODEOWNERS review — the pipeline enforces gates on its own runs, but only branch protection stops someone bypassing it via direct push.                                                                                                                                                           |
+| **Environments → `staging`**             | Repo settings → Environments | Not required to be protected — `push-image`/`update-gitops-staging` use it mainly so every staging deploy shows up in the repo's Environments tab (which SHA, when, which run). Add required reviewers here too if staging should ever need a gate.                                                                                                                                                |
+| **Environments → `production`**          | Repo settings → Environments | **This is what actually makes production promotion a two-person action, not just a two-_step_ one.** Add required reviewers; `backend-promote-production.yml`'s `promote` job (`environment: production`) then pauses for approval before it runs at all — before the GitOps commit, before Argo CD ever sees a diff. Without this configured, `environment: production` is present but toothless. |
+| `.github/CODEOWNERS`                     | This repo, already added     | Every owner in it is a `@REPLACE-ME-*` placeholder — replace with real GitHub usernames/teams before branch protection's "require review from code owners" has any effect. An unfilled CODEOWNERS file is silently inert, not an error.                                                                                                                                                            |
+| `.github/dependabot.yml`                 | This repo, already added     | Nothing to configure — Dependabot is enabled by the file's presence. It keeps `requirements.txt`, the pinned Action SHAs, and both Dockerfiles' base image current on a weekly schedule.                                                                                                                                                                                                           |
 
 ## Required cluster / Argo CD configuration
 
@@ -441,7 +441,7 @@ credential (see below).
 2. **ingress-nginx** and **cert-manager** installed cluster-wide, with a `ClusterIssuer` named `letsencrypt-prod` (referenced by `k8s/overlays/*/ingress.yaml`). Neither is part of this Kustomize tree — they're cluster add-ons, not per-application resources.
    `k8s/base/networkpolicy.yaml` selects the controller by the
    `kubernetes.io/metadata.name` label on its namespace. Kubernetes sets that
-   label automatically on every namespace, so this works out of the box *if*
+   label automatically on every namespace, so this works out of the box _if_
    the controller really is in a namespace called `ingress-nginx` — confirm
    with `kubectl get pods -A | grep ingress` and update the policy if not. A
    wrong value here drops all API traffic silently rather than failing loudly.
@@ -461,8 +461,8 @@ credential (see below).
    `resources-finalizer.argocd.argoproj.io` finalizer, and both manage their
    own `namespace.yaml` as part of their source. Confirmed directly in
    disposable-cluster testing: `kubectl delete application
-   flipstar-backend-staging` cascades through that finalizer to delete the
-   *entire* `flipstar-staging` namespace -- not just the resources Argo CD
+flipstar-backend-staging` cascades through that finalizer to delete the
+   _entire_ `flipstar-staging` namespace -- not just the resources Argo CD
    created, but everything in it, including anything else running there.
    This may be exactly what you want (tearing down an environment), but it's
    easy to trigger by accident while just trying to reset a stuck Application,
@@ -478,7 +478,7 @@ credential (see below).
    # repeat for flipstar-production with that environment's AppRole credentials
    ```
    Without this Secret, both Deployments will fail to start — `VAULT_REQUIRED=true` in `configmap.yaml` makes a missing/unreachable Vault credential a hard startup failure by design (see `infrastructure/health/startup.py`), not a silent fallback to broken config.
-6. **Resolve every `CHANGEME` value** — see the dedicated section below for the complete list and what each must be set to. The placeholders live in `k8s/overlays/*/patches/configmap-patch.yaml`, `k8s/overlays/production/ingress.yaml` and `k8s/base/networkpolicy.yaml`, and are placeholders — this project's only confirmed live domain today is `uat.flipstar.et` (used as-is for the staging overlay); production has no confirmed domain yet.
+6. **Resolve every `CHANGEME` value** — see the dedicated section below for the complete list and what each must be set to. The placeholders live in `k8s/overlays/*/patches/configmap-patch.yaml`, `k8s/overlays/production/ingress.yaml` and `k8s/base/networkpolicy.yaml`, and are placeholders — this project's only confirmed live domain today is `api.uat.flipstar.et` (used as-is for the staging overlay); production has no confirmed domain yet.
 
 ## Operational note: the Celery probe is expensive, and it scales with replicas
 
@@ -498,9 +498,9 @@ Measured inside a running worker: **~17.9s per invocation**.
 The load therefore multiplies by replica count:
 
 | Environment | Worker replicas | Liveness period | Vault logins/min from probes alone |
-|---|---|---|---|
-| Staging | 1 | 120s | ~0.5 |
-| Production | 3 | 120s | ~1.5 |
+| ----------- | --------------- | --------------- | ---------------------------------- |
+| Staging     | 1               | 120s            | ~0.5                               |
+| Production  | 3               | 120s            | ~1.5                               |
 
 Two consequences worth planning for:
 
@@ -539,9 +539,9 @@ In the disposable cluster the worker showed 15 restarts and
 genuinely healthy and consuming (a passing run returns `pong`, `1 node
 online`). The cause is not the probe:
 
-| Resolution mode | Result |
-|---|---|
-| `AF_INET` (A records only), 8 attempts | **8 ok, 0 fail, 0.0s total** |
+| Resolution mode                                                          | Result                        |
+| ------------------------------------------------------------------------ | ----------------------------- |
+| `AF_INET` (A records only), 8 attempts                                   | **8 ok, 0 fail, 0.0s total**  |
 | `AF_UNSPEC` (A **and** AAAA — what `getaddrinfo`/kombu uses), 8 attempts | **5 ok, 3 fail, 41.3s total** |
 
 The disposable cluster's CoreDNS forwards to an unreachable upstream
@@ -572,11 +572,11 @@ judged unacceptable for the target cluster:
 
 ```yaml
 # k8s/base/deployment-celery-worker.yaml, livenessProbe
-failureThreshold: 5     # currently 3
+failureThreshold: 5 # currently 3
 ```
 
 At `periodSeconds: 120` that changes the restart trigger from 6 minutes of
-sustained failure to 10. A genuinely wedged worker fails *every* probe and is
+sustained failure to 10. A genuinely wedged worker fails _every_ probe and is
 still restarted; a transient DNS or Vault blip no longer kills healthy workers.
 This is a threshold change, not a timeout increase — it does not extend how
 long any single probe is allowed to run.
@@ -601,52 +601,52 @@ is deliberately no PDB and no HPA for beat.
 > [`k8s/ROTATION_REQUIRED.md`](ROTATION_REQUIRED.md).
 
 Nothing here is invented. Where this project has no confirmed value (it has no
-production domain today — `uat.flipstar.et` is the only live host), the
+production domain today — `api.uat.flipstar.et` is the only live host), the
 placeholder is left as `CHANGEME` deliberately rather than filled with a guess.
 **The deployment will not work correctly until every row below is resolved.**
 
 ### Staging — `k8s/overlays/staging/patches/configmap-patch.yaml`
 
-| Key | Current value | Action |
-|---|---|---|
-| `ALLOWED_HOSTS` | `uat.flipstar.et` | Confirm this is the host the Ingress serves. A mismatch means **every request returns 400** (see defect 2). |
-| `DB_HOST` | `postgres.flipstar-staging.svc.cluster.local` | Point at the real managed Postgres, or deploy one into the namespace. |
-| `REDIS_HOST` | `redis.flipstar-staging.svc.cluster.local` | Same. |
-| `VAULT_ADDR` | `https://vault.internal:8200` | Real staging Vault address. |
+| Key             | Current value                                 | Action                                                                                                      |
+| --------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `ALLOWED_HOSTS` | `api.uat.flipstar.et`                         | Confirm this is the host the Ingress serves. A mismatch means **every request returns 400** (see defect 2). |
+| `DB_HOST`       | `postgres.flipstar-staging.svc.cluster.local` | Point at the real managed Postgres, or deploy one into the namespace.                                       |
+| `REDIS_HOST`    | `redis.flipstar-staging.svc.cluster.local`    | Same.                                                                                                       |
+| `VAULT_ADDR`    | `https://vault.internal:8200`                 | Real staging Vault address.                                                                                 |
 
 ### Production — `k8s/overlays/production/patches/configmap-patch.yaml`
 
-| Key | Placeholder | Action |
-|---|---|---|
-| `ALLOWED_HOSTS` | `CHANGEME-production-backend-domain` | **Required.** The production backend hostname. |
-| `DB_HOST` | `CHANGEME-production-postgres-host` | Production PostgreSQL host. |
-| `REDIS_HOST` | `CHANGEME-production-redis-host` | Production Redis host. |
+| Key                    | Placeholder                                   | Action                                               |
+| ---------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `ALLOWED_HOSTS`        | `CHANGEME-production-backend-domain`          | **Required.** The production backend hostname.       |
+| `DB_HOST`              | `CHANGEME-production-postgres-host`           | Production PostgreSQL host.                          |
+| `REDIS_HOST`           | `CHANGEME-production-redis-host`              | Production Redis host.                               |
 | `CORS_ALLOWED_ORIGINS` | `https://CHANGEME-production-frontend-domain` | The frontend origin (deployed separately to Vercel). |
-| `CSRF_TRUSTED_ORIGINS` | `https://CHANGEME-production-frontend-domain` | Same origin as above. |
-| `BACKEND_URL` | `https://CHANGEME-production-backend-domain` | Public backend URL. |
-| `VAULT_ADDR` | `https://CHANGEME-production-vault-addr:8200` | Production Vault address. |
+| `CSRF_TRUSTED_ORIGINS` | `https://CHANGEME-production-frontend-domain` | Same origin as above.                                |
+| `BACKEND_URL`          | `https://CHANGEME-production-backend-domain`  | Public backend URL.                                  |
+| `VAULT_ADDR`           | `https://CHANGEME-production-vault-addr:8200` | Production Vault address.                            |
 
 ### Production — `k8s/overlays/production/ingress.yaml`
 
-| Field | Placeholder | Action |
-|---|---|---|
-| `spec.tls[0].hosts[0]` / `spec.rules[0].host` | `CHANGEME-production-backend-domain` | Real domain. Must match `ALLOWED_HOSTS`. |
-| `spec.tls[0].secretName` | `flipstar-production-tls` | Match the cluster's cert-manager naming convention. |
-| `cert-manager.io/cluster-issuer` | `letsencrypt-prod` | Must name a `ClusterIssuer` that actually exists. |
+| Field                                         | Placeholder                          | Action                                              |
+| --------------------------------------------- | ------------------------------------ | --------------------------------------------------- |
+| `spec.tls[0].hosts[0]` / `spec.rules[0].host` | `CHANGEME-production-backend-domain` | Real domain. Must match `ALLOWED_HOSTS`.            |
+| `spec.tls[0].secretName`                      | `flipstar-production-tls`            | Match the cluster's cert-manager naming convention. |
+| `cert-manager.io/cluster-issuer`              | `letsencrypt-prod`                   | Must name a `ClusterIssuer` that actually exists.   |
 
 ### Base — `k8s/base/configmap.yaml`
 
 Values here are overridden per environment, but two are worth checking
 directly: `VAPID_SUBJECT` (`mailto:admin@flipstar.et`) and the Telebirr
 non-secret settings (`TELEBIRR_PAYEE_ACCOUNT_NAME`, `TELEBIRR_CALLER_TYPE`).
-Every Telebirr *credential* comes from Vault, not from here.
+Every Telebirr _credential_ comes from Vault, not from here.
 
 ### Base — `k8s/base/networkpolicy.yaml`
 
-| Field | Placeholder | Action |
-|---|---|---|
+| Field                                               | Placeholder     | Action                                                                                                 |
+| --------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------ |
 | `namespaceSelector` → `kubernetes.io/metadata.name` | `ingress-nginx` | The namespace the ingress controller actually runs in. Wrong value = all API traffic silently dropped. |
-| `ipBlock.cidr` | `10.0.0.0/8` | The cluster's node CIDR, for kubelet probe traffic. Narrow it to the real node subnet. |
+| `ipBlock.cidr`                                      | `10.0.0.0/8`    | The cluster's node CIDR, for kubelet probe traffic. Narrow it to the real node subnet.                 |
 
 ### Secrets that must exist in Vault before first deploy
 
@@ -681,15 +681,15 @@ guessed from this repository.
 
 ### Values that must be supplied or confirmed
 
-| Value | Current | State | Action |
-|---|---|---|---|
-| `ALLOWED_HOSTS` / `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` / `BACKEND_URL` | `uat.flipstar.et` | `[KNOWN]` | Confirm this is the host the staging ingress serves. **Must equal the ingress host** or every request returns `400`. |
-| `DB_HOST` | `postgres.flipstar-staging.svc.cluster.local` | `[REQUIRES INFRASTRUCTURE INPUT]` | An in-cluster service name. Correct only if PostgreSQL really runs in that namespace; otherwise point at the managed instance. |
-| `REDIS_HOST` | `redis.flipstar-staging.svc.cluster.local` | `[REQUIRES INFRASTRUCTURE INPUT]` | Same. |
-| `VAULT_ADDR` | `https://vault.internal:8200` | `[REQUIRES INFRASTRUCTURE INPUT]` | Placeholder hostname, never verified to resolve. **This is the one value most likely to be wrong.** |
-| Ingress controller namespace | `ingress-nginx` | `[REQUIRES INFRASTRUCTURE INPUT]` | `k8s/base/networkpolicy.yaml`. A wrong value silently drops all API traffic. |
-| Node CIDR | `10.0.0.0/8` | `[REQUIRES INFRASTRUCTURE INPUT]` | `k8s/base/networkpolicy.yaml`. Allows kubelet probe traffic; narrow it. |
-| `flipstar-staging-tls` / `letsencrypt-prod` | as named | `[REQUIRES INFRASTRUCTURE INPUT]` | Must match the cluster's cert-manager conventions. |
+| Value                                                                             | Current                                       | State                             | Action                                                                                                                         |
+| --------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `ALLOWED_HOSTS` / `CORS_ALLOWED_ORIGINS` / `CSRF_TRUSTED_ORIGINS` / `BACKEND_URL` | `api.uat.flipstar.et`                         | `[KNOWN]`                         | Confirm this is the host the staging ingress serves. **Must equal the ingress host** or every request returns `400`.           |
+| `DB_HOST`                                                                         | `postgres.flipstar-staging.svc.cluster.local` | `[REQUIRES INFRASTRUCTURE INPUT]` | An in-cluster service name. Correct only if PostgreSQL really runs in that namespace; otherwise point at the managed instance. |
+| `REDIS_HOST`                                                                      | `redis.flipstar-staging.svc.cluster.local`    | `[REQUIRES INFRASTRUCTURE INPUT]` | Same.                                                                                                                          |
+| `VAULT_ADDR`                                                                      | `https://vault.internal:8200`                 | `[REQUIRES INFRASTRUCTURE INPUT]` | Placeholder hostname, never verified to resolve. **This is the one value most likely to be wrong.**                            |
+| Ingress controller namespace                                                      | `ingress-nginx`                               | `[REQUIRES INFRASTRUCTURE INPUT]` | `k8s/base/networkpolicy.yaml`. A wrong value silently drops all API traffic.                                                   |
+| Node CIDR                                                                         | `10.0.0.0/8`                                  | `[REQUIRES INFRASTRUCTURE INPUT]` | `k8s/base/networkpolicy.yaml`. Allows kubelet probe traffic; narrow it.                                                        |
+| `flipstar-staging-tls` / `letsencrypt-prod`                                       | as named                                      | `[REQUIRES INFRASTRUCTURE INPUT]` | Must match the cluster's cert-manager conventions.                                                                             |
 
 Everything else is settled: `VAULT_SECRET_PATH=flipstar/backend/staging`,
 `VAULT_REQUIRED=true`, `VAULT_KV_MOUNT=secret`, `DEBUG=False`,
@@ -731,8 +731,8 @@ kubectl -n flipstar-staging get job flipstar-backend-migrate   # must reach Comp
 kubectl -n flipstar-staging get deploy                          # 1/1, 1/1, 1/1
 
 # 6. Verify through the ingress
-curl -sS https://uat.flipstar.et/api/v1/health/        # {"status":"ok"}
-curl -sS https://uat.flipstar.et/api/v1/health/deep/   # database block populated
+curl -sS https://api.uat.flipstar.et/api/v1/health/        # {"status":"ok"}
+curl -sS https://api.uat.flipstar.et/api/v1/health/deep/   # database block populated
 ```
 
 From then on, every push to `main` that passes CI updates the staging overlay
@@ -787,17 +787,17 @@ Every value is enumerated with its state in
 [`PRODUCTION_CHECKLIST.md`](PRODUCTION_CHECKLIST.md). Summary of what is
 **not** known and must be supplied:
 
-| Value | Where |
-|---|---|
-| Production backend domain | production `configmap-patch.yaml` (`ALLOWED_HOSTS`, `BACKEND_URL`) **and** `ingress.yaml` (`tls.hosts`, `rules.host`) — these must match exactly |
-| Production frontend origin | production `configmap-patch.yaml` (`CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`) |
-| Production `DB_HOST` / `REDIS_HOST` / `VAULT_ADDR` | production `configmap-patch.yaml` |
-| Staging `DB_HOST` / `REDIS_HOST` / `VAULT_ADDR` | staging `configmap-patch.yaml` (currently in-cluster service names / a placeholder Vault host) |
-| Ingress controller namespace | `k8s/base/networkpolicy.yaml` `namespaceSelector` |
-| Node CIDR | `k8s/base/networkpolicy.yaml` `ipBlock.cidr` |
-| `ClusterIssuer` name and TLS secret names | both `ingress.yaml` |
-| CODEOWNERS owners | `.github/CODEOWNERS` (every entry is `@REPLACE-ME-*`) |
-| `production` environment reviewers | GitHub → Settings → Environments |
+| Value                                              | Where                                                                                                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Production backend domain                          | production `configmap-patch.yaml` (`ALLOWED_HOSTS`, `BACKEND_URL`) **and** `ingress.yaml` (`tls.hosts`, `rules.host`) — these must match exactly |
+| Production frontend origin                         | production `configmap-patch.yaml` (`CORS_ALLOWED_ORIGINS`, `CSRF_TRUSTED_ORIGINS`)                                                               |
+| Production `DB_HOST` / `REDIS_HOST` / `VAULT_ADDR` | production `configmap-patch.yaml`                                                                                                                |
+| Staging `DB_HOST` / `REDIS_HOST` / `VAULT_ADDR`    | staging `configmap-patch.yaml` (currently in-cluster service names / a placeholder Vault host)                                                   |
+| Ingress controller namespace                       | `k8s/base/networkpolicy.yaml` `namespaceSelector`                                                                                                |
+| Node CIDR                                          | `k8s/base/networkpolicy.yaml` `ipBlock.cidr`                                                                                                     |
+| `ClusterIssuer` name and TLS secret names          | both `ingress.yaml`                                                                                                                              |
+| CODEOWNERS owners                                  | `.github/CODEOWNERS` (every entry is `@REPLACE-ME-*`)                                                                                            |
+| `production` environment reviewers                 | GitHub → Settings → Environments                                                                                                                 |
 
 **`ALLOWED_HOSTS` must equal the ingress host.** A mismatch does not fail
 loudly — pods stay green (probes use `Host: localhost`) while every real
@@ -854,12 +854,12 @@ next restart.
 
 ### D. GitHub environment protection
 
-| Setting | Where | Why |
-|---|---|---|
-| Required reviewers on the `production` environment | Settings → Environments → production | **This is what makes promotion a two-person action.** Without it, `environment: production` in `backend-promote-production.yml` is a label with no effect. |
-| Branch protection on `main` | Settings → Branches | Require `backend-ci-cd.yml` and `k8s-validate.yml` to pass, and require code-owner review. The pipeline gates its own runs; only branch protection stops a direct push bypassing it. |
-| Workflow permissions: "Read and write" | Settings → Actions → General | The `contents: write` steps in `update-gitops-staging` and the promotion workflow fail without it, even though the workflow requests it. |
-| Fill in `.github/CODEOWNERS` | Repository | Every owner is `@REPLACE-ME-*`. An unfilled CODEOWNERS is silently inert — code-owner review protects nothing until real owners are set. |
+| Setting                                            | Where                                | Why                                                                                                                                                                                  |
+| -------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Required reviewers on the `production` environment | Settings → Environments → production | **This is what makes promotion a two-person action.** Without it, `environment: production` in `backend-promote-production.yml` is a label with no effect.                           |
+| Branch protection on `main`                        | Settings → Branches                  | Require `backend-ci-cd.yml` and `k8s-validate.yml` to pass, and require code-owner review. The pipeline gates its own runs; only branch protection stops a direct push bypassing it. |
+| Workflow permissions: "Read and write"             | Settings → Actions → General         | The `contents: write` steps in `update-gitops-staging` and the promotion workflow fail without it, even though the workflow requests it.                                             |
+| Fill in `.github/CODEOWNERS`                       | Repository                           | Every owner is `@REPLACE-ME-*`. An unfilled CODEOWNERS is silently inert — code-owner review protects nothing until real owners are set.                                             |
 
 No repository secrets are required: `GITHUB_TOKEN` covers the GHCR push
 (`packages: write`), the GitOps commit (`contents: write`) and cosign keyless
@@ -1124,7 +1124,7 @@ argocd app sync flipstar-backend-production
 ```
 
 Alternatively, roll back through Argo CD directly without a new commit —
-useful when you need to be live again *now* and can commit the git-level
+useful when you need to be live again _now_ and can commit the git-level
 revert afterward:
 
 ```bash
@@ -1161,7 +1161,7 @@ was actually run from what could not be.
   (AppRole auth) under `config.settings.production`. Startup log confirms
   `Authenticated to Vault via AppRole`, `Loaded 5 secrets from Vault`,
   `Redis: reachable`, keypair initialised, `Listening on TCP address
-  0.0.0.0:8000`.
+0.0.0.0:8000`.
 - Verified the built image contains no `.git`, no `.env`, and an empty
   `/app/media` (see defect 3).
 
@@ -1184,7 +1184,7 @@ was actually run from what could not be.
 - PostgreSQL, Redis and Vault connectivity all confirmed from inside the
   cluster, through the real manifests.
 - Startup, liveness and readiness probes verified working — and verified
-  *failing correctly* before the fix (see defects 1, 5, 8).
+  _failing correctly_ before the fix (see defects 1, 5, 8).
 - No `CrashLoopBackOff` and no `ImagePullBackOff` in the final state.
 
 ### Argo CD
@@ -1195,7 +1195,7 @@ in-cluster Git daemon, since the cluster cannot reach GitHub):
 
 - AppProject destination enforcement: pointing an Application at `kube-system`
   is rejected — `application destination ... namespace 'kube-system' do not
-  match any of the allowed destinations`.
+match any of the allowed destinations`.
 - AppProject resource-kind enforcement: a `Secret` added to the overlay fails
   sync with `resource :Secret is not permitted in project flipstar-backend`.
 - Staging automated sync: a commit is detected and applied without
@@ -1229,7 +1229,7 @@ in-cluster Git daemon, since the cluster cannot reach GitHub):
 - **cosign signing and verification, GHCR push, dependency-review, pip-audit.**
   These run only inside GitHub Actions against the real repository and
   registry. Configuration was reviewed line by line but not executed. The
-  promotion workflow's staging-SHA parser *was* tested directly against the
+  promotion workflow's staging-SHA parser _was_ tested directly against the
   real `kustomization.yaml`, including a negative case proving it does not
   match the Celery image's tag.
 - **Typecheck.** 10 pre-existing mypy errors in `infrastructure/keys/` and
@@ -1240,7 +1240,7 @@ in-cluster Git daemon, since the cluster cannot reach GitHub):
 
 These were listed as unvalidated in an earlier pass and have since been run:
 
-- **gitleaks** — executed against a CI-equivalent checkout: *no leaks found*.
+- **gitleaks** — executed against a CI-equivalent checkout: _no leaks found_.
 - **Trivy** — executed against the canonical image: **0 CRITICAL** (it found
   and blocked 2 before the Django 4.2.26 bump).
 - **kubeconform `-strict`** — 27/27 resources valid.
@@ -1257,16 +1257,16 @@ These were listed as unvalidated in an earlier pass and have since been run:
 All gates green, verified against Django 4.2.26 (the version `requirements.txt`
 now pins):
 
-| Gate | Result |
-|---|---|
-| Unit + e2e (`pytest -m "not integration"`) | **319 passed, 0 failed** |
-| Integration (`pytest -m integration`, real PostgreSQL 15) | **298 passed, 0 failed** |
-| `manage.py check` | 0 issues |
-| `makemigrations --check --dry-run` | No changes detected, from two different working directories |
-| `ruff check` + `ruff format --check` (changed files, `--force-exclude`) | exit 0 |
-| gitleaks | no leaks found |
-| Trivy (canonical image, CRITICAL, `--ignore-unfixed`) | 0 |
-| kubeconform `-strict` | 27/27 valid |
+| Gate                                                                    | Result                                                      |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Unit + e2e (`pytest -m "not integration"`)                              | **319 passed, 0 failed**                                    |
+| Integration (`pytest -m integration`, real PostgreSQL 15)               | **298 passed, 0 failed**                                    |
+| `manage.py check`                                                       | 0 issues                                                    |
+| `makemigrations --check --dry-run`                                      | No changes detected, from two different working directories |
+| `ruff check` + `ruff format --check` (changed files, `--force-exclude`) | exit 0                                                      |
+| gitleaks                                                                | no leaks found                                              |
+| Trivy (canonical image, CRITICAL, `--ignore-unfixed`)                   | 0                                                           |
+| kubeconform `-strict`                                                   | 27/27 valid                                                 |
 
 Four separate blockers had to be cleared to get here — the two named failing
 tests, machine-dependent migrations, a payments webhook parsing bug, 28

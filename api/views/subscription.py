@@ -45,8 +45,8 @@ ONEVAS_PRODUCT_NUMBER = settings.ONEVAS_PRODUCT_NUMBER
 ONEVAS_PRODUCTS = settings.ONEVAS_PRODUCTS
 
 # App Links (placeholders - update with actual URLs)
-# WEB_APP_LINK = "https://uat.flipstar.et?subscription_tp=true"
-WEB_APP_LINK = "https://uat.flipstar.et"
+# WEB_APP_LINK = "https://api.uat.flipstar.et?subscription_tp=true"
+WEB_APP_LINK = "https://api.uat.flipstar.et"
 MOBILE_APP_LINK = "https://play.google.com/store/apps/details?id=com.postworq.mobile"
 
 # Helper function to mask phone number (show first 9 digits, mask last 4)
@@ -544,7 +544,7 @@ class OnevasWebhookView(APIView):
                     'ondemand': 'use'
                 }
                 price_period = price_periods.get(tier.duration_type, 'day')
-                success_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {existing_sms_sub.start_date.strftime('%Y-%m-%d %H:%M')}. You have 1 day remaining in your complimentary free trial. After your free trial concludes, the subscription price will be {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={mask_phone_number(phone_number)} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+                success_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {existing_sms_sub.start_date.strftime('%Y-%m-%d %H:%M')}. You have 1 day remaining in your complimentary free trial. After your free trial concludes, the subscription price will be {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://api.uat.flipstar.et?subscription_tp=true&phone={mask_phone_number(phone_number)} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
                 print(f"[SUBSCRIPTION DEBUG] Sending renewal SMS to {phone_number} with OTP: {otp_code}")
                 self.send_sms(phone_number, success_message, tier.duration_type)
                 print(f"[SUBSCRIPTION DEBUG] SMS-first subscription renewed successfully")
@@ -671,7 +671,7 @@ class OnevasWebhookView(APIView):
             else:
                 trial_message = f"The subscription price is {tier.price_etb} ETB per {price_period}."
             
-            success_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. {trial_message} To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+            success_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. {trial_message} To access your premium service, please click on https://api.uat.flipstar.et?subscription_tp=true&phone={phone_number} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending success SMS to {phone_number} with OTP: {otp_code}")
             self.send_sms(phone_number, success_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] SMS-first subscription completed successfully")
@@ -762,7 +762,7 @@ class OnevasWebhookView(APIView):
                 'ondemand': 'use'
             }
             price_period = price_periods.get(tier.duration_type, 'day')
-            renewal_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {active_sub.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+            renewal_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {active_sub.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://api.uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending renewal SMS with OTP to {phone_number}")
             sms_result = self.send_sms(phone_number, renewal_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] Renewal SMS sent: {sms_result}")
@@ -859,7 +859,7 @@ class OnevasWebhookView(APIView):
                     'ondemand': 'use'
                 }
                 price_period = price_periods.get(tier.duration_type, 'day')
-                confirmation_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
+                confirmation_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. The subscription price is {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://api.uat.flipstar.et?subscription_tp=true&phone={phone_number}&existing_user=true and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
                 print(f"[SUBSCRIPTION DEBUG] Sending confirmation SMS with OTP to {phone_number}")
                 sms_result = self.send_sms(phone_number, confirmation_message, tier.duration_type)
                 print(f"[SUBSCRIPTION DEBUG] Confirmation SMS sent: {sms_result}")

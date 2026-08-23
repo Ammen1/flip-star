@@ -4,7 +4,7 @@
 #
 # CHANGEME-production-backend-domain is a placeholder, not an invented
 # domain: this project has no confirmed production domain today (only
-# uat.flipstar.et exists, see docker-compose.yml/nginx.conf). Replace with
+# api.uat.flipstar.et exists, see docker-compose.yml/nginx.conf). Replace with
 # the real domain, and secretName below with whatever cert-manager Secret
 # naming convention the cluster actually uses, before applying.
 apiVersion: networking.k8s.io/v1

@@ -4,9 +4,10 @@
 **Environment:** UAT
 **Endpoint we POST to:** `http://10.180.79.13:30001/payment/services/APIRequestMgrService`
 **Content-Type:** `text/xml; charset=utf-8`
-**ResultURL embedded in every request:** `https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/`
+**ResultURL embedded in every request:** `https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/`
 
 > The four envelopes below are the exact payloads our backend sends. **We use SP Operator (IdentifierType=14) for all commands** as requested. Static fields use our UAT credentials. Dynamic fields are shown as `<PLACEHOLDER>`; each request rotates them at runtime:
+>
 > - `OriginatorConversationID` → `S_X<YYYYMMDDHHMMSS>`
 > - `ConversationID` → `AG_<YYYYMMDD>_<12-hex>`
 > - `Timestamp` → `YYYYMMDDHHMMSS`
@@ -36,7 +37,7 @@
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
           <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
-          <req:ResultURL>https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
+          <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
         <req:Timestamp>20260518114500</req:Timestamp>
@@ -77,6 +78,7 @@
 ```
 
 **Observed Response (sync):**
+
 ```xml
 <res:ResponseCode>0</res:ResponseCode>
 <res:ResponseDesc>Accept the service request successfully.</res:ResponseDesc>
@@ -112,7 +114,7 @@
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
           <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
-          <req:ResultURL>https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
+          <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
         <req:Timestamp>20260518114600</req:Timestamp>
@@ -147,7 +149,7 @@
 **CommandID:** `InitTrans_Initiate Direct Debit Transaction`
 **SOAPAction:** `InitTrans_Initiate Direct Debit Transaction`
 
-> Requires an *active* mandate from step 2. Uses Initiator `TestMer` with `ShortCode=232323`.
+> Requires an _active_ mandate from step 2. Uses Initiator `TestMer` with `ShortCode=232323`.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -167,7 +169,7 @@
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
           <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
-          <req:ResultURL>https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
+          <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
         <req:Timestamp>20260518114700</req:Timestamp>
@@ -234,7 +236,7 @@
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
           <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
-          <req:ResultURL>https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
+          <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
         <req:Timestamp>20260518114800</req:Timestamp>
@@ -264,16 +266,16 @@
 
 ## Credentials Reference (UAT — for the team's verification)
 
-| Field | Value |
-|---|---|
-| `ThirdPartyID` | `TestMer` |
-| `Password` | `jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=` |
-| `SP Operator Identifier` | `TestSPOperAPI` (IdentifierType=14) |
+| Field                            | Value                                          |
+| -------------------------------- | ---------------------------------------------- |
+| `ThirdPartyID`                   | `TestMer`                                      |
+| `Password`                       | `jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=` |
+| `SP Operator Identifier`         | `TestSPOperAPI` (IdentifierType=14)            |
 | `SP Operator SecurityCredential` | `2JKSrKYlLAVvKWuIUXcexc3GHiT0+lEKzeVb6JRcZUM=` |
-| `Payee ShortCode` | `232323` |
-| `Test Customer MSISDN` | `251955111111` |
-| `CallerType` | `2` (Third Party) |
-| `KeyOwner` | `1` |
+| `Payee ShortCode`                | `232323`                                       |
+| `Test Customer MSISDN`           | `251955111111`                                 |
+| `CallerType`                     | `2` (Third Party)                              |
+| `KeyOwner`                       | `1`                                            |
 
 > **Note on frequency:** You mentioned changing the frequency value — please specify what value you'd like us to use. Currently we send `05` (Monthly) per the spec.
 
@@ -282,7 +284,7 @@
 ## What we need from your side
 
 1. **Confirm async Result delivery is enabled for `TestMer` in UAT.**
-2. **Whitelist** `https://uat.flipstar.et/api/webhooks/telebirr-direct-debit/` as the outbound destination.
+2. **Whitelist** `https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/` as the outbound destination.
 3. **Trace these `OriginatorConversationID`s** in your Result Manager log and tell us why no callback fired:
    - `S_X20260517181734`
    - `S_X20260517182512`
