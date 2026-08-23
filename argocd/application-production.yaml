@@ -12,10 +12,32 @@ kind: Application
 metadata:
   name: flipstar-backend-production
   namespace: argocd
+  annotations:
+    # Renders as a link icon on the application node in the resource
+    # tree, so the CI run that produced this revision is one click away.
+    # Argo CD has no visibility into GitHub Actions itself -- build,
+    # scan, sign and push all happen before it is involved -- so a link
+    # is the only way to join the two halves of the pipeline.
+    link.argocd.argoproj.io/external-link: https://github.com/Ammen1/flip-star/actions/workflows/backend-ci-cd.yml
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: flipstar-backend
+
+  # Shown in the application summary panel. Static pointers at the parts
+  # of the pipeline Argo CD cannot see: the build, the scan/signature and
+  # the registry the image came from.
+  info:
+    - name: Source repository
+      value: https://github.com/Ammen1/flip-star
+    - name: CI pipeline (build, Trivy, cosign, GHCR push)
+      value: https://github.com/Ammen1/flip-star/actions/workflows/backend-ci-cd.yml
+    - name: Container images
+      value: https://github.com/Ammen1?tab=packages
+    - name: Manifests for this environment
+      value: https://github.com/Ammen1/flip-star/tree/main/k8s/overlays/production
+    - name: Runbook
+      value: https://github.com/Ammen1/flip-star/blob/main/k8s/README.md
 
   source:
     repoURL: https://github.com/Ammen1/flip-star.git
