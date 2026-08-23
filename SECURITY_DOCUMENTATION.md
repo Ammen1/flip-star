@@ -46,7 +46,6 @@ Flipstar is a gamified social media platform deployed on Ethio Telecom cloud inf
 
 ### Authentication Methods
 
-<<<<<<< HEAD
 **JWT Token Authentication:**
 
 ```

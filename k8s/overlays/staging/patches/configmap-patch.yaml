@@ -14,8 +14,13 @@ data:
   ALLOWED_HOSTS: "api.uat.flipstar.et"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
-  CORS_ALLOWED_ORIGINS: "https://api.uat.flipstar.et"
-  CSRF_TRUSTED_ORIGINS: "https://api.uat.flipstar.et"
+  # The API's own origin plus the local dev servers a frontend runs on.
+  # Without the localhost entries, every request from a developer machine
+  # fails CORS -- and the browser reports it as an opaque network error,
+  # while Postman succeeds because it ignores CORS entirely. Add the
+  # deployed frontend origin here too once it has one.
+  CORS_ALLOWED_ORIGINS: "https://api.uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
+  CSRF_TRUSTED_ORIGINS: "https://api.uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
   BACKEND_URL: "https://api.uat.flipstar.et"
   LOG_LEVEL: "DEBUG"
   # Serves /api/v1/crypto/test/* so the encrypted endpoints can be driven
