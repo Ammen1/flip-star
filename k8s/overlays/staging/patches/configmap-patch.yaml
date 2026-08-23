@@ -19,6 +19,10 @@ data:
   # fails CORS -- and the browser reports it as an opaque network error,
   # while Postman succeeds because it ignores CORS entirely. Add the
   # deployed frontend origin here too once it has one.
+  # The API origin plus the local dev servers a frontend runs on.
+  # Without the localhost entries every browser request from a
+  # developer machine fails CORS -- reported as an opaque network
+  # error, and invisible in Postman, which ignores CORS entirely.
   CORS_ALLOWED_ORIGINS: "https://api.uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
   CSRF_TRUSTED_ORIGINS: "https://api.uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
   BACKEND_URL: "https://api.uat.flipstar.et"
