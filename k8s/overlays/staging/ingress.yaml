@@ -15,20 +15,8 @@ metadata:
   name: flipstar-backend
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-staging
-    # The previous comment about HTTP-01 being ABSENT due to timeouts
-    # has been addressed by migrating to DNS-01 validation.
-    # host: both the production and staging ACME endpoints returned
-    #   "Timeout during connect (likely firewall problem)"
-    # for http://api.uat.flipstar.et/.well-known/acme-challenge/... while the same
-    # URL answered normally from other networks. Inbound TCP 80 is reachable
-    # from some sources but not from Let's Encrypt's validators, which no
-    # cert-manager setting can work around.
-    #
-    # flipstar-staging-tls is therefore populated out-of-band from a manual
-    # DNS-01 certificate (certbot --manual --preferred-challenges dns) and
-    # must be renewed by hand every 60 days. Re-add this annotation the moment
-    # inbound 80 is reachable from everywhere -- cert-manager then takes over
-    # issuance and renewal automatically and the manual step disappears.
+    # The previous issues with HTTP-01 timeouts have been resolved
+    # by migrating to DNS-01 validation via CNAME delegation.
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
