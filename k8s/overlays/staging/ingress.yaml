@@ -15,8 +15,6 @@ metadata:
   name: flipstar-backend
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-staging
-    # The previous issues with HTTP-01 timeouts have been resolved
-    # by migrating to DNS-01 validation via CNAME delegation.
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
