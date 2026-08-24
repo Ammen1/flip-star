@@ -15,6 +15,9 @@ metadata:
   name: flipstar-backend
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt-staging
+    # Ensure cert-manager's temporary HTTP-01 solver is handled by the same
+    # ingress-nginx class as this application Ingress.
+    acme.cert-manager.io/http01-ingress-class: nginx
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
