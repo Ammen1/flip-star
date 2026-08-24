@@ -21,18 +21,40 @@ name: Backend CI/CD
 on:
   pull_request:
     branches: [main]
-    paths: [
-      "api/**", "common/**", "config/**", "infrastructure/**", "scripts/**",
-      "tests/**", "docs/**", "requirements*.txt", "Dockerfile*", "manage.py", "pyproject.toml",
-      ".github/workflows/backend-ci-cd.yml", ".github/actions/setup-backend/**",
-    ]
+    paths:
+      [
+        "api/**",
+        "common/**",
+        "config/**",
+        "infrastructure/**",
+        "scripts/**",
+        "tests/**",
+        "docs/**",
+        "requirements*.txt",
+        "Dockerfile*",
+        "manage.py",
+        "pyproject.toml",
+        ".github/workflows/backend-ci-cd.yml",
+        ".github/actions/setup-backend/**",
+      ]
   push:
     branches: [main]
-    paths: [
-      "api/**", "common/**", "config/**", "infrastructure/**", "scripts/**",
-      "tests/**", "docs/**", "requirements*.txt", "Dockerfile*", "manage.py", "pyproject.toml",
-      ".github/workflows/backend-ci-cd.yml", ".github/actions/setup-backend/**",
-    ]
+    paths:
+      [
+        "api/**",
+        "common/**",
+        "config/**",
+        "infrastructure/**",
+        "scripts/**",
+        "tests/**",
+        "docs/**",
+        "requirements*.txt",
+        "Dockerfile*",
+        "manage.py",
+        "pyproject.toml",
+        ".github/workflows/backend-ci-cd.yml",
+        ".github/actions/setup-backend/**",
+      ]
 
 concurrency:
   group: backend-ci-cd-${{ github.ref }}
@@ -263,10 +285,11 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
+        continue-on-error: true
         with:
           name: coverage-report
           path: coverage.xml
-          retention-days: 14
+          retention-days: 3
 
   # ---------------------------------------------------------------------------
   # Integration tests -- real PostgreSQL, matching production's engine.
@@ -354,7 +377,8 @@ jobs:
   # push -- useful for PR review even before an image is ever published.
   # ---------------------------------------------------------------------------
   docker-build:
-    needs: [secret-scan, lint-and-format, test-unit, test-integration, django-checks]
+    needs:
+      [secret-scan, lint-and-format, test-unit, test-integration, django-checks]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -406,7 +430,7 @@ jobs:
         with:
           name: sboms
           path: sbom-*.spdx.json
-          retention-days: 90
+          retention-days: 14
 
       - name: Save images for the scan/push jobs
         run: |
