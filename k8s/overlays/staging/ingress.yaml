@@ -29,7 +29,7 @@ metadata:
     # inbound 80 is reachable from everywhere -- cert-manager then takes over
     # issuance and renewal automatically and the manual step disappears.
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: nginx
   tls:
