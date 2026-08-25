@@ -80,7 +80,7 @@ def test_model_count_is_stable():
     this model but never writes to it; admin_grant_admin now does).
     Update it deliberately when the model set genuinely changes.
     """
-    assert len(list(_api_models())) == 107
+    assert len(list(_api_models())) == 109
 
 
 @pytest.mark.parametrize(

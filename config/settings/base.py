@@ -17,7 +17,6 @@ import mimetypes
 import os
 from pathlib import Path
 
-
 from infrastructure.secrets import secret as config
 
 # backend/config/settings/base.py -> backend/

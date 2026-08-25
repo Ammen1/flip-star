@@ -187,7 +187,7 @@ def test_total_route_count_is_stable():
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 300, (
+    assert len(urlpatterns) == 301, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )
