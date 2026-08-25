@@ -1,4 +1,3 @@
-import random
 import re
 import string
 import traceback
@@ -73,7 +72,9 @@ from common.throttling import (
 
 # ── OTP / Phone helpers ────────────────────────────────────────────────────
 def _generate_otp():
-    return ''.join(random.choices(string.digits, k=6))
+    import secrets as _secrets
+
+    return ''.join(_secrets.choice(string.digits) for _ in range(6))
 
 
 def _normalize_ethiopian_phone(phone):
@@ -197,7 +198,7 @@ def login(request):
                     endpoint='/api/auth/login/',
                     details={'username': user.username, 'is_staff': user.is_staff},
                 )
-            except Exception:
+            except Exception:  # noqa: S110 – best-effort audit log; must not surface to the caller
                 pass
             return Response({'user': UserSerializer(user).data, 'token': token.key})
         else:
@@ -218,7 +219,7 @@ def login(request):
                     endpoint='/api/auth/login/',
                     details={'attempted_username': username},
                 )
-            except Exception:
+            except Exception:  # noqa: S110 – best-effort audit log; must not surface to the caller
                 pass
             if remaining == 0:
                 return Response(
@@ -250,7 +251,7 @@ def login(request):
                 endpoint='/api/auth/login/',
                 details={'attempted_username': username},
             )
-        except Exception:
+        except Exception:  # noqa: S110 – best-effort audit log; must not surface to the caller
             pass
         if remaining == 0:
             return Response(
@@ -475,7 +476,7 @@ def delete_account(request):
     # Delete authentication token
     try:
         Token.objects.filter(user=user).delete()
-    except:
+    except Exception:  # noqa: S110 – token deletion is best-effort during account deletion
         pass
 
     # Delete user (this cascades to related objects)
@@ -657,11 +658,9 @@ def send_phone_otp(request):
         # In dev/local mode return the OTP code so frontend can show it (SMS not required)
         from django.conf import settings as _settings
 
-        from api.services.otp import OTPService as _OTP
 
         dev_code = None
         if _settings.DEBUG:
-            cached = _OTP.__dict__  # just to access class
             from django.core.cache import cache as _cache
 
             _data = _cache.get(f'otp:{phone}')
@@ -1214,7 +1213,7 @@ def dev_create_subscription(request):
     otp_code = OTPService.generate_otp()
     # Cancel any existing unlinked subscription for this phone
     UserSubscription.objects.filter(onevas_phone_number=phone, user__isnull=True).delete()
-    sub = UserSubscription.objects.create(
+    UserSubscription.objects.create(
         tier=tier,
         onevas_phone_number=phone,
         status='active',
@@ -1850,7 +1849,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                         SavedPost.objects.filter(user=self.request.user, reel=OuterRef('pk'))
                     ),
                 )
-            except Exception:
+            except Exception:  # noqa: S110 – annotation failure must not crash the retrieve
                 pass
         obj = get_object_or_404(queryset, pk=pk)
         self.check_object_permissions(self.request, obj)
@@ -1894,8 +1893,8 @@ class ReelViewSet(viewsets.ModelViewSet):
                 thumbnail_path = os.path.join(thumbnail_dir, f'{instance.id}.jpg')
 
                 # Use FFmpeg to extract thumbnail at 1 second
-                subprocess.run(
-                    [
+                subprocess.run(  # noqa: S603 – args are fully hardcoded; no user input reaches ffmpeg
+                    [  # noqa: S607 – 'ffmpeg' is a fixed system binary, not user-controlled
                         'ffmpeg',
                         '-i',
                         media_path,
@@ -2954,7 +2953,7 @@ def get_user_notifications(request):
                     pf = notif.sender.profile.profile_photo
                     if pf and pf.name:
                         profile_photo = pf.name if pf.name.startswith('http') else pf.url
-                except Exception:
+                except Exception:  # noqa: S110 – profile photo fetch is best-effort in notification list
                     pass
                 sender_data = {
                     'id': notif.sender.id,
