@@ -71,6 +71,7 @@ from common.throttling import (
 )
 
 
+# ── OTP / Phone helpers ────────────────────────────────────────────────────
 def _generate_otp():
     return ''.join(random.choices(string.digits, k=6))
 
