@@ -47,6 +47,11 @@ paths = [
   # them into Vault. Re-check this entry once that is done and delete it.
   '''api/migrations/0057_create_subscription_tiers\.py$''',
   '''scripts/populate_subscription_tiers\.py$''',
+
+  # False positive in migration 0103: the dependency tuple ('api', '0102_timwe_integration')
+  # is flagged as a generic-api-key because the word 'api' appears next to a
+  # long alphanumeric string. This is a standard Django migration dependency, not a secret.
+  '''api/migrations/0103_rename_api_timwech_status_6d2b84_idx_api_timwech_status_093182_idx_and_more\.py$''',
 ]
 
 regexes = [
