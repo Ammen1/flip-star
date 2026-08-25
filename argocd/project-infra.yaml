@@ -1,0 +1,69 @@
+# Separate AppProject for staging infrastructure, so that argocd/project.yaml
+# (the backend project) does NOT have to gain cluster-scoped grants.
+#
+# That separation is a security decision, not tidiness. Adding PersistentVolume
+# to the backend project's clusterResourceWhitelist would mean anything able to
+# commit to k8s/overlays/* could define a hostPath PV at `/`, mount it via the
+# Deployment permission it already holds, and own the node. The backend
+# project's own header makes exactly this argument about staying inside its two
+# namespaces; it should not be weakened for a database.
+#
+# The residual cost is stated plainly rather than hidden: THIS project can
+# create hostPath-style PVs. It is confined to one namespace and three cluster
+# kinds, and it is a separate blast radius from the application.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: flipstar-infra
+  namespace: argocd
+spec:
+  description: >-
+    Staging-only data infrastructure (PostgreSQL, Redis, Vault) and the
+    Namespace itself. Deliberately separate from flipstar-backend so that
+    deleting the application never reaches the data.
+
+  sourceRepos:
+    - https://github.com/Ammen1/flip-star.git
+
+  destinations:
+    # Staging ONLY. Production keeps the managed-service assumption documented
+    # in k8s/README.md -- this tree is single-node, unreplicated, tls_disable,
+    # and must never be pointed at production.
+    - server: https://kubernetes.default.svc
+      namespace: flipstar-staging
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: ""
+      kind: PersistentVolume
+    - group: storage.k8s.io
+      kind: StorageClass
+
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: PersistentVolumeClaim
+    - group: batch
+      kind: CronJob
+    - group: batch
+      kind: Job
+    # ReplicaSet and Pod are here for the same reason they are in
+    # argocd/project.yaml: Argo filters the resource tree to project-permitted
+    # kinds, so without them the UI shows Deployments with no children and no
+    # LOGS tab anywhere.
+    - group: apps
+      kind: ReplicaSet
+    - group: ""
+      kind: Pod
+
+  # Secret is deliberately ABSENT, matching argocd/project.yaml. postgres-auth
+  # is created out-of-band exactly like flipstar-backend-vault-approle.
+
+  orphanedResources:
+    warn: true

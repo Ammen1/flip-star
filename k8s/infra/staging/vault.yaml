@@ -1,0 +1,216 @@
+# HashiCorp Vault -- staging only.
+#
+# This file is deliberately NOT a template for production. It uses file
+# storage, a single replica, no TLS on the listener, and manual unseal. Every
+# one of those is a real limitation, chosen because staging runs on one k3s
+# node with no cloud KMS available. k8s/README.md's production guidance
+# (a managed secret store) still stands.
+#
+# Three details here are the difference between "works" and "you are locked out
+# of your own Vault", and each cost real time to learn:
+#
+# 1. args: ["server"]
+#    The hashicorp/vault image entrypoint already loads the config. Without an
+#    explicit `server` arg the container loaded its config twice and
+#    CrashLooped. This is the fix that worked.
+#
+# 2. The liveness probe MUST tolerate a sealed Vault.
+#    File storage seals on every pod restart, and a sealed Vault answers /health
+#    with 503 by default. A plain health probe therefore kills the pod, which
+#    restarts sealed, which fails the probe again -- forever, with no window in
+#    which to `kubectl exec` in and unseal. The query parameters below remap
+#    sealed and uninitialised to 204 so the pod stays up and reachable while it
+#    waits for a human. The READINESS probe deliberately does NOT do this: a
+#    sealed Vault genuinely cannot serve the application, so it should be pulled
+#    from the Service endpoints.
+#
+# 3. Any change to the vault.hcl ConfigMap below restarts the pod, and every
+#    restart costs a manual unseal. Treat edits to this file as a maintenance
+#    window, not a routine sync. Auto-unseal (Transit or a KMS) and Raft
+#    storage are the real fix and are follow-up work, not this change.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-config
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: secrets
+    app.kubernetes.io/part-of: flipstar-infra
+data:
+  vault.hcl: |
+    ui = true
+
+    # disable_mlock is required because the container does not carry
+    # CAP_IPC_LOCK. The tradeoff is real and worth stating: without mlock, Vault
+    # cannot prevent its in-memory secrets being swapped to disk. On this node
+    # that is an accepted staging risk; on a host with swap enabled and
+    # untrusted co-tenants it would not be.
+    disable_mlock = true
+
+    storage "file" {
+      path = "/vault/data"
+    }
+
+    listener "tcp" {
+      address     = "0.0.0.0:8200"
+      tls_disable = 1
+    }
+
+    # Matches VAULT_ADDR in k8s/overlays/staging/patches/configmap-patch.yaml,
+    # which is http:// for exactly this reason. Traffic is pod-to-pod inside
+    # the cluster and never crosses the node boundary.
+    api_addr = "http://vault.flipstar-staging.svc.cluster.local:8200"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vault-data
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: secrets
+    app.kubernetes.io/part-of: flipstar-infra
+  annotations:
+    # Argo must never prune or delete this, even if the file is removed from
+    # git. Note the honest limit: these annotations stop ARGO. They do not
+    # participate in namespace garbage collection, so they would not have
+    # prevented the incident that destroyed this volume. The real protection is
+    # that the Namespace is no longer owned by a cascading Application, plus
+    # the Retain policy on the PV.
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: flipstar-local-retain
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: flipstar-staging-vault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vault
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: secrets
+    app.kubernetes.io/part-of: flipstar-infra
+spec:
+  type: ClusterIP
+  selector:
+    # Deliberately narrow. part-of is excluded so that a future label change
+    # cannot break the selector -- a Deployment's selector is immutable, and a
+    # mismatch here silently produces a Service with no endpoints.
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: secrets
+  ports:
+    - name: http
+      port: 8200
+      targetPort: 8200
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/component: secrets
+    # NOT `flipstar`. k8s/base/networkpolicy.yaml scopes its default-deny
+    # podSelector to `app.kubernetes.io/part-of: flipstar`, and its header
+    # comment records that a `podSelector: {}` version broke AppRole login with
+    # "Max retries exceeded with url: /v1/auth/approle/login". Labelling this
+    # pod `flipstar` puts it back inside that deny.
+    app.kubernetes.io/part-of: flipstar-infra
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate: two Vault pods would contend for the same
+    # ReadWriteOnce file-storage volume on a single node. File storage has no
+    # coordination for that.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+      app.kubernetes.io/component: secrets
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault
+        app.kubernetes.io/component: secrets
+        app.kubernetes.io/part-of: flipstar-infra
+    spec:
+      securityContext:
+        # The official image runs as uid/gid 100:1000. fsGroup makes the
+        # kubelet chgrp the mounted volume so Vault can write its file storage;
+        # a `local` PV directory is root-owned when first created, and without
+        # this Vault fails to start with a permission error on /vault/data.
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: vault
+          image: hashicorp/vault:1.19.0
+          # See the header: without this the entrypoint loads the config twice.
+          args: ["server"]
+          env:
+            - name: VAULT_ADDR
+              value: "http://127.0.0.1:8200"
+            - name: VAULT_API_ADDR
+              value: "http://vault.flipstar-staging.svc.cluster.local:8200"
+            - name: SKIP_CHOWN
+              value: "true"
+            - name: SKIP_SETCAP
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8200
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: config
+              mountPath: /vault/config
+              readOnly: true
+            - name: data
+              mountPath: /vault/data
+          # sealedcode/uninitcode remap the two states that are NORMAL for this
+          # deployment onto 204, so the pod survives them. Without this a sealed
+          # Vault is unrecoverable: it restarts sealed, fails the probe, and is
+          # killed before anyone can exec in to unseal it.
+          livenessProbe:
+            httpGet:
+              path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
+              port: 8200
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Readiness deliberately uses the DEFAULT codes. A sealed Vault cannot
+          # serve config, so it must leave the Service endpoints -- that is what
+          # stops backend pods starting against a Vault that will only give them
+          # the insecure defaults production.py refuses to boot on.
+          readinessProbe:
+            httpGet:
+              path: /v1/sys/health
+              port: 8200
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: vault-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: vault-data

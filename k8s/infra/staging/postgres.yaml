@@ -1,0 +1,513 @@
+# PostgreSQL 15 for staging -- the database the backend's DB_HOST already
+# points at (postgres.flipstar-staging.svc.cluster.local, see
+# k8s/overlays/staging/patches/configmap-patch.yaml). Until today this ran as
+# a hand-made object that existed only in the cluster's etcd; Argo CD listed
+# it among the "4 orphaned resources" because it was in no Kustomize tree, and
+# when flipstar-backend-staging was deleted its resources-finalizer cascaded
+# through the namespace and took the data with it. There was nothing to
+# restore from. This file is the half of the fix that makes the database
+# reproducible; k8s/infra/staging/pv-postgres.yaml is the half that makes the
+# data survivable.
+#
+# ---------------------------------------------------------------------------
+# Why a Deployment + an explicit PVC, and not a StatefulSet
+# ---------------------------------------------------------------------------
+# A StatefulSet is the reflexive answer for a database and it is the wrong one
+# HERE, for one specific reason: a volumeClaimTemplates PVC is created by the
+# StatefulSet controller at runtime, not by Argo CD from git. That means it
+#
+#   * cannot carry argocd.argoproj.io/sync-options: Delete=false -- the whole
+#     protection this recovery is built on,
+#   * does not exist in git, so it is not part of "reproducible from the
+#     repo", which is precisely the property that was missing today,
+#   * is deliberately never deleted with its StatefulSet, so it also never
+#     comes BACK from a sync -- recovery stays a manual kubectl exercise,
+#   * cannot be edited later (volumeClaimTemplates is immutable; changing it
+#     is a sync failure needing a --cascade=orphan delete to escape).
+#
+# What a StatefulSet actually buys -- stable ordinal identity, ordered
+# rollout, one volume per replica -- all describes a multi-replica set. This
+# is one replica, on one node, with one volume, so none of it applies. What
+# this incident needs is for the PVC to be a first-class object in git, and a
+# Deployment is what gives us that.
+#
+# strategy: Recreate is MANDATORY, not a preference. The default
+# RollingUpdate starts a second postgres pod before terminating the first,
+# both pointing at the same ReadWriteOnce volume -- and RWO permits exactly
+# that, two pods sharing one mount on one node. Two postmasters over one data
+# directory is how a cluster gets corrupted. Recreate buys that correctness
+# at the price of a hard outage on every rollout, which is the right trade
+# for a staging database and would not be for production.
+#
+# ---------------------------------------------------------------------------
+# Labels: why part-of is `flipstar-infra` and deliberately NOT `flipstar`
+# ---------------------------------------------------------------------------
+# k8s/base/networkpolicy.yaml lines 1-26 record, with the observed error, why
+# its default-deny podSelector is scoped to `app.kubernetes.io/part-of:
+# flipstar` rather than `{}`: a NetworkPolicy is evaluated from the
+# perspective of the pod RECEIVING the connection, so a namespace-wide
+# default-deny-ingress also denies the backend's connections INTO an
+# in-namespace PostgreSQL, Redis or Vault. The symptom was every pod in
+# CrashLoopBackOff with
+#     Max retries exceeded with url: /v1/auth/approle/login
+#
+# Labelling this pod `part-of: flipstar` puts it straight back inside that
+# selector and reproduces the outage that file was written to prevent.
+# `flipstar-infra` keeps it outside the policy while still being truthful.
+# Do not "tidy this up" to match the backend's labels.
+#
+# For the same reason k8s/infra/staging/kustomization.yaml must NOT use
+# `labels: [{includeSelectors: true}]` the way k8s/base and the staging
+# overlay do -- that would inject the app label into this pod AND into the
+# Deployment's selector, which is immutable, so the following sync fails.
+#
+# ---------------------------------------------------------------------------
+# Node locality (K6) -- and the limit of what any of this protects against
+# ---------------------------------------------------------------------------
+# The volume is a static `local` PV pinned by nodeAffinity to a single k3s
+# node (pv-postgres.yaml). Consequences, stated plainly:
+#
+#   * This pod can only ever be scheduled on that node. Cordon it, drain it
+#     or lose it and the pod is Pending -- not rescheduled elsewhere. There
+#     is no second copy of the data to reschedule onto.
+#   * persistentVolumeReclaimPolicy: Retain protects the data against every
+#     control-plane accident -- an Application delete, a namespace delete, a
+#     stray `kubectl delete pvc`. It protects it against NOTHING physical.
+#     Disk failure, or `rm -rf` on the node, is still total loss.
+#
+# Reproducible-from-git is not durability. postgres-backup-cronjob.yaml
+# writing pg_dump off-node is the only thing here that is actually a backup.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    # See the label rationale above -- NOT `flipstar`.
+    app.kubernetes.io/part-of: flipstar-infra
+  annotations:
+    # Defence in depth underneath the Application-level controls
+    # (application-infra-staging.yaml carries no resources-finalizer and sets
+    # prune: false). Delete=false stops Argo CD deleting this PVC even on an
+    # explicit app delete; Prune=false stops it being pruned if someone later
+    # removes this file from git.
+    #
+    # Be clear about the limit, because it is exactly what failed today:
+    # NEITHER annotation survives a Namespace delete. The API server garbage-
+    # collects every namespaced object in a deleted namespace and no Argo
+    # annotation participates in that. What actually makes the data survivable
+    # is the PV being cluster-scoped with reclaimPolicy: Retain. These two
+    # options are the second line of defence, not the first.
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # Bind to exactly one pre-declared PV instead of whichever PV happens to be
+  # Available. Deliberate: after a namespace loss the PV is `Released` and
+  # still holds the data, and an unqualified claim could bind somewhere else
+  # entirely -- to the empty vault volume, say -- whereupon Postgres would
+  # helpfully initdb into it and come up green and empty. Naming the volume
+  # makes the failure mode "PVC stays Pending until a human clears the
+  # claimRef", which is loud. Loud beats silent for a database.
+  volumeName: flipstar-staging-postgres
+  # A dedicated no-provisioner class (storageclass-local-retain.yaml), NOT
+  # k3s's default `local-path`. Two k3s-specific reasons:
+  #   1. local-path is a k3s packaged addon
+  #      (/var/lib/rancher/k3s/server/manifests/local-storage.yaml), so
+  #      editing its reclaim policy in place is reverted on k3s restart.
+  #   2. Dynamic provisioning fails in the dangerous direction: delete the
+  #      PVC and the next sync provisions a fresh empty volume, Postgres runs
+  #      initdb, and you get a healthy, green, empty database. Static PVs
+  #      fail in the safe direction.
+  storageClassName: flipstar-local-retain
+  resources:
+    requests:
+      # 5Gi, against a node with / at 76% and /var at 86% (K5 -- a pod was
+      # already evicted for disk pressure today). Sized for staging data plus
+      # WAL, not for growth; max_wal_size is capped at 512MB below so WAL
+      # cannot quietly consume the remainder.
+      #
+      # HONEST CAVEAT: for a `local` PV this number is DECLARATIVE ONLY.
+      # Nothing enforces it -- it is documentation plus a scheduler hint, and
+      # a runaway table will fill the node's filesystem regardless. The real
+      # protection is watching `df -h` and having the backup CronJob write to
+      # object storage rather than to another local PVC.
+      #
+      # Do not try to grow this by editing the number: a no-provisioner
+      # StorageClass has no allowVolumeExpansion, so a changed size is a sync
+      # failure on an immutable field. Growing means deleting the PVC and PV
+      # OBJECTS -- the on-disk directory is untouched, which is the entire
+      # point of Retain -- and recreating both at the larger size.
+      storage: 5Gi
+---
+# The Service name and port are a hard contract, not a preference: the backend
+# resolves postgres.flipstar-staging.svc.cluster.local:5432 from DB_HOST and
+# DB_PORT in the staging ConfigMap patch. Renaming either breaks every pod in
+# the namespace, and it breaks them at connection time rather than at sync
+# time, so nothing turns red until traffic arrives.
+#
+# ClusterIP rather than headless, deliberately. A headless Service hands the
+# client the pod IP directly, and Django holds connections open for
+# DB_CONN_MAX_AGE=60 -- so once a Recreate rollout gives the new pod a new IP,
+# clients keep dialling the dead address until their resolver cache expires.
+# A ClusterIP VIP is stable across pod replacement, so the reconnect lands on
+# the new pod immediately. The stable-DNS-identity argument for headless
+# Services is about addressing individual members of a set; there is one
+# replica here and nothing to address individually.
+#
+# publishNotReadyAddresses is left at its default (false) on purpose: during
+# the Recreate gap the Service has no endpoints and clients get an immediate
+# connection refused. That is a real staging outage of a few seconds on every
+# postgres change, and it is strictly better than routing live traffic into a
+# postmaster that is still replaying WAL.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: flipstar-infra
+spec:
+  type: ClusterIP
+  selector:
+    # Intentionally narrower than the metadata labels above. This pair has to
+    # match the Deployment's immutable selector forever, so it names only the
+    # two labels that will never legitimately change -- keeping part-of out of
+    # it means the label can be corrected later without an immutable-field
+    # sync failure.
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: flipstar-infra
+  # There is deliberately NO argocd.argoproj.io/sync-wave on this Deployment
+  # or on the PVC above. The obvious move -- PVC in an earlier wave than its
+  # consumer -- deadlocks here: storageclass-local-retain.yaml uses
+  # volumeBindingMode: WaitForFirstConsumer, so the PVC cannot bind until a
+  # consumer pod is scheduled; Argo CD reports an unbound PVC as Progressing;
+  # and it will wait on that wave forever while the pod that would unblock it
+  # sits in the next one. PVC and Deployment must share a wave.
+  #
+  # Cross-Application ordering is a different problem that sync waves do not
+  # solve at all: flipstar-infra-staging now owns namespace.yaml, so it has to
+  # be synced before flipstar-backend-staging on a rebuild. Both Applications
+  # set CreateNamespace=false. See k8s/infra/staging/README.md.
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    # See the file header. Not negotiable while this is one RWO volume.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: flipstar-infra
+    spec:
+      # Postgres has no business talking to the Kubernetes API, and a mounted
+      # token is one more thing worth stealing from a database pod.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # 999:999 is the postgres uid/gid in the DEBIAN-based official image.
+        # It is NOT 999 in the -alpine variant, where postgres is uid 70 --
+        # and that is the main reason this uses the larger Debian image
+        # despite K5's disk pressure. The one-off node bootstrap in the
+        # runbook chowns the PV directory 999:999 by hand, so an image swap
+        # that silently changes the expected uid turns it into a
+        # permission-denied initdb that reads like a corrupt volume. (Second
+        # reason: alpine is musl, whose default collation differs from the
+        # glibc collation a managed production Postgres uses, and collation
+        # differences change index ordering -- so staging would sort
+        # differently from production.) If you do switch to -alpine, change
+        # runAsUser, runAsGroup and fsGroup to 70 AND re-chown the directory
+        # on the node.
+        runAsUser: 999
+        runAsGroup: 999
+        # fsGroup makes the kubelet chgrp the mounted volume, which is what
+        # lets a non-root postmaster write to it. Necessary but NOT sufficient
+        # for a `local` PV: the backing directory is created root-owned on the
+        # node, and the first initdb fails with "could not create directory
+        # ... Permission denied". The one-off bootstrap, also in the runbook:
+        #   mkdir -p /opt/flipstar/staging/postgres
+        #   chown 999:999 /opt/flipstar/staging/postgres
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      # No nodeSelector or nodeAffinity here on purpose: it would be a second
+      # place to keep the node name correct, and two sources of truth that can
+      # disagree. The PV's own nodeAffinity plus WaitForFirstConsumer already
+      # constrains the scheduler to the one node holding the data.
+      #
+      # No PodDisruptionBudget either. With replicas: 1 the only PDB worth
+      # writing (minAvailable: 1) makes `kubectl drain` on that node block
+      # forever. For a single-replica node-pinned database, draining SHOULD be
+      # a deliberate act with accepted downtime rather than something a PDB
+      # pretends to make safe.
+      containers:
+        - name: postgres
+          # PostgreSQL 15, matching DB_ENGINE: django.db.backends.postgresql
+          # and the version that was in use before the incident.
+          #
+          # HUMAN ACTION -- pin the digest:
+          #   docker pull postgres:15
+          #   docker inspect --format='{{index .RepoDigests 0}}' postgres:15
+          # then replace the tag with postgres:15@sha256:<digest>. A floating
+          # minor tag means the running version can change under you on any
+          # pod recreate -- the same class of problem the backend images avoid
+          # by never using `latest` (k8s/base/deployment.yaml).
+          #
+          # NEVER bump the MAJOR version by editing this line. Postgres
+          # refuses to start against a data directory written by a different
+          # major ("database files are incompatible with server"), and since
+          # that check happens after the volume is mounted it surfaces as an
+          # ordinary CrashLoopBackOff rather than as a clear upgrade error. A
+          # major upgrade is a dump/restore, planned on its own.
+          image: postgres:15
+          imagePullPolicy: IfNotPresent
+          # args REPLACES the image's CMD, so "postgres" must be the first
+          # element -- omit it and docker-entrypoint.sh has no command to exec
+          # and the container exits immediately. Same shape of trap as the
+          # args: ["server"] fix that stopped Vault CrashLooping (K1).
+          args:
+            - postgres
+            # WAL lives inside PGDATA, i.e. inside the 5Gi above. The default
+            # max_wal_size of 1GB lets WAL occupy a fifth of the volume before
+            # a checkpoint is forced. 512MB trades slightly more frequent
+            # checkpoints -- irrelevant at staging write volume -- for a much
+            # tighter disk ceiling (K5).
+            - -c
+            - max_wal_size=512MB
+            # Cheap on CPU at this scale and directly reduces bytes written to
+            # a node already at 86% on /var.
+            - -c
+            - wal_compression=on
+            # Staging exists to find the slow queries before production does.
+            - -c
+            - log_min_duration_statement=1000
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            # POSTGRES_DB / POSTGRES_USER must match DB_NAME / DB_USER as the
+            # backend resolves them (infrastructure/database/config.py reads
+            # DB_NAME, DB_USER and DB_PASSWORD; all three come from Vault at
+            # flipstar/backend/staging). These are the values that were in use
+            # before the incident.
+            - name: POSTGRES_DB
+              value: flipstar
+            - name: POSTGRES_USER
+              value: flipstar
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  # HUMAN ACTION -- this Secret is NOT in git and is NOT
+                  # created by Argo CD. Secret is deliberately absent from the
+                  # flipstar-infra AppProject's namespaceResourceWhitelist,
+                  # exactly as it is absent from flipstar-backend's (see the
+                  # closing comment in argocd/project.yaml). Create it
+                  # out-of-band, once, the way the Vault AppRole secret is:
+                  #
+                  #   kubectl create secret generic postgres-auth \
+                  #     --namespace flipstar-staging \
+                  #     --from-literal=POSTGRES_PASSWORD='<value>'
+                  #
+                  # Template: secret.example.postgres-auth.yaml.
+                  #
+                  # TWO TRAPS, IN BOTH DIRECTIONS:
+                  #
+                  #  1. This value must be byte-identical to DB_PASSWORD at
+                  #     flipstar/backend/staging in Vault, and NOTHING checks
+                  #     that. A mismatch is not a sync error: Postgres comes up
+                  #     healthy and every backend pod fails authentication.
+                  #
+                  #  2. POSTGRES_PASSWORD IS READ ONLY AT initdb -- the very
+                  #     first start against an empty volume. Changing this
+                  #     Secret afterwards changes nothing about the database:
+                  #     the old password keeps working and the new one does
+                  #     not, while `kubectl get secret` shows the new one.
+                  #     Rotating for real means ALTER USER flipstar WITH
+                  #     PASSWORD ... inside the running server, then Vault,
+                  #     then this Secret so that a future initdb agrees.
+                  name: postgres-auth
+                  key: POSTGRES_PASSWORD
+            # PGDATA must be a SUBDIRECTORY of the mount, never the mount
+            # root. initdb refuses to run in a directory that already contains
+            # anything, and a mount root routinely does -- lost+found on an
+            # ext4 volume, or a stray file from an earlier bootstrap. The
+            # failure reads "directory /var/lib/postgresql/data exists but is
+            # not empty" and looks like a bug in this manifest.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            # Checksums catch silent corruption on exactly the storage this
+            # is: one local disk, no replication, no scrubbing, no second copy
+            # to compare against. Like POSTGRES_PASSWORD this applies at
+            # initdb ONLY -- turning it on for an existing cluster needs
+            # `pg_checksums --enable` with the server stopped.
+            - name: POSTGRES_INITDB_ARGS
+              value: --data-checksums
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # Postgres tolerates a read-only root filesystem only because the
+            # two paths it writes outside PGDATA are emptyDir mounts below:
+            # /var/run/postgresql (unix socket + postmaster.pid) and /tmp
+            # (sort and hash spill files). If a future image writes somewhere
+            # else the symptom is a startup failure naming a read-only
+            # filesystem, and this is the first setting to relax while
+            # diagnosing that. It is worth keeping because it stops a
+            # compromised postmaster rewriting its own binaries or extensions.
+            readOnlyRootFilesystem: true
+          # ---------------------------------------------------------------
+          # Probes -- the startupProbe is the one doing the real work
+          # ---------------------------------------------------------------
+          # A liveness probe on a database is a loaded gun: it restarts a
+          # server that is slow rather than broken, and for Postgres "slow"
+          # usually means crash recovery -- so a trigger-happy liveness probe
+          # restarts recovery from the beginning, forever, and the pod never
+          # comes back. All three probes below are shaped around not doing
+          # that. (Same family of mistake as a plain health probe against a
+          # sealed Vault, K2, which CrashLoops it before anyone can exec in.)
+          #
+          # Every probe uses pg_isready over TCP on 127.0.0.1 rather than the
+          # unix socket, and that detail is load-bearing. During initdb the
+          # entrypoint runs a TEMPORARY postmaster with listen_addresses='' so
+          # it can create the role and the database; a socket-based pg_isready
+          # reports READY against that temporary server, so the pod goes Ready
+          # and the Service starts sending real traffic to a database that is
+          # still being built. Over TCP the temporary server is unreachable
+          # and the probe correctly keeps failing until the real one listens.
+          #
+          # startupProbe suppresses the other two entirely until Postgres is
+          # genuinely up: 30 x 10s = 5 minutes, enough for a first-boot initdb
+          # or a crash recovery after an unclean shutdown on a slow local disk.
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -q -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          # Liveness deliberately accepts pg_isready exit code 1 as alive.
+          # The codes are: 0 = accepting connections, 1 = server is running
+          # but REJECTING them (starting up, or in recovery), 2 = no response
+          # at all. Treating 1 as dead is the restart-recovery-forever loop
+          # described above. Only "the postmaster is not answering on the port
+          # at all" -- code 2, sustained across 6 x 10s -- justifies a restart.
+          # The `sh -c` wrapper exists solely to reinterpret that exit code;
+          # an exec probe cannot do it any other way.
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -q -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"; [ $? -le 1 ]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # Readiness is the strict one: only exit 0 -- actually accepting
+          # connections -- puts this pod behind the Service. A server in
+          # recovery is alive by the rule above but must not receive backend
+          # traffic, and this is where that distinction is enforced.
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -q -h 127.0.0.1 -p 5432 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            # Sized for one small staging node that also runs 2 backend
+            # replicas (250m/384Mi each), a Celery worker, Celery beat, Redis
+            # and Vault. requests are what the scheduler actually reserves, so
+            # they stay honest-but-small; limits exist because under K5 an
+            # unbounded pod here evicts something else.
+            #
+            # The memory limit is the number to be careful with: exceeding it
+            # is an OOMKill of the postmaster, which is an unclean shutdown,
+            # which means crash recovery on the next start. 1Gi against a
+            # default 128MB shared_buffers plus up to 100 backends leaves real
+            # headroom. If you lower it, lower shared_buffers and
+            # max_connections in args above at the same time -- otherwise the
+            # server will happily allocate its way past the limit.
+            #
+            # On connections: max_connections stays at the default 100. Django
+            # holds connections open (DB_CONN_MAX_AGE=60) and each backend
+            # replica, Celery worker, beat process and migrate Job holds its
+            # own, so the number to watch as replicas grow is
+            # (pods x threads), not the number of users.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          lifecycle:
+            preStop:
+              exec:
+                # Kubernetes sends SIGTERM, and SIGTERM to a postmaster means
+                # SMART shutdown: wait for every client to disconnect
+                # voluntarily. With Django holding pooled connections for
+                # DB_CONN_MAX_AGE seconds that wait does not end on its own,
+                # so the postmaster sits there until
+                # terminationGracePeriodSeconds expires and is then SIGKILLed
+                # -- an unclean shutdown, and therefore crash recovery on the
+                # next start, on every single rollout.
+                #
+                # The image's Dockerfile sets STOPSIGNAL SIGINT (fast
+                # shutdown) precisely to avoid this, but Kubernetes ignores
+                # Dockerfile STOPSIGNAL; the container-level stopSignal field
+                # is recent and not something to depend on here. This preStop
+                # hook runs before SIGTERM is sent and requests the fast
+                # shutdown explicitly: disconnect clients, roll back in-flight
+                # transactions, checkpoint, exit cleanly.
+                command:
+                  - sh
+                  - -c
+                  - exec pg_ctl -D "$PGDATA" -m fast -w -t 50 stop
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            # Both of the next two are required BY readOnlyRootFilesystem, not
+            # by Postgres -- see the securityContext comment. Deleting them
+            # without also deleting that setting is a startup failure.
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      # 60s, chosen to sit comfortably above the preStop hook's -t 50 timeout.
+      # Set it below the hook's timeout and SIGKILL lands mid-checkpoint,
+      # which defeats the entire reason the hook exists.
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

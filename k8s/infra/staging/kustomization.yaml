@@ -1,0 +1,32 @@
+# Flat, with no base/ -- there is exactly one consumer of this tree and
+# introducing an overlay layer for a single environment buys indirection and
+# nothing else. Production deliberately does NOT copy this: it keeps the
+# managed-service assumption k8s/README.md already states.
+#
+# NOTE the absence of `labels: includeSelectors: true`, which the app overlay
+# uses. Two reasons, both load-bearing:
+#   1. It would inject `environment: staging` into every Deployment SELECTOR,
+#      and a Deployment selector is immutable -- a later label change becomes an
+#      unfixable sync failure.
+#   2. These pods must stay OUT of the `app.kubernetes.io/part-of: flipstar`
+#      selector that k8s/base/networkpolicy.yaml's default-deny matches on.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: flipstar-staging
+
+resources:
+  # Order here is documentation only -- kustomize does not sequence applies.
+  # Real ordering is enforced by the runbook and by Argo CD sync waves.
+  - namespace.yaml
+  - storageclass-local-retain.yaml
+  - pv-postgres.yaml
+  - pv-vault.yaml
+  - postgres.yaml
+  - redis.yaml
+  - vault.yaml
+
+# secret.example.postgres-auth.yaml is deliberately NOT listed. It is a
+# template, not a resource. k8s/base/secret.example.yaml follows the same
+# convention, and .github/workflows/k8s-validate.yml fails the build if any
+# rendered manifest contains `kind: Secret`.

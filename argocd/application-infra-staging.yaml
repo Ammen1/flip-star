@@ -1,0 +1,63 @@
+# Staging data infrastructure. Read the finalizer note below before editing.
+#
+# THIS APPLICATION HAS NO `finalizers:` BLOCK, AND THAT IS DELIBERATE.
+#
+# argocd/application-staging.yaml carries
+# `resources-finalizer.argocd.argoproj.io`, so deleting it cascades to
+# everything it owns. That is appropriate for stateless workloads and it is
+# what k8s/README.md describes. It is NOT appropriate here: an accidental
+# `kubectl delete application` against a cascading Application is precisely how
+# the staging database, the Vault, and every PersistentVolume were destroyed.
+#
+# Without a finalizer, deleting this Application removes only the Application
+# object. PostgreSQL, Redis, Vault, the PVCs, the PVs and the Namespace keep
+# running, and `kubectl apply -f` re-adopts them.
+#
+# If you are here to "fix" the missing finalizer: don't. Its absence is the
+# control.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flipstar-infra-staging
+  namespace: argocd
+spec:
+  project: flipstar-infra
+
+  info:
+    - name: Why this is separate from the backend Application
+      value: https://github.com/Ammen1/flip-star/blob/main/k8s/infra/staging/README.md
+    - name: Bootstrap and unseal runbook
+      value: https://github.com/Ammen1/flip-star/blob/main/k8s/infra/staging/README.md
+
+  source:
+    repoURL: https://github.com/Ammen1/flip-star.git
+    targetRevision: main
+    path: k8s/infra/staging
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: flipstar-staging
+
+  syncPolicy:
+    automated:
+      # prune: false -- removing a file from git must never delete a database.
+      # Deletion here is a deliberate human act, never a side effect of a
+      # commit. This is the second control after the missing finalizer.
+      prune: false
+      # selfHeal stays on: it reverts manual `kubectl edit` drift, which is
+      # desirable. It cannot delete anything, because prune is off.
+      selfHeal: true
+    syncOptions:
+      # This Application owns namespace.yaml explicitly, so Argo must not also
+      # try to create the namespace implicitly.
+      - CreateNamespace=false
+      - RespectIgnoreDifferences=true
+      # Infrastructure must exist before the backend Application's migrate hook
+      # runs. Sync waves order resources WITHIN an Application; ordering
+      # BETWEEN Applications is the runbook's job, not Argo's.
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2

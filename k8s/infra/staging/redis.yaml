@@ -1,0 +1,500 @@
+# Redis 7 for staging -- one server, three unrelated consumers.
+#
+# config/settings/base.py:255-285 points all three at the same instance on
+# three logical DBs:
+#
+#   DB 0  Celery broker AND result backend (CELERY_BROKER_URL /
+#         CELERY_RESULT_BACKEND)
+#   DB 1  Django cache -- OTP codes, rate-limit counters, throttle state, and
+#         the E2E nonce replay set. It has to be shared across processes
+#         (audit finding H-02), so a per-process LocMemCache is not an option.
+#   DB 2  the application's own X25519 identity keypair (REDIS_CRYPTO_URL,
+#         infrastructure/keys/redis_store.py)
+#
+# The Django Channels layer is a fourth consumer and does NOT get its own DB:
+# CHANNEL_LAYERS passes `hosts: [(REDIS_HOST, REDIS_PORT)]` (base.py:274) with
+# no db index, so channels_redis lands on DB 0 alongside Celery. That is not
+# ideal -- a `redis-cli -n 0 FLUSHDB` aimed at a stuck Celery queue also drops
+# every WebSocket group -- but it is what the code does today, and changing it
+# is a settings change, not a manifest change.
+#
+# One Redis rather than three, because a node at 76% / and 86% /var (K5) does
+# not have room for isolation nobody has asked for in staging. The price is
+# that a single maxmemory-policy has to be correct for a cache, a task queue
+# and a private key simultaneously -- see the eviction section.
+#
+# ---------------------------------------------------------------------------
+# The Service name and port are not free choices
+# ---------------------------------------------------------------------------
+# k8s/overlays/staging/patches/configmap-patch.yaml sets
+#   REDIS_HOST: redis.flipstar-staging.svc.cluster.local
+# and base.py builds every URL from it (REDIS_PORT defaults to 6379).
+# Renaming this Service, moving it to another namespace or changing the port
+# breaks the API, both Celery Deployments and the WebSocket layer at once,
+# with no fallback path. Name `redis`, port 6379, namespace
+# flipstar-staging -- all three are load-bearing.
+#
+# ---------------------------------------------------------------------------
+# Ownership
+# ---------------------------------------------------------------------------
+# Synced by the flipstar-infra-staging Application, which deliberately has no
+# `resources-finalizer.argocd.argoproj.io` and has automated pruning disabled.
+# Nothing in THIS file carries `Delete=false` / `Prune=false`, unlike
+# pv-postgres.yaml, pv-vault.yaml and their PVCs: there is nothing here whose
+# loss is unrecoverable, and annotating everything would dilute the annotation
+# exactly where it matters. Deleting this Deployment costs a re-sync and the
+# restart consequences documented below -- not data.
+#
+# ---------------------------------------------------------------------------
+# No password -- and that is not a decision this manifest is free to make
+# ---------------------------------------------------------------------------
+# There is no `--requirepass` here. Not because auth was judged unnecessary,
+# but because the client side cannot use one today:
+#
+#   REDIS_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}'         base.py:260
+#   CHANNEL_LAYERS ... 'hosts': [(REDIS_HOST, REDIS_PORT)]   base.py:274
+#
+# Neither form has a slot for a credential, and there is no REDIS_PASSWORD in
+# the settings, in the ConfigMap or at the Vault path. Setting `requirepass`
+# here would leave Redis perfectly healthy and every client failing with
+# `NOAUTH Authentication required` -- API, Celery worker, Celery beat and the
+# channel layer, simultaneously.
+#
+# State the exposure plainly rather than leaving it implied: anything in this
+# cluster that can route to this pod can read the OTP cache, drain the Celery
+# queue, and -- the one that actually matters -- read the application's
+# PRIVATE X25519 key out of DB 2. The only thing in front of it is that
+# nothing else runs in this cluster, and there is deliberately no
+# NetworkPolicy in this tree yet (see the label section). That is a weak
+# control, recorded here as a known gap rather than presented as a design.
+#
+# Closing it is a code change FIRST: add REDIS_PASSWORD to base.py's URL and
+# to the channel layer CONFIG, put the value in Vault at
+# flipstar/backend/staging, then add `--requirepass` here sourced from a
+# Secret. The reverse order is a staging outage.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  # Namespace is stated explicitly even though
+  # k8s/infra/staging/kustomization.yaml sets it for every resource in this
+  # directory. During a recovery this file gets applied by hand with
+  # `kubectl apply -f`, and a Service that lands in `default` because
+  # someone's kubeconfig context was wrong is a confusing twenty minutes.
+  namespace: flipstar-staging
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: datastore
+    # NOT `flipstar` -- see the Deployment's label comment below (K4).
+    app.kubernetes.io/part-of: flipstar-infra
+    environment: staging
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: datastore
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+---
+# ---------------------------------------------------------------------------
+# Why these pods must NOT carry app.kubernetes.io/part-of: flipstar   (K4)
+# ---------------------------------------------------------------------------
+# k8s/base/networkpolicy.yaml:1-26 records, with the observed error, why
+# `flipstar-default-deny-ingress` scopes its podSelector to
+# `app.kubernetes.io/part-of: flipstar` instead of the obvious `{}`: a
+# NetworkPolicy is evaluated at the pod RECEIVING the connection, so a
+# namespace-wide default-deny also denies the backend's connections INTO an
+# in-namespace Postgres, Redis or Vault. The `{}` version produced
+#
+#     Max retries exceeded with url: /v1/auth/approle/login
+#
+# and put every pod into CrashLoopBackOff.
+#
+# That policy is still deployed. Labelling this pod `part-of: flipstar` would
+# pull it into that selector and reproduce the same outage from the other end:
+# Redis would deny ingress from the backend, and the symptom would be Celery,
+# the OTP flow and every WebSocket failing while `kubectl get pod redis` shows
+# Running and Ready. `part-of: flipstar-infra` keeps it outside the selector.
+# This is not an inconsistency to tidy up.
+#
+# The same reasoning is why k8s/infra/staging/kustomization.yaml must not use
+# `includeSelectors: true`: it would push shared labels into the selector
+# below, and a Deployment's selector is immutable -- Argo would then fail
+# every sync with a field-is-immutable error until someone deleted the
+# Deployment by hand.
+#
+# ---------------------------------------------------------------------------
+# Deployment, not StatefulSet
+# ---------------------------------------------------------------------------
+# A StatefulSet buys two things, and neither is wanted here:
+#
+#   * Stable per-pod identity (redis-0, plus a headless Service for
+#     redis-0.redis...). Nothing addresses an individual Redis pod -- every
+#     client resolves the ClusterIP Service name out of the ConfigMap, so a
+#     per-pod DNS name would have no consumer.
+#   * volumeClaimTemplates, which are the wrong shape for this tree by design.
+#     A PVC created by the StatefulSet controller is not a git object: it
+#     cannot carry `argocd.argoproj.io/sync-options: Delete=false`, cannot be
+#     resized, and is precisely the sort of "exists only in the cluster"
+#     resource that made the deleted Application unrecoverable in the first
+#     place. postgres.yaml and vault.yaml therefore declare their PVCs
+#     explicitly; Redis has no volume to template at all (below).
+#
+# So a StatefulSet here would be a Deployment with extra ceremony and a worse
+# recovery story.
+#
+# replicas: 1 is a hard constraint, not a starting point. Two Redis pods
+# behind one ClusterIP are two independent datasets, not a cluster: clients
+# would be round-robined between them, half the Celery tasks would vanish and
+# a cache hit would become a coin flip. Real HA is Sentinel or Redis Cluster,
+# and neither belongs in a single-node staging environment.
+#
+# strategy: Recreate follows from the same fact. With RollingUpdate the new
+# pod becomes Ready while the old one is still serving, both sit in the
+# Service's endpoint list for a few seconds, and in that window a task
+# published to the empty new instance is never seen by a worker BRPOP-ing the
+# old one, while a Django process that happens to boot finds DB 2 empty and
+# generates a SECOND identity keypair. Recreate trades that for ~10s of hard
+# downtime on every change to this file. Clients reconnect (redis-py and kombu
+# both retry); Django cache reads during the gap surface as 500s on the OTP
+# path. Acceptable in staging, and worth knowing before editing this file
+# during a demo.
+#
+# ---------------------------------------------------------------------------
+# Persistence: none. RDB off, AOF off, emptyDir. What that actually costs
+# ---------------------------------------------------------------------------
+# `--save ""` and `--appendonly no` mean a pod reschedule starts an empty
+# Redis. That is narrower than it sounds -- an emptyDir survives a container
+# crash-restart within the same pod -- so this is about pod deletion, node
+# drain, eviction, and any edit to this file. Per DB:
+#
+#   DB 0  Celery. Queued-but-unstarted tasks and stored results are lost, and
+#         so is every Channels group. Staging tasks are re-runnable by hand.
+#         Note this is deliberately WEAKER than docker-compose.yml, which runs
+#         `redis-server --appendonly yes` on a named volume: a local run
+#         survives a restart, staging does not. Do not debug a lost-task
+#         report by reasoning from the compose file.
+#   DB 1  Django cache. Regenerable by definition, with two consequences that
+#         are not: in-flight OTP codes stop validating (users request a new
+#         one), and the E2E nonce replay set is cleared --
+#         common/security/e2e_encryption.py records seen nonces for
+#         NONCE_REPLAY_WINDOW_SECONDS = 24h, so a wipe re-opens the replay
+#         window for any captured request still inside it. Accepted in
+#         staging; not acceptable in production, which is one more reason this
+#         file is staging-only.
+#   DB 2  The one that needs care. infrastructure/keys/redis_store.py stores
+#         the public and private halves of the application's X25519 identity
+#         as two plain Redis strings with NO TTL, and base.py:479-482 states
+#         outright that "Redis is the single source of truth, not
+#         configuration" -- there is no file, env var or Vault copy to fall
+#         back on. An empty DB 2 means the next process to boot generates a
+#         fresh identity.
+#
+#         For a live client that self-heals: the public half is served from
+#         /api/v1/crypto/public-key/ (api/urls.py:545), so a client that
+#         fetches it per session simply gets the new one. Two things do not
+#         self-heal:
+#
+#         (1) Anything holding a COPY of the old public key --
+#             docs/postman/FlipStar-Encryption-Tests.postman_collection.json
+#             and whatever scripts/generate_crypto_manifest.py last emitted.
+#             Regenerate them after a Redis restart; otherwise the symptom is
+#             decryption failures that look exactly like a code bug.
+#         (2) The running API pods. The keypair is loaded ONCE at process
+#             startup and cached in memory from then on (see the comment at
+#             common/security/e2e_encryption.py:222-231), so after a wipe the
+#             existing replicas keep serving the old identity from memory
+#             while a newly started replica writes a different one into the
+#             empty DB 2. /api/v1/crypto/public-key/ then answers with
+#             whichever replica the request lands on, and clients encrypt to a
+#             key half the fleet cannot decrypt with.
+#
+#         => RUNBOOK: after any restart of this pod, run
+#              kubectl -n flipstar-staging rollout restart deploy/flipstar-backend
+#            so every replica converges on one identity. This is the single
+#            most surprising operational consequence in this file.
+#
+# Why no PVC, when postgres.yaml gets 5Gi and vault.yaml gets 1Gi:
+#
+#   * K6: a `local` / local-path PV is node-local. It does not survive its
+#     node. A Redis PVC would therefore protect exactly one failure mode -- a
+#     pod restarting on the SAME node -- and nothing else.
+#   * K5: it would buy that one case with disk on a node whose /var is at 86%
+#     and which already evicted a pod for disk pressure today, plus a third
+#     Retain PV whose claimRef a human has to clear by hand after any future
+#     namespace loss.
+#   * Postgres and Vault pay that cost because their data has no other source.
+#     Redis's three datasets are respectively re-runnable, regenerable, and
+#     re-derived at boot. Paying the same price for them is not a bargain, and
+#     the backup CronJob that makes Postgres genuinely durable has no Redis
+#     equivalent worth writing.
+#
+# One consequence worth naming because it is a real benefit rather than a
+# rationalisation: with persistence off there is no BGSAVE and no AOF rewrite,
+# therefore no fork, no copy-on-write memory spike (the usual reason a Redis
+# pod is OOMKilled at precisely the moment it is trying to protect its data),
+# and no multi-second save stall for a liveness probe to misread as death. The
+# classic "probe restarts Redis mid-save" failure mode cannot occur here. It is
+# also the only pod in this infra tree with no PV pinning it to a node, so it
+# is the only one that could be rescheduled after losing the node.
+#
+# PRODUCTION MUST NOT COPY THIS. k8s/infra/ is staging-only on purpose. A
+# production Redis needs AOF `everysec`, a real volume, authentication, and a
+# decision about whether the identity keypair belongs in Redis at all.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: flipstar-staging
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: datastore
+    app.kubernetes.io/part-of: flipstar-infra
+    environment: staging
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    # Two labels only. A Deployment's selector is immutable, so anything added
+    # here later costs a delete-and-recreate of the Deployment; `environment`
+    # and any kustomize-injected label are deliberately kept out of it.
+    matchLabels:
+      app.kubernetes.io/name: redis
+      app.kubernetes.io/component: datastore
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis
+        app.kubernetes.io/component: datastore
+        app.kubernetes.io/part-of: flipstar-infra
+        environment: staging
+    spec:
+      # Redis makes no Kubernetes API calls. The token would be a credential
+      # sitting in a pod that already holds the application's private key.
+      automountServiceAccountToken: false
+      # There is deliberately no PodDisruptionBudget for this Deployment: a
+      # single-replica PDB with minAvailable 1 protects nothing, it just
+      # blocks `kubectl drain` forever and turns routine node maintenance into
+      # an incident.
+      #
+      # A PriorityClass would be the right control for "do not evict the thing
+      # every workload depends on" (K5), but PriorityClass is cluster-scoped
+      # and the flipstar-infra AppProject's clusterResourceWhitelist is
+      # deliberately limited to Namespace, PersistentVolume and StorageClass.
+      # The honest requests below are the substitute; adding a fourth
+      # cluster-scoped grant to buy scheduling priority is not a trade worth
+      # making.
+      securityContext:
+        runAsNonRoot: true
+        # redis:7-alpine creates its user as uid 999, gid 1000 (the alpine
+        # images use `adduser -S -u 999 -G redis` against a gid-1000 group --
+        # the same pattern behind Vault's 100:1000). Nothing here mounts a
+        # pre-existing host directory, so a wrong value degrades to "runs as
+        # an unknown uid" rather than a permission failure; the emptyDir below
+        # is chowned to fsGroup by the kubelet either way. Confirm with:
+        #   docker run --rm redis:7-alpine id redis
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          # Pinned to a minor, not `7` and never `latest`. CI rewrites the two
+          # application image tags via `kustomize edit set image`
+          # (k8s/overlays/staging/kustomization.yaml) but knows nothing about
+          # this tree, so this tag only ever changes because a human changed
+          # it -- which is the intent. `alpine` because image layers land on
+          # the same tight node disk as everything else (K5).
+          image: redis:7.4-alpine
+          imagePullPolicy: IfNotPresent
+          # `args` replaces the image's CMD, not its ENTRYPOINT:
+          # docker-entrypoint.sh still runs and still does its uid handling, so
+          # `redis-server` must be the first element here -- drop it and the
+          # flags silently become the command. (Compare vault.yaml, where the
+          # fix for the CrashLoop was the mirror image of this: adding
+          # args: ["server"] so the entrypoint stopped loading its config
+          # twice -- K1.)
+          #
+          # Config lives in args rather than a mounted redis.conf ConfigMap on
+          # purpose: five flags are legible in `kubectl describe pod`, whereas
+          # a ConfigMap hides them one indirection away and adds a file whose
+          # checksum has to be tracked to force a restart. Vault gets a
+          # ConfigMap because its config genuinely is a document.
+          args:
+            - redis-server
+            # RDB off. An empty --save string is how you disable the default
+            # save points; omitting the flag entirely leaves 3600/300/60
+            # enabled and quietly reintroduces the fork this design avoids.
+            - --save
+            - ""
+            # AOF off. See the persistence block above for what that costs.
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 256mb
+            - --maxmemory-policy
+            - volatile-lru
+            # Default is 16; stated explicitly because base.py uses DB 0, 1 and
+            # 2, so trimming this to `--databases 1` for tidiness would break
+            # the cache and the keypair with a confusing "DB index is out of
+            # range".
+            - --databases
+            - "16"
+            - --dir
+            - /data
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # -------------------------------------------------------------
+          # Eviction: volatile-lru, NOT allkeys-lru
+          # -------------------------------------------------------------
+          # This is the one place this file deliberately differs from the
+          # infra design note, which specified allkeys-lru. allkeys-lru is
+          # wrong HERE because one Redis holds three workloads and only one of
+          # them is a cache:
+          #
+          #   * The identity keypair in DB 2 has no TTL, so allkeys-lru may
+          #     evict it -- and evicting HALF of it is worse than evicting
+          #     both. infrastructure/keys/service.py treats "public exists,
+          #     private does not" as a FATAL boot error and refuses to start,
+          #     because generating a replacement private key would silently
+          #     invalidate a public key someone may already hold. A routine
+          #     cache eviction would then keep the API down until a human
+          #     deleted the surviving key by hand.
+          #   * The Celery queue in DB 0 is a list with no TTL. Evicting it
+          #     drops accepted tasks silently: the publish succeeded, the work
+          #     never runs, and nothing logs an error.
+          #
+          # volatile-lru only evicts keys that carry a TTL. Every cache write
+          # in this codebase passes an explicit timeout (api/services/otp.py,
+          # common/throttling.py, common/middleware/security.py,
+          # common/security/e2e_encryption.py, infrastructure/health/startup.py
+          # -- there is no `timeout=None` anywhere), so the whole Django cache
+          # stays evictable and nothing else is touched.
+          #
+          # The tradeoff, stated honestly: if the non-evictable data alone
+          # exceeds maxmemory -- a Celery backlog, most likely -- writes start
+          # failing with an OOM error instead of silently evicting something.
+          # That IS the intended behaviour, and it is the same reasoning
+          # behind the Retain PVs elsewhere in this tree: a loud failure a
+          # human investigates beats a quiet one that looks healthy.
+          #
+          # -------------------------------------------------------------
+          # Memory: maxmemory 256mb inside a 384Mi limit
+          # -------------------------------------------------------------
+          # `maxmemory` bounds the DATASET only -- not client output buffers,
+          # not the replication backlog, not allocator fragmentation. Setting
+          # maxmemory equal to the cgroup limit is how a Redis pod gets
+          # OOMKilled while reporting it is nowhere near its maxmemory. The
+          # 128Mi gap is that headroom.
+          #
+          # Redis's `mb` suffix is binary: 256mb is 268435456 bytes, exactly
+          # 256Mi, so requests.memory and maxmemory really are the same
+          # number. (`256m` would mean 256000000 -- keep the two-letter form.)
+          #
+          # requests.memory equals maxmemory deliberately: request less and the
+          # scheduler may place Redis where its own permitted dataset does not
+          # fit, and the kubelet ranks a pod above its request as an early
+          # eviction candidate under node pressure.
+          #
+          # If this pod is OOMKilled, lower maxmemory first. Raising the limit
+          # takes memory from a node that has none spare (K5).
+          #
+          # ephemeral-storage is requested and limited because the node evicted
+          # a pod for disk pressure today: pods over their ephemeral-storage
+          # request are ranked first for eviction, and the limit plus the
+          # emptyDir sizeLimit means a runaway here evicts itself loudly
+          # instead of filling / and taking Postgres down with it.
+          #
+          # The CPU limit is a real tradeoff, not boilerplate. Redis executes
+          # commands on one thread, so a limit above 1 CPU is meaningless, but
+          # CFS throttling on a single-threaded event loop shows up directly as
+          # command latency. If latency spikes appear under load, REMOVE the
+          # CPU limit rather than raising it -- staging load does not justify
+          # reserving more.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+              ephemeral-storage: 64Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi
+              ephemeral-storage: 256Mi
+          # -------------------------------------------------------------
+          # Probes
+          # -------------------------------------------------------------
+          # `redis-cli ping` over loopback: connect plus one round trip. Worth
+          # contrasting with the Celery probe documented in k8s/README.md,
+          # which boots Django, resolves DNS and performs a full Vault AppRole
+          # login at ~17.9s per invocation -- this one costs a fork and a
+          # syscall, so the periods below carry no infrastructure load worth
+          # planning around.
+          #
+          # There is no startupProbe. A startupProbe earns its place when a
+          # process has a slow, variable-length load phase, which for Redis
+          # means reading an RDB or replaying an AOF. Persistence is off, so
+          # that phase does not exist and the server accepts connections in
+          # well under a second -- a case where disabling persistence removed
+          # a problem instead of deferring it.
+          #
+          # livenessProbe is deliberately slack: failureThreshold 5 at 15s is
+          # ~75s of sustained unresponsiveness before a restart. Redis is
+          # single-threaded, so one careless O(n) command against DB 1 blocks
+          # PING too. Restarting on that discards the entire staging cache,
+          # task queue and identity keypair -- and forces the backend
+          # rollout-restart in the runbook above -- to cure a stall that was
+          # about to end by itself. The cure costs more than the symptom.
+          #
+          # readinessProbe cannot shift traffic anywhere: with one replica,
+          # failing it empties the Service's endpoints and every client fails
+          # immediately. It is kept for two other reasons -- it gates the
+          # Recreate rollout (the new pod must answer before the rollout is
+          # considered done), and it makes `kubectl get pod` tell the truth
+          # about a blocked Redis instead of showing Running.
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "-h", "127.0.0.1", "-p", "6379", "ping"]
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "-h", "127.0.0.1", "-p", "6379", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      # No save points are configured, so SIGTERM is "log the shutdown and
+      # exit" -- there is no dataset being flushed that a long grace period
+      # would protect. 15s is generous for that and keeps a node drain from
+      # stalling on this pod.
+      terminationGracePeriodSeconds: 15
+      volumes:
+        # An emptyDir despite persistence being off, for two reasons:
+        # readOnlyRootFilesystem: true otherwise leaves the container with no
+        # writable path at all, and Redis chdir()s into `dir` and will write
+        # there given the chance (a hand-run `CONFIG SET appendonly yes`, a
+        # DEBUG command, a crash log). sizeLimit bounds the damage: exceeding
+        # it evicts this pod, which is loud and local, rather than filling the
+        # node filesystem and evicting something else -- which is exactly what
+        # happened today (K5).
+        - name: data
+          emptyDir:
+            sizeLimit: 128Mi

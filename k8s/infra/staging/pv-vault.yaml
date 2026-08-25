@@ -1,0 +1,57 @@
+# Statically provisioned `local` PersistentVolume for Vault.
+#
+# A PersistentVolume is CLUSTER-SCOPED. That is the entire point: it is not
+# inside flipstar-staging, so it survives `kubectl delete namespace` and it
+# survives an Application cascade. The PVC that binds to it does not -- but the
+# PV, and the data on disk, do.
+#
+# persistentVolumeReclaimPolicy: Retain means that when the PVC is deleted the
+# PV moves to `Released` and KEEPS the data. Recovery is then:
+#     kubectl patch pv flipstar-staging-vault -p '{"spec":{"claimRef":null}}'
+#     (Released -> Available, next PVC binds to the existing data)
+#
+# Honest limit: Retain protects against every control-plane accident and
+# against nothing physical. Node loss, disk failure or `rm -rf` on the host is
+# still total loss. Reproducible-from-git is not durability -- that is what the
+# pg_dump CronJob to object storage is for.
+#
+# BEFORE APPLYING, on the node:
+#     mkdir -p /opt/flipstar/staging/vault
+#     chown 100:1000 /opt/flipstar/staging/vault     # vault uid:gid
+# A `local` PV directory is root-owned on creation and Vault fails to write its file storage.
+#
+# Path is under /opt deliberately: local-path writes to
+# /var/lib/rancher/k3s/storage, and /var is the filesystem at 86% that evicted
+# a pod. VERIFY `df -h /opt /var` before applying -- if /opt is not a separate,
+# roomier filesystem this needs rethinking, not just repointing.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: flipstar-staging-vault
+  labels:
+    app.kubernetes.io/name: vault
+    app.kubernetes.io/part-of: flipstar-infra
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false,Prune=false
+spec:
+  capacity:
+    # Declarative only. For a `local` volume nothing enforces this -- it is
+    # documentation plus a scheduler hint. Actual protection is `df` and the
+    # off-node backup.
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: flipstar-local-retain
+  local:
+    path: /opt/flipstar/staging/vault
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              # VERIFY with `kubectl get nodes -o name` before applying. A
+              # wrong hostname leaves the PVC Pending forever with a scheduling
+              # error that does not name this file.
+              values: ["sky-staging-server"]

@@ -1,0 +1,25 @@
+# A dedicated StorageClass rather than k3s's built-in `local-path`, for two
+# reasons that both bite in the same direction.
+#
+# 1. `local-path` is a k3s PACKAGED ADDON, reconciled from
+#    /var/lib/rancher/k3s/server/manifests/local-storage.yaml. Editing its
+#    reclaimPolicy in place is silently reverted on the next k3s restart.
+#
+# 2. Dynamic provisioning fails in the DANGEROUS direction. Delete a PVC and a
+#    re-sync provisions a fresh empty volume, Postgres runs initdb, and you get
+#    a green, healthy, EMPTY database with no error anywhere. Static
+#    provisioning fails LOUDLY: the recreated PVC sits Pending until a human
+#    clears the PV's claimRef. For a database, loud beats silent.
+#
+# no-provisioner means nothing is ever created automatically -- PVs in this
+# class are the two declared in pv-postgres.yaml and pv-vault.yaml, and only
+# those. WaitForFirstConsumer keeps binding until a pod is actually scheduled,
+# which matters on a single node with nodeAffinity.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: flipstar-local-retain
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false

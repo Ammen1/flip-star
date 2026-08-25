@@ -1,0 +1,24 @@
+# MOVED here from k8s/overlays/staging/namespace.yaml, and that move is the
+# single most important change in this tree.
+#
+# The backend Application (argocd/application-staging.yaml) carries
+# `finalizers: [resources-finalizer.argocd.argoproj.io]`, so deleting it
+# cascades to everything it owns. While it owned this Namespace, deleting the
+# Application deleted the namespace -- and the API server then garbage-collected
+# every namespaced object inside it, PVCs included. That is exactly how the
+# staging database and the entire Vault were lost.
+#
+# Argo resource annotations (Delete=false, Prune=false) do NOT help here: they
+# stop Argo deleting a resource, but nothing participates in namespace garbage
+# collection. Ownership is the control, not annotation.
+#
+# Owned now by flipstar-infra-staging, which deliberately has NO finalizer, so
+# deleting THAT Application removes only the Application object and leaves
+# every resource running.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: flipstar-staging
+  labels:
+    app.kubernetes.io/part-of: flipstar
+    environment: staging
