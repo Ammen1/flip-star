@@ -2436,10 +2436,9 @@ def telebirr_ussd_subscription_webhook(request):
     """
     from defusedxml import ElementTree as ET
 
-    raw_body = request.body or b''
-    logger.info('[USSD SUBSCRIPTION WEBHOOK] Received callback, len=%d', len(raw_body))
-
     try:
+        raw_body = request.body or b''
+        logger.info('[USSD SUBSCRIPTION WEBHOOK] Received callback, len=%d', len(raw_body))
         root = ET.fromstring(raw_body)
         namespaces = {
             'soapenv': 'http://schemas.xmlsoap.org/soap/envelope/',
@@ -2538,8 +2537,9 @@ def telebirr_ussd_subscription_webhook(request):
                 else:
                     username = f'user_{normalized_phone[-8:]}'
                     user = User.objects.create_user(username=username, password=None)
-                    UserProfile.objects.filter(user=user).update(
-                        phone_number=normalized_phone
+                    UserProfile.objects.update_or_create(
+                        user=user,
+                        defaults={'phone_number': normalized_phone},
                     )
                     payment.user = user
                     metadata = payment.metadata or {}
