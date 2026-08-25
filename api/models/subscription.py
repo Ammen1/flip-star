@@ -292,9 +292,10 @@ class SubscriptionPayment(models.Model):
             models.Index(fields=['status', '-created_at']),
         ]
     
-    def __str__(self):
-        return f"{self.user.username} - {self.amount} {self.currency} ({self.status})"
 
+    def __str__(self):
+        username = self.user.username if self.user else 'unknown_user'
+        return f"{username} - {self.amount} {self.currency} ({self.status})"
 
 class SubscriptionHistory(models.Model):
     """Subscription history tracking"""
