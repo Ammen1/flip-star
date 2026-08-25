@@ -373,8 +373,8 @@ jobs:
   # ---------------------------------------------------------------------------
   # Docker build -- always runs (validates the build on every PR); only
   # pushed/scanned/deployed on a push to main (see push-image below). Also
-  # generates an SBOM per image, uploaded as a build artifact regardless of
-  # push -- useful for PR review even before an image is ever published.
+  # generates an SBOM per image for the build log; the Docker image artifact
+  # below is the only artifact consumed by downstream jobs.
   # ---------------------------------------------------------------------------
   docker-build:
     needs:
@@ -425,12 +425,6 @@ jobs:
           image: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
           format: spdx-json
           output-file: sbom-celery.spdx.json
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: sboms
-          path: sbom-*.spdx.json
-          retention-days: 14
 
       - name: Save images for the scan/push jobs
         run: |
