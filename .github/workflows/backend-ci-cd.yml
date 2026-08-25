@@ -371,12 +371,13 @@ jobs:
         run: python manage.py makemigrations --check --dry-run
 
   # ---------------------------------------------------------------------------
-  # Docker build -- always runs (validates the build on every PR); only
-  # pushed/scanned/deployed on a push to main (see push-image below). Also
-  # generates an SBOM per image for the build log; the Docker image artifact
-  # below is the only artifact consumed by downstream jobs.
+  # Docker build -- PR-only validation. Builds both images, generates SBOMs,
+  # and runs the Trivy scan so PRs get full build+security validation without
+  # consuming artifact storage. On main this job is skipped; push-image
+  # performs its own single build → SBOM → scan → push pipeline (see below).
   # ---------------------------------------------------------------------------
   docker-build:
+    if: github.event_name == 'pull_request'
     needs:
       [secret-scan, lint-and-format, test-unit, test-integration, django-checks]
     runs-on: ubuntu-latest
@@ -442,44 +443,14 @@ jobs:
           output-file: sbom-celery.spdx.json
           upload-artifact: "false"
 
-      - name: Save images for the scan/push jobs
-        run: |
-          docker save "${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}" -o /tmp/api-image.tar
-          docker save "${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}" -o /tmp/celery-image.tar
+      # Trivy scan is integrated here (PR-only) so the exact built image is
+      # scanned without artifact transfer. On main, push-image does its own
+      # single build → scan → push pipeline.
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: docker-images
-          path: /tmp/*.tar
-          retention-days: 1
-
-  # ---------------------------------------------------------------------------
-  # Vulnerability scan -- blocking on CRITICAL, informational on HIGH+.
-  # ---------------------------------------------------------------------------
-  security-scan:
-    needs: [docker-build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: docker-images
-          path: /tmp
-
-      - run: |
-          docker load -i /tmp/api-image.tar
-          docker load -i /tmp/celery-image.tar
-
-      # Both images are scanned, not just the API. They are built from
-      # separate Dockerfiles and the Celery image carries its own runtime
-      # layer (ffmpeg, libpq5) -- a CRITICAL there is just as exploitable,
-      # and it runs the same application code with the same database and
-      # Vault credentials. Scanning only the API image left the worker and
-      # beat images entirely unscanned even though push-image publishes both.
       - name: Trivy scan (API) -- fail on CRITICAL
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_API }}:${{ needs.docker-build.outputs.image-tag }}
+          image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
           severity: "CRITICAL"
           exit-code: "1"
           ignore-unfixed: true
@@ -487,7 +458,7 @@ jobs:
       - name: Trivy scan (Celery) -- fail on CRITICAL
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_CELERY }}:${{ needs.docker-build.outputs.image-tag }}
+          image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
           severity: "CRITICAL"
           exit-code: "1"
           ignore-unfixed: true
@@ -496,7 +467,7 @@ jobs:
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         if: always()
         with:
-          image-ref: ${{ env.IMAGE_API }}:${{ needs.docker-build.outputs.image-tag }}
+          image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
           severity: "HIGH,CRITICAL"
           exit-code: "0"
           format: "table"
@@ -505,40 +476,137 @@ jobs:
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         if: always()
         with:
-          image-ref: ${{ env.IMAGE_CELERY }}:${{ needs.docker-build.outputs.image-tag }}
+          image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
           severity: "HIGH,CRITICAL"
           exit-code: "0"
           format: "table"
 
   # ---------------------------------------------------------------------------
+  # Vulnerability scan -- PR-only no-op. Trivy scanning was moved into
+  # docker-build so the exact image is scanned without artifact transfer.
+  # This job ID is preserved for compatibility; on main it is automatically
+  # skipped because docker-build (its dependency) is skipped.
+  # ---------------------------------------------------------------------------
+  security-scan:
+    needs: [docker-build]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "Trivy scanning is integrated into docker-build. Skipping duplicate scan."
+
+  # ---------------------------------------------------------------------------
   # Push -- only on push to main, only after every gate above has passed.
-  # Signs both images (keyless, via GitHub's own OIDC identity -- no signing
-  # key to generate, store, or rotate) so anyone can verify an image running
-  # in a cluster was actually built by this workflow from this commit,
-  # rather than pushed by hand or by a compromised credential.
+  # Performs a single Docker build, generates SBOMs, runs the Trivy scan,
+  # then only after all gates pass, logs in to GHCR and pushes. Signs both
+  # images (keyless, via GitHub's own OIDC identity -- no signing key to
+  # generate, store, or rotate) so anyone can verify an image running in a
+  # cluster was actually built by this workflow from this commit, rather than
+  # pushed by hand or by a compromised credential.
+  #
+  # The build, scan, and push all happen in this single job so the exact
+  # same image that was built is the one scanned and pushed -- no artifact
+  # transfer, no second build. On PRs this job is skipped; docker-build
+  # provides build + SBOM + scan validation instead.
   # ---------------------------------------------------------------------------
   push-image:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [docker-build, security-scan]
+    needs: [secret-scan, lint-and-format, test-unit, test-integration, django-checks]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     environment: staging
     permissions:
       contents: read
       packages: write
       id-token: write # required for cosign keyless signing
     outputs:
-      image-tag: ${{ needs.docker-build.outputs.image-tag }}
+      image-tag: ${{ steps.tag.outputs.sha }}
+    env:
+      # Suppress build-record artifact upload (see docker-build comment).
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - id: tag
+        run: echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.11.1
+
+      - name: Build API image (single build -- scanned and pushed below)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.0
         with:
-          name: docker-images
-          path: /tmp
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - run: |
-          docker load -i /tmp/api-image.tar
-          docker load -i /tmp/celery-image.tar
+      - name: Build Celery image (single build -- scanned and pushed below)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.0
+        with:
+          context: .
+          file: Dockerfile.celery
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
+      - name: Generate SBOMs (SPDX)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.17.9
+        with:
+          image: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
+          format: spdx-json
+          output-file: sbom-api.spdx.json
+          upload-artifact: "false"
+
+      - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.17.9
+        with:
+          image: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
+          format: spdx-json
+          output-file: sbom-celery.spdx.json
+          upload-artifact: "false"
+
+      # Trivy scan runs on the exact image built above -- same job, same
+      # Docker daemon, no transfer. CRITICAL is fatal; HIGH+ is informational.
+      - name: Trivy scan (API) -- fail on CRITICAL
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
+          severity: "CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Trivy scan (Celery) -- fail on CRITICAL
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
+          severity: "CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Trivy scan -- full report (HIGH+, non-blocking)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        if: always()
+        with:
+          image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
+          severity: "HIGH,CRITICAL"
+          exit-code: "0"
+          format: "table"
+
+      - name: Trivy scan (Celery) -- full report (HIGH+, non-blocking)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        if: always()
+        with:
+          image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
+          severity: "HIGH,CRITICAL"
+          exit-code: "0"
+          format: "table"
+
+      # GHCR login only after security gates pass -- the build and scan are
+      # both complete before any credential is used.
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.5.0
         with:
@@ -547,9 +615,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag and push (immutable commit-SHA tag only -- never latest)
-        id: push
         env:
-          SHA: ${{ needs.docker-build.outputs.image-tag }}
+          SHA: ${{ steps.tag.outputs.sha }}
         run: |
           docker push "${{ env.IMAGE_API }}:${SHA}"
           docker push "${{ env.IMAGE_CELERY }}:${SHA}"
@@ -558,7 +625,7 @@ jobs:
 
       - name: Sign images (keyless)
         env:
-          SHA: ${{ needs.docker-build.outputs.image-tag }}
+          SHA: ${{ steps.tag.outputs.sha }}
           COSIGN_EXPERIMENTAL: "1"
         run: |
           cosign sign --yes "${{ env.IMAGE_API }}:${SHA}"
