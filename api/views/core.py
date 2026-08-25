@@ -658,7 +658,6 @@ def send_phone_otp(request):
         # In dev/local mode return the OTP code so frontend can show it (SMS not required)
         from django.conf import settings as _settings
 
-
         dev_code = None
         if _settings.DEBUG:
             from django.core.cache import cache as _cache
