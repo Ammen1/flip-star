@@ -16,6 +16,7 @@ daphne==4.0.0
 whitenoise==6.6.0
 cryptography==42.0.5
 requests==2.31.0
+defusedxml==0.7.1
 
 # Django Channels for real-time WebSocket
 channels==4.0.0
