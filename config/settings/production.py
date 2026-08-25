@@ -8,6 +8,7 @@ Two rules govern this module:
    rather than booting in a weakened state.
 2. There is no SQLite fallback. If PostgreSQL is unreachable the process must
    die and let the orchestrator restart it -- never accept writes into a
+   throwaway file (audit finding H-05).
 """
 
 from django.core.exceptions import ImproperlyConfigured
