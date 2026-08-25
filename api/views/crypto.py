@@ -37,7 +37,7 @@ def crypto_public_key(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    return Response({'publicKey': public_key})
+    return Response({'publicKey': public_key, 'algorithm': ALGORITHM})
 
 
 def _require_test_endpoints_enabled():
