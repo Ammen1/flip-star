@@ -3570,7 +3570,7 @@ def get_trending_reels(request):
         queryset = Reel.objects.filter(created_at__gte=time_threshold)
 
         if category != 'all':
-            # Use category field instead of keyword matching
+            # Use category field instead of keyword matching for better performance and accuracy
             from api.models import Category
 
             try:
