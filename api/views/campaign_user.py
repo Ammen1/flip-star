@@ -754,7 +754,7 @@ def global_leaderboard(request):
         except ValueError:
             target_date = now.date()
 
-        target_start = timezone.make_aware(datetime.combine(target_date, datetime.min.time()))
+        target_start = datetime.combine(target_date, datetime.min.time(), tzinfo=now.tzinfo)
         target_end = target_start + timedelta(days=1)
 
         if master_campaign:
