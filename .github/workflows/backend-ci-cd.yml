@@ -432,7 +432,7 @@ jobs:
           # was silently storing the SPDX at the repository default retention.
           # The stated intent of these two steps is an SBOM "for the build log"
           # -- output-file already does that. The upload is what exhausted the
-          # quota and made this step fail the build.
+          # quota and made this step fail the build\\\.
           upload-artifact: "false"
 
       - uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.17.9
