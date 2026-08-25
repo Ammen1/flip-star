@@ -1,30 +1,36 @@
 import logging
-
-from django.db import transaction
-from django.utils import timezone
-from django.conf import settings
-from django.core.exceptions import ValidationError
-from rest_framework import viewsets, status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.contrib.auth.models import User
-
-from api.models.subscription import (
-    SubscriptionTier, SubscriptionPlan as UserSubscription, SubscriptionPayment, SubscriptionHistory,
-    OnevasWebhookLog, PromoCode, UserPromoUsage, SubscriptionFeatureUsage,
-    ExpiredSubscriptionAction, TrialPopupLog, SubscriptionCoinTransaction as CoinTransaction, AdminRole, SubscriptionReport
-)
-from api.models import UserProfile
-from api.integrations.telebirr.checkout import telebirr_service
-from api.integrations.telebirr.direct_debit import telebirr_direct_debit_service
-from api.services.superapp_sms_service import superapp_sms_service
-from common.security import EncryptedPayloadMixin
-import requests
-import json
 import uuid
 from datetime import timedelta
+
+import requests
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.db import transaction
+from django.utils import timezone
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from api.integrations.telebirr.checkout import telebirr_service
+from api.integrations.telebirr.direct_debit import telebirr_direct_debit_service
+from api.models import UserProfile
+from api.models.subscription import (
+    OnevasWebhookLog,
+    SubscriptionHistory,
+    SubscriptionPayment,
+    SubscriptionTier,
+    TrialPopupLog,
+)
+from api.models.subscription import (
+    SubscriptionCoinTransaction as CoinTransaction,
+)
+from api.models.subscription import (
+    SubscriptionPlan as UserSubscription,
+)
+from api.services.superapp_sms_service import superapp_sms_service
+from common.security import EncryptedPayloadMixin
 
 logger = logging.getLogger(__name__)
 
@@ -59,26 +65,27 @@ def mask_phone_number(phone):
 class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
     """Check user subscription status"""
     permission_classes = [IsAuthenticated]
-    
+
     def get(self, request):
         """Get current user's subscription status"""
         try:
             from django.utils import timezone
+
             from api.models import Subscription
-            
+
             print(f'[SUBSCRIPTION STATUS] Checking subscription for user: {request.user.username} (ID: {request.user.id})')
-            
+
             # First check new UserSubscription model
             active_subscription = UserSubscription.objects.filter(
                 user=request.user,
                 status='active',
                 end_date__gt=timezone.now()
             ).first()
-            
+
             print(f'[SUBSCRIPTION STATUS] UserSubscription active found: {active_subscription is not None}')
             if active_subscription:
                 print(f'[SUBSCRIPTION STATUS] UserSubscription: ID={active_subscription.id}, status={active_subscription.status}, end_date={active_subscription.end_date}')
-            
+
             if active_subscription:
                 return Response({
                     'has_subscription': True,
@@ -96,17 +103,17 @@ class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
                         'auto_renew': active_subscription.auto_renew,
                     }
                 })
-            
+
             # Fallback to old Subscription model
             old_subscription = Subscription.objects.filter(
                 user=request.user,
                 expires_at__gt=timezone.now()
             ).first()
-            
+
             print(f'[SUBSCRIPTION STATUS] Old Subscription active found: {old_subscription is not None}')
             if old_subscription:
                 print(f'[SUBSCRIPTION STATUS] Old Subscription: ID={old_subscription.id}, plan={old_subscription.plan}, expires_at={old_subscription.expires_at}')
-            
+
             if old_subscription:
                 return Response({
                     'has_subscription': True,
@@ -124,29 +131,29 @@ class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
                         'auto_renew': False,
                     }
                 })
-            
+
             # No active subscription found - check for any subscriptions
             any_subscription = UserSubscription.objects.filter(user=request.user)
             any_old_subscription = Subscription.objects.filter(user=request.user)
-            
+
             print(f'[SUBSCRIPTION STATUS] Any UserSubscription count: {any_subscription.count()}')
             print(f'[SUBSCRIPTION STATUS] Any old Subscription count: {any_old_subscription.count()}')
-            
+
             if any_subscription.exists():
                 for sub in any_subscription:
                     print(f'[SUBSCRIPTION STATUS] UserSubscription: status={sub.status}, end_date={sub.end_date}')
-            
+
             if any_old_subscription.exists():
                 for sub in any_old_subscription:
                     print(f'[SUBSCRIPTION STATUS] Old Subscription: plan={sub.plan}, expires_at={sub.expires_at}')
-            
+
             return Response({
                 'has_subscription': False,
                 'subscription': None,
                 'has_had_subscription': any_subscription.exists() or any_old_subscription.exists(),
                 'message': 'No active subscription found'
             }, status=status.HTTP_200_OK)
-        
+
         except Exception as e:
             print(f'[SUBSCRIPTION STATUS] Error: {e}')
             import traceback
@@ -160,7 +167,7 @@ class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
 class OnevasWebhookView(APIView):
     """Handle Onevas webhook notifications"""
     permission_classes = [AllowAny]
-    
+
     def handle_stop_command(self, phone_number, stop_keyword='STOP'):
         """Handle STOP command for subscription cancellation"""
         print(f"[SUBSCRIPTION DEBUG] {stop_keyword} command received for phone: {phone_number}")
@@ -194,7 +201,7 @@ class OnevasWebhookView(APIView):
                     user.profile.save()
                     print(f"[SUBSCRIPTION DEBUG] Updated UserProfile phone_number for {user.username}")
             else:
-                print(f"[SUBSCRIPTION DEBUG] User not registered, checking for SMS-first subscription")
+                print("[SUBSCRIPTION DEBUG] User not registered, checking for SMS-first subscription")
 
         # Find active subscriptions (either by user or by phone number for SMS-first)
         subscriptions = []
@@ -204,7 +211,7 @@ class OnevasWebhookView(APIView):
             print(f"[SUBSCRIPTION DEBUG] Total subscriptions for user: {all_user_subs.count()}")
             for sub in all_user_subs:
                 print(f"[SUBSCRIPTION DEBUG]   - ID: {sub.id}, Status: {sub.status}, Duration: {sub.duration_type}, Tier: {sub.tier.name if sub.tier else 'None'}")
-            
+
             if target_duration_type:
                 # Find ALL active subscriptions with this duration type
                 subscriptions = list(UserSubscription.objects.filter(
@@ -253,7 +260,7 @@ class OnevasWebhookView(APIView):
         for subscription in subscriptions:
             print(f"[SUBSCRIPTION DEBUG] Cancelling subscription: ID {subscription.id}, Tier: {subscription.tier.name}, Status: {subscription.status}")
             subscription.cancel(reason='User cancelled via STOP SMS')
-            
+
             # Record history
             SubscriptionHistory.objects.create(
                 user=user,
@@ -271,22 +278,6 @@ class OnevasWebhookView(APIView):
         # Use the tier from the first cancelled subscription for the SMS
         if subscriptions and subscriptions[0].tier:
             tier = subscriptions[0].tier
-            # Map duration type to resubscribe keyword and stop keyword
-            resubscribe_keywords = {
-                'daily': '1',
-                'weekly': '2',
-                'monthly': '3',
-                'ondemand': '4'
-            }
-            stop_keywords = {
-                'daily': 'STOP1',
-                'weekly': 'STOP2',
-                'monthly': 'STOP3',
-                'ondemand': 'STOP'
-            }
-            resubscribe_keyword = resubscribe_keywords.get(tier.duration_type, '1')
-            cancel_keyword = stop_keywords.get(tier.duration_type, 'STOP')
-            
             # Map tier duration type to service name and resubscribe keyword for message
             service_names = {
                 'daily': 'Daily',
@@ -295,7 +286,7 @@ class OnevasWebhookView(APIView):
                 'ondemand': 'On-Demand'
             }
             service_name = service_names.get(tier.duration_type, tier.name)
-            
+
             # Map duration type to the correct resubscribe keyword for the message
             resubscribe_keyword_map = {
                 'daily': '1',
@@ -309,14 +300,14 @@ class OnevasWebhookView(APIView):
             sms_sent = self.send_sms(phone_number, cancellation_message, tier.duration_type)
             print(f"[SUBSCRIPTION DEBUG] Cancellation SMS sent: {sms_sent}")
         else:
-            print(f"[SUBSCRIPTION DEBUG] WARNING: subscription.tier is None, cannot send SMS with tier info")
-            cancellation_message = f"You have successfully unsubscribed from the Flipstar service."
+            print("[SUBSCRIPTION DEBUG] WARNING: subscription.tier is None, cannot send SMS with tier info")
+            cancellation_message = "You have successfully unsubscribed from the Flipstar service."
             print(f"[SUBSCRIPTION DEBUG] Sending generic cancellation SMS to {phone_number}")
             sms_sent = self.send_sms(phone_number, cancellation_message, None)
             print(f"[SUBSCRIPTION DEBUG] Cancellation SMS sent: {sms_sent}")
 
         return Response({'status': 'success', 'message': f'{cancelled_count} subscription(s) cancelled via STOP command'})
-    
+
     def send_sms(self, phone_number, text, tier_type=None):
         """Send SMS using Onevas API with tier-specific application key"""
         try:
@@ -344,29 +335,29 @@ class OnevasWebhookView(APIView):
         except Exception as e:
             print(f"Failed to send SMS: {e}")
             return False
-    
+
     def post(self, request, webhook_type):
         """Handle subscription, unsubscription, renewal, and stop webhooks"""
         try:
             payload = request.data
             print(f"[SUBSCRIPTION DEBUG] Webhook received - type: {webhook_type}")
             print(f"[SUBSCRIPTION DEBUG] Webhook payload: {payload}")
-            
+
             # Log the webhook
             log = OnevasWebhookLog.objects.create(
                 webhook_type=webhook_type,
                 payload=payload
             )
             print(f"[SUBSCRIPTION DEBUG] Webhook log created: ID {log.id}")
-            
+
             if webhook_type == 'subscription':
-                print(f"[SUBSCRIPTION DEBUG] Routing to handle_subscription")
+                print("[SUBSCRIPTION DEBUG] Routing to handle_subscription")
                 response = self.handle_subscription(payload, log)
             elif webhook_type == 'unsubscription':
-                print(f"[SUBSCRIPTION DEBUG] Routing to handle_unsubscription")
+                print("[SUBSCRIPTION DEBUG] Routing to handle_unsubscription")
                 response = self.handle_unsubscription(payload, log)
             elif webhook_type == 'renewal':
-                print(f"[SUBSCRIPTION DEBUG] Routing to handle_renewal")
+                print("[SUBSCRIPTION DEBUG] Routing to handle_renewal")
                 response = self.handle_renewal(payload, log)
             elif webhook_type == 'stop':
                 phone_number = payload.get('phone_number')
@@ -398,18 +389,18 @@ class OnevasWebhookView(APIView):
             else:
                 print(f"[SUBSCRIPTION DEBUG] Invalid webhook type: {webhook_type}")
                 response = Response({'error': 'Invalid webhook type'}, status=400)
-            
+
             log.response_status = response.status_code
             log.response_body = response.data if hasattr(response, 'data') else {}
             log.processed = True
             log.save()
             print(f"[SUBSCRIPTION DEBUG] Webhook processed - status: {response.status_code}")
-            
+
             return response
-            
+
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-    
+
     def handle_subscription(self, payload, log):
         """Handle subscription notification from Onevas"""
         phone_number = payload.get('phone_number')
@@ -482,11 +473,11 @@ class OnevasWebhookView(APIView):
         if not tier:
             print(f"[SUBSCRIPTION DEBUG] Tier not found - product_number: {product_number}, password: {password}, keyword from params: {keyword_from_params}")
             return Response({'error': 'Tier not found. Please check product_number or SMS code.'}, status=404)
-        
+
         # If user is not registered, create active subscription (SMS-first flow)
         if not user_exists:
-            print(f"[SUBSCRIPTION DEBUG] Creating SMS-first subscription (user not registered)")
-            
+            print("[SUBSCRIPTION DEBUG] Creating SMS-first subscription (user not registered)")
+
             # Check if there's already an SMS-first subscription of the same duration type for this phone
             existing_sms_sub = UserSubscription.objects.filter(
                 onevas_phone_number=phone_number,
@@ -494,20 +485,20 @@ class OnevasWebhookView(APIView):
                 subscription_source='sms',
                 duration_type=tier.duration_type
             ).first()
-            
+
             if existing_sms_sub:
-                print(f"[SUBSCRIPTION DEBUG] Found existing SMS-first subscription of same type, renewing it...")
+                print("[SUBSCRIPTION DEBUG] Found existing SMS-first subscription of same type, renewing it...")
                 # Renew existing subscription
                 existing_sms_sub.tier = tier
                 existing_sms_sub.duration_type = tier.duration_type
                 existing_sms_sub.activate()
-                
+
                 from api.services.otp import OTPService
                 otp_code = OTPService.generate_otp()
                 existing_sms_sub.setup_otp = otp_code
                 existing_sms_sub.save()
-                
-    
+
+
                 SubscriptionPayment.objects.create(
                     subscription=existing_sms_sub,
                     user=None,
@@ -518,7 +509,7 @@ class OnevasWebhookView(APIView):
                     period_end=existing_sms_sub.end_date or timezone.now() + timedelta(days=tier.duration_days or 30),
                     status='completed'
                 )
-                
+
                 # Record history
                 SubscriptionHistory.objects.create(
                     user=None,
@@ -528,7 +519,7 @@ class OnevasWebhookView(APIView):
                     reason='SMS-first subscription renewed via Onevas',
                     metadata={'webhook_payload': payload, 'sms_subscription': True}
                 )
-                
+
                 # Send success SMS
                 stop_keywords = {
                     'daily': 'STOP1',
@@ -547,16 +538,16 @@ class OnevasWebhookView(APIView):
                 success_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {existing_sms_sub.start_date.strftime('%Y-%m-%d %H:%M')}. You have 1 day remaining in your complimentary free trial. After your free trial concludes, the subscription price will be {tier.price_etb} ETB per {price_period}. To access your premium service, please click on https://api.uat.flipstar.et?subscription_tp=true&phone={mask_phone_number(phone_number)} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
                 print(f"[SUBSCRIPTION DEBUG] Sending renewal SMS to {phone_number} with OTP: {otp_code}")
                 self.send_sms(phone_number, success_message, tier.duration_type)
-                print(f"[SUBSCRIPTION DEBUG] SMS-first subscription renewed successfully")
+                print("[SUBSCRIPTION DEBUG] SMS-first subscription renewed successfully")
                 return Response({'status': 'success', 'message': 'SMS-first subscription renewed'})
-            
+
             # Check for other SMS-first subscriptions of different duration types and cancel them
             other_sms_subs = UserSubscription.objects.filter(
                 onevas_phone_number=phone_number,
                 status='active',
                 subscription_source='sms'
             ).exclude(duration_type=tier.duration_type)
-            
+
             if other_sms_subs.exists():
                 print(f"[SUBSCRIPTION DEBUG] Found {other_sms_subs.count()} other SMS-first subscription(s) of different types, cancelling them...")
                 for sub in other_sms_subs:
@@ -570,35 +561,35 @@ class OnevasWebhookView(APIView):
                         metadata={'new_duration_type': tier.duration_type, 'sms_subscription': True}
                     )
                     print(f"[SUBSCRIPTION DEBUG] Cancelled SMS-first subscription ID {sub.id} (duration_type={sub.duration_type})")
-            
+
             # Generate OTP for user to set up their account
             from api.services.otp import OTPService
             otp_code = OTPService.generate_otp()
             print(f"[SUBSCRIPTION DEBUG] Generated OTP for account setup: {otp_code}")
-            
+
             # Create active subscription linked to phone number (user can log in without OTP)
             try:
                 with transaction.atomic():
-                    print(f"[SUBSCRIPTION DEBUG] Starting transaction to create SMS-first subscription...")
-                    
+                    print("[SUBSCRIPTION DEBUG] Starting transaction to create SMS-first subscription...")
+
                     # Check if user has any previous subscription history (for free trial eligibility)
                     has_previous_subscriptions = UserSubscription.objects.filter(
                         onevas_phone_number=phone_number
                     ).exists()
-                    
+
                     # Calculate end date with free trial if eligible
                     base_duration_days = tier.duration_days or 30
                     free_trial_days = 0
-                    
+
                     if not has_previous_subscriptions:
                         # First-time subscriber - grant 1 free trial day
                         free_trial_days = 1
-                        print(f"[SUBSCRIPTION DEBUG] First-time subscriber - granting 1 free trial day")
+                        print("[SUBSCRIPTION DEBUG] First-time subscriber - granting 1 free trial day")
                     else:
-                        print(f"[SUBSCRIPTION DEBUG] User has previous subscriptions - no free trial")
-                    
+                        print("[SUBSCRIPTION DEBUG] User has previous subscriptions - no free trial")
+
                     total_duration_days = base_duration_days + free_trial_days
-                    
+
                     subscription = UserSubscription.objects.create(
                         user=None,  # No user yet - will be linked when they register
                         tier=tier,
@@ -613,11 +604,11 @@ class OnevasWebhookView(APIView):
                         free_trial_days=free_trial_days  # Track free trial days granted
                     )
                     print(f"[SUBSCRIPTION DEBUG] Subscription created: ID {subscription.id}, status: {subscription.status}")
-                    
+
                     # Verify the subscription was actually saved
                     saved_subscription = UserSubscription.objects.get(id=subscription.id)
                     print(f"[SUBSCRIPTION DEBUG] Verified subscription in database: ID {saved_subscription.id}, status: {saved_subscription.status}")
-                    
+
                     # Record payment
                     payment = SubscriptionPayment.objects.create(
                         subscription=subscription,
@@ -630,7 +621,7 @@ class OnevasWebhookView(APIView):
                         status='completed'
                     )
                     print(f"[SUBSCRIPTION DEBUG] Payment recorded: {tier.price_etb} ETB, payment ID: {payment.id}")
-                    
+
                     # Record history
                     history = SubscriptionHistory.objects.create(
                         user=None,
@@ -641,13 +632,13 @@ class OnevasWebhookView(APIView):
                         metadata={'webhook_payload': payload, 'sms_subscription': True}
                     )
                     print(f"[SUBSCRIPTION DEBUG] History recorded: action=created, history ID: {history.id}")
-                    print(f"[SUBSCRIPTION DEBUG] Transaction committed successfully")
+                    print("[SUBSCRIPTION DEBUG] Transaction committed successfully")
             except Exception as e:
                 print(f"[SUBSCRIPTION DEBUG] ERROR during transaction: {str(e)}")
                 import traceback
                 print(f"[SUBSCRIPTION DEBUG] Traceback: {traceback.format_exc()}")
                 return Response({'error': f'Failed to create subscription: {str(e)}'}, status=500)
-            
+
             # Send success SMS with registration info (no OTP needed)
             stop_keywords = {
                 'daily': 'STOP1',
@@ -664,28 +655,28 @@ class OnevasWebhookView(APIView):
                 'ondemand': 'use'
             }
             price_period = price_periods.get(tier.duration_type, 'day')
-            
+
             # Customize message based on whether free trial was granted
             if free_trial_days > 0:
                 trial_message = f"You have {free_trial_days} day(s) of complimentary free trial. After your free trial concludes, the subscription price will be {tier.price_etb} ETB per {price_period}."
             else:
                 trial_message = f"The subscription price is {tier.price_etb} ETB per {price_period}."
-            
+
             success_message = f"Dear valued customer, you have successfully subscribed to the {tier.name} Flipstar service, effective from {subscription.start_date.strftime('%Y-%m-%d %H:%M')}. {trial_message} To access your premium service, please click on https://api.uat.flipstar.et?subscription_tp=true&phone={phone_number} and enter your OTP: {otp_code}. To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}."
             print(f"[SUBSCRIPTION DEBUG] Sending success SMS to {phone_number} with OTP: {otp_code}")
             self.send_sms(phone_number, success_message, tier.duration_type)
-            print(f"[SUBSCRIPTION DEBUG] SMS-first subscription completed successfully")
+            print("[SUBSCRIPTION DEBUG] SMS-first subscription completed successfully")
             return Response({'status': 'success', 'message': 'Active subscription created via SMS, user can log in without OTP'})
-        
+
         # User exists - proceed with subscription
         print(f"[SUBSCRIPTION DEBUG] User exists, proceeding with subscription for {user.username}")
-        
+
         # Cancel any other active subscriptions of different duration types to prevent conflicts
         other_active_subs = UserSubscription.objects.filter(
             user=user,
             status='active'
         ).exclude(duration_type=tier.duration_type)
-        
+
         if other_active_subs.exists():
             print(f"[SUBSCRIPTION DEBUG] Found {other_active_subs.count()} other active subscription(s) of different types, cancelling them...")
             for sub in other_active_subs:
@@ -699,7 +690,7 @@ class OnevasWebhookView(APIView):
                     metadata={'new_duration_type': tier.duration_type}
                 )
                 print(f"[SUBSCRIPTION DEBUG] Cancelled subscription ID {sub.id} (duration_type={sub.duration_type})")
-        
+
         # Check if user already has active subscription of the SAME duration type
         active_sub = UserSubscription.objects.filter(
             user=user,
@@ -709,18 +700,18 @@ class OnevasWebhookView(APIView):
 
         print(f"[SUBSCRIPTION DEBUG] Active subscription check for duration_type={tier.duration_type}: {'Found' if active_sub else 'Not found'}")
         if active_sub:
-            print(f"[SUBSCRIPTION DEBUG] Found active subscription of same type, renewing...")
+            print("[SUBSCRIPTION DEBUG] Found active subscription of same type, renewing...")
             # Generate OTP for login
             from api.services.otp import OTPService
             otp_code = OTPService.generate_otp()
             print(f"[SUBSCRIPTION DEBUG] Generated OTP for renewal: {otp_code}")
-            
+
             # Update existing subscription
             active_sub.tier = tier
             active_sub.duration_type = tier.duration_type
             active_sub.setup_otp = otp_code  # Store OTP for login
             active_sub.activate()
-            
+
             # Record history
             SubscriptionHistory.objects.create(
                 user=user,
@@ -730,7 +721,7 @@ class OnevasWebhookView(APIView):
                 reason='Subscription renewed via Onevas',
                 metadata={'webhook_payload': payload}
             )
-            
+
             # Create payment record
             SubscriptionPayment.objects.create(
                 subscription=active_sub,
@@ -742,7 +733,7 @@ class OnevasWebhookView(APIView):
                 period_end=active_sub.end_date or timezone.now() + timedelta(days=tier.duration_days or 30),
                 status='completed'
             )
-            
+
             # Update user trial status
             profile.is_trial_user = False
             profile.save()
@@ -768,14 +759,14 @@ class OnevasWebhookView(APIView):
             print(f"[SUBSCRIPTION DEBUG] Renewal SMS sent: {sms_result}")
 
             return Response({'status': 'success', 'message': 'Subscription renewed'})
-        
+
         else:
-            print(f"[SUBSCRIPTION DEBUG] No active subscription found, creating new subscription")
+            print("[SUBSCRIPTION DEBUG] No active subscription found, creating new subscription")
             # Generate OTP for login
             from api.services.otp import OTPService
             otp_code = OTPService.generate_otp()
             print(f"[SUBSCRIPTION DEBUG] Generated OTP for new subscription: {otp_code}")
-            
+
             # Create new subscription
             try:
                 with transaction.atomic():
@@ -783,24 +774,24 @@ class OnevasWebhookView(APIView):
                     has_previous_subscriptions = UserSubscription.objects.filter(
                         user=user
                     ).exists()
-                    
+
                     # Calculate end date with free trial if eligible
                     base_duration_days = tier.duration_days or 30
                     free_trial_days = 0
-                    
+
                     if not has_previous_subscriptions:
                         # First-time subscriber - grant 1 free trial day
                         free_trial_days = 1
-                        print(f"[SUBSCRIPTION DEBUG] First-time subscriber - granting 1 free trial day")
+                        print("[SUBSCRIPTION DEBUG] First-time subscriber - granting 1 free trial day")
                         # Mark user as having used free trial
                         if user.profile:
                             user.profile.has_used_free_trial = True
                             user.profile.save()
                     else:
-                        print(f"[SUBSCRIPTION DEBUG] User has previous subscriptions - no free trial")
-                    
+                        print("[SUBSCRIPTION DEBUG] User has previous subscriptions - no free trial")
+
                     total_duration_days = base_duration_days + free_trial_days
-                    
+
                     subscription = UserSubscription.objects.create(
                         user=user,
                         tier=tier,
@@ -815,9 +806,9 @@ class OnevasWebhookView(APIView):
                         payment_method='onevas'  # Onevas webhook always uses onevas payment method
                     )
                     print(f"[SUBSCRIPTION DEBUG] New subscription created: ID {subscription.id}, setup_otp: {subscription.setup_otp}, free_trial_days: {free_trial_days}")
-                
+
                 subscription.activate()
-                
+
                 # Record history
                 SubscriptionHistory.objects.create(
                     user=user,
@@ -827,7 +818,7 @@ class OnevasWebhookView(APIView):
                     reason='Subscription created via Onevas',
                     metadata={'webhook_payload': payload}
                 )
-                
+
                 # Create payment record
                 SubscriptionPayment.objects.create(
                     subscription=subscription,
@@ -839,7 +830,7 @@ class OnevasWebhookView(APIView):
                     period_end=subscription.end_date or timezone.now() + timedelta(days=tier.duration_days or 30),
                     status='completed'
                 )
-                
+
                 # Update user trial status
                 user.profile.is_trial_user = False
                 user.profile.save()
@@ -871,31 +862,30 @@ class OnevasWebhookView(APIView):
                 import traceback
                 print(f"[SUBSCRIPTION DEBUG] Traceback: {traceback.format_exc()}")
                 return Response({'error': str(e)}, status=500)
-    
+
     def handle_unsubscription(self, payload, log):
         """Handle unsubscription notification from Onevas"""
         phone_number = payload.get('phone_number')
-        product_number = payload.get('product_number')
-        
+
         # Find user by phone number
         try:
             profile = UserProfile.objects.get(phone_number=phone_number)
             user = profile.user
         except UserProfile.DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
-        
+
         # Find active subscription
         subscription = UserSubscription.objects.filter(
             user=user,
             status='active'
         ).first()
-        
+
         if not subscription:
             return Response({'error': 'No active subscription found'}, status=404)
-        
+
         # Cancel subscription
         subscription.cancel(reason='User unsubscribed via Onevas (STOP message)')
-        
+
         # Record history
         SubscriptionHistory.objects.create(
             user=user,
@@ -905,35 +895,34 @@ class OnevasWebhookView(APIView):
             reason='User unsubscribed via Onevas',
             metadata={'webhook_payload': payload}
         )
-        
+
         # Send SMS confirmation
         cancellation_message = f"Your {subscription.tier.name} subscription has been cancelled. Thank you for using our service!"
         self.send_sms(phone_number, cancellation_message, subscription.tier.duration_type)
-        
+
         return Response({'status': 'success', 'message': 'Subscription cancelled'})
-    
+
     def handle_renewal(self, payload, log):
         """Handle renewal notification from Onevas"""
         phone_number = payload.get('phone_number')
         next_renewal_date = payload.get('nextRenewalDate')
-        product_number = payload.get('product_number')
-        
+
         # Find user by phone number
         try:
             profile = UserProfile.objects.get(phone_number=phone_number)
             user = profile.user
         except UserProfile.DoesNotExist:
             return Response({'error': 'User not found'}, status=404)
-        
+
         # Find active subscription
         subscription = UserSubscription.objects.filter(
             user=user,
             status='active'
         ).first()
-        
+
         if not subscription:
             return Response({'error': 'No active subscription found'}, status=404)
-        
+
         # Update next renewal date
         if next_renewal_date:
             from datetime import datetime
@@ -942,20 +931,20 @@ class OnevasWebhookView(APIView):
                 subscription.save()
             except ValueError:
                 pass
-        
+
         return Response({'status': 'success', 'message': 'Renewal date updated'})
 
 
 class SubscriptionTierViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     """Manage subscription tiers"""
     permission_classes = [IsAuthenticated]
-    
+
     queryset = SubscriptionTier.objects.filter(is_active=True)
     serializer_class = None  # Add serializer later
-    
+
     def get_queryset(self):
         return super().get_queryset().order_by('sort_order', 'price_etb')
-    
+
     def list(self, request):
         """Get all active tiers"""
         tiers = self.get_queryset()
@@ -974,7 +963,7 @@ class SubscriptionTierViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             'privileges': tier.privileges,
         } for tier in tiers]
         return Response(data)
-    
+
     @action(detail=False, methods=['get'])
     def active(self, request):
         """Get all active tiers (alias for list)"""
@@ -994,7 +983,7 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     def list(self, request):
         """Get user's current subscription"""
         subscription = self.get_queryset().filter(status='active').first()
-        
+
         if not subscription:
             # Check if user is in trial
             profile = request.user.profile
@@ -1006,7 +995,7 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 })
             else:
                 return Response({'status': 'no_subscription'})
-        
+
         data = {
             'id': str(subscription.id),
             'tier': {
@@ -1022,36 +1011,36 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             'auto_renew': subscription.auto_renew,
         }
         return Response(data)
-    
+
     @action(detail=False, methods=['post'])
     def subscribe(self, request):
         """Initiate subscription request"""
         tier_id = request.data.get('tier_id')
         payment_method = request.data.get('payment_method', 'onevas')  # onevas, telebirr, coins
-        
+
         try:
             tier = SubscriptionTier.objects.get(id=tier_id, is_active=True)
         except SubscriptionTier.DoesNotExist:
             return Response({'error': 'Invalid tier'}, status=400)
-        
+
         user = request.user
         profile = user.profile
-        
+
         # Check if user already has active subscription
         active_sub = UserSubscription.objects.filter(user=user, status='active').first()
         if active_sub:
             return Response({'error': 'Already subscribed'}, status=400)
-        
+
         if payment_method == 'onevas':
             # Send Onevas charging request
             response = self.send_onevas_charge(user, tier)
             return response
-        
+
         elif payment_method == 'coins':
             # Check coin balance
             if not tier.price_coins:
                 return Response({'error': 'This tier cannot be purchased with coins'}, status=400)
-            
+
             # Deduct coins and activate subscription. deduct_coins locks the
             # profile row, re-reads it fresh, and raises ValueError if the
             # balance is insufficient -- see UserProfile._apply_delta's
@@ -1111,15 +1100,15 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 return Response({'error': str(exc)}, status=400)
 
             return Response({'status': 'success', 'message': 'Subscription activated'})
-        
+
         elif payment_method == 'telebirr':
             # Initiate Telebirr payment
             response = self.initiate_telebirr_payment(user, tier)
             return response
-        
+
         else:
             return Response({'error': 'Invalid payment method'}, status=400)
-    
+
     def send_onevas_charge(self, user, tier):
         """DISABLED: Ethio Telecom SIM cards are only accessible for SMS OTP purposes.
         Onevas charging has been disabled to ensure phone numbers are used solely for OTP verification."""
@@ -1127,11 +1116,11 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             {'error': 'Onevas charging is disabled. Ethio Telecom SIM cards are only accessible for SMS OTP verification.'},
             status=status.HTTP_403_FORBIDDEN
         )
-    
+
     def initiate_telebirr_payment(self, user, tier):
         """Initiate Telebirr payment for subscription"""
         profile = user.profile
-        
+
         try:
             response = telebirr_service.initiate_payment(
                 amount=float(tier.price_etb),
@@ -1139,7 +1128,7 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 user_id=user.id,
                 package_id=tier.id
             )
-            
+
             if response.get('success'):
                 # Create pending payment record
                 payment = SubscriptionPayment.objects.create(
@@ -1153,7 +1142,7 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                     period_start=timezone.now(),
                     period_end=timezone.now() + timedelta(days=tier.duration_days or 30),
                 )
-                
+
                 return Response({
                     'status': 'pending',
                     'message': 'Payment initiated. Please complete payment via Telebirr.',
@@ -1163,21 +1152,21 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 })
             else:
                 return Response({'error': response.get('error', 'Payment initiation failed')}, status=400)
-                
+
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-    
+
     @action(detail=False, methods=['post'])
     def unsubscribe(self, request):
         """Cancel subscription"""
         subscription = self.get_queryset().filter(status='active').first()
-        
+
         if not subscription:
             return Response({'error': 'No active subscription'}, status=400)
-        
+
         reason = request.data.get('reason', 'User requested cancellation')
         subscription.cancel(reason=reason)
-        
+
         # Record history
         SubscriptionHistory.objects.create(
             user=request.user,
@@ -1186,47 +1175,47 @@ class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             action='cancelled',
             reason=reason
         )
-        
+
         return Response({'status': 'success', 'message': 'Subscription cancelled'})
-    
+
     @action(detail=False, methods=['get'])
     def history(self, request):
         """Get subscription history"""
         history = SubscriptionHistory.objects.filter(user=request.user).order_by('-created_at')
-        
+
         data = [{
             'action': item.action,
             'tier_name': item.tier.name if item.tier else None,
             'reason': item.reason,
             'created_at': item.created_at.isoformat(),
         } for item in history]
-        
+
         return Response(data)
 
 
 class TrialPopupViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     """Track trial popup interactions"""
     permission_classes = [IsAuthenticated]
-    
+
     queryset = TrialPopupLog.objects.all()
     serializer_class = None
-    
+
     def get_queryset(self):
         return self.queryset.filter(user=self.request.user)
-    
+
     def create(self, request):
         """Log popup interaction"""
         trigger_action = request.data.get('trigger_action')
         trigger_screen = request.data.get('trigger_screen')
         user_action = request.data.get('user_action')
-        
+
         # Update user profile
         profile = request.user.profile
         profile.trial_interaction_count += 1
         if user_action:
             profile.trial_popup_shown_count += 1
         profile.save()
-        
+
         # Log the popup
         TrialPopupLog.objects.create(
             user=request.user,
@@ -1234,24 +1223,24 @@ class TrialPopupViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             trigger_screen=trigger_screen,
             user_action=user_action
         )
-        
+
         return Response({'status': 'success'})
 
 
 class CoinTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     """Manage coin transactions"""
     permission_classes = [IsAuthenticated]
-    
+
     queryset = CoinTransaction.objects.all()
     serializer_class = None
-    
+
     def get_queryset(self):
         return self.queryset.filter(user=self.request.user).order_by('-created_at')
-    
+
     def list(self, request):
         """Get user's coin transactions"""
         transactions = self.get_queryset()
-        
+
         data = [{
             'id': str(t.id),
             'transaction_type': t.transaction_type,
@@ -1260,22 +1249,22 @@ class CoinTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             'description': t.description,
             'created_at': t.created_at.isoformat(),
         } for t in transactions]
-        
+
         return Response(data)
-    
+
     @action(detail=False, methods=['post'])
     def purchase(self, request):
         """Purchase coins via Telebirr or airtime"""
         amount = request.data.get('amount')  # ETB amount
         payment_method = request.data.get('payment_method', 'telebirr')
-        
+
         # Coin conversion: 10 ETB = 100 coins (1 ETB = 10 coins)
         coins = int(amount * 10)
-        
+
         if payment_method == 'telebirr':
             # Initiate Telebirr payment
             from api.integrations.telebirr.checkout import TelebirrService
-            
+
             try:
                 telebirr = TelebirrService()
                 response = telebirr.create_payment(
@@ -1283,7 +1272,7 @@ class CoinTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                     phone_number=request.user.profile.phone_number,
                     description=f'Purchase {coins} coins'
                 )
-                
+
                 if response.get('success'):
                     return Response({
                         'status': 'pending',
@@ -1293,10 +1282,10 @@ class CoinTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                     })
                 else:
                     return Response({'error': response.get('error', 'Payment failed')}, status=500)
-            
+
             except Exception as e:
                 return Response({'error': str(e)}, status=500)
-        
+
         else:
             return Response({'error': 'Invalid payment method'}, status=400)
 
@@ -1304,14 +1293,14 @@ class CoinTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
 class AdminSubscriptionViewSet(viewsets.ModelViewSet):
     """Admin subscription management"""
     permission_classes = [IsAuthenticated]
-    
+
     def get_queryset(self):
         # Check admin permissions
         if not self.request.user.is_staff and not self.request.user.is_superuser:
             return UserSubscription.objects.none()
-        
+
         return UserSubscription.objects.all()
-    
+
     def _type_filter(self, request):
         """Build queryset filters from ?type= query param.
 
@@ -1376,15 +1365,16 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         }
 
         return Response(data)
-    
+
     @action(detail=False, methods=['get'])
     def charging_analytics(self, request):
         """Get real-time charging analytics. Optional ?type=subscription|ondemand."""
         if not self._is_admin(request):
             return Response({'error': 'Unauthorized'}, status=403)
-        
-        from django.db.models import Sum, Count
-        from datetime import datetime, timedelta
+
+        from datetime import timedelta
+
+        from django.db.models import Count, Sum
 
         f = self._type_filter(request)
         sub_filter = f['sub_filter']
@@ -1452,7 +1442,7 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         recent_transactions = SubscriptionPayment.objects.filter(
             status='completed', **pay_filter,
         ).order_by('-created_at')[:20]
-        
+
         recent_data = []
         for tx in recent_transactions:
             sub = tx.subscription
@@ -1481,7 +1471,7 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
                 'date': tx.created_at.strftime('%Y-%m-%d %H:%M') if tx.created_at else (tx.period_start.strftime('%Y-%m-%d %H:%M') if tx.period_start else 'N/A'),
                 'status': tx.status,
             })
-        
+
         return Response({
             'active_subscriptions': {
                 'total': active_subs.count(),
@@ -1507,38 +1497,38 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
             },
             'recent_transactions': recent_data
         })
-    
+
     @action(detail=False, methods=['get'])
     def revenue(self, request):
         """Get revenue reports"""
         if not self._is_admin(request):
             return Response({'error': 'Unauthorized'}, status=403)
-        
+
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
-        
+
         payments = SubscriptionPayment.objects.filter(status='completed')
-        
+
         if date_from:
             from datetime import datetime
             payments = payments.filter(created_at__gte=datetime.fromisoformat(date_from))
         if date_to:
             from datetime import datetime
             payments = payments.filter(created_at__lte=datetime.fromisoformat(date_to))
-        
+
         revenue_by_tier = {}
         for payment in payments:
             tier_name = payment.subscription.tier.name if payment.subscription.tier else 'Unknown'
             revenue_by_tier[tier_name] = revenue_by_tier.get(tier_name, 0) + float(payment.amount)
-        
+
         data = {
             'total_revenue': sum(float(p.amount) for p in payments),
             'revenue_by_tier': revenue_by_tier,
             'payment_count': payments.count(),
         }
-        
+
         return Response(data)
-    
+
     def _is_admin(self, request):
         """Check if user has admin permissions"""
         return request.user.is_staff or request.user.is_superuser
@@ -1589,7 +1579,7 @@ def telebirr_one_time_initiate(request):
             user_id = phone_number[-8:] if phone_number else 'ANON'
         merch_order_id = f'SUB{timezone.now().strftime("%Y%m%d%H%M%S")}{user_id}'
 
-        amount = '{:.2f}'.format(float(tier.price_etb))
+        amount = f'{float(tier.price_etb):.2f}'
         title = f'{tier.name} Subscription'
 
         result = telebirr_service.create_order_ondemand(
@@ -2045,7 +2035,7 @@ def telebirr_ussd_subscription_initiate(request):
     if normalized_phone:
         phone_number = normalized_phone
 
-    amount = '{:.2f}'.format(float(tier.price_etb))
+    amount = f'{float(tier.price_etb):.2f}'
 
     subscription_webhook_url = getattr(settings, 'TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL', '')
     result = telebirr_direct_debit_service.initiate_ussd_push_payment(
@@ -2147,7 +2137,7 @@ def telebirr_ussd_subscription_webhook(request):
     stops a retry from double-activating a subscription or double-creating
     a user for the same payment.
     """
-    import xml.etree.ElementTree as ET
+    from defusedxml import ElementTree as ET
 
     raw_body = request.body or b''
     logger.info('[USSD SUBSCRIPTION WEBHOOK] Received callback, len=%d', len(raw_body))
@@ -2166,7 +2156,6 @@ def telebirr_ussd_subscription_webhook(request):
         body_el = root.find('.//res:Body', namespaces)
         result_type = body_el.find('res:ResultType', namespaces).text if body_el is not None else None
         result_code = body_el.find('res:ResultCode', namespaces).text if body_el is not None else None
-        result_desc = body_el.find('res:ResultDesc', namespaces).text if body_el is not None else None
 
         transaction_id = None
         transaction_result = body_el.find('res:TransactionResult', namespaces) if body_el is not None else None
