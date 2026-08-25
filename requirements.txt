@@ -5,7 +5,7 @@
 #   CVE-2025-64459  SQL injection                                     (fixed 4.2.26)
 # 4.2.26 is a patch release on the same 4.2 LTS line, so it carries no
 # breaking changes by Django policy. Verified against the full test suite.
-Django==4.2.26
+Django==5.2.17
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 python-decouple==3.8

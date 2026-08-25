@@ -8,7 +8,7 @@ readme = "README.md"
 # Runtime dependencies are pinned in requirements.txt, which is what the Docker
 # image installs. This section documents them for tooling that reads PEP 621.
 dependencies = [
-    "Django==4.2.26",
+    "Django==5.2.17",
     "djangorestframework==3.14.0",
     "channels==4.0.0",
     "celery==5.3.4",
