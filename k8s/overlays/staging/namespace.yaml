@@ -1,3 +1,8 @@
+# SUPERSEDED -- no longer referenced by kustomization.yaml in this directory.
+# The live copy is k8s/infra/staging/namespace.yaml, owned by the
+# flipstar-infra-staging Application, which has no finalizer and cannot cascade.
+# Kept here only so the move is visible in review; safe to delete once merged.
+#
 apiVersion: v1
 kind: Namespace
 metadata:

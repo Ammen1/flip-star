@@ -283,14 +283,6 @@ jobs:
           python -c "import xml.etree.ElementTree as ET; r = ET.parse('coverage.xml').getroot(); print(f'**{float(r.attrib[\"line-rate\"]) * 100:.1f}%** line coverage')" >> "$GITHUB_STEP_SUMMARY" \
             || echo "coverage.xml not found (test run likely failed before producing it)" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        continue-on-error: true
-        with:
-          name: coverage-report
-          path: coverage.xml
-          retention-days: 3
-
   # ---------------------------------------------------------------------------
   # Integration tests -- real PostgreSQL, matching production's engine.
   # ---------------------------------------------------------------------------

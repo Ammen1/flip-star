@@ -91,13 +91,6 @@ jobs:
           fi
           echo "OK: no Secret in the rendered ${{ matrix.overlay }} output"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        continue-on-error: true
-        with:
-          name: rendered-${{ matrix.overlay }}
-          path: rendered-${{ matrix.overlay }}.yaml
-          retention-days: 3
-
   validate-argocd-manifests:
     runs-on: ubuntu-latest
     timeout-minutes: 5
