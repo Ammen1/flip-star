@@ -4,7 +4,6 @@ kind: Ingress
 metadata:
   name: flipstar-backend
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "100m"
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 
@@ -14,10 +13,32 @@ spec:
   tls:
     - hosts:
         - api.uat.flipstar.et
+        - uat.flipstar.et
+        - flipstar.et
       secretName: flipstar-staging-tls
 
   rules:
     - host: api.uat.flipstar.et
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+    - host: uat.flipstar.et
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+    - host: flipstar.et
       http:
         paths:
           - path: /
