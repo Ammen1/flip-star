@@ -2513,21 +2513,13 @@ def telebirr_ussd_subscription_webhook(request):
 
             user = payment.user
 
-            if (
-                not user
-                and payment.metadata
-                and payment.metadata.get('phone_number')
-            ):
+            if not user and payment.metadata and payment.metadata.get('phone_number'):
                 from api.views.core import _normalize_ethiopian_phone
 
                 phone_number = payment.metadata.get('phone_number')
-                normalized_phone = (
-                    _normalize_ethiopian_phone(phone_number) or phone_number
-                )
+                normalized_phone = _normalize_ethiopian_phone(phone_number) or phone_number
 
-                profile = UserProfile.objects.filter(
-                    phone_number=normalized_phone
-                ).first()
+                profile = UserProfile.objects.filter(phone_number=normalized_phone).first()
                 if profile:
                     user = profile.user
                     payment.user = user
