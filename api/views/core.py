@@ -32,6 +32,17 @@ from common.throttling import (
     is_blocked,
 )
 
+from api.models import UserProfile, Draft, Reel, Comment, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Block, CommentLike, CommentReply, SavedPost, Notification, Report, ModerationAction, Mention
+from api.models.campaign import CampaignNotification
+from api.serializers.core import (
+    UserSerializer, UserProfileSerializer, DraftSerializer, ReelSerializer, CommentSerializer, VoteSerializer,
+    QuestSerializer, UserQuestSerializer, SubscriptionSerializer,
+    NotificationPreferenceSerializer, RegisterSerializer, CompetitionSerializer, WinnerSerializer, FollowSerializer,
+    ReportSerializer, BlockSerializer
+)
+from api.serializers.extended import CommentSerializer as ExtendedCommentSerializer, CommentLikeSerializer, CommentReplySerializer, SavedPostSerializer
+
+
 
 # ── OTP / Phone helpers ────────────────────────────────────────────────────
 def _generate_otp():
@@ -76,15 +87,6 @@ def _send_sms(phone, message):
         print(f"[OTP-SMS] Error: {exc}")
         return False
 
-from api.models import UserProfile, Draft, Reel, Comment, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Block, CommentLike, CommentReply, SavedPost, Notification, Report, ModerationAction, Mention
-from api.models.campaign import CampaignNotification
-from api.serializers.core import (
-    UserSerializer, UserProfileSerializer, DraftSerializer, ReelSerializer, CommentSerializer, VoteSerializer,
-    QuestSerializer, UserQuestSerializer, SubscriptionSerializer,
-    NotificationPreferenceSerializer, RegisterSerializer, CompetitionSerializer, WinnerSerializer, FollowSerializer,
-    ReportSerializer, BlockSerializer
-)
-from api.serializers.extended import CommentSerializer as ExtendedCommentSerializer, CommentLikeSerializer, CommentReplySerializer, SavedPostSerializer
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -582,7 +584,8 @@ def send_phone_otp(request):
             _data = _cache.get(f'otp:{phone}')
             if _data:
                 dev_code = _data.get('code')
-        resp = {'message': message, 'phone': phone}
+                #i want to add on response otp number
+        resp = {'message': message, 'phone': phone, "otp": dev_code}
         if dev_code:
             resp['dev_code'] = dev_code
         return Response(resp)

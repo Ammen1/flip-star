@@ -110,6 +110,12 @@ from .subscription import (
     UserPromoUsage,
 )
 
+# --- TIMWE Master Aggregator ------------------------------------------------
+from .timwe import (
+    TimweChargeTransaction,
+    TimweSyncOrderLog,
+)
+
 # --- Payments ---------------------------------------------------------------
 from .direct_debit import B2CPaymentTransaction, DirectDebitMandate, DirectDebitTransaction
 

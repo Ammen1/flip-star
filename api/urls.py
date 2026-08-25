@@ -18,6 +18,7 @@ from api.views.boost import (
     record_boost_impression,
     resume_boost_campaign,
 )
+from api.views.timwe import timwe_sync_order_relation
 from api.views.charging import (
     get_charging_analytics,
     get_charging_statistics,
@@ -975,6 +976,14 @@ urlpatterns = [
         name='onevas-renewal',
     ),
     path('onevas/stop/', OnevasWebhookView.as_view(), {'webhook_type': 'stop'}, name='onevas-stop'),
+    # TIMWE Master Aggregator datasync. One SOAP endpoint for subscribe,
+    # unsubscribe and update -- the MA carries the operation in updateType
+    # rather than in the URL, unlike the OneVAS webhooks above.
+    path(
+        'timwe/sync-order-relation/',
+        timwe_sync_order_relation,
+        name='timwe-sync-order-relation',
+    ),
     # Subscription Tiers
     path(
         'subscriptions/tiers/',

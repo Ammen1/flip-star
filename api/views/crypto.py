@@ -32,28 +32,12 @@ def crypto_public_key(request):
     try:
         public_key = key_manager.get_public_key()
     except KeyManagementError:
-        # Key initialization failed at startup or hasn't completed -- a
-        # server-side condition, not anything the caller did wrong.
         return Response(
             {'error': 'The cryptographic keypair is not currently available.'},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    return Response({'publicKey': public_key, 'algorithm': ALGORITHM})
-
-
-# ---------------------------------------------------------------------------
-# Test helpers -- development and staging only
-# ---------------------------------------------------------------------------
-# These perform the CLIENT half of the exchange on the server so the encrypted
-# endpoints can be driven from Postman or curl. That is the opposite of what
-# end-to-end encryption is for, which is why every one of them is gated on
-# settings.CRYPTO_TEST_ENDPOINTS_ENABLED and why that setting defaults to
-# False. Enabled, they let anyone who can reach the API mint a valid envelope
-# for any payload.
-#
-# Http404 rather than 403 when disabled: a route that is switched off should
-# not confirm it exists.
+    return Response({'publicKey': public_key})
 
 
 def _require_test_endpoints_enabled():

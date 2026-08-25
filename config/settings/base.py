@@ -17,9 +17,7 @@ import mimetypes
 import os
 from pathlib import Path
 
-# Resolves from the OS environment, then HashiCorp Vault, then .env, then the
-# supplied default. Signature-compatible with decouple.config, which it
-# replaced. Vault is optional -- see docs/secrets.md.
+
 from infrastructure.secrets import secret as config
 
 # backend/config/settings/base.py -> backend/
@@ -73,10 +71,6 @@ THIRD_PARTY_APPS = [
     'django_celery_beat',
 ]
 
-# The application is a single Django app. Its *internal* structure is layered
-# (models/, services/, integrations/, api/), but the app label stays "api" so
-# that all 86 migrations, every ``api_*`` table name, and existing ContentType
-# rows remain valid. Do not rename this without a data migration plan.
 LOCAL_APPS = [
     'api',
 ]
@@ -324,6 +318,7 @@ CORS_ALLOW_HEADERS = [
     'x-forwarded-for',
     'x-forwarded-host',
     'x-forwarded-proto',
+    'x-client-public-key',
 ]
 CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
 
@@ -440,6 +435,24 @@ TELEBIRR_NOTIFY_URL = config('TELEBIRR_NOTIFY_URL', default='')
 TELEBIRR_REDIRECT_URL = config('TELEBIRR_REDIRECT_URL', default='')
 
 # Onevas SMS / airtime charging
+# ---------------------------------------------------------------------------
+# TIMWE Master Aggregator
+# ---------------------------------------------------------------------------
+# Replaces the OneVAS block below. Both are configured during the migration;
+# OneVAS is removed at cutover. TIMWE_INTEGRATION_ENABLED stays False until
+# TIMWE supplies credentials and the WEB subscription flow, so the datasync
+# endpoint records events without granting subscriptions alongside OneVAS.
+TIMWE_INTEGRATION_ENABLED = config('TIMWE_INTEGRATION_ENABLED', default=False, cast=bool)
+TIMWE_CHARGE_URL = config('TIMWE_CHARGE_URL', default='')
+TIMWE_SP_ID = config('TIMWE_SP_ID', default='')
+TIMWE_SP_PASSWORD = config('TIMWE_SP_PASSWORD', default='')
+TIMWE_SERVICE_ID = config('TIMWE_SERVICE_ID', default='')
+TIMWE_CURRENCY = config('TIMWE_CURRENCY', default='')
+TIMWE_CHARGE_TIMEOUT = config('TIMWE_CHARGE_TIMEOUT', default=60, cast=int)
+TIMWE_ALLOWED_IPS = [
+    ip.strip() for ip in config('TIMWE_ALLOWED_IPS', default='').split(',') if ip.strip()
+]
+
 ONEVAS_APPLICATION_KEY = config('ONEVAS_APPLICATION_KEY', default='')
 ONEVAS_PRODUCT_NUMBER = config('ONEVAS_PRODUCT_NUMBER', default='')
 ONEVAS_SMS_URL = config('ONEVAS_SMS_URL', default='https://onevas.et/api/partnerSms/send')
