@@ -956,8 +956,7 @@ class SubscriptionTierViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         return super().get_queryset().order_by('sort_order', 'price_etb')
     
-    @action(detail=False, methods=['get'])
-    def active(self, request):
+    def list(self, request):
         """Get all active tiers"""
         tiers = self.get_queryset()
         data = [{
@@ -975,6 +974,11 @@ class SubscriptionTierViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             'privileges': tier.privileges,
         } for tier in tiers]
         return Response(data)
+    
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """Get all active tiers (alias for list)"""
+        return self.list(request)
 
 
 class SubscriptionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
