@@ -7,6 +7,7 @@ from api.admin import admin_site
 urlpatterns = [
     path('admin/', admin_site.urls),
     path('api/v1/', include('api.urls')),
+    path('api/', include('api.urls')),
 ]
 
 # Always serve media files (Render has no separate web server for media)
