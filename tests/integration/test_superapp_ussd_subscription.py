@@ -41,22 +41,27 @@ pytestmark = pytest.mark.integration
 factory = APIRequestFactory()
 plain_factory = RequestFactory()
 
-# Dummy public key for tests -- require_client_public_key only checks presence
-_DUMMY_PUBLIC_KEY = 'dGVzdC1wdWJsaWMta2V5LTEyMzQ1Njc4OTA='
-
 
 @pytest.fixture
 def monthly_tier(db):
     tier = SubscriptionTier.objects.create(
-        name='USSD Test Monthly', slug='ussd-test-monthly', duration_type='monthly', duration_days=30,
-        price_etb=150, onevas_code='U1', spid='sp', service_id='svc', product_id='prod', is_active=True,
+        name='USSD Test Monthly',
+        slug='ussd-test-monthly',
+        duration_type='monthly',
+        duration_days=30,
+        price_etb=150,
+        onevas_code='U1',
+        spid='sp',
+        service_id='svc',
+        product_id='prod',
+        is_active=True,
     )
     yield tier
     tier.delete()
 
 
 def _soap_result(*, originator_conversation_id, result_code, transaction_id='', result_desc=''):
-    return f'''<?xml version="1.0" encoding="UTF-8"?>
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:res="http://cps.huawei.com/cpsinterface/result">
   <soapenv:Body>
     <api:Result xmlns:api="http://cps.huawei.com/cpsinterface/api_resultmgr">
@@ -74,21 +79,31 @@ def _soap_result(*, originator_conversation_id, result_code, transaction_id='', 
       </res:Body>
     </api:Result>
   </soapenv:Body>
-</soapenv:Envelope>'''.encode()
+</soapenv:Envelope>""".encode()
 
 
 # ---------------------------------------------------------------------------
 # telebirr_ussd_subscription_initiate: never activates directly
 # ---------------------------------------------------------------------------
 
+
 def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
     with patch(
         'api.views.subscription.telebirr_direct_debit_service.initiate_ussd_push_payment',
-        return_value={'success': True, 'originator_conversation_id': 'S_X_USSD1', 'conversation_id': 'AG_USSD1'},
+        return_value={
+            'success': True,
+            'originator_conversation_id': 'S_X_USSD1',
+            'conversation_id': 'AG_USSD1',
+        },
     ):
-        request = factory.post('/subscription/telebirr/ussd/initiate/', {
-            'tier_id': str(monthly_tier.id), 'phone_number': '0911223344',
-        }, format='json', HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
+        request = factory.post(
+            '/subscription/telebirr/ussd/initiate/',
+            {
+                'tier_id': str(monthly_tier.id),
+                'phone_number': '0911223344',
+            },
+            format='json',
+        )
 
         response = telebirr_ussd_subscription_initiate(request)
 
@@ -100,8 +115,9 @@ def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
 
 
 def test_initiate_requires_phone_for_anonymous_user(db, monthly_tier):
-    request = factory.post('/subscription/telebirr/ussd/initiate/', {'tier_id': str(monthly_tier.id)}, format='json',
-                           HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
+    request = factory.post(
+        '/subscription/telebirr/ussd/initiate/', {'tier_id': str(monthly_tier.id)}, format='json'
+    )
 
     response = telebirr_ussd_subscription_initiate(request)
 
@@ -109,9 +125,14 @@ def test_initiate_requires_phone_for_anonymous_user(db, monthly_tier):
 
 
 def test_initiate_rejects_unknown_tier(db):
-    request = factory.post('/subscription/telebirr/ussd/initiate/', {
-        'tier_id': '00000000-0000-0000-0000-000000000000', 'phone_number': '0911223344',
-    }, format='json', HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
+    request = factory.post(
+        '/subscription/telebirr/ussd/initiate/',
+        {
+            'tier_id': '00000000-0000-0000-0000-000000000000',
+            'phone_number': '0911223344',
+        },
+        format='json',
+    )
 
     response = telebirr_ussd_subscription_initiate(request)
 
@@ -123,9 +144,14 @@ def test_initiate_returns_error_when_telebirr_call_fails(db, monthly_tier):
         'api.views.subscription.telebirr_direct_debit_service.initiate_ussd_push_payment',
         return_value={'success': False, 'error': 'upstream down'},
     ):
-        request = factory.post('/subscription/telebirr/ussd/initiate/', {
-            'tier_id': str(monthly_tier.id), 'phone_number': '0911223344',
-        }, format='json', HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
+        request = factory.post(
+            '/subscription/telebirr/ussd/initiate/',
+            {
+                'tier_id': str(monthly_tier.id),
+                'phone_number': '0911223344',
+            },
+            format='json',
+        )
 
         response = telebirr_ussd_subscription_initiate(request)
 
@@ -137,18 +163,32 @@ def test_initiate_returns_error_when_telebirr_call_fails(db, monthly_tier):
 # telebirr_ussd_subscription_webhook: only place that activates
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def pending_ussd_payment(db, monthly_tier):
     start = timezone.now()
     end = start + timezone.timedelta(days=30)
     subscription = SubscriptionPlan.objects.create(
-        user=None, tier=monthly_tier, status='pending', duration_type='monthly',
-        start_date=start, end_date=end, payment_method='telebirr', auto_renew=False,
+        user=None,
+        tier=monthly_tier,
+        status='pending',
+        duration_type='monthly',
+        start_date=start,
+        end_date=end,
+        payment_method='telebirr',
+        auto_renew=False,
     )
     payment = SubscriptionPayment.objects.create(
-        user=None, subscription=subscription, amount=monthly_tier.price_etb, currency='ETB',
-        status='pending', payment_method='telebirr', onevas_transaction_id='S_X_USSDWEBHOOK1',
-        duration_type='monthly', period_start=start, period_end=end,
+        user=None,
+        subscription=subscription,
+        amount=monthly_tier.price_etb,
+        currency='ETB',
+        status='pending',
+        payment_method='telebirr',
+        onevas_transaction_id='S_X_USSDWEBHOOK1',
+        duration_type='monthly',
+        period_start=start,
+        period_end=end,
         metadata={'phone_number': '251966778899'},
     )
     yield payment
@@ -157,8 +197,12 @@ def pending_ussd_payment(db, monthly_tier):
 
 
 def test_webhook_activates_pending_subscription_and_creates_user(pending_ussd_payment):
-    body = _soap_result(originator_conversation_id='S_X_USSDWEBHOOK1', result_code='0', transaction_id='TXNUSSD1')
-    request = plain_factory.post('/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml')
+    body = _soap_result(
+        originator_conversation_id='S_X_USSDWEBHOOK1', result_code='0', transaction_id='TXNUSSD1'
+    )
+    request = plain_factory.post(
+        '/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'
+    )
 
     with patch('api.services.otp.OTPService.send_otp', return_value=(True, 'ok')):
         response = telebirr_ussd_subscription_webhook(request)
@@ -173,8 +217,12 @@ def test_webhook_activates_pending_subscription_and_creates_user(pending_ussd_pa
 
 
 def test_webhook_marks_payment_failed_on_telebirr_failure(pending_ussd_payment):
-    body = _soap_result(originator_conversation_id='S_X_USSDWEBHOOK1', result_code='1', result_desc='declined')
-    request = plain_factory.post('/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml')
+    body = _soap_result(
+        originator_conversation_id='S_X_USSDWEBHOOK1', result_code='1', result_desc='declined'
+    )
+    request = plain_factory.post(
+        '/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'
+    )
 
     response = telebirr_ussd_subscription_webhook(request)
 
@@ -186,13 +234,23 @@ def test_webhook_marks_payment_failed_on_telebirr_failure(pending_ussd_payment):
 
 
 def test_webhook_duplicate_delivery_does_not_double_activate(pending_ussd_payment):
-    body = _soap_result(originator_conversation_id='S_X_USSDWEBHOOK1', result_code='0', transaction_id='TXNUSSD2')
+    body = _soap_result(
+        originator_conversation_id='S_X_USSDWEBHOOK1', result_code='0', transaction_id='TXNUSSD2'
+    )
 
     with patch('api.services.otp.OTPService.send_otp', return_value=(True, 'ok')):
-        telebirr_ussd_subscription_webhook(plain_factory.post('/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'))
+        telebirr_ussd_subscription_webhook(
+            plain_factory.post(
+                '/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'
+            )
+        )
         first_user_id = SubscriptionPayment.objects.get(pk=pending_ussd_payment.pk).user_id
 
-        telebirr_ussd_subscription_webhook(plain_factory.post('/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'))
+        telebirr_ussd_subscription_webhook(
+            plain_factory.post(
+                '/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'
+            )
+        )
 
     pending_ussd_payment.refresh_from_db()
     assert pending_ussd_payment.status == 'completed'
@@ -207,20 +265,41 @@ def test_webhook_reuses_existing_user_matched_by_phone(db, monthly_tier):
     start = timezone.now()
     end = start + timezone.timedelta(days=30)
     subscription = SubscriptionPlan.objects.create(
-        user=None, tier=monthly_tier, status='pending', duration_type='monthly',
-        start_date=start, end_date=end, payment_method='telebirr', auto_renew=False,
+        user=None,
+        tier=monthly_tier,
+        status='pending',
+        duration_type='monthly',
+        start_date=start,
+        end_date=end,
+        payment_method='telebirr',
+        auto_renew=False,
     )
     payment = SubscriptionPayment.objects.create(
-        user=None, subscription=subscription, amount=monthly_tier.price_etb, currency='ETB',
-        status='pending', payment_method='telebirr', onevas_transaction_id='S_X_USSDWEBHOOK2',
-        duration_type='monthly', period_start=start, period_end=end,
+        user=None,
+        subscription=subscription,
+        amount=monthly_tier.price_etb,
+        currency='ETB',
+        status='pending',
+        payment_method='telebirr',
+        onevas_transaction_id='S_X_USSDWEBHOOK2',
+        duration_type='monthly',
+        period_start=start,
+        period_end=end,
         metadata={'phone_number': '251977889900'},
     )
     try:
-        body = _soap_result(originator_conversation_id='S_X_USSDWEBHOOK2', result_code='0', transaction_id='TXNUSSD3')
+        body = _soap_result(
+            originator_conversation_id='S_X_USSDWEBHOOK2',
+            result_code='0',
+            transaction_id='TXNUSSD3',
+        )
 
         with patch('api.services.otp.OTPService.send_otp', return_value=(True, 'ok')):
-            telebirr_ussd_subscription_webhook(plain_factory.post('/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'))
+            telebirr_ussd_subscription_webhook(
+                plain_factory.post(
+                    '/webhooks/telebirrSubscriptionUssd/', data=body, content_type='text/xml'
+                )
+            )
 
         payment.refresh_from_db()
         assert payment.user_id == existing_user.id
@@ -235,8 +314,11 @@ def test_webhook_reuses_existing_user_matched_by_phone(db, monthly_tier):
 # telebirr_ussd_subscription_status: anonymous polling
 # ---------------------------------------------------------------------------
 
+
 def test_status_returns_found_false_for_unknown_id(db):
-    request = plain_factory.get('/subscription/telebirr/ussd/status/?originator_conversation_id=nope')
+    request = plain_factory.get(
+        '/subscription/telebirr/ussd/status/?originator_conversation_id=nope'
+    )
 
     response = telebirr_ussd_subscription_status(request)
 
@@ -245,7 +327,9 @@ def test_status_returns_found_false_for_unknown_id(db):
 
 
 def test_status_reflects_pending_payment(pending_ussd_payment):
-    request = plain_factory.get(f'/subscription/telebirr/ussd/status/?originator_conversation_id={pending_ussd_payment.onevas_transaction_id}')
+    request = plain_factory.get(
+        f'/subscription/telebirr/ussd/status/?originator_conversation_id={pending_ussd_payment.onevas_transaction_id}'
+    )
 
     response = telebirr_ussd_subscription_status(request)
 
@@ -267,16 +351,24 @@ def test_status_requires_originator_conversation_id(db):
 # check_superapp_subscription / validate_subscription_token
 # ---------------------------------------------------------------------------
 
+
 def test_check_superapp_subscription_finds_active_telebirr_subscription(db, monthly_tier):
     now = timezone.now()
     subscription = SubscriptionPlan.objects.create(
-        user=None, tier=monthly_tier, status='active', duration_type='monthly',
-        start_date=now, end_date=now + timezone.timedelta(days=30), payment_method='telebirr',
-        telebirr_phone_number='251988990011', auto_renew=False,
+        user=None,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='251988990011',
+        auto_renew=False,
     )
     try:
-        request = factory.post('/subscription/check-superapp/', {'phone': '0988990011'}, format='json',
-                               HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
+        request = factory.post(
+            '/subscription/check-superapp/', {'phone': '0988990011'}, format='json'
+        )
 
         response = check_superapp_subscription(request)
 
@@ -288,8 +380,7 @@ def test_check_superapp_subscription_finds_active_telebirr_subscription(db, mont
 
 
 def test_check_superapp_subscription_no_match(db):
-    request = factory.post('/subscription/check-superapp/', {'phone': '0900000000'}, format='json',
-                           HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
+    request = factory.post('/subscription/check-superapp/', {'phone': '0900000000'}, format='json')
 
     response = check_superapp_subscription(request)
 
@@ -300,9 +391,15 @@ def test_check_superapp_subscription_no_match(db):
 def test_validate_subscription_token_returns_phone(db, monthly_tier):
     now = timezone.now()
     subscription = SubscriptionPlan.objects.create(
-        user=None, tier=monthly_tier, status='active', duration_type='monthly',
-        start_date=now, end_date=now + timezone.timedelta(days=30), payment_method='telebirr',
-        telebirr_phone_number='251911002200', auto_renew=False,
+        user=None,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='251911002200',
+        auto_renew=False,
     )
     token = subscription.generate_subscription_token()
     try:
@@ -317,7 +414,9 @@ def test_validate_subscription_token_returns_phone(db, monthly_tier):
 
 
 def test_validate_subscription_token_rejects_unknown_token(db):
-    request = factory.post('/subscription/validate-token/', {'token': 'not-a-real-token'}, format='json')
+    request = factory.post(
+        '/subscription/validate-token/', {'token': 'not-a-real-token'}, format='json'
+    )
 
     response = validate_subscription_token(request)
 
