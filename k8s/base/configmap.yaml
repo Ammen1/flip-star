@@ -38,8 +38,6 @@ data:
   DB_CONN_MAX_AGE: "60"
   REDIS_HOST: "CHANGEME-set-per-environment"
   REDIS_PORT: "6379"
-  REGION_NAME: "us-east-1"
-  S3_ENDPOINT_URL: ""
   CORS_ALLOW_ALL_ORIGINS: "false"
   CORS_ALLOWED_ORIGINS: "https://CHANGEME.flipstar.et"
   CSRF_TRUSTED_ORIGINS: "https://CHANGEME.flipstar.et"
