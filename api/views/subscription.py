@@ -377,12 +377,16 @@ class OnevasWebhookView(APIView):
             # Get application key for the specific tier, or use default
             app_key = ONEVAS_APPLICATION_KEY
             if tier_type and tier_type in ONEVAS_PRODUCTS:
-                app_key = ONEVAS_PRODUCTS[tier_type]['application_key']
+                tier_key = ONEVAS_PRODUCTS[tier_type]['application_key']
+                if tier_key:
+                    app_key = tier_key
 
             # Get product number from configuration
             product_number = ONEVAS_PRODUCT_NUMBER
             if tier_type and tier_type in ONEVAS_PRODUCTS:
-                product_number = ONEVAS_PRODUCTS[tier_type]['product_id']
+                tier_pid = ONEVAS_PRODUCTS[tier_type]['product_id']
+                if tier_pid:
+                    product_number = tier_pid
 
             payload = {
                 'phone_number': phone_number,
