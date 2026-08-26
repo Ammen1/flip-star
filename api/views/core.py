@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Exists, F, OuterRef, Prefetch
+from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
@@ -1127,7 +1127,7 @@ def resend_subscription_otp(request):
 
     subscription = (
         UserSubscription.objects.filter(
-            onevas_phone_number=phone,
+            Q(onevas_phone_number=phone) | Q(telebirr_phone_number=phone),
             status='active',
             end_date__gt=timezone.now(),
         )

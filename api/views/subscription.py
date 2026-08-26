@@ -52,7 +52,7 @@ ONEVAS_PRODUCTS = settings.ONEVAS_PRODUCTS
 
 # App Links (placeholders - update with actual URLs)
 # WEB_APP_LINK = "https://api.uat.flipstar.et?subscription_tp=true"
-WEB_APP_LINK = 'https://api.uat.flipstar.et'
+WEB_APP_LINK = 'https://uat.flipstar.et'
 MOBILE_APP_LINK = 'https://play.google.com/store/apps/details?id=com.postworq.mobile'
 
 
