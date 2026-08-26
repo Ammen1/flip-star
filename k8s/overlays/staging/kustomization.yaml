@@ -3,7 +3,6 @@ kind: Kustomization
 
 namespace: flipstar-staging
 
-resources:
 # namespace.yaml deliberately REMOVED from this list -- it now lives in
 # k8s/infra/staging/ and is owned by the flipstar-infra-staging Application.
 #
@@ -12,6 +11,7 @@ resources:
 # and the API server then garbage-collected every object inside it, PVCs
 # included -- which is how the staging database and the whole Vault were lost.
 # Nothing here may own the Namespace again.
+resources:
 - ../../base
 - ingress.yaml
 
@@ -44,7 +44,7 @@ patches:
 images:
 - name: ghcr.io/ammen1/flip-star-backend
   newName: ghcr.io/ammen1/flip-star-backend
-  newTag: 46026d900957c69156a14fedcf4ed673bdaa968a
+  newTag: 458349a7d310b343a735a11936ef7239ea51ffc1
 - name: ghcr.io/ammen1/flip-star-backend-celery
   newName: ghcr.io/ammen1/flip-star-backend-celery
-  newTag: 46026d900957c69156a14fedcf4ed673bdaa968a
+  newTag: 458349a7d310b343a735a11936ef7239ea51ffc1
