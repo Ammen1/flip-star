@@ -26,7 +26,7 @@ ALLOW_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
 ALLOW_HEADERS = (
     'accept, accept-encoding, authorization, content-type, dnt, origin, '
     'user-agent, x-csrftoken, x-requested-with, x-forwarded-for, '
-    'x-forwarded-host, x-forwarded-proto'
+    'x-forwarded-host, x-forwarded-proto, x-client-public-key'
 )
 EXPOSE_HEADERS = 'content-type, x-csrftoken'
 MAX_AGE = '86400'
