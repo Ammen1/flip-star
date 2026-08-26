@@ -41,6 +41,9 @@ pytestmark = pytest.mark.integration
 factory = APIRequestFactory()
 plain_factory = RequestFactory()
 
+# Dummy public key for tests -- require_client_public_key only checks presence
+_DUMMY_PUBLIC_KEY = 'dGVzdC1wdWJsaWMta2V5LTEyMzQ1Njc4OTA='
+
 
 @pytest.fixture
 def monthly_tier(db):
@@ -85,7 +88,7 @@ def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
     ):
         request = factory.post('/subscription/telebirr/ussd/initiate/', {
             'tier_id': str(monthly_tier.id), 'phone_number': '0911223344',
-        }, format='json')
+        }, format='json', HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
 
         response = telebirr_ussd_subscription_initiate(request)
 
@@ -97,7 +100,8 @@ def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
 
 
 def test_initiate_requires_phone_for_anonymous_user(db, monthly_tier):
-    request = factory.post('/subscription/telebirr/ussd/initiate/', {'tier_id': str(monthly_tier.id)}, format='json')
+    request = factory.post('/subscription/telebirr/ussd/initiate/', {'tier_id': str(monthly_tier.id)}, format='json',
+                           HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
 
     response = telebirr_ussd_subscription_initiate(request)
 
@@ -107,7 +111,7 @@ def test_initiate_requires_phone_for_anonymous_user(db, monthly_tier):
 def test_initiate_rejects_unknown_tier(db):
     request = factory.post('/subscription/telebirr/ussd/initiate/', {
         'tier_id': '00000000-0000-0000-0000-000000000000', 'phone_number': '0911223344',
-    }, format='json')
+    }, format='json', HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
 
     response = telebirr_ussd_subscription_initiate(request)
 
@@ -121,7 +125,7 @@ def test_initiate_returns_error_when_telebirr_call_fails(db, monthly_tier):
     ):
         request = factory.post('/subscription/telebirr/ussd/initiate/', {
             'tier_id': str(monthly_tier.id), 'phone_number': '0911223344',
-        }, format='json')
+        }, format='json', HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
 
         response = telebirr_ussd_subscription_initiate(request)
 
@@ -271,7 +275,8 @@ def test_check_superapp_subscription_finds_active_telebirr_subscription(db, mont
         telebirr_phone_number='251988990011', auto_renew=False,
     )
     try:
-        request = factory.post('/subscription/check-superapp/', {'phone': '0988990011'}, format='json')
+        request = factory.post('/subscription/check-superapp/', {'phone': '0988990011'}, format='json',
+                               HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
 
         response = check_superapp_subscription(request)
 
@@ -283,7 +288,8 @@ def test_check_superapp_subscription_finds_active_telebirr_subscription(db, mont
 
 
 def test_check_superapp_subscription_no_match(db):
-    request = factory.post('/subscription/check-superapp/', {'phone': '0900000000'}, format='json')
+    request = factory.post('/subscription/check-superapp/', {'phone': '0900000000'}, format='json',
+                           HTTP_X_CLIENT_PUBLIC_KEY=_DUMMY_PUBLIC_KEY)
 
     response = check_superapp_subscription(request)
 
