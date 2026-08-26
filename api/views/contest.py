@@ -133,7 +133,6 @@ def get_coin_packages(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@encrypted_endpoint
 def get_coin_balance(request):
     """Get user's coin balance and transaction history"""
     user = request.user
