@@ -44,7 +44,7 @@ patches:
 images:
 - name: ghcr.io/ammen1/flip-star-backend
   newName: ghcr.io/ammen1/flip-star-backend
-  newTag: 5b53ec776ef73532d86aea754d383b360aa5e952
+  newTag: 48504144d4e4df73c7f249cc9d23886253e69071
 - name: ghcr.io/ammen1/flip-star-backend-celery
   newName: ghcr.io/ammen1/flip-star-backend-celery
-  newTag: 5b53ec776ef73532d86aea754d383b360aa5e952
+  newTag: 48504144d4e4df73c7f249cc9d23886253e69071
