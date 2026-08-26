@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -1068,7 +1068,24 @@ class OnevasWebhookView(APIView):
 class SubscriptionTierViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     """Manage subscription tiers"""
 
-    permission_classes = [IsAuthenticated]
+    # Split by action rather than a single permission_classes, because this is
+    # a ModelViewSet and the two halves need opposite answers.
+    #
+    # Reads are the public price list. A visitor has to see what the plans cost
+    # before signing up, so requiring a login to fetch them made the signup
+    # flow impossible -- the client had no tier_id to send to
+    # /subscription/telebirr/ussd/initiate/, which answered "tier_id is
+    # required".
+    #
+    # Writes are the opposite. `IsAuthenticated` alone let ANY logged-in user
+    # create, reprice or delete a subscription tier through the inherited
+    # ModelViewSet routes. That was a live hole independent of this change;
+    # IsAdminUser closes it. Do not collapse these back into one
+    # permission_classes -- AllowAny here would publish the write routes too.
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'active'):
+            return [AllowAny()]
+        return [IsAdminUser()]
 
     queryset = SubscriptionTier.objects.filter(is_active=True)
     serializer_class = None  # Add serializer later

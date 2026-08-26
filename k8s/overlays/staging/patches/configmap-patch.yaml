@@ -11,7 +11,7 @@ kind: ConfigMap
 metadata:
   name: flipstar-backend-config
 data:
-  ALLOWED_HOSTS: "api.uat.flipstar.et"
+  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.
