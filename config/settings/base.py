@@ -234,6 +234,15 @@ S3_CUSTOM_DOMAIN = _storage['custom_domain']
 DEFAULT_FILE_STORAGE = _storage['default_file_storage']
 STATICFILES_STORAGE = _storage['staticfiles_storage']
 MEDIA_URL = _storage['media_url']
+
+# django-storages reads AWS_STORAGE_BUCKET_NAME to find the bucket.
+AWS_STORAGE_BUCKET_NAME = _storage['bucket_name']
+if _storage['access_key_id']:
+    AWS_ACCESS_KEY_ID = _storage['access_key_id']
+if _storage['secret_access_key']:
+    AWS_SECRET_ACCESS_KEY = _storage['secret_access_key']
+if _storage['region_name']:
+    AWS_S3_REGION_NAME = _storage['region_name']
 if _storage['endpoint_url']:
     AWS_S3_ENDPOINT_URL = _storage['endpoint_url']
     AWS_S3_USE_SSL = _storage['use_ssl']
