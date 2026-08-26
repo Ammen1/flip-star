@@ -30,7 +30,7 @@ from api.models.subscription import (
     SubscriptionPlan as UserSubscription,
 )
 from api.services.superapp_sms_service import superapp_sms_service
-from common.security import EncryptedPayloadMixin
+from common.security import EncryptedPayloadMixin, encrypted_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -2126,6 +2126,7 @@ def telebirr_one_time_query(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def check_superapp_subscription(request):
     """
     Check if a phone number has an active SuperApp (Telebirr) subscription.
@@ -2281,6 +2282,7 @@ def telebirr_ussd_subscription_status(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def telebirr_ussd_subscription_initiate(request):
     """
     Initiate a USSD Push payment for a subscription (BuyGoodsForCustomer).
