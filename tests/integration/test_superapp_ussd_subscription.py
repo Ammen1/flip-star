@@ -83,7 +83,7 @@ def _soap_result(*, originator_conversation_id, result_code, transaction_id='', 
 
 
 # ---------------------------------------------------------------------------
-# telebirr_ussd_subscription_initiate: never activates directly
+# telebirr_ussd_subscription_initiate: never activates directl
 # ---------------------------------------------------------------------------
 
 
