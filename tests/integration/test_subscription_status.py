@@ -34,10 +34,9 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
+from api.models.subscription import SubscriptionPlan, SubscriptionTier
 from common.security.e2e_encryption import decrypt_payload, generate_keypair
 from infrastructure.keys import redis_store
-
-from api.models.subscription import SubscriptionPlan, SubscriptionTier
 
 pytestmark = pytest.mark.django_db
 
@@ -45,6 +44,7 @@ URL_NAME = 'subscription-status'
 
 
 # ─── fixtures ─────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def server_public_key(db):
@@ -108,8 +108,11 @@ def _body(response, *, server_public_key, client_private_key):
     if isinstance(raw, dict) and {'encrypted', 'nonce', 'checksum'} <= raw.keys():
         return json.loads(
             decrypt_payload(
-                raw['encrypted'], raw['nonce'], server_public_key,
-                raw['checksum'], client_private_key,
+                raw['encrypted'],
+                raw['nonce'],
+                server_public_key,
+                raw['checksum'],
+                client_private_key,
             )
         )
     return raw
@@ -131,6 +134,7 @@ def _assert_contract(body):
 
 # ─── auth and transport boundaries ────────────────────────────────────────────
 
+
 def test_unauthenticated_is_401_not_500(server_public_key, client_keys):
     pub, _priv = client_keys
     r = APIClient().get(reverse(URL_NAME), HTTP_X_CLIENT_PUBLIC_KEY=pub)
@@ -147,6 +151,7 @@ def test_missing_client_key_header_is_400_not_500(server_public_key, user):
 
 
 # ─── business states: none of these may 500 ───────────────────────────────────
+
 
 def test_no_subscription_record_returns_200(server_public_key, client_keys, user):
     """The single most important case: never a 500 for a brand new account."""
@@ -198,8 +203,11 @@ def test_active_plan_with_null_tier_does_not_500(server_public_key, client_keys,
     pub, priv = client_keys
     now = timezone.now()
     SubscriptionPlan.objects.create(
-        user=user, tier=None, status='active',
-        start_date=now - timedelta(days=1), end_date=now + timedelta(days=30),
+        user=user,
+        tier=None,
+        status='active',
+        start_date=now - timedelta(days=1),
+        end_date=now + timedelta(days=30),
     )
     r = _get(user, pub)
     assert r.status_code == 200, r.content[:400]
@@ -217,6 +225,7 @@ def test_no_status_value_produces_a_500(server_public_key, client_keys, user, ti
 
 
 # ─── safety ───────────────────────────────────────────────────────────────────
+
 
 def test_response_never_leaks_a_traceback(server_public_key, client_keys, user):
     pub, _priv = client_keys

@@ -1710,6 +1710,7 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         """Check if user has admin permissions"""
         return request.user.is_staff or request.user.is_superuser
 
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def telebirr_one_time_initiate(request):

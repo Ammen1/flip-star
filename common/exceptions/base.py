@@ -73,6 +73,7 @@ class ConflictError(DomainError):
 # Financial domain
 # ---------------------------------------------------------------------------
 
+
 class FinancialError(DomainError):
     """Base class for wallet, payment and settlement failures."""
 
@@ -113,6 +114,7 @@ class InvalidStateTransition(FinancialError):
 # External providers
 # ---------------------------------------------------------------------------
 
+
 class IntegrationError(DomainError):
     """An external provider failed, timed out, or returned an unusable result."""
 
@@ -122,7 +124,9 @@ class IntegrationError(DomainError):
 
     def __init__(self, provider: str, message: str | None = None, **context: Any) -> None:
         self.provider = provider
-        super().__init__(message or f'{provider} is currently unavailable.', provider=provider, **context)
+        super().__init__(
+            message or f'{provider} is currently unavailable.', provider=provider, **context
+        )
 
 
 class IntegrationTimeout(IntegrationError):
@@ -147,6 +151,7 @@ class SignatureVerificationError(IntegrationError):
 # ---------------------------------------------------------------------------
 # End-to-end encryption
 # ---------------------------------------------------------------------------
+
 
 class DecryptionError(DomainError):
     """An encrypted payload could not be decrypted or failed integrity checks.

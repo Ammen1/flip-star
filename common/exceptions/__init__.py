@@ -19,9 +19,19 @@ from common.exceptions.base import (
 )
 
 __all__ = [
-    'ConflictError', 'DecryptionError', 'DomainError', 'DuplicateTransaction',
-    'EncryptionUnavailable', 'FinancialError', 'IntegrationError', 'IntegrationTimeout',
-    'InsufficientFunds', 'InvalidStateTransition', 'NotFound',
-    'PermissionDenied', 'ReplayDetected', 'SignatureVerificationError',
+    'ConflictError',
+    'DecryptionError',
+    'DomainError',
+    'DuplicateTransaction',
+    'EncryptionUnavailable',
+    'FinancialError',
+    'IntegrationError',
+    'IntegrationTimeout',
+    'InsufficientFunds',
+    'InvalidStateTransition',
+    'NotFound',
+    'PermissionDenied',
+    'ReplayDetected',
+    'SignatureVerificationError',
     'ValidationError',
 ]

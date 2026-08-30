@@ -95,9 +95,7 @@ def require_client_public_key(request) -> str:
     """The caller's public key, or a 400 ``DecryptionError`` if absent."""
     client_public_key = _client_public_key(request)
     if not client_public_key:
-        raise DecryptionError(
-            f'Missing required {CLIENT_PUBLIC_KEY_HEADER_NAME} header.'
-        )
+        raise DecryptionError(f'Missing required {CLIENT_PUBLIC_KEY_HEADER_NAME} header.')
     return client_public_key
 
 
@@ -147,8 +145,11 @@ class EncryptedJSONParser(JSONParser):
         client_public_key = require_client_public_key(request)
 
         plaintext = decrypt_payload(
-            envelope['encrypted'], envelope['nonce'], client_public_key,
-            envelope['checksum'], get_server_private_key(),
+            envelope['encrypted'],
+            envelope['nonce'],
+            client_public_key,
+            envelope['checksum'],
+            get_server_private_key(),
         )
         try:
             return json.loads(plaintext)
@@ -170,7 +171,6 @@ class EncryptedJSONRenderer(JSONRenderer):
         client_public_key = _client_public_key(request)
 
         if not client_public_key:
-
             logger.warning(
                 'EncryptedJSONRenderer used without a client public key; '
                 'rendering unencrypted. This should not happen on a view '
@@ -189,14 +189,19 @@ class EncryptedJSONRenderer(JSONRenderer):
             status_code = getattr(response, 'status_code', 500)
             logger.error(
                 'Response encryption failed (status %s): %s',
-                status_code, exc, exc_info=True,
+                status_code,
+                exc,
+                exc_info=True,
             )
             if status_code >= 400:
                 return super().render(data, accepted_media_type, renderer_context)
             return super().render(
-                {'error': 'Secure transport is temporarily unavailable. Please retry.',
-                 'code': 'encryption_unavailable'},
-                accepted_media_type, renderer_context,
+                {
+                    'error': 'Secure transport is temporarily unavailable. Please retry.',
+                    'code': 'encryption_unavailable',
+                },
+                accepted_media_type,
+                renderer_context,
             )
         return super().render(sealed.to_dict(), accepted_media_type, renderer_context)
 
