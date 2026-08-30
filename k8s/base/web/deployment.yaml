@@ -60,7 +60,7 @@ spec:
                     app.kubernetes.io/component: web
       containers:
         - name: web
-          image: ghcr.io/skykin-technologies/flipstar-web:__REPLACED_BY_KUSTOMIZE__
+          image: ghcr.io/ammen1/flipstar-web:__REPLACED_BY_KUSTOMIZE__
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

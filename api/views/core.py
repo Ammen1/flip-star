@@ -52,6 +52,11 @@ from api.serializers.core import (
 )
 from common.permissions import IsOwnerOrStaffOrReadOnly
 from common.security import EncryptedPayloadMixin, encrypted_endpoint, is_pin_too_weak
+from common.validators import normalize_ethiopian_phone
+from api.services.subscription_access import (
+    has_active_subscription,
+    subscription_required_payload,
+)
 from common.throttling import (
     LoginAnonThrottle,
     LoginUserThrottle,
@@ -78,17 +83,14 @@ def _generate_otp():
 
 
 def _normalize_ethiopian_phone(phone):
-    """Normalize to 251XXXXXXXXX (without + for Onevas). Returns None if invalid."""
-    phone = phone.strip().replace(' ', '').replace('-', '')
-    # Remove + prefix if present
-    phone = phone.replace('+', '')
-    if phone.startswith('251') and len(phone) == 12:
-        return phone
-    if phone.startswith('0') and len(phone) == 10:
-        return '251' + phone[1:]
-    if len(phone) == 9 and phone[0] in '79':
-        return '251' + phone
-    return None
+    """Normalize to 251XXXXXXXXX (without + for Onevas). Returns None if invalid.
+
+    Delegates to the shared validator so the client and the API enforce one
+    rule. The previous implementation checked only length and the first
+    character, so values like ``9abcdefgh`` and ``251abcdefghi`` were accepted
+    and stored as phone numbers.
+    """
+    return normalize_ethiopian_phone(phone)
 
 
 def _send_sms(phone, message):
@@ -1508,6 +1510,19 @@ def create_post(request):
         is_video = file.content_type.startswith('video/') or file.name.lower().endswith(
             ('.mp4', '.webm', '.mov', '.avi', '.mkv')
         )
+
+        # Posting a video is subscriber-only. The client checks too, but that
+        # check is a courtesy: the status can lapse between opening the page
+        # and pressing Publish, and the endpoint is reachable directly.
+        #
+        # 403 with a machine-readable `code` rather than a generic error, so
+        # the client can tell this apart from a real failure and keep the
+        # user's video and caption instead of discarding the draft.
+        if is_video and not has_active_subscription(request.user):
+            return Response(
+                subscription_required_payload(),
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         # Determine if campaign post
         campaign = None

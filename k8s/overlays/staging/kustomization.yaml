@@ -42,10 +42,10 @@ patches:
 # .github/workflows/backend-ci-cd.yml. The tag is always a commit SHA, never
 # `latest`. Argo CD's staging Application (argocd/application-staging.yaml)
 # watches this file and syncs automatically on change.
-# Updated by Flipstar-web's own workflow (.github/workflows/web-ci-cd.yml in
-# Skykin-Technologies/Flipstar-web), which pushes to this repo with a PAT
-# because the two live in different repositories. Same rule as above: the tag
-# is always a commit SHA, never `latest`.
+# Updated by the web app's own workflow (.github/workflows/web-ci-cd.yml in
+# Ammen1/flipstar-web), which pushes to this repo with a PAT because the two
+# live in different repositories. Same rule as above: the tag is always a
+# commit SHA, never `latest`.
 images:
 - name: ghcr.io/ammen1/flip-star-backend
   newName: ghcr.io/ammen1/flip-star-backend
@@ -53,6 +53,6 @@ images:
 - name: ghcr.io/ammen1/flip-star-backend-celery
   newName: ghcr.io/ammen1/flip-star-backend-celery
   newTag: a3863f2b5a7bfea1633831ed7d75c7ae39bbf083
-- name: ghcr.io/skykin-technologies/flipstar-web
-  newName: ghcr.io/skykin-technologies/flipstar-web
+- name: ghcr.io/ammen1/flipstar-web
+  newName: ghcr.io/ammen1/flipstar-web
   newTag: unset-awaiting-first-ci-build

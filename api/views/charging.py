@@ -13,6 +13,7 @@ from api.models.contest import UserCoinBalance, CoinTransaction
 from api.integrations.onevas.charging import onevas_charging_service
 from common.security import encrypted_endpoint
 import logging
+from common.validators import AIRTIME, validate_pay_method
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +194,23 @@ def purchase_coins_on_demand(request):
     """
     DISABLED: Ethio Telecom SIM cards are only accessible for SMS OTP purposes.
     Coin purchase via airtime charging has been disabled to ensure phone numbers are used solely for OTP verification.
+
+    The price rule is enforced *before* that block on purpose. Airtime is only
+    permitted for a 10 ETB purchase (see common/validators/payment.py); putting
+    the check here means the constraint is already in force if the block above
+    is ever lifted, rather than being something a future change has to
+    remember to add.
     """
+    price_etb = (
+        request.data.get('price_etb')
+        or request.data.get('amount')
+        or request.data.get('amount_etb')
+    )
+    if price_etb is not None:
+        # Raises ValidationError (400) when airtime is not allowed at this
+        # price; the DRF exception handler renders it.
+        validate_pay_method(AIRTIME, price_etb)
+
     return Response(
         {'error': 'Coin purchase via airtime charging is disabled. Ethio Telecom SIM cards are only accessible for SMS OTP verification.'},
         status=status.HTTP_403_FORBIDDEN
