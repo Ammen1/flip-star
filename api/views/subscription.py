@@ -34,16 +34,6 @@ from common.security import EncryptedPayloadMixin
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Onevas configuration
-# ---------------------------------------------------------------------------
-# All of this used to be hardcoded here, including four live per-tier
-# application keys. Everything now resolves through Django settings, which read
-# environment -> Vault -> .env. See docs/secrets.md.
-#
-# The authoritative source for per-tier provisioning is the SubscriptionTier row
-# (it carries spid / service_id / product_id / application_key). ONEVAS_PRODUCTS
-# is only the fallback for tiers with nothing stored.
 
 ONEVAS_SMS_URL = settings.ONEVAS_SMS_URL
 ONEVAS_APPLICATION_KEY = settings.ONEVAS_APPLICATION_KEY
@@ -1720,15 +1710,6 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
         """Check if user has admin permissions"""
         return request.user.is_staff or request.user.is_superuser
 
-
-# ---------------------------------------------------------------------------
-# One-Time Subscription Flow (mimics coin purchase)
-# ---------------------------------------------------------------------------
-# The live replacement for the old recurring-mandate flow: buy once, mimic
-# a coin purchase, renew manually. api/views/wallet.py's telebirr_callback
-# already delegates every 'SUB'-prefixed order here.
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def telebirr_one_time_initiate(request):
@@ -1926,8 +1907,6 @@ def telebirr_one_time_callback(request):
                 return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'no subscription found'})
 
             if trade_status in ('Completed', 'SUCCESS'):
-                # New (previously-anonymous) user: create/link the account
-                # now that payment is confirmed.
                 if not subscription.user:
                     from api.views.core import _normalize_ethiopian_phone
 
@@ -2042,11 +2021,6 @@ def telebirr_one_time_query(request):
         if not subscription:
             return Response({'error': 'Subscription not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Self-healing: the async webhook may have been delayed or dropped.
-        # If still pending, actively ask Telebirr for the real order status
-        # rather than waiting forever. Locked the same way the webhook is,
-        # so a self-heal here and a delayed webhook arriving concurrently
-        # can't both activate the same subscription.
         if subscription.status == 'pending':
             try:
                 query_result = telebirr_service.query_order(merch_order_id)

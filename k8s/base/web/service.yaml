@@ -1,0 +1,21 @@
+# Port 80 on the Service, 8080 in the pod. The Ingress targets this Service by
+# port NAME (`http`), so the pod-side number can change without touching
+# k8s/overlays/*/ingress.yaml.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flipstar-web
+  labels:
+    app.kubernetes.io/name: flipstar-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: flipstar
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flipstar-web
+    app.kubernetes.io/component: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,25 @@
+# Deliberately NOT listed in k8s/base/kustomization.yaml.
+#
+# That base is consumed by BOTH k8s/overlays/staging and
+# k8s/overlays/production. Adding the web app there would deploy it to
+# production on the next sync with whatever tag the production overlay
+# happens to carry -- currently the all-zeroes placeholder, which does not
+# exist in GHCR. Each overlay opts in by referencing ../../base/web instead,
+# so production stays untouched until someone adds that line on purpose.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: flipstar
+      app.kubernetes.io/managed-by: kustomize
+    includeSelectors: true
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+
+images:
+  - name: ghcr.io/skykin-technologies/flipstar-web
+    newTag: unset-set-by-overlay

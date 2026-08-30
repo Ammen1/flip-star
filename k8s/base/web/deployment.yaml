@@ -1,0 +1,127 @@
+# FlipStar web SPA (React/Vite build served by nginx).
+#
+# Two things here are not obvious and both cost a silent failure if changed:
+#
+# 1. Port 8080, not 80. The runtime image is nginxinc/nginx-unprivileged
+#    (see Flipstar-web/Dockerfile), which runs as uid 101 and therefore cannot
+#    bind a privileged port. Reverting to the stock nginx image would require
+#    dropping runAsNonRoot below.
+#
+# 2. The API base URL is NOT configurable here. Vite inlines
+#    VITE_API_BASE_URL into the bundle at BUILD time (Flipstar-web/config.js),
+#    so pointing this at a different backend means rebuilding the image, not
+#    editing a ConfigMap. The build arg lives in the web repo's workflow.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-web
+  labels:
+    app.kubernetes.io/name: flipstar-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-web
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-web
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # 101:101 is the `nginx` user baked into nginxinc/nginx-unprivileged.
+        # No fsGroup: nothing is persisted, every writable path below is an
+        # emptyDir the kubelet already makes writable.
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: flipstar-web
+                    app.kubernetes.io/component: web
+      containers:
+        - name: web
+          image: ghcr.io/skykin-technologies/flipstar-web:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # /healthz is a `return 200` block in Flipstar-web/default.conf.
+          # Probing / instead would work but pulls the ~2MB self-contained
+          # index.html on every check -- the Vite build inlines the whole JS
+          # bundle into the entry document, so there is no small static file
+          # to hit by accident.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 12
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Static file serving. Far below the backend's budget: nginx holds
+          # the documents in the page cache and does no application work.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          # readOnlyRootFilesystem forces all three. nginx-unprivileged writes
+          # its pid and every *_temp_path under /tmp, and the stock config
+          # still declares a cache directory under /var/cache/nginx. A missing
+          # mount here does not fail the manifest -- nginx exits at startup.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

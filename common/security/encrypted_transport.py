@@ -70,7 +70,7 @@ from django.conf import settings
 from rest_framework.parsers import JSONParser
 from rest_framework.renderers import JSONRenderer
 
-from common.exceptions import DecryptionError
+from common.exceptions import DecryptionError, EncryptionUnavailable
 from common.security.e2e_encryption import decrypt_payload, encrypt_payload, get_server_private_key
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,25 @@ def require_client_public_key(request) -> str:
             f'Missing required {CLIENT_PUBLIC_KEY_HEADER_NAME} header.'
         )
     return client_public_key
+
+
+def require_server_key() -> None:
+    """Fail now, with a handled error, if the response could not be sealed.
+
+    The renderer is the natural place to discover a missing server key, but it
+    runs *after* DRF's exception handler -- anything raised there escapes to
+    Django and becomes an unhandled HTML 500. Checking during dispatch keeps
+    the failure inside DRF, so the client gets a clean JSON 503 and the cause
+    is logged once, rather than a generic error page.
+    """
+    try:
+        if not get_server_private_key():
+            raise EncryptionUnavailable()
+    except EncryptionUnavailable:
+        raise
+    except Exception as exc:
+        logger.error('Server encryption key unavailable: %s', exc, exc_info=True)
+        raise EncryptionUnavailable() from exc
 
 
 class EncryptedJSONParser(JSONParser):
@@ -144,8 +163,6 @@ class EncryptedJSONRenderer(JSONRenderer):
 
     def render(self, data, accepted_media_type=None, renderer_context=None):
         if data is None:
-            # Matches JSONRenderer's own early return (e.g. 204 responses) --
-            # nothing to encrypt.
             return b''
 
         renderer_context = renderer_context or {}
@@ -153,12 +170,7 @@ class EncryptedJSONRenderer(JSONRenderer):
         client_public_key = _client_public_key(request)
 
         if not client_public_key:
-            # Reachable only if this renderer is attached without going
-            # through encrypted_endpoint / EncryptedPayloadMixin (both
-            # reject the request before this point if the header is
-            # missing). Rendering plain rather than raising matters here
-            # specifically: see the module docstring on why raising from a
-            # renderer is unsafe.
+
             logger.warning(
                 'EncryptedJSONRenderer used without a client public key; '
                 'rendering unencrypted. This should not happen on a view '
@@ -166,11 +178,26 @@ class EncryptedJSONRenderer(JSONRenderer):
             )
             return super().render(data, accepted_media_type, renderer_context)
 
-        sealed = encrypt_payload(
-            data,
-            receiver_public_key_b64=client_public_key,
-            sender_private_key_b64=get_server_private_key(),
-        )
+        try:
+            sealed = encrypt_payload(
+                data,
+                receiver_public_key_b64=client_public_key,
+                sender_private_key_b64=get_server_private_key(),
+            )
+        except Exception as exc:
+            response = renderer_context.get('response')
+            status_code = getattr(response, 'status_code', 500)
+            logger.error(
+                'Response encryption failed (status %s): %s',
+                status_code, exc, exc_info=True,
+            )
+            if status_code >= 400:
+                return super().render(data, accepted_media_type, renderer_context)
+            return super().render(
+                {'error': 'Secure transport is temporarily unavailable. Please retry.',
+                 'code': 'encryption_unavailable'},
+                accepted_media_type, renderer_context,
+            )
         return super().render(sealed.to_dict(), accepted_media_type, renderer_context)
 
 
@@ -213,8 +240,6 @@ class EncryptedPayloadMixin:
     renderer_classes = [EncryptedJSONRenderer]
 
     def initial(self, request, *args, **kwargs):
-        # Authentication, permissions and throttling first -- matches
-        # auth -> permissions -> decrypt. Runs for every HTTP method,
-        # unlike a per-handler check, so GET/DELETE views are covered too.
         super().initial(request, *args, **kwargs)
         require_client_public_key(request)
+        require_server_key()

@@ -1,0 +1,46 @@
+# REQUIRED, not optional -- without it the web app is unreachable and nothing
+# reports an error.
+#
+# k8s/base/networkpolicy.yaml declares a default-deny-ingress whose
+# podSelector is `app.kubernetes.io/part-of: flipstar`. The web Deployment
+# carries that label, so it inherits the deny. The backend has its own allow
+# rule (flipstar-backend-allow-ingress); this is the equivalent for the web
+# pod, and its absence would show up only as ingress-nginx returning 504 with
+# healthy, Ready pods behind it.
+#
+# Both `from` blocks mirror the backend rule exactly, for the same reasons
+# documented there -- the namespace label was verified against this cluster's
+# Helm-installed ingress-nginx, and the two CIDRs cover kubelet probe traffic,
+# which originates from the node and matches no pod or namespace selector.
+# Every value below is cluster-specific and must be re-derived elsewhere.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flipstar-web-allow-ingress
+  labels:
+    app.kubernetes.io/name: flipstar-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: flipstar
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-web
+      app.kubernetes.io/component: web
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.93/32
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8080

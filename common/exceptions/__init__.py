@@ -5,6 +5,7 @@ from common.exceptions.base import (
     DecryptionError,
     DomainError,
     DuplicateTransaction,
+    EncryptionUnavailable,
     FinancialError,
     InsufficientFunds,
     IntegrationError,
@@ -19,7 +20,7 @@ from common.exceptions.base import (
 
 __all__ = [
     'ConflictError', 'DecryptionError', 'DomainError', 'DuplicateTransaction',
-    'FinancialError', 'IntegrationError', 'IntegrationTimeout',
+    'EncryptionUnavailable', 'FinancialError', 'IntegrationError', 'IntegrationTimeout',
     'InsufficientFunds', 'InvalidStateTransition', 'NotFound',
     'PermissionDenied', 'ReplayDetected', 'SignatureVerificationError',
     'ValidationError',

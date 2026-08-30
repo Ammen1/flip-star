@@ -305,7 +305,9 @@ def test_mixin_class_attributes():
     assert EncryptedPayloadMixin.renderer_classes == [EncryptedJSONRenderer]
 
 
-def test_mixin_initial_calls_super_before_checking_header(client_keys):
+def test_mixin_initial_calls_super_before_checking_header(_server_keys, client_keys):
+    # _server_keys: initial() now also verifies the server can seal a response
+    # (require_server_key), so the key manager has to be initialized here.
     client_public_key, _ = client_keys
     view = _MixedView()
     request = factory.get('/x/', HTTP_X_CLIENT_PUBLIC_KEY=client_public_key)

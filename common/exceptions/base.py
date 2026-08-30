@@ -162,6 +162,25 @@ class DecryptionError(DomainError):
     status_code = 400
 
 
+class EncryptionUnavailable(DomainError):
+    """The service cannot seal a response for an encrypted endpoint.
+
+    Raised when the server keypair cannot be retrieved (key store unreachable,
+    key never provisioned). This is deliberately raised during request dispatch
+    rather than left to surface from the renderer: a renderer runs *after*
+    DRF's exception handler, so anything it raises escapes to Django and
+    becomes an unhandled HTML 500 -- which is how a key-store outage
+    previously presented to clients.
+
+    503 rather than 500: the request is well-formed and retryable once the key
+    store is healthy again.
+    """
+
+    code = 'encryption_unavailable'
+    default_message = 'Secure transport is temporarily unavailable. Please retry.'
+    status_code = 503
+
+
 class ReplayDetected(DomainError):
     """An encrypted payload's nonce has already been used once before.
 

@@ -1,3 +1,19 @@
+# Host split for staging:
+#
+#   api.uat.flipstar.et -> flipstar-backend  (Django/Daphne API)
+#   uat.flipstar.et     -> flipstar-web      (React SPA)
+#   flipstar.et         -> flipstar-backend  (unchanged)
+#
+# The SPA calls the API cross-origin, from https://uat.flipstar.et to
+# https://api.uat.flipstar.et. That already works without a CORS change:
+# patches/configmap-patch.yaml lists https://uat.flipstar.et in both
+# CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS.
+#
+# COMMIT THIS FILE SEPARATELY, AFTER the web image exists in GHCR and the web
+# pods are Ready. Flipping the rule while the Deployment is in
+# ImagePullBackOff turns uat.flipstar.et into a 504 -- Argo CD syncs the whole
+# overlay at once, so a single commit containing both the new Deployment and
+# this change would do exactly that.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 
@@ -35,7 +51,9 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: flipstar-backend
+                # Changed from flipstar-backend. The SPA is served here; the
+                # API keeps its own hostname above.
+                name: flipstar-web
                 port:
                   name: http
     - host: flipstar.et
