@@ -184,20 +184,133 @@ def _resolve_user(msisdn: str):
     return plan.user if plan is not None else None
 
 
+def _find_active_plan(relation, tier, user):
+    """
+    Locate the live subscription this notification refers to.
+
+    Two lookup paths, because a subscriber may reach us before they have an
+    account: by user when the MSISDN resolved to one, and by phone number for
+    the SMS-first case where the row carries no user until they register.
+    Both are scoped to the tier, so cancelling Daily never touches Monthly.
+    """
+    from api.models import SubscriptionPlan
+
+    qs = SubscriptionPlan.objects.filter(tier=tier, status='active')
+    if user is not None:
+        return qs.filter(user=user).first()
+    if relation.msisdn:
+        return qs.filter(user__isnull=True, onevas_phone_number=relation.msisdn).first()
+    return None
+
+
 def _apply_relation(relation, tier, user):
     """
-    Apply a subscription change.
+    Apply one subscription change announced by the MA.
 
-    Left unimplemented on purpose. The live subscription lifecycle currently
-    belongs to OnevasWebhookView, and adding a second path that grants and
-    cancels the same SubscriptionPlan rows would be exactly the parallel
-    implementation this migration is meant to avoid. At cutover this function
-    takes over that logic and the OneVAS view is deleted in the same change.
+    Returns ``(applied, description)``. ``applied`` says whether subscription
+    state actually changed, which the caller records on the log row -- a
+    duplicate or a no-op is a successful request that changed nothing, and the
+    two must stay distinguishable when reconciling against TIMWE's own records.
 
-    Reached only when TIMWE_INTEGRATION_ENABLED is true, which stays false
-    until TIMWE supplies credentials and the WEB subscription flow.
+    Reached only when TIMWE_INTEGRATION_ENABLED is true. Until the OneVAS
+    webhooks are removed, that flag is the only thing keeping this from
+    granting subscriptions in parallel with them.
     """
-    raise NotImplementedError(
-        'TIMWE subscription application is wired at cutover, when '
-        'OnevasWebhookView is removed. See docs/integrations.md.'
-    )
+    from django.db import transaction
+
+    from api.models import SubscriptionHistory, SubscriptionPlan
+
+    # The MA retries on anything other than result 0, and a retried
+    # subscribe must not produce a second subscription. transactionID is the
+    # MA's own identifier for the event, so it is the right idempotency key.
+    # The current log row is still applied=False at this point, so it cannot
+    # match itself.
+    if (
+        relation.transaction_id
+        and TimweSyncOrderLog.objects.filter(
+            transaction_id=relation.transaction_id, applied=True
+        ).exists()
+    ):
+        return False, 'Already applied; duplicate transactionID.'
+
+    if relation.is_subscribe:
+        with transaction.atomic():
+            if _find_active_plan(relation, tier, user) is not None:
+                return False, 'Subscription already active.'
+
+            plan = SubscriptionPlan.objects.create(
+                user=user,
+                tier=tier,
+                duration_type=tier.duration_type,
+                # Reusing the onevas_* column deliberately rather than adding a
+                # parallel timwe_phone_number: _resolve_user already searches
+                # it, and every existing subscription query keys off it. A
+                # second phone column would mean auditing all of them.
+                onevas_phone_number=relation.msisdn,
+                subscription_source='sms',
+                status='pending',
+            )
+            # activate() owns the date arithmetic -- it adds
+            # tier.duration_days + free_trial_days, and leaves end_date null
+            # for OnDemand, which has no duration by definition.
+            plan.activate()
+
+            SubscriptionHistory.objects.create(
+                user=user,
+                subscription=plan,
+                tier=tier,
+                action='created',
+                reason='Subscribed via TIMWE',
+                metadata={
+                    'source': 'timwe',
+                    'product_id': relation.product_id,
+                    'service_id': relation.service_id,
+                    'transaction_id': relation.transaction_id,
+                    'order_key': relation.order_key,
+                    'keyword': relation.keyword,
+                },
+            )
+
+        logger.info(
+            'TIMWE subscription activated',
+            extra={'product_id': relation.product_id, 'tier': tier.name},
+        )
+        return True, 'Subscription activated.'
+
+    if relation.is_unsubscribe:
+        with transaction.atomic():
+            plan = _find_active_plan(relation, tier, user)
+            if plan is None:
+                # Deliberately not 2031 ("subscription relationship does not
+                # exist"). The MA is reporting something it has already done;
+                # answering with an error makes it retry a cancellation we can
+                # never satisfy. Recorded, and reconciled from the log.
+                return False, 'No active subscription to cancel.'
+
+            plan.cancel(reason='Unsubscribed via TIMWE')
+
+            SubscriptionHistory.objects.create(
+                user=plan.user,
+                subscription=plan,
+                tier=tier,
+                action='cancelled',
+                reason='Unsubscribed via TIMWE',
+                metadata={
+                    'source': 'timwe',
+                    'product_id': relation.product_id,
+                    'transaction_id': relation.transaction_id,
+                    'order_key': relation.order_key,
+                    'update_reason': relation.update_reason,
+                },
+            )
+
+        logger.info(
+            'TIMWE subscription cancelled',
+            extra={'product_id': relation.product_id, 'tier': tier.name},
+        )
+        return True, 'Subscription cancelled.'
+
+    # updateType 3. The guide defines it as "Update" without saying what
+    # changes, and every documented reason code arrives on 1 or 2. Recorded
+    # rather than guessed at; revisit if one ever appears in the log.
+    return False, 'Update recorded; no subscription change.'
