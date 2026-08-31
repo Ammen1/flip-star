@@ -984,6 +984,17 @@ urlpatterns = [
         timwe_sync_order_relation,
         name='timwe-sync-order-relation',
     ),
+    # Same view, without the trailing slash. NOT redundant: the MA is
+    # configured to POST to `.../sync-order-relation` and APPEND_SLASH answers
+    # a slashless POST with a 301, which SOAP clients either refuse to follow
+    # or follow as a GET with the body discarded -- the failure looks like a
+    # network problem from their side and like no traffic at all from ours.
+    # Unnamed so reverse('timwe-sync-order-relation') keeps returning the
+    # canonical slashed form.
+    path(
+        'timwe/sync-order-relation',
+        timwe_sync_order_relation,
+    ),
     # Subscription Tiers
     path(
         'subscriptions/tiers/',

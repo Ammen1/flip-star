@@ -11,7 +11,22 @@ kind: ConfigMap
 metadata:
   name: flipstar-backend-config
 data:
-  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et"
+  # 172.16.170.2 is this node's address on the IPsec tunnel to TIMWE
+  # (enp4s5). Their Master Aggregator POSTs to https://172.16.170.2/... so the
+  # Host header is that bare IP; without it here Django answers 400
+  # DisallowedHost after the ingress has already routed correctly, which looks
+  # like an application fault rather than a config gap.
+  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,172.16.170.2"
+
+  # The pod CIDR, so X-Forwarded-For from ingress-nginx is honoured.
+  # common/security/client_ip.py only trusts that header when the immediate
+  # peer is a proxy we control, and it defaults to loopback only -- which is
+  # never true in Kubernetes, where the peer is the ingress pod on 10.42.x.x.
+  # Left unset, get_client_ip() returns the ingress pod's own address, so
+  # TIMWE_ALLOWED_IPS would reject every genuine request from the MA, and
+  # IP-based rate limiting and audit logging would attribute all traffic to
+  # one internal address.
+  TRUSTED_PROXY_IPS: "10.42.0.0/16"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.

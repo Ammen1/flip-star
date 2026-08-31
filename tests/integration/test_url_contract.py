@@ -183,11 +183,15 @@ def test_total_route_count_is_stable():
     which defaults to False and is set only in the staging overlay. The count
     is therefore the same in every environment.
 
+    +1 for the slashless alias of timwe/sync-order-relation (api/urls.py).
+    The MA is configured without the trailing slash and APPEND_SLASH turns
+    a slashless POST into a 301 that drops the body.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 301, (
+    assert len(urlpatterns) == 302, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )

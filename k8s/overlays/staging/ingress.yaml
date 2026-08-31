@@ -34,6 +34,26 @@ spec:
       secretName: flipstar-staging-tls
 
   rules:
+    # Host-less rule: matches any Host header no other rule claims, which is
+    # how TIMWE's Master Aggregator reaches us. It POSTs to
+    # https://172.16.170.2/api/v1/timwe/sync-order-relation over the IPsec
+    # tunnel, so the Host header is a bare IP -- and the Ingress spec forbids
+    # IP addresses in `host`, so it cannot be matched by name.
+    #
+    # Scoped to /api/v1/timwe deliberately. A host-less `path: /` would send
+    # every unmatched Host to the backend, turning this into an accidental
+    # default vhost. Without the trailing slash so both
+    # .../sync-order-relation and .../sync-order-relation/ match -- the MA is
+    # configured without it.
+    - http:
+        paths:
+          - path: /api/v1/timwe
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
     - host: api.uat.flipstar.et
       http:
         paths:
