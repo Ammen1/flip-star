@@ -18,7 +18,6 @@ from api.views.boost import (
     record_boost_impression,
     resume_boost_campaign,
 )
-from api.views.timwe import timwe_sync_order_relation
 from api.views.charging import (
     get_charging_analytics,
     get_charging_statistics,
@@ -160,6 +159,7 @@ from api.views.support import (
     admin_update_support_request,
     my_support_requests,
 )
+from api.views.timwe import timwe_sync_order_relation
 
 
 @api_view(['GET', 'HEAD'])
