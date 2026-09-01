@@ -24,17 +24,28 @@ pytestmark = pytest.mark.integration
 PURCHASE_URL = '/api/v1/coins/purchase/'
 
 
-def post_purchase(user, package_id, client_public):
-    """Call the endpoint the way a client does.
+def post_purchase(user, package_id, keys):
+    """Call the endpoint exactly the way a real client does.
 
-    It sits behind the E2E transport, so the request needs the client public
-    key header; without it the view is refused before it is even reached.
+    It sits behind the E2E transport, so both the header and an *encrypted
+    body* are required. Sending plaintext is rejected by the parser before the
+    view runs -- which would make this look like a pass for the wrong reason,
+    since a view that never touches request.data never triggers the parser.
     """
+    from common.security.e2e_encryption import encrypt_payload
+
+    server_public, client_public, client_private = keys
+    sealed = encrypt_payload({'package_id': package_id}, server_public, client_private)
+
     api = APIClient()
     api.force_authenticate(user=user)
     return api.post(
         PURCHASE_URL,
-        {'package_id': package_id},
+        {
+            'encrypted': sealed['encrypted'],
+            'nonce': sealed['nonce'],
+            'checksum': sealed['checksum'],
+        },
         format='json',
         HTTP_X_CLIENT_PUBLIC_KEY=client_public,
     )
@@ -72,21 +83,17 @@ def test_the_old_instant_credit_endpoint_no_longer_grants_coins(
 ):
     """It used to add package coins on request, so any signed-in user could
     mint themselves an unlimited balance."""
-    _server_public, client_public, _client_private = encrypted_client_keys
-
     before = coins(user)
-    response = post_purchase(user, package.id, client_public)
+    response = post_purchase(user, package.id, encrypted_client_keys)
 
     assert response.status_code == 402, response.content
     assert coins(user) == before
 
 
 def test_repeating_that_call_still_grants_nothing(user, package, encrypted_client_keys):
-    _server_public, client_public, _client_private = encrypted_client_keys
-
     before = coins(user)
     for _ in range(5):
-        post_purchase(user, package.id, client_public)
+        post_purchase(user, package.id, encrypted_client_keys)
     assert coins(user) == before
 
 
