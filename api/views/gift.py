@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from api.services.coin_purchase import insufficient_coins_payload
 from django.db.models import Q, F, Sum, Count, Case, When
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -326,16 +327,22 @@ class GiftTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
         
         # Check if sender has enough purchased coins
         if (sender_coin_balance.purchased_balance or 0) < total_cost:
+            # Gifting spends purchased coins only, so the balance that matters
+            # here is the purchased one -- not the total, which is what makes
+            # this refusal confusing without the breakdown below.
             return Response(
-                {
-                    'error': f'Insufficient purchased coins. You need {total_cost} purchased coins but have {sender_coin_balance.purchased_balance or 0}. '
-                    f'Your total balance is {sender_coin_balance.balance} (earned: {sender_coin_balance.earned_balance or 0}, purchased: {sender_coin_balance.purchased_balance or 0}). '
-                    f'Only purchased coins can be used for gifting. Please top up your coins.',
-                    'needs_recharge': True,
-                    'required_coins': total_cost,
-                    'current_purchased_coins': sender_coin_balance.purchased_balance or 0,
-                    'current_earned_coins': sender_coin_balance.earned_balance or 0
-                },
+                insufficient_coins_payload(
+                    total_cost,
+                    sender_coin_balance.purchased_balance or 0,
+                    message=(
+                        f'You need {total_cost} purchased coins to send this gift and have '
+                        f'{sender_coin_balance.purchased_balance or 0}. Only purchased coins '
+                        f'can be gifted.'
+                    ),
+                    current_purchased_coins=sender_coin_balance.purchased_balance or 0,
+                    current_earned_coins=sender_coin_balance.earned_balance or 0,
+                    total_balance=sender_coin_balance.balance,
+                ),
                 status=status.HTTP_400_BAD_REQUEST
             )
         

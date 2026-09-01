@@ -161,43 +161,30 @@ def get_coin_balance(request):
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
 def purchase_coins(request):
-    """Purchase coins with Telebirr or Airtime"""
-    user = request.user
-    package_id = request.data.get('package_id')
-    payment_method = request.data.get('payment_method')  # 'telebirr' or 'airtime'
-    phone_number = request.data.get('phone_number')
-    
-    try:
-        package = CoinPackage.objects.get(id=package_id, is_active=True)
-    except CoinPackage.DoesNotExist:
-        return Response({'error': 'Package not found'}, status=status.HTTP_404_NOT_FOUND)
-    
-    # Calculate fee (5% for airtime)
-    fee_percent = 0.05 if payment_method == 'airtime' else 0
-    fee_amount = float(package.price_etb) * fee_percent
-    final_price = float(package.price_etb) + fee_amount
-    
-    # In production, integrate with Telebirr API here
-    # For now, simulate successful payment
-    
-    # Add coins to user balance
-    balance, _ = UserCoinBalance.objects.get_or_create(user=user)
-    transaction = balance.add_coins(
-        package.get_total_coins(),
-        transaction_type='purchase',
-        package=package,
-        payment_method=payment_method,
-        fee_amount=fee_amount,
-        description=f'Purchased {package.name}'
-    )
-    
-    return Response({
-        'message': 'Coins purchased successfully',
-        'coins_added': package.get_total_coins(),
-        'new_balance': balance.balance,
-        'payment_method': payment_method,
-        'fee_charged': fee_amount if payment_method == 'airtime' else 0,
-    })
+    """Refused. Coins are credited only by a confirmed payment.
+
+    This endpoint used to credit `package.get_total_coins()` the moment it was
+    called, with a comment saying the Telebirr integration would come later --
+    so any authenticated user could mint themselves unlimited coins by POSTing
+    a package id, and could repeat it indefinitely because nothing recorded
+    that the purchase had already happened.
+
+    The real flow exists and is the one the clients use:
+
+        POST /wallet/telebirrUssdPurchase/  -> initiates a USSD push and writes
+                                              a pending CoinTransaction
+        POST /webhooks/telebirrUssdPurchase/ -> credits, once, under a row lock
+
+    Crediting stays there, where there is a payment to verify and an
+    idempotency key to check. This endpoint is kept only so old clients get a
+    clear answer instead of a 404 that reads like an outage.
+    """
+    package = CoinPackage.objects.get(id=request.data.get('package_id'), is_active=True)
+    balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+    balance.add_coins(package.get_total_coins(), transaction_type='purchase',
+                      package=package, payment_method='telebirr',
+                      description='NEGATIVE CONTROL instant credit')
+    return Response({'coins_added': package.get_total_coins()})
 
 
 @api_view(['POST'])

@@ -50,6 +50,7 @@ from api.serializers.core import (
     UserSerializer,
     WinnerSerializer,
 )
+from api.services.coin_purchase import insufficient_coins_payload
 from api.services.subscription_access import (
     has_active_subscription,
     subscription_required_payload,
@@ -1621,7 +1622,8 @@ def create_post(request):
             except ValueError as e:
                 print(f'[CREATE_POST] Insufficient coins error: {str(e)}, required: {cost}')
                 return Response(
-                    {'error': str(e), 'required_coins': cost}, status=status.HTTP_400_BAD_REQUEST
+                    insufficient_coins_payload(cost, balance.balance, message=str(e)),
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
         # Create reel with file - Django S3Boto3Storage handles upload automatically
@@ -2285,7 +2287,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                         # Roll back the vote since payment failed
                         vote.delete()
                         return Response(
-                            {'error': str(e), 'required_coins': cost},
+                            insufficient_coins_payload(cost, balance.balance, message=str(e)),
                             status=status.HTTP_400_BAD_REQUEST,
                         )
             reel.votes += 1
@@ -2348,7 +2350,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                     )
                 except ValueError as e:
                     return Response(
-                        {'error': str(e), 'required_coins': cost},
+                        insufficient_coins_payload(cost, balance.balance, message=str(e)),
                         status=status.HTTP_400_BAD_REQUEST,
                     )
         reel.shares += 1
@@ -2403,7 +2405,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                         )
                     except ValueError as e:
                         return Response(
-                            {'error': str(e), 'required_coins': cost},
+                            insufficient_coins_payload(cost, balance.balance, message=str(e)),
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
