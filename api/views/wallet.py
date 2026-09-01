@@ -12,12 +12,12 @@ Endpoints:
 - POST   /api/wallet/telebirr/initiate/     Initiate Telebirr payment for coin purchase
 - POST   /api/wallet/telebirr-callback/     Telebirr payment callback webhook
 """
+
 import logging
 from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.db import transaction as db_transaction
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -70,7 +70,9 @@ def _serialize_transaction(tx):
 
     # Get post details for gift transactions
     post_details = None
-    if tx.reel_id and (tx.transaction_type == 'gift_sent' or tx.transaction_type == 'gift_received'):
+    if tx.reel_id and (
+        tx.transaction_type == 'gift_sent' or tx.transaction_type == 'gift_received'
+    ):
         try:
             reel = tx.reel
             if reel:
@@ -80,8 +82,11 @@ def _serialize_transaction(tx):
                     'description': reel.description or '',
                     'media_url': reel.media.url if reel.media else None,
                 }
-        except:
-            pass
+        except Exception:
+            # Best-effort enrichment: a transaction still serialises without
+            # its reel. Logged rather than silently dropped so a broken
+            # relation is visible.
+            logger.debug('Could not attach reel to transaction %s', tx.id, exc_info=True)
 
     return {
         'id': tx.id,
@@ -110,7 +115,9 @@ def _serialize_withdrawal(w):
         'net_birr': str(w.net_birr),
         'conversion_rate': w.conversion_rate,
         'payout_method': w.payout_method,
-        'payout_method_display': dict(WithdrawalRequest.PAYOUT_METHODS).get(w.payout_method, w.payout_method),
+        'payout_method_display': dict(WithdrawalRequest.PAYOUT_METHODS).get(
+            w.payout_method, w.payout_method
+        ),
         'payout_account': w.payout_account,
         'payout_account_name': w.payout_account_name,
         'status': w.status,
@@ -129,6 +136,7 @@ def _serialize_withdrawal(w):
 # User wallet endpoints
 # ---------------------------------------------------------------------------
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
@@ -137,48 +145,45 @@ def wallet_summary(request):
     balance = _get_or_create_balance(request.user)
     config = WalletConfig.get_config()
 
-    recent_tx = (
-        CoinTransaction.objects
-        .filter(user=request.user)
-        .order_by('-created_at')[:10]
-    )
+    recent_tx = CoinTransaction.objects.filter(user=request.user).order_by('-created_at')[:10]
 
     pending_withdrawals = WithdrawalRequest.objects.filter(
-        user=request.user,
-        status__in=['pending', 'approved', 'processing']
+        user=request.user, status__in=['pending', 'approved', 'processing']
     ).count()
 
-    return Response({
-        'balance': {
-            'total': balance.balance,
-            'earned': balance.earned_balance,
-            'purchased': balance.purchased_balance,
-        },
-        'points': {
-            'current': request.user.profile.points,
-            'earned_total': request.user.profile.points_earned_total,
-            'withdrawn_total': request.user.profile.points_withdrawn_total,
-        },
-        'totals': {
-            'lifetime_earned': balance.total_earned,
-            'lifetime_spent': balance.total_spent,
-            'lifetime_purchased': balance.total_purchased,
-            'lifetime_withdrawn': balance.total_withdrawn,
-        },
-        'withdrawal': {
-            'enabled': config.withdrawal_enabled,
-            'min_coins': config.withdrawal_min_coins,
-            'coins_per_birr': config.coins_per_birr,
-            'fee_percent': str(config.withdrawal_fee_percent),
-            'eligible': (
-                config.withdrawal_enabled
-                and balance.earned_balance >= config.withdrawal_min_coins
-            ),
-            'pending_requests': pending_withdrawals,
-        },
-        'currency': 'ETB',
-        'recent_transactions': [_serialize_transaction(tx) for tx in recent_tx],
-    })
+    return Response(
+        {
+            'balance': {
+                'total': balance.balance,
+                'earned': balance.earned_balance,
+                'purchased': balance.purchased_balance,
+            },
+            'points': {
+                'current': request.user.profile.points,
+                'earned_total': request.user.profile.points_earned_total,
+                'withdrawn_total': request.user.profile.points_withdrawn_total,
+            },
+            'totals': {
+                'lifetime_earned': balance.total_earned,
+                'lifetime_spent': balance.total_spent,
+                'lifetime_purchased': balance.total_purchased,
+                'lifetime_withdrawn': balance.total_withdrawn,
+            },
+            'withdrawal': {
+                'enabled': config.withdrawal_enabled,
+                'min_coins': config.withdrawal_min_coins,
+                'coins_per_birr': config.coins_per_birr,
+                'fee_percent': str(config.withdrawal_fee_percent),
+                'eligible': (
+                    config.withdrawal_enabled
+                    and balance.earned_balance >= config.withdrawal_min_coins
+                ),
+                'pending_requests': pending_withdrawals,
+            },
+            'currency': 'ETB',
+            'recent_transactions': [_serialize_transaction(tx) for tx in recent_tx],
+        }
+    )
 
 
 @api_view(['GET'])
@@ -209,14 +214,16 @@ def wallet_transactions(request):
     end = start + page_size
     items = qs[start:end]
 
-    return Response({
-        'count': total,
-        'page': page,
-        'page_size': page_size,
-        'has_next': end < total,
-        'has_prev': page > 1,
-        'results': [_serialize_transaction(tx) for tx in items],
-    })
+    return Response(
+        {
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end < total,
+            'has_prev': page > 1,
+            'results': [_serialize_transaction(tx) for tx in items],
+        }
+    )
 
 
 @api_view(['GET'])
@@ -247,24 +254,26 @@ def withdrawal_info(request):
         except ValueError:
             pass
 
-    return Response({
-        'enabled': config.withdrawal_enabled,
-        'min_coins': config.withdrawal_min_coins,
-        'max_coins_per_request': config.withdrawal_max_coins_per_request,
-        'coins_per_birr': config.coins_per_birr,
-        'fee_percent': str(config.withdrawal_fee_percent),
-        'processing_days': config.withdrawal_processing_days,
-        'available_coins': balance.earned_balance,
-        'eligible': (
-            config.withdrawal_enabled
-            and balance.earned_balance >= config.withdrawal_min_coins
-        ),
-        'payout_methods': [
-            {'value': v, 'label': l} for v, l in WithdrawalRequest.PAYOUT_METHODS
-        ],
-        'preview': preview,
-        'currency': 'ETB',
-    })
+    return Response(
+        {
+            'enabled': config.withdrawal_enabled,
+            'min_coins': config.withdrawal_min_coins,
+            'max_coins_per_request': config.withdrawal_max_coins_per_request,
+            'coins_per_birr': config.coins_per_birr,
+            'fee_percent': str(config.withdrawal_fee_percent),
+            'processing_days': config.withdrawal_processing_days,
+            'available_coins': balance.earned_balance,
+            'eligible': (
+                config.withdrawal_enabled and balance.earned_balance >= config.withdrawal_min_coins
+            ),
+            'payout_methods': [
+                {'value': value, 'label': label}
+                for value, label in WithdrawalRequest.PAYOUT_METHODS
+            ],
+            'preview': preview,
+            'currency': 'ETB',
+        }
+    )
 
 
 @api_view(['POST'])
@@ -371,19 +380,27 @@ def request_withdrawal(request):
         if b2c_result.get('success'):
             with db_transaction.atomic():
                 withdrawal = WithdrawalRequest.objects.select_for_update().get(pk=withdrawal.pk)
-                withdrawal.originator_conversation_id = b2c_result.get('originator_conversation_id') or ''
+                withdrawal.originator_conversation_id = (
+                    b2c_result.get('originator_conversation_id') or ''
+                )
                 withdrawal.conversation_id = b2c_result.get('conversation_id') or ''
                 withdrawal.status = 'processing'
-                withdrawal.save(update_fields=['originator_conversation_id', 'conversation_id', 'status'])
+                withdrawal.save(
+                    update_fields=['originator_conversation_id', 'conversation_id', 'status']
+                )
         else:
             logger.error(
-                'B2C initiation failed for withdrawal #%s: %s', withdrawal.id, b2c_result.get('error'),
+                'B2C initiation failed for withdrawal #%s: %s',
+                withdrawal.id,
+                b2c_result.get('error'),
             )
             with db_transaction.atomic():
                 withdrawal = WithdrawalRequest.objects.select_for_update().get(pk=withdrawal.pk)
                 if withdrawal.status == 'pending':
                     withdrawal.status = 'failed'
-                    withdrawal.rejection_reason = f"B2C payment failed: {b2c_result.get('error', 'Unknown error')}"
+                    withdrawal.rejection_reason = (
+                        f"B2C payment failed: {b2c_result.get('error', 'Unknown error')}"
+                    )
                     withdrawal.save(update_fields=['status', 'rejection_reason'])
                     # Refund the points. total_field is intentionally omitted:
                     # _apply_delta only ever increments a total counter, and
@@ -458,22 +475,25 @@ def reinvest_points(request):
             user_profile.deduct_points(points_amount)
             # 1 point = 1 coin. Also creates the CoinTransaction record.
             coin_balance.add_earned(
-                points_amount, transaction_type='reinvest',
+                points_amount,
+                transaction_type='reinvest',
                 description=f'Converted {points_amount} points to coins',
             )
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response({
-        'message': 'Successfully converted points to coins',
-        'points_converted': points_amount,
-        'coins_received': points_amount,
-        'new_balance': {
-            'points': user_profile.points,
-            'coins': coin_balance.balance,
-            'earned_coins': coin_balance.earned_balance,
-        },
-    })
+    return Response(
+        {
+            'message': 'Successfully converted points to coins',
+            'points_converted': points_amount,
+            'coins_received': points_amount,
+            'new_balance': {
+                'points': user_profile.points,
+                'coins': coin_balance.balance,
+                'earned_coins': coin_balance.earned_balance,
+            },
+        }
+    )
 
 
 @api_view(['GET'])
@@ -482,7 +502,7 @@ def reinvest_points(request):
 def my_withdrawals(request):
     """List current user's withdrawal requests with pagination."""
     qs = WithdrawalRequest.objects.filter(user=request.user).order_by('-created_at')
-    
+
     try:
         page = max(int(request.query_params.get('page', 1)), 1)
         page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
@@ -494,14 +514,16 @@ def my_withdrawals(request):
     end = start + page_size
     items = qs[start:end]
 
-    return Response({
-        'count': total,
-        'page': page,
-        'page_size': page_size,
-        'has_next': end < total,
-        'has_prev': page > 1,
-        'results': [_serialize_withdrawal(w) for w in items],
-    })
+    return Response(
+        {
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end < total,
+            'has_prev': page > 1,
+            'results': [_serialize_withdrawal(w) for w in items],
+        }
+    )
 
 
 @api_view(['POST'])
@@ -537,15 +559,17 @@ def cancel_withdrawal(request, withdrawal_id):
     withdrawal.status = 'cancelled'
     withdrawal.save()
 
-    return Response({
-        'message': 'Withdrawal cancelled and coins refunded',
-        'withdrawal': _serialize_withdrawal(withdrawal),
-        'new_balance': {
-            'total': balance.balance,
-            'earned': balance.earned_balance,
-            'purchased': balance.purchased_balance,
-        },
-    })
+    return Response(
+        {
+            'message': 'Withdrawal cancelled and coins refunded',
+            'withdrawal': _serialize_withdrawal(withdrawal),
+            'new_balance': {
+                'total': balance.balance,
+                'earned': balance.earned_balance,
+                'purchased': balance.purchased_balance,
+            },
+        }
+    )
 
 
 @api_view(['GET'])
@@ -574,61 +598,104 @@ def public_wallet_config(request):
     except Exception:
         # Table may not exist yet - return default packages
         packages = [
-            {'id': 1, 'name': 'Starter Pack', 'price_etb': '10.0', 'coin_amount': 100, 'bonus_coins': 0, 'total_coins': 100, 'is_featured': False},
-            {'id': 2, 'name': 'Good Value', 'price_etb': '25.0', 'coin_amount': 250, 'bonus_coins': 25, 'total_coins': 275, 'is_featured': False},
-            {'id': 3, 'name': 'Most Popular', 'price_etb': '50.0', 'coin_amount': 500, 'bonus_coins': 75, 'total_coins': 575, 'is_featured': True},
-            {'id': 4, 'name': 'Best Deal', 'price_etb': '100.0', 'coin_amount': 1000, 'bonus_coins': 200, 'total_coins': 1200, 'is_featured': False},
-            {'id': 5, 'name': 'Premium Package', 'price_etb': '250.0', 'coin_amount': 2500, 'bonus_coins': 625, 'total_coins': 3125, 'is_featured': False},
+            {
+                'id': 1,
+                'name': 'Starter Pack',
+                'price_etb': '10.0',
+                'coin_amount': 100,
+                'bonus_coins': 0,
+                'total_coins': 100,
+                'is_featured': False,
+            },
+            {
+                'id': 2,
+                'name': 'Good Value',
+                'price_etb': '25.0',
+                'coin_amount': 250,
+                'bonus_coins': 25,
+                'total_coins': 275,
+                'is_featured': False,
+            },
+            {
+                'id': 3,
+                'name': 'Most Popular',
+                'price_etb': '50.0',
+                'coin_amount': 500,
+                'bonus_coins': 75,
+                'total_coins': 575,
+                'is_featured': True,
+            },
+            {
+                'id': 4,
+                'name': 'Best Deal',
+                'price_etb': '100.0',
+                'coin_amount': 1000,
+                'bonus_coins': 200,
+                'total_coins': 1200,
+                'is_featured': False,
+            },
+            {
+                'id': 5,
+                'name': 'Premium Package',
+                'price_etb': '250.0',
+                'coin_amount': 2500,
+                'bonus_coins': 625,
+                'total_coins': 3125,
+                'is_featured': False,
+            },
         ]
 
-    return Response({
-        'currency': 'ETB',
-        'currency_label': 'Birr',
-        'coins_per_birr': config.coins_per_birr,
-        'points_per_birr': config.points_per_birr,
-        'withdrawal_min_points': config.withdrawal_min_points,
-        'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
-        'coins_to_points_conversion': config.coins_to_points_conversion,
-        'rewards': {
-            'welcome_bonus': config.welcome_bonus,
-            'daily_post_bonus': config.daily_post_bonus,
-            'campaign_join': config.campaign_join_reward,
-            'receive_like': config.receive_like_reward,
-            'campaign_winner': config.campaign_winner_reward,
-            'referral': config.referral_reward,
-        },
-        'costs': {
-            'post_create': config.cost_post_create,
-            'like': config.cost_like,
-            'comment': config.cost_comment,
-            'share': config.cost_share,
-            'gift': config.cost_gift,
-            'join_campaign': config.cost_join_campaign,
-            'extra_campaign_entry': config.cost_extra_campaign_entry,
-            'boost_2hr': config.cost_boost_2hr,
-            'boost_24hr': config.cost_boost_24hr,
-        },
-        'withdrawal': {
-            'enabled': config.withdrawal_enabled,
-            'min_coins': config.withdrawal_min_coins,
-            'fee_percent': str(config.withdrawal_fee_percent),
-            'processing_days': config.withdrawal_processing_days,
-        },
-        'gifting': {
-            'earned_coins_giftable': config.earned_coins_giftable,
-            'purchased_coins_giftable': config.purchased_coins_giftable,
-            'min_points_per_transaction': config.gift_min_points_per_transaction,
-            'max_points_per_transaction': config.gift_max_points_per_transaction,
-            'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
-            'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
-        },
-        'packages': packages,
-    })
+    return Response(
+        {
+            'currency': 'ETB',
+            'currency_label': 'Birr',
+            'coins_per_birr': config.coins_per_birr,
+            'points_per_birr': config.points_per_birr,
+            'withdrawal_min_points': config.withdrawal_min_points,
+            'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
+            'coins_to_points_conversion': config.coins_to_points_conversion,
+            'rewards': {
+                'welcome_bonus': config.welcome_bonus,
+                'daily_post_bonus': config.daily_post_bonus,
+                'campaign_join': config.campaign_join_reward,
+                'receive_like': config.receive_like_reward,
+                'campaign_winner': config.campaign_winner_reward,
+                'referral': config.referral_reward,
+            },
+            'costs': {
+                'post_create': config.cost_post_create,
+                'like': config.cost_like,
+                'comment': config.cost_comment,
+                'share': config.cost_share,
+                'gift': config.cost_gift,
+                'join_campaign': config.cost_join_campaign,
+                'extra_campaign_entry': config.cost_extra_campaign_entry,
+                'boost_2hr': config.cost_boost_2hr,
+                'boost_24hr': config.cost_boost_24hr,
+            },
+            'withdrawal': {
+                'enabled': config.withdrawal_enabled,
+                'min_coins': config.withdrawal_min_coins,
+                'fee_percent': str(config.withdrawal_fee_percent),
+                'processing_days': config.withdrawal_processing_days,
+            },
+            'gifting': {
+                'earned_coins_giftable': config.earned_coins_giftable,
+                'purchased_coins_giftable': config.purchased_coins_giftable,
+                'min_points_per_transaction': config.gift_min_points_per_transaction,
+                'max_points_per_transaction': config.gift_max_points_per_transaction,
+                'max_points_to_recipient_per_day': config.gift_max_points_to_recipient_per_day,
+                'max_total_points_sent_per_day': config.gift_max_total_points_sent_per_day,
+            },
+            'packages': packages,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Admin endpoints
 # ---------------------------------------------------------------------------
+
 
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAdminUser])
@@ -642,23 +709,58 @@ def admin_wallet_config(request):
     # PATCH
     editable_fields = [
         'welcome_bonus',
-        'daily_login_day1', 'daily_login_day2', 'daily_login_day3', 'daily_login_day4',
-        'daily_login_day5', 'daily_login_day6', 'daily_login_day7',
-        'daily_post_bonus', 'campaign_join_reward', 'receive_like_reward',
-        'receive_like_daily_cap', 'quality_comment_reward', 'quality_comment_daily_cap',
-        'profile_complete_reward', 'referral_reward', 'campaign_winner_reward',
-        'cost_post_create', 'cost_post_create_long_video', 'cost_like', 'cost_comment', 'cost_share', 'cost_gift', 'cost_join_campaign',
-        'cost_extra_campaign_entry', 'cost_boost_1hr', 'cost_boost_2hr', 'cost_boost_24hr',
-        'cost_trending_1hr', 'cost_trending_24hr',
-        'cost_post_create_non_campaign', 'cost_post_create_long_video_non_campaign', 'cost_like_non_campaign', 'cost_comment_non_campaign',
-        'cost_share_non_campaign', 'cost_gift_non_campaign', 'cost_boost_1hr_non_campaign',
-        'cost_boost_2hr_non_campaign', 'cost_boost_24hr_non_campaign',
-        'cost_trending_1hr_non_campaign', 'cost_trending_24hr_non_campaign',
-        'min_balance_to_post', 'min_balance_to_join_campaign',
-        'withdrawal_enabled', 'withdrawal_min_coins', 'withdrawal_max_coins_per_request',
-        'coins_per_birr', 'withdrawal_fee_percent', 'withdrawal_processing_days',
-        'earned_coins_giftable', 'purchased_coins_giftable',
-        'earned_coins_withdrawable', 'purchased_coins_withdrawable',
+        'daily_login_day1',
+        'daily_login_day2',
+        'daily_login_day3',
+        'daily_login_day4',
+        'daily_login_day5',
+        'daily_login_day6',
+        'daily_login_day7',
+        'daily_post_bonus',
+        'campaign_join_reward',
+        'receive_like_reward',
+        'receive_like_daily_cap',
+        'quality_comment_reward',
+        'quality_comment_daily_cap',
+        'profile_complete_reward',
+        'referral_reward',
+        'campaign_winner_reward',
+        'cost_post_create',
+        'cost_post_create_long_video',
+        'cost_like',
+        'cost_comment',
+        'cost_share',
+        'cost_gift',
+        'cost_join_campaign',
+        'cost_extra_campaign_entry',
+        'cost_boost_1hr',
+        'cost_boost_2hr',
+        'cost_boost_24hr',
+        'cost_trending_1hr',
+        'cost_trending_24hr',
+        'cost_post_create_non_campaign',
+        'cost_post_create_long_video_non_campaign',
+        'cost_like_non_campaign',
+        'cost_comment_non_campaign',
+        'cost_share_non_campaign',
+        'cost_gift_non_campaign',
+        'cost_boost_1hr_non_campaign',
+        'cost_boost_2hr_non_campaign',
+        'cost_boost_24hr_non_campaign',
+        'cost_trending_1hr_non_campaign',
+        'cost_trending_24hr_non_campaign',
+        'min_balance_to_post',
+        'min_balance_to_join_campaign',
+        'withdrawal_enabled',
+        'withdrawal_min_coins',
+        'withdrawal_max_coins_per_request',
+        'coins_per_birr',
+        'withdrawal_fee_percent',
+        'withdrawal_processing_days',
+        'earned_coins_giftable',
+        'purchased_coins_giftable',
+        'earned_coins_withdrawable',
+        'purchased_coins_withdrawable',
         'earned_coins_expire_days',
         'coins_to_points_conversion',
         'points_per_birr',
@@ -674,37 +776,50 @@ def admin_wallet_config(request):
         'gift_max_points_to_recipient_per_day',
         'gift_max_total_points_sent_per_day',
     ]
-    
-    print(f"[WALLET_CONFIG] Request data keys: {list(request.data.keys())}")
-    print(f"[WALLET_CONFIG] Non-campaign fields in request: {[k for k in request.data.keys() if 'non_campaign' in k]}")
-    
+
+    print(f'[WALLET_CONFIG] Request data keys: {list(request.data.keys())}')
+    print(
+        f"[WALLET_CONFIG] Non-campaign fields in request: {[k for k in request.data.keys() if 'non_campaign' in k]}"
+    )
+
     for field in editable_fields:
         if field in request.data:
             value = request.data[field]
-            print(f"[WALLET_CONFIG] Processing {field}={value} (type: {type(value).__name__})")
+            print(f'[WALLET_CONFIG] Processing {field}={value} (type: {type(value).__name__})')
             if field in ('withdrawal_fee_percent',):
                 value = Decimal(str(value))
             elif field.startswith(('earned_coins_', 'purchased_coins_', 'withdrawal_enabled')):
                 if isinstance(value, str):
                     value = value.lower() in ('true', '1', 'yes', 'on')
-            elif field.startswith('cost_') or field.startswith('daily_') or field.startswith('min_') or field.startswith('max_') or field.startswith('coins_per_') or field.startswith('points_per_') or field.startswith('withdrawal_') or field.startswith('gift_'):
+            elif (
+                field.startswith('cost_')
+                or field.startswith('daily_')
+                or field.startswith('min_')
+                or field.startswith('max_')
+                or field.startswith('coins_per_')
+                or field.startswith('points_per_')
+                or field.startswith('withdrawal_')
+                or field.startswith('gift_')
+            ):
                 # Convert to integer for cost/points/withdrawal fields
                 if isinstance(value, str):
                     try:
                         value = int(value)
-                        print(f"[WALLET_CONFIG] Converted {field} to int: {value}")
+                        print(f'[WALLET_CONFIG] Converted {field} to int: {value}')
                     except ValueError:
-                        print(f"[WALLET_CONFIG] Failed to convert {field}={value} to int")
-            print(f"[WALLET_CONFIG] Setting {field}={value} (type: {type(value).__name__})")
+                        print(f'[WALLET_CONFIG] Failed to convert {field}={value} to int')
+            print(f'[WALLET_CONFIG] Setting {field}={value} (type: {type(value).__name__})')
             setattr(config, field, value)
 
     config.updated_by = request.user
     config.save()
 
-    return Response({
-        'message': 'Wallet configuration updated',
-        'config': _serialize_full_config(config),
-    })
+    return Response(
+        {
+            'message': 'Wallet configuration updated',
+            'config': _serialize_full_config(config),
+        }
+    )
 
 
 def _serialize_full_config(config):
@@ -834,14 +949,16 @@ def admin_withdrawals_list(request):
         'rejected': WithdrawalRequest.objects.filter(status='rejected').count(),
     }
 
-    return Response({
-        'count': total,
-        'page': page,
-        'page_size': page_size,
-        'has_next': end < total,
-        'summary': summary,
-        'results': results,
-    })
+    return Response(
+        {
+            'count': total,
+            'page': page,
+            'page_size': page_size,
+            'has_next': end < total,
+            'summary': summary,
+            'results': results,
+        }
+    )
 
 
 @api_view(['GET'])
@@ -853,7 +970,9 @@ def admin_withdrawal_analytics(request):
 
     all_withdrawals = WithdrawalRequest.objects.all()
 
-    total_gross = all_withdrawals.aggregate(total=Coalesce(Sum('gross_birr'), Decimal('0.00')))['total']
+    total_gross = all_withdrawals.aggregate(total=Coalesce(Sum('gross_birr'), Decimal('0.00')))[
+        'total'
+    ]
     total_fee = all_withdrawals.aggregate(total=Coalesce(Sum('fee_birr'), Decimal('0.00')))['total']
     total_net = all_withdrawals.aggregate(total=Coalesce(Sum('net_birr'), Decimal('0.00')))['total']
     total_count = all_withdrawals.count()
@@ -868,16 +987,18 @@ def admin_withdrawal_analytics(request):
         avg=Coalesce(Avg('net_birr'), Decimal('0.00')),
     )['avg']
 
-    return Response({
-        'total_gross_birr': float(total_gross),
-        'total_platform_fee_birr': float(total_fee),
-        'total_net_birr': float(total_net),
-        'total_withdrawals': total_count,
-        'completed_count': completed_count,
-        'pending_count': pending_count,
-        'rejected_count': rejected_count,
-        'avg_withdrawal_birr': float(avg_withdrawal),
-    })
+    return Response(
+        {
+            'total_gross_birr': float(total_gross),
+            'total_platform_fee_birr': float(total_fee),
+            'total_net_birr': float(total_net),
+            'total_withdrawals': total_count,
+            'completed_count': completed_count,
+            'pending_count': pending_count,
+            'rejected_count': rejected_count,
+            'avg_withdrawal_birr': float(avg_withdrawal),
+        }
+    )
 
 
 @api_view(['POST'])
@@ -906,8 +1027,10 @@ def admin_withdrawal_action(request, withdrawal_id):
 
             if action == 'approve':
                 if withdrawal.status != 'pending':
-                    return Response({'error': f'Cannot approve a {withdrawal.status} withdrawal'},
-                                    status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {'error': f'Cannot approve a {withdrawal.status} withdrawal'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 withdrawal.status = 'approved'
                 withdrawal.reviewed_at = timezone.now()
                 withdrawal.reviewed_by = request.user
@@ -917,14 +1040,18 @@ def admin_withdrawal_action(request, withdrawal_id):
 
             elif action == 'reject':
                 if withdrawal.status not in ('pending', 'approved'):
-                    return Response({'error': f'Cannot reject a {withdrawal.status} withdrawal'},
-                                    status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {'error': f'Cannot reject a {withdrawal.status} withdrawal'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 withdrawal.mark_rejected(request.user, reason=notes)
 
             elif action == 'mark_processing':
                 if withdrawal.status not in ('approved',):
-                    return Response({'error': f'Must be approved before processing'},
-                                    status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {'error': 'Must be approved before processing'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 withdrawal.status = 'processing'
                 if notes:
                     withdrawal.admin_notes = notes
@@ -932,11 +1059,15 @@ def admin_withdrawal_action(request, withdrawal_id):
 
             elif action == 'mark_completed':
                 if withdrawal.status not in ('approved', 'processing'):
-                    return Response({'error': f'Must be approved/processing first'},
-                                    status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {'error': 'Must be approved/processing first'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 if not payout_reference:
-                    return Response({'error': 'payout_reference is required'},
-                                    status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {'error': 'payout_reference is required'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 withdrawal.mark_completed(request.user, payout_reference=payout_reference)
                 if notes:
                     withdrawal.admin_notes = notes
@@ -944,10 +1075,12 @@ def admin_withdrawal_action(request, withdrawal_id):
     except WithdrawalRequest.DoesNotExist:
         return Response({'error': 'Withdrawal not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response({
-        'message': f'Withdrawal {action} successful',
-        'withdrawal': _serialize_withdrawal(withdrawal),
-    })
+    return Response(
+        {
+            'message': f'Withdrawal {action} successful',
+            'withdrawal': _serialize_withdrawal(withdrawal),
+        }
+    )
 
 
 @api_view(['GET'])
@@ -961,25 +1094,32 @@ def admin_user_wallet(request, user_id):
         # Ensure user has a profile
         if not hasattr(user, 'profile'):
             from api.models import UserProfile
+
             UserProfile.objects.get_or_create(user=user)
             user.refresh_from_db()
 
-        return Response({
-            'balance': {
-                'total': balance.balance,
-                'earned': balance.earned_balance,
-                'purchased': balance.purchased_balance,
-            },
-            'points': {
-                'current': user.profile.points if hasattr(user, 'profile') else 0,
-                'earned_total': user.profile.points_earned_total if hasattr(user, 'profile') else 0,
-                'withdrawn_total': user.profile.points_withdrawn_total if hasattr(user, 'profile') else 0,
+        return Response(
+            {
+                'balance': {
+                    'total': balance.balance,
+                    'earned': balance.earned_balance,
+                    'purchased': balance.purchased_balance,
+                },
+                'points': {
+                    'current': user.profile.points if hasattr(user, 'profile') else 0,
+                    'earned_total': user.profile.points_earned_total
+                    if hasattr(user, 'profile')
+                    else 0,
+                    'withdrawn_total': user.profile.points_withdrawn_total
+                    if hasattr(user, 'profile')
+                    else 0,
+                },
             }
-        })
+        )
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        logger.error(f"[Admin Wallet] Error for user {user_id}: {str(e)}")
+        logger.error(f'[Admin Wallet] Error for user {user_id}: {str(e)}')
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -990,31 +1130,35 @@ def admin_user_transactions(request):
     user_id = request.query_params.get('user_id')
     if not user_id:
         return Response({'error': 'user_id parameter required'}, status=status.HTTP_400_BAD_REQUEST)
-    
+
     try:
         user = User.objects.get(id=user_id)
         page_size = int(request.query_params.get('page_size', 20))
-        
+
         transactions = CoinTransaction.objects.filter(user=user).order_by('-created_at')[:page_size]
-        
-        data = [{
-            'id': tx.id,
-            'transaction_type': tx.transaction_type,
-            'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
-            'coins': tx.coins if tx.coins is not None else 0,
-            'is_credit': tx.coins > 0 if tx.coins is not None else False,
-            'created_at': tx.created_at.isoformat() if tx.created_at else None,
-            'description': tx.description or '',
-            'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
-            'payment_method': tx.payment_method or '',
-        } for tx in transactions]
-        
+
+        data = [
+            {
+                'id': tx.id,
+                'transaction_type': tx.transaction_type,
+                'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
+                'coins': tx.coins if tx.coins is not None else 0,
+                'is_credit': tx.coins > 0 if tx.coins is not None else False,
+                'created_at': tx.created_at.isoformat() if tx.created_at else None,
+                'description': tx.description or '',
+                'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
+                'payment_method': tx.payment_method or '',
+            }
+            for tx in transactions
+        ]
+
         return Response({'results': data})
     except User.DoesNotExist:
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
         import logging
-        logging.error(f"[Admin Transactions] Error for user {user_id}: {str(e)}")
+
+        logging.error(f'[Admin Transactions] Error for user {user_id}: {str(e)}')
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1036,29 +1180,38 @@ def admin_all_coin_transactions(request):
         for tx in transactions:
             user_obj = tx.user
             phone = ''
-            if user_obj and hasattr(user_obj, 'profile') and getattr(user_obj.profile, 'phone_number', None):
+            if (
+                user_obj
+                and hasattr(user_obj, 'profile')
+                and getattr(user_obj.profile, 'phone_number', None)
+            ):
                 phone = user_obj.profile.phone_number
 
-            data.append({
-                'id': tx.id,
-                'transaction_type': tx.transaction_type,
-                'type_display': TRANSACTION_DISPLAY.get(tx.transaction_type, tx.transaction_type),
-                'coins': tx.coins if tx.coins is not None else 0,
-                'is_credit': tx.coins > 0 if tx.coins is not None else False,
-                'created_at': tx.created_at.isoformat() if tx.created_at else None,
-                'description': tx.description or '',
-                'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
-                'payment_method': tx.payment_method or '',
-                'user': user_obj.username if user_obj else 'N/A',
-                'user_id': user_obj.id if user_obj else None,
-                'email': user_obj.email if user_obj else '',
-                'phone': phone,
-            })
+            data.append(
+                {
+                    'id': tx.id,
+                    'transaction_type': tx.transaction_type,
+                    'type_display': TRANSACTION_DISPLAY.get(
+                        tx.transaction_type, tx.transaction_type
+                    ),
+                    'coins': tx.coins if tx.coins is not None else 0,
+                    'is_credit': tx.coins > 0 if tx.coins is not None else False,
+                    'created_at': tx.created_at.isoformat() if tx.created_at else None,
+                    'description': tx.description or '',
+                    'fee_amount': float(tx.fee_amount) if tx.fee_amount else 0,
+                    'payment_method': tx.payment_method or '',
+                    'user': user_obj.username if user_obj else 'N/A',
+                    'user_id': user_obj.id if user_obj else None,
+                    'email': user_obj.email if user_obj else '',
+                    'phone': phone,
+                }
+            )
 
         return Response({'results': data, 'count': len(data)})
     except Exception as e:
         import logging
-        logging.error(f"[Admin All Transactions] Error: {str(e)}")
+
+        logging.error(f'[Admin All Transactions] Error: {str(e)}')
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1079,7 +1232,10 @@ def admin_adjust_balance(request):
     reason = request.data.get('reason', 'Admin adjustment')
 
     if bucket not in ('earned', 'purchased', 'points'):
-        return Response({'error': 'bucket must be earned, purchased, or points'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {'error': 'bucket must be earned, purchased, or points'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
         user = User.objects.get(id=user_id)
@@ -1097,10 +1253,12 @@ def admin_adjust_balance(request):
         except ValueError as exc:
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({
-            'message': f'Adjusted {user.username}\'s points by {amount}',
-            'new_points': profile.points,
-        })
+        return Response(
+            {
+                'message': f"Adjusted {user.username}'s points by {amount}",
+                'new_points': profile.points,
+            }
+        )
 
     # Handle coin balance adjustment
     balance = _get_or_create_balance(user)
@@ -1110,25 +1268,32 @@ def admin_adjust_balance(request):
             if bucket == 'earned':
                 balance.add_earned(amount, transaction_type='admin_adjustment', description=reason)
             else:
-                balance.add_purchased(amount, transaction_type='admin_adjustment', description=reason)
+                balance.add_purchased(
+                    amount, transaction_type='admin_adjustment', description=reason
+                )
         else:
-            balance.deduct_from_bucket(bucket, abs(amount), transaction_type='admin_adjustment', description=reason)
+            balance.deduct_from_bucket(
+                bucket, abs(amount), transaction_type='admin_adjustment', description=reason
+            )
     except ValueError as exc:
         return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response({
-        'message': f'Adjusted {user.username}\'s {bucket} balance by {amount}',
-        'new_balance': {
-            'total': balance.balance,
-            'earned': balance.earned_balance,
-            'purchased': balance.purchased_balance,
-        },
-    })
+    return Response(
+        {
+            'message': f"Adjusted {user.username}'s {bucket} balance by {amount}",
+            'new_balance': {
+                'total': balance.balance,
+                'earned': balance.earned_balance,
+                'purchased': balance.purchased_balance,
+            },
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Telebirr Payment Integration
 # ---------------------------------------------------------------------------
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1151,9 +1316,11 @@ def telebirr_initiate_payment(request):
     try:
         package = CoinPackage.objects.get(id=package_id, is_active=True)
     except CoinPackage.DoesNotExist:
-        return Response({'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+        )
 
-    total_amount = '{:.2f}'.format(float(package.price_etb))
+    total_amount = f'{float(package.price_etb):.2f}'
 
     # create_order_ondemand: coin purchases have no payee fields (unlike
     # subscription mandates), matching Telebirr's on-demand order shape.
@@ -1164,10 +1331,13 @@ def telebirr_initiate_payment(request):
     )
 
     if not result.get('success'):
-        return Response({
-            'error': result.get('error', 'Payment initiation failed'),
-            'details': result,
-        }, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                'error': result.get('error', 'Payment initiation failed'),
+                'details': result,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     merch_order_id = result.get('merch_order_id')
 
@@ -1184,21 +1354,23 @@ def telebirr_initiate_payment(request):
         is_successful=False,
     )
 
-    return Response({
-        'success': True,
-        'raw_request': result.get('raw_request'),
-        'merch_order_id': merch_order_id,
-        'prepay_id': result.get('prepay_id'),
-        'amount': total_amount,
-        'package': {
-            'id': package.id,
-            'name': package.name,
-            'coin_amount': package.coin_amount,
-            'bonus_coins': package.bonus_coins,
-            'total_coins': package.get_total_coins(),
-        },
-        'message': 'Order created. Call js_fun_start_pay with raw_request.',
-    })
+    return Response(
+        {
+            'success': True,
+            'raw_request': result.get('raw_request'),
+            'merch_order_id': merch_order_id,
+            'prepay_id': result.get('prepay_id'),
+            'amount': total_amount,
+            'package': {
+                'id': package.id,
+                'name': package.name,
+                'coin_amount': package.coin_amount,
+                'bonus_coins': package.bonus_coins,
+                'total_coins': package.get_total_coins(),
+            },
+            'message': 'Order created. Call js_fun_start_pay with raw_request.',
+        }
+    )
 
 
 def _credit_telebirr_order(merch_order_id, payment_order_id=None):
@@ -1235,15 +1407,23 @@ def _credit_telebirr_order(merch_order_id, payment_order_id=None):
         balance.total_telebirr_purchased = (balance.total_telebirr_purchased or 0) + total_coins
         balance.total_purchased = (balance.total_purchased or 0) + total_coins
         balance._sync_balance()
-        balance.save(update_fields=[
-            'telebirr_purchased_balance', 'purchased_balance', 'balance',
-            'total_purchased', 'total_telebirr_purchased', 'updated_at',
-        ])
+        balance.save(
+            update_fields=[
+                'telebirr_purchased_balance',
+                'purchased_balance',
+                'balance',
+                'total_purchased',
+                'total_telebirr_purchased',
+                'updated_at',
+            ]
+        )
 
         coin_tx.coins = total_coins
         coin_tx.is_successful = True
         coin_tx.payment_reference = payment_order_id or merch_order_id
-        coin_tx.description = f'Successful Telebirr payment for {package.name if package else "Unknown"}'
+        coin_tx.description = (
+            f'Successful Telebirr payment for {package.name if package else "Unknown"}'
+        )
         coin_tx.save()
 
     return True, total_coins
@@ -1270,11 +1450,14 @@ def telebirr_callback(request):
     # (activate a SubscriptionPlan, not a coin balance) -- delegate.
     if merch_order_id.startswith('SUB'):
         from api.views.subscription import telebirr_one_time_callback
+
         return telebirr_one_time_callback(request)
 
     if not notify.get('is_paid'):
         CoinTransaction.objects.filter(
-            payment_reference=merch_order_id, payment_method='telebirr', is_successful=False,
+            payment_reference=merch_order_id,
+            payment_method='telebirr',
+            is_successful=False,
         ).update(description=f'Failed Telebirr payment: {notify.get("trade_status")}')
         return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'received'})
 
@@ -1286,7 +1469,9 @@ def telebirr_callback(request):
         # Either unknown order or already processed (idempotent OK).
         return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'already processed'})
 
-    return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'success', 'coins_added': coins_added})
+    return Response(
+        {'result': 'SUCCESS', 'code': '0', 'msg': 'success', 'coins_added': coins_added}
+    )
 
 
 @api_view(['POST'])
@@ -1314,7 +1499,9 @@ def telebirr_auth(request):
 
     phone_number = auth_result.get('identifier')
     if not phone_number:
-        return Response({'error': 'No phone number returned from Telebirr'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {'error': 'No phone number returned from Telebirr'}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     phone_number = ''.join(filter(str.isdigit, phone_number))
 
@@ -1336,27 +1523,34 @@ def telebirr_auth(request):
     if profile:
         user = profile.user
         token, _created = Token.objects.get_or_create(user=user)
-        return Response({'user': UserSerializer(user).data, 'token': token.key, 'telebirr_info': telebirr_info})
+        return Response(
+            {'user': UserSerializer(user).data, 'token': token.key, 'telebirr_info': telebirr_info}
+        )
 
     # New phone number: create a minimal account (username = phone number)
     # so the SuperApp session has something to auto-login into, but still
     # require the subscription step before granting real access.
     user, _created = User.objects.get_or_create(username=phone_number)
-    profile, profile_created = UserProfile.objects.get_or_create(user=user, defaults={'phone_number': phone_number})
+    profile, profile_created = UserProfile.objects.get_or_create(
+        user=user, defaults={'phone_number': phone_number}
+    )
     if not profile_created and not profile.phone_number:
         profile.phone_number = phone_number
         profile.save()
     UserCoinBalance.objects.get_or_create(user=user)
 
     token, _created = Token.objects.get_or_create(user=user)
-    return Response({
-        'user': UserSerializer(user).data,
-        'token': token.key,
-        'telebirr_info': telebirr_info,
-        'requires_subscription': True,
-        'phone_number': phone_number,
-        'is_new_user': True,
-    }, status=status.HTTP_401_UNAUTHORIZED)
+    return Response(
+        {
+            'user': UserSerializer(user).data,
+            'token': token.key,
+            'telebirr_info': telebirr_info,
+            'requires_subscription': True,
+            'phone_number': phone_number,
+            'is_new_user': True,
+        },
+        status=status.HTTP_401_UNAUTHORIZED,
+    )
 
 
 @api_view(['GET'])
@@ -1380,17 +1574,21 @@ def telebirr_query_order(request):
 
     coins_added = 0
     if result.get('is_paid'):
-        _, coins_added = _credit_telebirr_order(merch_order_id, payment_order_id=result.get('payment_order_id'))
+        _, coins_added = _credit_telebirr_order(
+            merch_order_id, payment_order_id=result.get('payment_order_id')
+        )
 
-    return Response({
-        'success': True,
-        'is_paid': result.get('is_paid'),
-        'trade_status': result.get('trade_status'),
-        'order_status': result.get('order_status'),
-        'merch_order_id': merch_order_id,
-        'payment_order_id': result.get('payment_order_id'),
-        'coins_added': coins_added,
-    })
+    return Response(
+        {
+            'success': True,
+            'is_paid': result.get('is_paid'),
+            'trade_status': result.get('trade_status'),
+            'order_status': result.get('order_status'),
+            'merch_order_id': merch_order_id,
+            'payment_order_id': result.get('payment_order_id'),
+            'coins_added': coins_added,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1400,6 +1598,7 @@ def telebirr_query_order(request):
 # 'telebirr_ussd' instead of 'telebirr' so the two pending-transaction
 # lookups never collide.
 # ---------------------------------------------------------------------------
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1413,14 +1612,18 @@ def telebirr_ussd_purchase(request):
     try:
         package = CoinPackage.objects.get(id=package_id, is_active=True)
     except CoinPackage.DoesNotExist:
-        return Response({'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+        )
 
     try:
         phone_number = request.user.profile.phone_number
     except UserProfile.DoesNotExist:
         return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
     if not phone_number:
-        return Response({'error': 'Phone number not found in profile'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {'error': 'Phone number not found in profile'}, status=status.HTTP_400_BAD_REQUEST
+        )
 
     normalized_phone = _normalize_ethiopian_phone(phone_number)
     if normalized_phone:
@@ -1430,11 +1633,16 @@ def telebirr_ussd_purchase(request):
     coins = package.get_total_coins()
 
     result = telebirr_direct_debit_service.initiate_ussd_push_payment(
-        amount=amount, phone_number=phone_number, coins=coins,
+        amount=amount,
+        phone_number=phone_number,
+        coins=coins,
     )
     if not result.get('success'):
         return Response(
-            {'error': result.get('error', 'USSD Push payment initiation failed'), 'details': result},
+            {
+                'error': result.get('error', 'USSD Push payment initiation failed'),
+                'details': result,
+            },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -1449,19 +1657,21 @@ def telebirr_ussd_purchase(request):
         is_successful=False,
     )
 
-    return Response({
-        'success': True,
-        'originator_conversation_id': result.get('originator_conversation_id'),
-        'conversation_id': result.get('conversation_id'),
-        'message': result.get('message'),
-        'package': {
-            'id': package.id,
-            'name': package.name,
-            'coin_amount': package.coin_amount,
-            'bonus_coins': package.bonus_coins,
-            'total_coins': coins,
-        },
-    })
+    return Response(
+        {
+            'success': True,
+            'originator_conversation_id': result.get('originator_conversation_id'),
+            'conversation_id': result.get('conversation_id'),
+            'message': result.get('message'),
+            'package': {
+                'id': package.id,
+                'name': package.name,
+                'coin_amount': package.coin_amount,
+                'bonus_coins': package.bonus_coins,
+                'total_coins': coins,
+            },
+        }
+    )
 
 
 def _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=None):
@@ -1489,15 +1699,23 @@ def _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=None)
         balance.total_telebirr_purchased = (balance.total_telebirr_purchased or 0) + total_coins
         balance.total_purchased = (balance.total_purchased or 0) + total_coins
         balance._sync_balance()
-        balance.save(update_fields=[
-            'telebirr_purchased_balance', 'purchased_balance', 'balance',
-            'total_purchased', 'total_telebirr_purchased', 'updated_at',
-        ])
+        balance.save(
+            update_fields=[
+                'telebirr_purchased_balance',
+                'purchased_balance',
+                'balance',
+                'total_purchased',
+                'total_telebirr_purchased',
+                'updated_at',
+            ]
+        )
 
         coin_tx.coins = total_coins
         coin_tx.is_successful = True
         coin_tx.payment_reference = transaction_id or originator_conversation_id
-        coin_tx.description = f'Successful USSD Push payment for {package.name if package else "Unknown"}'
+        coin_tx.description = (
+            f'Successful USSD Push payment for {package.name if package else "Unknown"}'
+        )
         coin_tx.save()
 
     return True, total_coins
@@ -1512,7 +1730,8 @@ def telebirr_ussd_webhook(request):
     raw_body = request.body or b''
     logger.info(
         '[USSD WEBHOOK] Received callback. Content-Type: %s, Body: %s',
-        request.META.get('CONTENT_TYPE'), raw_body[:2000],
+        request.META.get('CONTENT_TYPE'),
+        raw_body[:2000],
     )
 
     parsed = _parse_telebirr_soap_result(raw_body)
@@ -1527,16 +1746,22 @@ def telebirr_ussd_webhook(request):
     if not is_success:
         logger.warning('[USSD WEBHOOK] Payment failed: %s', result_desc)
         CoinTransaction.objects.filter(
-            payment_reference=originator_conversation_id, payment_method='telebirr_ussd', is_successful=False,
+            payment_reference=originator_conversation_id,
+            payment_method='telebirr_ussd',
+            is_successful=False,
         ).update(description=f'Failed USSD Push payment: {result_desc}')
         return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'received'})
 
-    handled, coins_added = _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=transaction_id)
+    handled, coins_added = _credit_telebirr_ussd_order(
+        originator_conversation_id, transaction_id=transaction_id
+    )
 
     if not handled:
         # Either unknown order or already processed (idempotent OK).
-        return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'transaction not found or already processed'})
+        return Response(
+            {'result': 'SUCCESS', 'code': '0', 'msg': 'transaction not found or already processed'}
+        )
 
-    return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'success', 'coins_added': coins_added})
-
-
+    return Response(
+        {'result': 'SUCCESS', 'code': '0', 'msg': 'success', 'coins_added': coins_added}
+    )
