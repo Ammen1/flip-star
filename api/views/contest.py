@@ -179,12 +179,17 @@ def purchase_coins(request):
     idempotency key to check. This endpoint is kept only so old clients get a
     clear answer instead of a 404 that reads like an outage.
     """
-    package = CoinPackage.objects.get(id=request.data.get('package_id'), is_active=True)
-    balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-    balance.add_coins(package.get_total_coins(), transaction_type='purchase',
-                      package=package, payment_method='telebirr',
-                      description='NEGATIVE CONTROL instant credit')
-    return Response({'coins_added': package.get_total_coins()})
+    return Response(
+        {
+            'success': False,
+            'code': 'PAYMENT_REQUIRED',
+            'error': (
+                'Coins are credited only after a confirmed payment. '
+                'Start a purchase with /wallet/telebirrUssdPurchase/.'
+            ),
+        },
+        status=status.HTTP_402_PAYMENT_REQUIRED,
+    )
 
 
 @api_view(['POST'])
