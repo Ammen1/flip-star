@@ -30,7 +30,7 @@ from api.models.subscription import (
     SubscriptionPlan as UserSubscription,
 )
 from api.services.superapp_sms_service import superapp_sms_service
-from common.security import EncryptedPayloadMixin
+from common.security import EncryptedPayloadMixin, encrypted_endpoint
 from common.throttling import PhoneLookupAnonThrottle, PhoneLookupUserThrottle
 
 logger = logging.getLogger(__name__)
@@ -2268,6 +2268,17 @@ def telebirr_ussd_subscription_status(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+# REQUIRED. api.js puts "/subscription/" in ENCRYPTED_ENDPOINT_PREFIXES and
+# only excludes /subscription/check-superapp/, so the client encrypts this
+# body. 59223b6f removed this decorator on the premise that "the frontend
+# excludes these from encryption" -- true of check-superapp, not of this
+# endpoint -- and the mismatch made the view read an envelope instead of a
+# payload, answering 400 "tier_id is required".
+#
+# It failed intermittently, which is why it survived: the client only encrypts
+# once isCryptoReady() is true, so a request sent before the server key was
+# fetched went through in the clear and worked.
+@encrypted_endpoint
 def telebirr_ussd_subscription_initiate(request):
     """
     Initiate a USSD Push payment for a subscription (BuyGoodsForCustomer).

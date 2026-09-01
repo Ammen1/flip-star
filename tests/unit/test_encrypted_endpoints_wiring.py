@@ -43,6 +43,7 @@ from api.views.direct_debit import (
     create_one_off_coin_purchase,
     initiate_direct_debit,
 )
+from api.views.subscription import telebirr_ussd_subscription_initiate
 from api.views.wallet import (
     cancel_withdrawal,
     reinvest_points,
@@ -67,6 +68,12 @@ TIER_1_ENDPOINTS = [
     (forgot_password_confirm, False, ()),
     (forgot_password_phone_verify, False, ()),
     (login_with_subscription_otp, False, ()),
+    # Regression guard for 59223b6f, which removed @encrypted_endpoint here on
+    # the premise that the client excluded it. api.js encrypts everything under
+    # "/subscription/" except check-superapp, so the view received an envelope
+    # and answered 400 "tier_id is required" -- intermittently, since the
+    # client only encrypts once isCryptoReady() is true.
+    (telebirr_ussd_subscription_initiate, False, ()),
     (change_password, True, ()),
     (delete_account, True, ()),
     (request_withdrawal, True, ()),
@@ -90,12 +97,12 @@ def _view_name(view):
 
 @pytest.mark.parametrize('view,requires_auth,extra_args', TIER_1_ENDPOINTS, ids=_view_name)
 def test_wired_correctly(view, requires_auth, extra_args):
-    assert list(view.cls.parser_classes) == [EncryptedJSONParser], (
-        f'{_view_name(view)} is not using EncryptedJSONParser'
-    )
-    assert list(view.cls.renderer_classes) == [EncryptedJSONRenderer], (
-        f'{_view_name(view)} is not using EncryptedJSONRenderer'
-    )
+    assert list(view.cls.parser_classes) == [
+        EncryptedJSONParser
+    ], f'{_view_name(view)} is not using EncryptedJSONParser'
+    assert list(view.cls.renderer_classes) == [
+        EncryptedJSONRenderer
+    ], f'{_view_name(view)} is not using EncryptedJSONRenderer'
 
 
 @pytest.mark.parametrize('view,requires_auth,extra_args', TIER_1_ENDPOINTS, ids=_view_name)
@@ -118,6 +125,6 @@ def test_rejects_request_without_client_public_key_header(view, requires_auth, e
         f'{CLIENT_PUBLIC_KEY_HEADER_NAME} header (got {response.status_code})'
     )
     body = response.data if hasattr(response, 'data') else {}
-    assert CLIENT_PUBLIC_KEY_HEADER_NAME in str(body), (
-        f'{_view_name(view)} rejected the request but not for the expected reason: {body}'
-    )
+    assert CLIENT_PUBLIC_KEY_HEADER_NAME in str(
+        body
+    ), f'{_view_name(view)} rejected the request but not for the expected reason: {body}'

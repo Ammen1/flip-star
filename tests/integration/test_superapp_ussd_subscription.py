@@ -19,8 +19,10 @@ Uses the real `db` fixture -- see tests/conftest.py's MIGRATIONS_ARE_REPLAYABLE.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
+import fakeredis
 import pytest
 from django.contrib.auth.models import User
 from django.test import RequestFactory
@@ -35,11 +37,56 @@ from api.views.subscription import (
     telebirr_ussd_subscription_webhook,
     validate_subscription_token,
 )
+from common.security.e2e_encryption import encrypt_payload, generate_keypair
+from infrastructure.keys import redis_store
 
 pytestmark = pytest.mark.integration
 
 factory = APIRequestFactory()
 plain_factory = RequestFactory()
+
+
+# telebirr_ussd_subscription_initiate carries @encrypted_endpoint: api.js puts
+# "/subscription/" in ENCRYPTED_ENDPOINT_PREFIXES, so the real client seals
+# this body. Calling the view with a plain dict reproduces 59223b6f's bug
+# rather than the production path, so these tests seal it the same way.
+#
+# Helpers mirror tests/integration/test_b2c_payout.py; this project keeps them
+# per-file rather than in a shared conftest.
+
+
+@pytest.fixture
+def _server_keys(db):
+    from infrastructure.keys import key_manager
+
+    redis_store.set_client(fakeredis.FakeRedis(decode_responses=True))
+    key_manager.reset()
+    key_manager.initialize()
+    yield key_manager.get_public_key()
+    key_manager.reset()
+    redis_store.reset_client()
+
+
+@pytest.fixture
+def client_keys():
+    return generate_keypair()
+
+
+def _post_initiate(body, *, server_public_key, client_keys):
+    """Seal `body` for the server and invoke the view, as the client does."""
+    client_public_key, client_private_key = client_keys
+    sealed = encrypt_payload(
+        body,
+        receiver_public_key_b64=server_public_key,
+        sender_private_key_b64=client_private_key,
+    )
+    request = factory.post(
+        '/subscription/telebirr/ussd/initiate/',
+        data=json.dumps(sealed.to_dict()),
+        content_type='application/json',
+        HTTP_X_CLIENT_PUBLIC_KEY=client_public_key,
+    )
+    return telebirr_ussd_subscription_initiate(request)
 
 
 @pytest.fixture
@@ -87,7 +134,9 @@ def _soap_result(*, originator_conversation_id, result_code, transaction_id='', 
 # ---------------------------------------------------------------------------
 
 
-def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
+def test_initiate_creates_pending_subscription_not_active(
+    db, monthly_tier, _server_keys, client_keys
+):
     with patch(
         'api.views.subscription.telebirr_direct_debit_service.initiate_ussd_push_payment',
         return_value={
@@ -96,16 +145,11 @@ def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
             'conversation_id': 'AG_USSD1',
         },
     ):
-        request = factory.post(
-            '/subscription/telebirr/ussd/initiate/',
-            {
-                'tier_id': str(monthly_tier.id),
-                'phone_number': '0911223344',
-            },
-            format='json',
+        response = _post_initiate(
+            {'tier_id': str(monthly_tier.id), 'phone_number': '0911223344'},
+            server_public_key=_server_keys,
+            client_keys=client_keys,
         )
-
-        response = telebirr_ussd_subscription_initiate(request)
 
     assert response.status_code == 200, response.data
     payment = SubscriptionPayment.objects.get(onevas_transaction_id='S_X_USSD1')
@@ -114,46 +158,43 @@ def test_initiate_creates_pending_subscription_not_active(db, monthly_tier):
     assert payment.subscription.status != 'active'
 
 
-def test_initiate_requires_phone_for_anonymous_user(db, monthly_tier):
-    request = factory.post(
-        '/subscription/telebirr/ussd/initiate/', {'tier_id': str(monthly_tier.id)}, format='json'
+def test_initiate_requires_phone_for_anonymous_user(db, monthly_tier, _server_keys, client_keys):
+    response = _post_initiate(
+        {'tier_id': str(monthly_tier.id)},
+        server_public_key=_server_keys,
+        client_keys=client_keys,
     )
 
-    response = telebirr_ussd_subscription_initiate(request)
-
+    # 400 for the missing phone, not for a body the view could not read.
     assert response.status_code == 400
+    assert 'Phone number' in str(response.data)
 
 
-def test_initiate_rejects_unknown_tier(db):
-    request = factory.post(
-        '/subscription/telebirr/ussd/initiate/',
+def test_initiate_rejects_unknown_tier(db, _server_keys, client_keys):
+    response = _post_initiate(
         {
             'tier_id': '00000000-0000-0000-0000-000000000000',
             'phone_number': '0911223344',
         },
-        format='json',
+        server_public_key=_server_keys,
+        client_keys=client_keys,
     )
-
-    response = telebirr_ussd_subscription_initiate(request)
 
     assert response.status_code == 404
 
 
-def test_initiate_returns_error_when_telebirr_call_fails(db, monthly_tier):
+def test_initiate_returns_error_when_telebirr_call_fails(
+    db, monthly_tier, _server_keys, client_keys
+):
     with patch(
         'api.views.subscription.telebirr_direct_debit_service.initiate_ussd_push_payment',
         return_value={'success': False, 'error': 'upstream down'},
     ):
-        request = factory.post(
-            '/subscription/telebirr/ussd/initiate/',
-            {
-                'tier_id': str(monthly_tier.id),
-                'phone_number': '0911223344',
-            },
-            format='json',
+        response = _post_initiate(
+            {'tier_id': str(monthly_tier.id), 'phone_number': '0911223344'},
+            server_public_key=_server_keys,
+            client_keys=client_keys,
         )
-
-        response = telebirr_ussd_subscription_initiate(request)
 
     assert response.status_code == 500
     assert not SubscriptionPayment.objects.filter(subscription__tier=monthly_tier).exists()
