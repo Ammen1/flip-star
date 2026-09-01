@@ -50,6 +50,7 @@ import nacl.exceptions
 import nacl.public
 import nacl.utils
 from django.core.cache import cache
+from rest_framework.utils.encoders import JSONEncoder
 
 from common.exceptions import DecryptionError, ReplayDetected
 from infrastructure.keys import key_manager
@@ -133,7 +134,29 @@ def encrypt_payload(
     except (nacl.exceptions.CryptoError, ValueError, TypeError) as exc:
         raise DecryptionError('One or more keys are malformed.') from exc
 
-    plaintext = json.dumps(data, separators=(',', ':'), sort_keys=True)
+    # cls=JSONEncoder is REQUIRED, not a convenience.
+    #
+    # This function replaces DRF's JSONRenderer for encrypted responses, and
+    # that renderer serialises with rest_framework.utils.encoders.JSONEncoder --
+    # which knows date, datetime, time, timedelta, Decimal, UUID, Promise and
+    # any object exposing .tolist()/__getitem__. Plain json.dumps knows none of
+    # them, so an endpoint that renders perfectly without encryption raised
+    #
+    #     TypeError: Object of type date is not JSON serializable
+    #
+    # the moment a client sent X-Client-Public-Key. The view was identical; only
+    # the serialiser differed. Observed on /api/v1/gamification/status/, whose
+    # response carries UserProfile.last_login_date (a DateField), and latent on
+    # ~38 other hand-built response dicts across eight view modules that pass
+    # model datetimes straight through.
+    #
+    # Using DRF's encoder makes the encrypted and unencrypted paths produce
+    # byte-identical JSON, so the wire contract does not depend on whether a
+    # request happened to be encrypted. Note this is NOT the same as calling
+    # .isoformat() in the views: DRF renders UTC datetimes with a `Z` suffix,
+    # while .isoformat() emits `+00:00`. Rewriting the views would therefore
+    # have changed the contract for every *unencrypted* caller too.
+    plaintext = json.dumps(data, separators=(',', ':'), sort_keys=True, cls=JSONEncoder)
     checksum = _checksum(plaintext)
 
     box = nacl.public.Box(sender_private_key, receiver_public_key)

@@ -27,6 +27,24 @@ data:
   # IP-based rate limiting and audit logging would attribute all traffic to
   # one internal address.
   TRUSTED_PROXY_IPS: "10.42.0.0/16"
+
+  # Telebirr calls this back when a USSD subscription payment completes.
+  #
+  # It was unset, and telebirr/direct_debit.py falls back
+  #   result_url or TELEBIRR_USSD_RESULT_URL or TELEBIRR_RESULT_URL
+  # so every subscription payment was handed the COIN PURCHASE callback URL.
+  # That handler looks up a CoinTransaction by conversation id, finds none for
+  # a subscription, and drops it -- leaving the plan pending forever. The
+  # status endpoint only reads the local row, so nothing self-heals: 8 of 8
+  # telebirr subscriptions were stuck pending, with the customer already
+  # charged.
+  #
+  # Host and port mirror TELEBIRR_USSD_RESULT_URL, which is the one callback
+  # Telebirr is known to reach; only the path differs.
+  #
+  # Lives here rather than in Vault because it is a URL, not a secret, and
+  # VAULT_PRECEDENCE defaults to 'env' so this value wins either way.
+  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/v1/webhooks/telebirrSubscriptionUssd/"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.

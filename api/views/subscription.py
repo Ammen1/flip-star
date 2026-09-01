@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -31,6 +31,7 @@ from api.models.subscription import (
 )
 from api.services.superapp_sms_service import superapp_sms_service
 from common.security import EncryptedPayloadMixin
+from common.throttling import PhoneLookupAnonThrottle, PhoneLookupUserThrottle
 
 logger = logging.getLogger(__name__)
 
@@ -2105,10 +2106,20 @@ def telebirr_one_time_query(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([PhoneLookupAnonThrottle, PhoneLookupUserThrottle])
 def check_superapp_subscription(request):
     """
     Check if a phone number has an active SuperApp (Telebirr) subscription.
     Used for SuperApp users to log in to the web app.
+
+    Unauthenticated by necessity -- the caller is deciding whether to show a
+    login prompt and has no token yet. That makes it an oracle for "does this
+    number subscribe", so it carries the phone_lookup throttle rather than
+    accepting unlimited attempts.
+
+    It deliberately returns NO OneVAS credentials. It used to include
+    application_key and product_number so the browser could pass them to
+    send-login-otp; that endpoint now resolves them from the tier itself.
     """
     from api.views.core import _normalize_ethiopian_phone
 
@@ -2136,7 +2147,6 @@ def check_superapp_subscription(request):
             )
 
         tier_type = subscription.tier.duration_type if subscription.tier else None
-        onevas_config = ONEVAS_PRODUCTS.get(tier_type, {})
         return Response(
             {
                 'has_active_subscription': True,
@@ -2145,8 +2155,6 @@ def check_superapp_subscription(request):
                 'tier_name': subscription.tier.name if subscription.tier else None,
                 'tier_type': tier_type,
                 'end_date': subscription.end_date.isoformat() if subscription.end_date else None,
-                'application_key': onevas_config.get('application_key'),
-                'product_number': onevas_config.get('product_id'),
             },
             status=status.HTTP_200_OK,
         )

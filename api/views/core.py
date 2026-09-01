@@ -50,13 +50,12 @@ from api.serializers.core import (
     UserSerializer,
     WinnerSerializer,
 )
-from common.permissions import IsOwnerOrStaffOrReadOnly
-from common.security import EncryptedPayloadMixin, encrypted_endpoint, is_pin_too_weak
-from common.validators import normalize_ethiopian_phone
 from api.services.subscription_access import (
     has_active_subscription,
     subscription_required_payload,
 )
+from common.permissions import IsOwnerOrStaffOrReadOnly
+from common.security import EncryptedPayloadMixin, encrypted_endpoint, is_pin_too_weak
 from common.throttling import (
     LoginAnonThrottle,
     LoginUserThrottle,
@@ -73,6 +72,7 @@ from common.throttling import (
     clear_failures,
     is_blocked,
 )
+from common.validators import normalize_ethiopian_phone
 
 
 # ── OTP / Phone helpers ────────────────────────────────────────────────────
@@ -743,8 +743,36 @@ def send_login_otp(request):
     # this endpoint is for -- do not reject on UserProfile match.
     user_exists = UserProfile.objects.filter(phone_number=phone).exists()
 
-    application_key = request.data.get('application_key') or _settings.ONEVAS_APPLICATION_KEY
-    product_number = request.data.get('product_number') or _settings.ONEVAS_PRODUCT_NUMBER
+    # Resolved from the subscriber's own tier, NOT from the request body.
+    #
+    # This used to read request.data['application_key'], and
+    # check_superapp_subscription returned that key so the browser could send
+    # it back -- which meant a provisioned OneVAS credential
+    # (ONEVAS_<TIER>_APPLICATION_KEY, resolved through Vault) was handed to any
+    # unauthenticated caller who knew a subscribed phone number, and whatever
+    # the caller sent was then trusted over the configured value.
+    #
+    # The server already knows the phone number here, so it can look the tier
+    # up itself; the key never has to leave the process.
+    from api.models import SubscriptionPlan
+    from api.services.superapp_sms_service import onevas_product_config
+
+    superapp_sub = (
+        SubscriptionPlan.objects.filter(
+            telebirr_phone_number__in=[phone, phone_raw],
+            payment_method='telebirr',
+            status='active',
+            end_date__gt=timezone.now(),
+        )
+        .select_related('tier')
+        .first()
+    )
+    duration_type = superapp_sub.tier.duration_type if superapp_sub and superapp_sub.tier else None
+    # Falls back to the default ONEVAS_APPLICATION_KEY / ONEVAS_PRODUCT_NUMBER
+    # when the number has no SuperApp subscription -- the ordinary login path.
+    onevas = onevas_product_config(duration_type)
+    application_key = onevas.get('application_key') or _settings.ONEVAS_APPLICATION_KEY
+    product_number = onevas.get('product_id') or _settings.ONEVAS_PRODUCT_NUMBER
 
     success, message = OTPService.send_otp(phone, application_key, product_number, action='login')
 
