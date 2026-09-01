@@ -41,11 +41,7 @@ def post_purchase(user, package_id, keys):
     api.force_authenticate(user=user)
     return api.post(
         PURCHASE_URL,
-        {
-            'encrypted': sealed['encrypted'],
-            'nonce': sealed['nonce'],
-            'checksum': sealed['checksum'],
-        },
+        sealed.to_dict(),
         format='json',
         HTTP_X_CLIENT_PUBLIC_KEY=client_public,
     )
