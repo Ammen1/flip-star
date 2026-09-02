@@ -68,15 +68,20 @@ def _decrypt_response(response, *, server_public_key, client_private_key):
     response.render()
     envelope_out = json.loads(response.content)
     plaintext = decrypt_payload(
-        envelope_out['encrypted'], envelope_out['nonce'], server_public_key,
-        envelope_out['checksum'], client_private_key,
+        envelope_out['encrypted'],
+        envelope_out['nonce'],
+        server_public_key,
+        envelope_out['checksum'],
+        client_private_key,
     )
     return json.loads(plaintext)
 
 
 @pytest.fixture
 def package(db):
-    pkg = CoinPackage.objects.create(name='USSD Test Pack', price_etb=50, coin_amount=500, bonus_coins=50)
+    pkg = CoinPackage.objects.create(
+        name='USSD Test Pack', price_etb=50, coin_amount=500, bonus_coins=50
+    )
     yield pkg
     pkg.delete()
 
@@ -90,26 +95,71 @@ def user_with_phone(db):
     u.delete()
 
 
-def test_telebirr_ussd_purchase_creates_pending_transaction(user_with_phone, package, _server_keys, client_keys):
+def _seal_post(url, body, *, server_public_key, client_keys, view):
+    """POST a sealed body to an @encrypted_endpoint view, as the client does."""
+    client_public_key, client_private_key = client_keys
+    envelope = encrypt_payload(
+        body,
+        receiver_public_key_b64=server_public_key,
+        sender_private_key_b64=client_private_key,
+    )
+    request = factory.post(
+        url,
+        data=json.dumps(envelope.to_dict()),
+        content_type='application/json',
+        HTTP_X_CLIENT_PUBLIC_KEY=client_public_key,
+    )
+    return view(request)
+
+
+def _key_get(url, *, client_keys, view, user=None):
+    """
+    GET an @encrypted_endpoint view.
+
+    No request envelope -- there is no body -- but X-Client-Public-Key is
+    required so the decorator can seal the response; without it the view
+    answers 400 before running.
+    """
+    client_public_key, _ = client_keys
+    request = factory.get(url, HTTP_X_CLIENT_PUBLIC_KEY=client_public_key)
+    if user is not None:
+        force_authenticate(request, user=user)
+    return view(request)
+
+
+def test_telebirr_ussd_purchase_creates_pending_transaction(
+    user_with_phone, package, _server_keys, client_keys
+):
     server_public_key = _server_keys
     client_public_key, client_private_key = client_keys
 
     with patch(
         'api.views.wallet.telebirr_direct_debit_service.initiate_ussd_push_payment',
-        return_value={'success': True, 'originator_conversation_id': 'S_X1', 'conversation_id': 'AG_1', 'message': 'Accepted'},
+        return_value={
+            'success': True,
+            'originator_conversation_id': 'S_X1',
+            'conversation_id': 'AG_1',
+            'message': 'Accepted',
+        },
     ) as mock_initiate:
         envelope = encrypt_payload(
-            {'package_id': package.id}, receiver_public_key_b64=server_public_key, sender_private_key_b64=client_private_key,
+            {'package_id': package.id},
+            receiver_public_key_b64=server_public_key,
+            sender_private_key_b64=client_private_key,
         ).to_dict()
         request = factory.post(
-            '/wallet/telebirrUssdPurchase/', data=json.dumps(envelope), content_type='application/json',
+            '/wallet/telebirrUssdPurchase/',
+            data=json.dumps(envelope),
+            content_type='application/json',
             HTTP_X_CLIENT_PUBLIC_KEY=client_public_key,
         )
         force_authenticate(request, user=user_with_phone)
 
         response = telebirr_ussd_purchase(request)
 
-    data = _decrypt_response(response, server_public_key=server_public_key, client_private_key=client_private_key)
+    data = _decrypt_response(
+        response, server_public_key=server_public_key, client_private_key=client_private_key
+    )
     assert response.status_code == 200, data
     assert data['originator_conversation_id'] == 'S_X1'
     mock_initiate.assert_called_once()
@@ -119,15 +169,21 @@ def test_telebirr_ussd_purchase_creates_pending_transaction(user_with_phone, pac
     assert txn.payment_reference == 'S_X1'
 
 
-def test_telebirr_ussd_purchase_rejects_unknown_package(user_with_phone, db, _server_keys, client_keys):
+def test_telebirr_ussd_purchase_rejects_unknown_package(
+    user_with_phone, db, _server_keys, client_keys
+):
     server_public_key = _server_keys
     client_public_key, client_private_key = client_keys
 
     envelope = encrypt_payload(
-        {'package_id': 999999}, receiver_public_key_b64=server_public_key, sender_private_key_b64=client_private_key,
+        {'package_id': 999999},
+        receiver_public_key_b64=server_public_key,
+        sender_private_key_b64=client_private_key,
     ).to_dict()
     request = factory.post(
-        '/wallet/telebirrUssdPurchase/', data=json.dumps(envelope), content_type='application/json',
+        '/wallet/telebirrUssdPurchase/',
+        data=json.dumps(envelope),
+        content_type='application/json',
         HTTP_X_CLIENT_PUBLIC_KEY=client_public_key,
     )
     force_authenticate(request, user=user_with_phone)
@@ -137,8 +193,10 @@ def test_telebirr_ussd_purchase_rejects_unknown_package(user_with_phone, db, _se
     assert response.status_code == 404
 
 
-def _ussd_soap_result(*, originator_conversation_id, result_code, transaction_id='', result_desc=''):
-    return f'''<?xml version="1.0" encoding="UTF-8"?>
+def _ussd_soap_result(
+    *, originator_conversation_id, result_code, transaction_id='', result_desc=''
+):
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:res="http://cps.huawei.com/cpsinterface/result">
   <soapenv:Body>
     <api:Result xmlns:api="http://cps.huawei.com/cpsinterface/api_resultmgr">
@@ -149,20 +207,30 @@ def _ussd_soap_result(*, originator_conversation_id, result_code, transaction_id
       <res:TransactionID>{transaction_id}</res:TransactionID>
     </api:Result>
   </soapenv:Body>
-</soapenv:Envelope>'''.encode()
+</soapenv:Envelope>""".encode()
 
 
 @pytest.fixture
 def pending_ussd_transaction(db, user_with_phone, package):
     txn = CoinTransaction.objects.create(
-        user=user_with_phone, transaction_type='purchase', coins=0, payment_method='telebirr_ussd',
-        payment_reference='S_USSD1', package=package, description='Pending USSD Push payment', is_successful=False,
+        user=user_with_phone,
+        transaction_type='purchase',
+        coins=0,
+        payment_method='telebirr_ussd',
+        payment_reference='S_USSD1',
+        package=package,
+        description='Pending USSD Push payment',
+        is_successful=False,
     )
     yield txn
 
 
-def test_telebirr_ussd_webhook_credits_coins_on_success(pending_ussd_transaction, user_with_phone, package):
-    body = _ussd_soap_result(originator_conversation_id='S_USSD1', result_code='0', transaction_id='TX123')
+def test_telebirr_ussd_webhook_credits_coins_on_success(
+    pending_ussd_transaction, user_with_phone, package
+):
+    body = _ussd_soap_result(
+        originator_conversation_id='S_USSD1', result_code='0', transaction_id='TX123'
+    )
     request = factory.post('/webhooks/telebirrUssdPurchase/', data=body, content_type='text/xml')
 
     response = telebirr_ussd_webhook(request)
@@ -178,14 +246,22 @@ def test_telebirr_ussd_webhook_credits_coins_on_success(pending_ussd_transaction
     assert balance.telebirr_purchased_balance == package.get_total_coins()
 
 
-def test_telebirr_ussd_webhook_is_idempotent_against_duplicate_delivery(pending_ussd_transaction, user_with_phone, package):
+def test_telebirr_ussd_webhook_is_idempotent_against_duplicate_delivery(
+    pending_ussd_transaction, user_with_phone, package
+):
     """Telebirr is documented to retry webhook delivery. Master credits coins
     with no locking at all -- a duplicate delivery double-credits the same
     payment. This must not double-credit."""
-    body = _ussd_soap_result(originator_conversation_id='S_USSD1', result_code='0', transaction_id='TX123')
+    body = _ussd_soap_result(
+        originator_conversation_id='S_USSD1', result_code='0', transaction_id='TX123'
+    )
 
-    first = telebirr_ussd_webhook(factory.post('/webhooks/telebirrUssdPurchase/', data=body, content_type='text/xml'))
-    second = telebirr_ussd_webhook(factory.post('/webhooks/telebirrUssdPurchase/', data=body, content_type='text/xml'))
+    first = telebirr_ussd_webhook(
+        factory.post('/webhooks/telebirrUssdPurchase/', data=body, content_type='text/xml')
+    )
+    second = telebirr_ussd_webhook(
+        factory.post('/webhooks/telebirrUssdPurchase/', data=body, content_type='text/xml')
+    )
 
     assert first.status_code == 200
     assert first.data.get('coins_added') == package.get_total_coins()
@@ -194,11 +270,18 @@ def test_telebirr_ussd_webhook_is_idempotent_against_duplicate_delivery(pending_
 
     balance = UserCoinBalance.objects.get(user=user_with_phone)
     assert balance.telebirr_purchased_balance == package.get_total_coins()
-    assert CoinTransaction.objects.filter(payment_reference__in=('S_USSD1', 'TX123'), payment_method='telebirr_ussd').count() == 1
+    assert (
+        CoinTransaction.objects.filter(
+            payment_reference__in=('S_USSD1', 'TX123'), payment_method='telebirr_ussd'
+        ).count()
+        == 1
+    )
 
 
 def test_telebirr_ussd_webhook_marks_failed_payment(pending_ussd_transaction, package):
-    body = _ussd_soap_result(originator_conversation_id='S_USSD1', result_code='1', result_desc='Insufficient funds')
+    body = _ussd_soap_result(
+        originator_conversation_id='S_USSD1', result_code='1', result_desc='Insufficient funds'
+    )
     request = factory.post('/webhooks/telebirrUssdPurchase/', data=body, content_type='text/xml')
 
     response = telebirr_ussd_webhook(request)
@@ -209,22 +292,35 @@ def test_telebirr_ussd_webhook_marks_failed_payment(pending_ussd_transaction, pa
     assert 'Insufficient funds' in pending_ussd_transaction.description
 
 
-def test_telebirr_query_order_credits_coins_when_paid(db):
+def test_telebirr_query_order_credits_coins_when_paid(db, _server_keys, client_keys):
     user = User.objects.create_user(username='ussd_query_user', password='x')
     package = CoinPackage.objects.create(name='Query Test Pack', price_etb=20, coin_amount=200)
     txn = CoinTransaction.objects.create(
-        user=user, transaction_type='purchase', coins=0, payment_method='telebirr',
-        payment_reference='M123', package=package, description='pending', is_successful=False,
+        user=user,
+        transaction_type='purchase',
+        coins=0,
+        payment_method='telebirr',
+        payment_reference='M123',
+        package=package,
+        description='pending',
+        is_successful=False,
     )
     try:
         with patch(
             'api.views.wallet.telebirr_service.query_order',
-            return_value={'success': True, 'is_paid': True, 'trade_status': 'TRADE_SUCCESS', 'payment_order_id': 'P123'},
+            return_value={
+                'success': True,
+                'is_paid': True,
+                'trade_status': 'TRADE_SUCCESS',
+                'payment_order_id': 'P123',
+            },
         ):
-            request = factory.get('/wallet/telebirr/query/?merch_order_id=M123')
-            force_authenticate(request, user=user)
-
-            response = telebirr_query_order(request)
+            response = _key_get(
+                '/wallet/telebirr/query/?merch_order_id=M123',
+                client_keys=client_keys,
+                view=telebirr_query_order,
+                user=user,
+            )
 
         assert response.status_code == 200, response.data
         assert response.data['coins_added'] == package.get_total_coins()
@@ -236,18 +332,29 @@ def test_telebirr_query_order_credits_coins_when_paid(db):
         user.delete()
 
 
-def test_telebirr_auth_logs_in_existing_user_by_phone(db):
+def test_telebirr_auth_logs_in_existing_user_by_phone(db, _server_keys, client_keys):
     user = User.objects.create_user(username='superapp_existing', password='x')
     user.profile.phone_number = '251933000111'
     user.profile.save()
     try:
         with patch(
             'api.views.wallet.telebirr_service.request_auth_token',
-            return_value={'success': True, 'identifier': '251933000111', 'open_id': 'oid1', 'nickName': 'Abebe'},
+            return_value={
+                'success': True,
+                'identifier': '251933000111',
+                'open_id': 'oid1',
+                'nickName': 'Abebe',
+            },
         ):
-            request = factory.post('/wallet/telebirr/auth/', {'access_token': 'tok123'}, format='json')
+            pass
 
-            response = telebirr_auth(request)
+            response = _seal_post(
+                '/wallet/telebirr/auth/',
+                {'access_token': 'tok123'},
+                server_public_key=_server_keys,
+                client_keys=client_keys,
+                view=telebirr_auth,
+            )
 
         assert response.status_code == 200, response.data
         assert response.data['user']['username'] == 'superapp_existing'
@@ -256,14 +363,25 @@ def test_telebirr_auth_logs_in_existing_user_by_phone(db):
         user.delete()
 
 
-def test_telebirr_auth_creates_minimal_account_for_new_phone(db):
+def test_telebirr_auth_creates_minimal_account_for_new_phone(db, _server_keys, client_keys):
     with patch(
         'api.views.wallet.telebirr_service.request_auth_token',
-        return_value={'success': True, 'identifier': '251944000222', 'open_id': 'oid2', 'nickName': 'New'},
+        return_value={
+            'success': True,
+            'identifier': '251944000222',
+            'open_id': 'oid2',
+            'nickName': 'New',
+        },
     ):
-        request = factory.post('/wallet/telebirr/auth/', {'access_token': 'tok456'}, format='json')
+        pass
 
-        response = telebirr_auth(request)
+        response = _seal_post(
+            '/wallet/telebirr/auth/',
+            {'access_token': 'tok456'},
+            server_public_key=_server_keys,
+            client_keys=client_keys,
+            view=telebirr_auth,
+        )
 
     try:
         assert response.status_code == 401

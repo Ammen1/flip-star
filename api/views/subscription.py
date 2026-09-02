@@ -1714,6 +1714,7 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def telebirr_one_time_initiate(request):
     """
     Initiate a one-time Telebirr payment for subscription (no recurring mandate).
@@ -1996,6 +1997,7 @@ def telebirr_one_time_callback(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def telebirr_one_time_query(request):
     """
     Query subscription status by merch_order_id. Used by the frontend to
@@ -2169,6 +2171,7 @@ def check_superapp_subscription(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def validate_subscription_token(request):
     """
     Validate a subscription_token and return the phone number it belongs to.
@@ -2213,6 +2216,7 @@ def validate_subscription_token(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def telebirr_ussd_subscription_status(request):
     """
     Public status check for a USSD Push subscription payment, keyed by

@@ -154,6 +154,9 @@ def get_coin_packages(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+# Restored: the 500 that removed this in c4b19115 was the raw datetime
+# in the response meeting encrypt_payload's json.dumps, fixed below.
+@encrypted_endpoint
 def get_coin_balance(request):
     """Get user's coin balance and transaction history"""
     user = request.user
@@ -175,7 +178,7 @@ def get_coin_balance(request):
                     'type': t.transaction_type,
                     'coins': t.coins,
                     'description': t.description,
-                    'created_at': t.created_at,
+                    'created_at': t.created_at.isoformat(),
                 }
                 for t in transactions
             ],

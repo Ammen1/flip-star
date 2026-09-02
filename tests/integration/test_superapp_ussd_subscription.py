@@ -72,8 +72,8 @@ def client_keys():
     return generate_keypair()
 
 
-def _post_initiate(body, *, server_public_key, client_keys):
-    """Seal `body` for the server and invoke the view, as the client does."""
+def _post_encrypted(url, body, *, server_public_key, client_keys, view):
+    """Seal `body` for the server and invoke `view`, as the client does."""
     client_public_key, client_private_key = client_keys
     sealed = encrypt_payload(
         body,
@@ -81,12 +81,37 @@ def _post_initiate(body, *, server_public_key, client_keys):
         sender_private_key_b64=client_private_key,
     )
     request = factory.post(
-        '/subscription/telebirr/ussd/initiate/',
+        url,
         data=json.dumps(sealed.to_dict()),
         content_type='application/json',
         HTTP_X_CLIENT_PUBLIC_KEY=client_public_key,
     )
-    return telebirr_ussd_subscription_initiate(request)
+    return view(request)
+
+
+def _post_initiate(body, *, server_public_key, client_keys):
+    return _post_encrypted(
+        '/subscription/telebirr/ussd/initiate/',
+        body,
+        server_public_key=server_public_key,
+        client_keys=client_keys,
+        view=telebirr_ussd_subscription_initiate,
+    )
+
+
+def _get_encrypted(url, *, client_keys, view):
+    """
+    GET an @encrypted_endpoint view the way the client does.
+
+    No request envelope -- there is no body -- but X-Client-Public-Key is
+    still required, because the decorator seals the RESPONSE. Without it the
+    view answers 400 "Missing required X-Client-Public-Key header." before
+    running. Assertions still read response.data: DRF holds the plain dict
+    until render time, and the renderer encrypts after that.
+    """
+    client_public_key, _ = client_keys
+    request = plain_factory.get(url, HTTP_X_CLIENT_PUBLIC_KEY=client_public_key)
+    return view(request)
 
 
 @pytest.fixture
@@ -356,23 +381,23 @@ def test_webhook_reuses_existing_user_matched_by_phone(db, monthly_tier):
 # ---------------------------------------------------------------------------
 
 
-def test_status_returns_found_false_for_unknown_id(db):
-    request = plain_factory.get(
-        '/subscription/telebirr/ussd/status/?originator_conversation_id=nope'
+def test_status_returns_found_false_for_unknown_id(db, _server_keys, client_keys):
+    response = _get_encrypted(
+        '/subscription/telebirr/ussd/status/?originator_conversation_id=nope',
+        client_keys=client_keys,
+        view=telebirr_ussd_subscription_status,
     )
-
-    response = telebirr_ussd_subscription_status(request)
 
     assert response.status_code == 200
     assert response.data['found'] is False
 
 
-def test_status_reflects_pending_payment(pending_ussd_payment):
-    request = plain_factory.get(
-        f'/subscription/telebirr/ussd/status/?originator_conversation_id={pending_ussd_payment.onevas_transaction_id}'
+def test_status_reflects_pending_payment(pending_ussd_payment, _server_keys, client_keys):
+    response = _get_encrypted(
+        f'/subscription/telebirr/ussd/status/?originator_conversation_id={pending_ussd_payment.onevas_transaction_id}',
+        client_keys=client_keys,
+        view=telebirr_ussd_subscription_status,
     )
-
-    response = telebirr_ussd_subscription_status(request)
 
     assert response.status_code == 200
     assert response.data['found'] is True
@@ -380,10 +405,12 @@ def test_status_reflects_pending_payment(pending_ussd_payment):
     assert response.data['subscription_status'] == 'pending'
 
 
-def test_status_requires_originator_conversation_id(db):
-    request = plain_factory.get('/subscription/telebirr/ussd/status/')
-
-    response = telebirr_ussd_subscription_status(request)
+def test_status_requires_originator_conversation_id(db, _server_keys, client_keys):
+    response = _get_encrypted(
+        '/subscription/telebirr/ussd/status/',
+        client_keys=client_keys,
+        view=telebirr_ussd_subscription_status,
+    )
 
     assert response.status_code == 400
 
@@ -429,7 +456,7 @@ def test_check_superapp_subscription_no_match(db):
     assert response.data['has_active_subscription'] is False
 
 
-def test_validate_subscription_token_returns_phone(db, monthly_tier):
+def test_validate_subscription_token_returns_phone(db, monthly_tier, _server_keys, client_keys):
     now = timezone.now()
     subscription = SubscriptionPlan.objects.create(
         user=None,
@@ -444,9 +471,13 @@ def test_validate_subscription_token_returns_phone(db, monthly_tier):
     )
     token = subscription.generate_subscription_token()
     try:
-        request = factory.post('/subscription/validate-token/', {'token': token}, format='json')
-
-        response = validate_subscription_token(request)
+        response = _post_encrypted(
+            '/subscription/validate-token/',
+            {'token': token},
+            server_public_key=_server_keys,
+            client_keys=client_keys,
+            view=validate_subscription_token,
+        )
 
         assert response.status_code == 200
         assert response.data['phone'] == '251911002200'
@@ -454,11 +485,13 @@ def test_validate_subscription_token_returns_phone(db, monthly_tier):
         subscription.delete()
 
 
-def test_validate_subscription_token_rejects_unknown_token(db):
-    request = factory.post(
-        '/subscription/validate-token/', {'token': 'not-a-real-token'}, format='json'
+def test_validate_subscription_token_rejects_unknown_token(db, _server_keys, client_keys):
+    response = _post_encrypted(
+        '/subscription/validate-token/',
+        {'token': 'not-a-real-token'},
+        server_public_key=_server_keys,
+        client_keys=client_keys,
+        view=validate_subscription_token,
     )
-
-    response = validate_subscription_token(request)
 
     assert response.status_code == 400

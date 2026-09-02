@@ -1476,6 +1476,7 @@ def telebirr_callback(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@encrypted_endpoint
 def telebirr_auth(request):
     """
     Telebirr SuperApp auto-login endpoint.
@@ -1555,6 +1556,7 @@ def telebirr_auth(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@encrypted_endpoint
 def telebirr_query_order(request):
     """
     Query a Telebirr H5 order's status and credit coins if paid -- a
