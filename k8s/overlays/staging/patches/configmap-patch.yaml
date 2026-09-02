@@ -57,20 +57,17 @@ data:
   # Telebirr's client accepts our TLS certificate, which is still the
   # Kubernetes default -- if it refuses, that is why plain HTTP on a custom
   # port was chosen originally, and the certificate becomes a payment blocker.
-  # Telebirr calls back over the PRIVATE link, not the internet. Their own
-  # request capture echoes ResultURL=https://10.0.0.93:443/api/webhooks/...
-  # -- 10.0.0.93 is this node's address, the same one networkpolicy.yaml
-  # allows for kubelet probes. Their SOAP gateway is 10.180.70.177, also
-  # private, so their network has no route to api.uat.flipstar.et and cannot
-  # resolve it; pointing the callback at the public hostname meant it was
-  # reachable from the internet (curl returned 200) and unreachable from the
-  # only network that actually calls it.
+  # Telebirr's registered callback form: plain HTTP on port 6082, unversioned
+  # /api/webhooks/ path. Their July capture shows this shape working
+  # (Host: api.skykin.et:6082 -> 200 OK), so it matches what their side expects.
   #
-  # Unversioned /api/webhooks/ deliberately: that is the path Telebirr has
-  # mapped. config/urls.py mounts the API at both /api/ and /api/v1/, so it
-  # resolves to the same view either way.
-  TELEBIRR_USSD_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrUssdPurchase/"
-  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrSubscriptionUssd/"
+  # NOTE: nothing currently listens on 6082 -- `ss -lntp` shows no process and
+  # no NodePort maps to it, which is why no callback has landed since the
+  # cluster was rebuilt on 29 Aug. The URL being correct is necessary but not
+  # sufficient: a listener has to be restored on that port, or Telebirr has to
+  # be repointed at 443.
+  TELEBIRR_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase/"
+  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrSubscriptionUssd/"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.
