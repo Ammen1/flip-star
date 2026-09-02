@@ -2363,16 +2363,22 @@ def telebirr_ussd_subscription_initiate(request):
     # from the logs -- the only trace of an initiate was our own "Initiating
     # USSD Push payment" line, logged BEFORE the call. When callbacks stop
     # arriving, this is the line that says whether the push was ever delivered.
+    #
+    # The detail goes in the MESSAGE, not extra={}. common/middleware/logging.py
+    # emits a fixed whitelist -- transaction_id, operation, duration_ms,
+    # provider, result -- and silently drops every other key, which is why an
+    # earlier version of this line logged nothing useful.
     logger.info(
-        'Telebirr USSD push accepted',
+        'Telebirr USSD push accepted: ResponseCode=%s desc=%r tier=%s callback=%s',
+        result.get('response_code'),
+        result.get('message'),
+        tier.name,
+        subscription_webhook_url or '(unset -- fell back to the coin callback)',
         extra={
             'operation': 'telebirr_ussd_subscription_initiate',
-            'response_code': result.get('response_code'),
-            'response_desc': result.get('message'),
-            'originator_conversation_id': result.get('originator_conversation_id'),
-            'conversation_id': result.get('conversation_id'),
-            'result_url': subscription_webhook_url or '(fell back to a default)',
-            'tier': tier.name,
+            'transaction_id': result.get('originator_conversation_id'),
+            'provider': 'telebirr',
+            'result': 'push_accepted',
         },
     )
 
