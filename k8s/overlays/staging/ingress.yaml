@@ -54,6 +54,29 @@ spec:
                 name: flipstar-backend
                 port:
                   name: http
+          # Telebirr payment callbacks. They arrive from the private link
+          # (their gateway is 10.180.70.177) addressed to this node's own IP,
+          # 10.0.0.93 -- so the Host header is a bare IP and no named rule can
+          # match it. Without these paths the ingress answered 404 and every
+          # payment confirmation was lost, leaving subscriptions pending and
+          # coin purchases uncredited since the cluster rebuild.
+          #
+          # Both mounts listed: Telebirr has the unversioned form mapped, and
+          # config/urls.py serves the API at /api/ as well as /api/v1/.
+          - path: /api/webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+          - path: /api/v1/webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
     - host: api.uat.flipstar.et
       http:
         paths:
