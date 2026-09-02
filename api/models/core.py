@@ -261,10 +261,27 @@ class Reel(models.Model):
     is_campaign_post = models.BooleanField(default=False)
 
     # Media processing
+    #
+    # `media` and `image` hold the DERIVED assets the app serves -- the 720p
+    # transcode and the optimised still. The untouched upload is kept in the
+    # original_* fields below so processing can be re-run from source.
+    #
+    # This matters because the pipeline used to overwrite both: the image was
+    # resized in place and the video URL replaced with the compressed one, so
+    # a re-run fed already-compressed output back through the encoder and lost
+    # quality on every pass. Existing rows have null originals -- theirs were
+    # already overwritten before these fields existed, and nothing can recover
+    # them.
+    original_media = models.CharField(max_length=500, blank=True, default='')
+    original_image = models.CharField(max_length=500, blank=True, default='')
+
     thumbnail = models.ImageField(upload_to='thumbnails/', null=True, blank=True)
     blurhash = models.CharField(max_length=100, blank=True, default='')
     duration = models.FloatField(null=True, blank=True)
     processed = models.BooleanField(default=False)
+    # Set when processing fails past its retries, so a failed reel is
+    # distinguishable from one still in the queue -- both have processed=False.
+    processing_failed = models.BooleanField(default=False)
 
     # Boost functionality
     is_boosted = models.BooleanField(
