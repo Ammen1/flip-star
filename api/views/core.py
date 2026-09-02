@@ -2163,15 +2163,26 @@ class ReelViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Get category if provided
+            # Resolve the category, rejecting anything that does not exist.
+            #
+            # This used to swallow a bad id and create the post uncategorised,
+            # so a client sending a stale or mistyped category got a 201 and
+            # silently lost it -- the post then never appeared under any
+            # Explore filter, with nothing to explain why.
             category = None
-            if category_id:
-                try:
-                    from api.models import Category
+            if category_id not in (None, '', 'null'):
+                from api.models import Category
 
-                    category = Category.objects.get(id=category_id, is_active=True)
-                except Category.DoesNotExist:
-                    pass  # Silently ignore invalid category
+                category = Category.objects.filter(id=category_id, is_active=True).first()
+                if category is None:
+                    return Response(
+                        {
+                            'error': 'Unknown or inactive category.',
+                            'code': 'invalid_category',
+                            'category': str(category_id),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             # Create reel with file - Django S3Boto3Storage handles upload automatically
             if is_video:

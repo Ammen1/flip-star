@@ -1,8 +1,10 @@
+from django.db.models import Count, Exists, OuterRef, Prefetch
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db.models import Count, Q, Exists, OuterRef, Prefetch
-from api.models import Reel, Follow, SavedPost, Vote, Comment
+
+from api.models import Comment, Follow, Reel, SavedPost, Vote
 from api.serializers.core import ReelSerializer, build_feed_context
 from common.security import encrypted_endpoint
 
@@ -19,8 +21,7 @@ def _annotated_reels(user):
         to_attr='prefetched_comments',
     )
     qs = (
-        Reel.objects
-        .select_related('user', 'user__profile')
+        Reel.objects.select_related('user', 'user__profile')
         .prefetch_related(recent_comments_prefetch)
         .annotate(
             comment_count_db=Count('comments', distinct=True),
@@ -49,6 +50,7 @@ def reels_following(request):
     reels = _annotated_reels(user).filter(user_id__in=following_users).order_by('-created_at')
 
     from api.models import NotInterested
+
     not_interested_ids = NotInterested.objects.filter(user=user).values_list('reel_id', flat=True)
     reels = reels.exclude(id__in=not_interested_ids)
 
@@ -75,8 +77,9 @@ def reels_saved(request):
 @encrypted_endpoint
 def reels_trending(request):
     """Get trending/popular reels based on votes and comments"""
-    from django.utils import timezone
     from datetime import timedelta
+
+    from django.utils import timezone
 
     week_ago = timezone.now() - timedelta(days=7)
 
@@ -87,11 +90,32 @@ def reels_trending(request):
         .order_by('-engagement', '-created_at')
     )
 
+    # Optional ?category=<slug>. Absent or "all" leaves the feed untouched, so
+    # existing callers keep their current behaviour. An unknown slug returns
+    # 400 rather than silently serving an unfiltered feed, which would look
+    # like the filter was applied and simply matched everything.
+    category_slug = (request.GET.get('category') or '').strip()
+    if category_slug and category_slug != 'all':
+        from api.models import Category
+
+        category = Category.objects.filter(slug=category_slug, is_active=True).first()
+        if category is None:
+            return Response(
+                {
+                    'error': 'Unknown or inactive category.',
+                    'code': 'invalid_category',
+                    'category': category_slug,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reels = reels.filter(category=category)
+
     if request.user.is_authenticated:
         from api.models import NotInterested
-        not_interested_ids = NotInterested.objects.filter(
-            user=request.user
-        ).values_list('reel_id', flat=True)
+
+        not_interested_ids = NotInterested.objects.filter(user=request.user).values_list(
+            'reel_id', flat=True
+        )
         reels = reels.exclude(id__in=not_interested_ids)
 
     reels = reels[:50]
