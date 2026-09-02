@@ -29,6 +29,10 @@ from api.models.subscription import (
 from api.models.subscription import (
     SubscriptionPlan as UserSubscription,
 )
+from api.services.subscription_access import (
+    active_subscription_for,
+    already_subscribed_payload,
+)
 from api.services.superapp_sms_service import superapp_sms_service
 from common.security import EncryptedPayloadMixin, encrypted_endpoint
 from common.throttling import PhoneLookupAnonThrottle, PhoneLookupUserThrottle
@@ -2318,6 +2322,23 @@ def telebirr_ussd_subscription_initiate(request):
     if normalized_phone:
         phone_number = normalized_phone
 
+    # Refuse a second subscription before any money moves.
+    #
+    # The page checks too, but it cannot be relied on: in the telebirr
+    # SuperApp the visitor is not authenticated, so /subscriptions/ 401s for
+    # them and the plan chooser is all they ever see -- they can tap Subscribe
+    # repeatedly and be charged each time. Resolving by phone here catches
+    # that case, which is exactly the one the client cannot.
+    existing = active_subscription_for(
+        user=request.user if request.user.is_authenticated else None,
+        phone_number=phone_number,
+    )
+    if existing is not None:
+        return Response(
+            already_subscribed_payload(existing),
+            status=status.HTTP_409_CONFLICT,
+        )
+
     amount = f'{float(tier.price_etb):.2f}'
 
     subscription_webhook_url = getattr(settings, 'TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL', '')
@@ -2336,6 +2357,24 @@ def telebirr_ussd_subscription_initiate(request):
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+    # Telebirr's ResponseCode/ResponseDesc were parsed by the service and then
+    # thrown away here, which left "did Telebirr accept the push?" unanswerable
+    # from the logs -- the only trace of an initiate was our own "Initiating
+    # USSD Push payment" line, logged BEFORE the call. When callbacks stop
+    # arriving, this is the line that says whether the push was ever delivered.
+    logger.info(
+        'Telebirr USSD push accepted',
+        extra={
+            'operation': 'telebirr_ussd_subscription_initiate',
+            'response_code': result.get('response_code'),
+            'response_desc': result.get('message'),
+            'originator_conversation_id': result.get('originator_conversation_id'),
+            'conversation_id': result.get('conversation_id'),
+            'result_url': subscription_webhook_url or '(fell back to a default)',
+            'tier': tier.name,
+        },
+    )
 
     start_date = timezone.now()
     end_date = start_date + timedelta(days=tier.duration_days or 30)
