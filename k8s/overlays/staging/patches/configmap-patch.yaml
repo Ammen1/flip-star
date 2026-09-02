@@ -44,7 +44,21 @@ data:
   #
   # Lives here rather than in Vault because it is a URL, not a secret, and
   # VAULT_PRECEDENCE defaults to 'env' so this value wins either way.
-  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/v1/webhooks/telebirrSubscriptionUssd/"
+  # Both callbacks moved off http://uat.flipstar.et:6082 onto the ingress.
+  #
+  # Nothing has listened on 6082 since the namespace rebuild: `ss -lntp` shows
+  # no process, no NodePort maps to it, and no Telebirr USSD payment -- coin or
+  # subscription -- has confirmed since Aug 29 22:37, the last success before
+  # the rebuild. 29 subscriptions and 25 coin purchases are stuck pending
+  # because the confirmations have nowhere to land.
+  #
+  # api.uat.flipstar.et:443 is the ingress every other request already uses, so
+  # it is reachable and survives cluster rebuilds. The open question is whether
+  # Telebirr's client accepts our TLS certificate, which is still the
+  # Kubernetes default -- if it refuses, that is why plain HTTP on a custom
+  # port was chosen originally, and the certificate becomes a payment blocker.
+  TELEBIRR_USSD_RESULT_URL: "https://api.uat.flipstar.et/api/v1/webhooks/telebirrUssdPurchase/"
+  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "https://api.uat.flipstar.et/api/v1/webhooks/telebirrSubscriptionUssd/"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.
