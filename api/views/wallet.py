@@ -1759,7 +1759,33 @@ def telebirr_ussd_webhook(request):
     )
 
     if not handled:
-        # Either unknown order or already processed (idempotent OK).
+        # No coin order matched -- try the subscription flow before giving up.
+        #
+        # Telebirr registers ONE Result Address per merchant, so this endpoint
+        # receives coin AND subscription confirmations. Returning early here
+        # discarded every subscription callback: the conversation id has no
+        # CoinTransaction, so `handled` was False and the payment was dropped
+        # with a 200. That is why 29 subscriptions sat pending while coins
+        # occasionally succeeded -- the callbacks arrived and were thrown away.
+        from api.models import SubscriptionPayment
+        from api.views.subscription import _activate_ussd_subscription_payment
+
+        payment = (
+            SubscriptionPayment.objects.select_related('subscription', 'subscription__tier')
+            .filter(
+                onevas_transaction_id=originator_conversation_id,
+                payment_method='telebirr',
+                status='pending',
+            )
+            .first()
+        )
+        if payment is not None:
+            tier = payment.subscription.tier if payment.subscription else None
+            _activate_ussd_subscription_payment(payment, tier)
+            logger.info('[USSD WEBHOOK] Activated subscription for %s', originator_conversation_id)
+            return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'subscription activated'})
+
+        # Genuinely unknown, or already processed -- idempotent OK either way.
         return Response(
             {'result': 'SUCCESS', 'code': '0', 'msg': 'transaction not found or already processed'}
         )
