@@ -16,7 +16,12 @@ data:
   # Host header is that bare IP; without it here Django answers 400
   # DisallowedHost after the ingress has already routed correctly, which looks
   # like an application fault rather than a config gap.
-  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,172.16.170.2"
+  # 10.0.0.93 is this node's VPN-side address (enp4s3). Telebirr posts payment
+  # callbacks straight to it, so the Host header is a bare IP -- without it
+  # here Django answers 400 DisallowedHost with an HTML page, before the
+  # webhook view ever runs. That is indistinguishable from a parse failure
+  # in the logs, which is how it went unnoticed.
+  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,172.16.170.2,10.0.0.93"
 
   # The pod CIDR, so X-Forwarded-For from ingress-nginx is honoured.
   # common/security/client_ip.py only trusts that header when the immediate
