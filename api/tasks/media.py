@@ -235,6 +235,23 @@ def _process_image(input_path, out_path, max_px=1080):
         return None
 
 
+def _publish(local_path, s3_key, discard=None):
+    """Upload a generated artifact and return the URL to store for it.
+
+    Appends to ``discard`` only when the upload actually succeeded. A file that
+    never reached S3 is the one being served -- the caller falls back to its
+    relative path -- so deleting it would leave the reel pointing at nothing.
+    Pass ``discard=None`` for a path that must survive regardless, such as the
+    source image reused when optimisation fails.
+    """
+    url = _upload_to_s3(local_path, s3_key)
+    if url:
+        if discard is not None:
+            discard.append(local_path)
+        return url
+    return os.path.relpath(local_path, settings.MEDIA_ROOT)
+
+
 def _write_reel_fields(reel_pk, **fields):
     """
     Update reel fields without loading or saving the model.
@@ -265,6 +282,9 @@ def process_reel_media(self, reel_id):
     media_val = str(reel.media or '').strip()
     image_val = str(reel.image or '').strip()
     tmp_file = None
+    # Local copies of artifacts that reached S3. Kept until the end so a failure
+    # mid-flow still cleans up whatever was already uploaded.
+    discard = []
 
     try:
         if media_val:
@@ -281,14 +301,9 @@ def process_reel_media(self, reel_id):
             out_video, out_thumb, duration = _process_video(input_path, reel_id)
 
             # Try S3 upload first; fall back to relative local path
-            video_url = _upload_to_s3(
-                out_video, f'reels/processed/reel_{reel_id}_720p.mp4'
-            ) or os.path.relpath(out_video, settings.MEDIA_ROOT)
+            video_url = _publish(out_video, f'reels/processed/reel_{reel_id}_720p.mp4', discard)
             thumb_url = (
-                (
-                    _upload_to_s3(out_thumb, f'thumbnails/reel_{reel_id}_thumb.jpg')
-                    or os.path.relpath(out_thumb, settings.MEDIA_ROOT)
-                )
+                _publish(out_thumb, f'thumbnails/reel_{reel_id}_thumb.jpg', discard)
                 if out_thumb
                 else ''
             )
@@ -332,12 +347,15 @@ def process_reel_media(self, reel_id):
             # a 1080px still as a list thumbnail wastes bandwidth on every card.
             thumb_path = _render_thumbnail(input_path, out_thumb)
 
-            img_url = _upload_to_s3(out_image, f'reels/reel_{reel_id}.jpg') or image_val
+            # discard=None when optimisation fell back to the source: that path
+            # is the untouched upload, not an artifact this task created.
+            img_url = _publish(
+                out_image,
+                f'reels/reel_{reel_id}.jpg',
+                discard if out_image != input_path else None,
+            )
             thumb_url = (
-                (
-                    _upload_to_s3(thumb_path, f'thumbnails/reel_{reel_id}_thumb.jpg')
-                    or os.path.relpath(thumb_path, settings.MEDIA_ROOT)
-                )
+                _publish(thumb_path, f'thumbnails/reel_{reel_id}_thumb.jpg', discard)
                 if thumb_path
                 else img_url
             )
@@ -369,6 +387,15 @@ def process_reel_media(self, reel_id):
     finally:
         if tmp_file and os.path.exists(tmp_file):
             os.unlink(tmp_file)
+        # Transcodes and thumbnails are written under MEDIA_ROOT before being
+        # uploaded. Leaving them there filled the worker's disk: a 720p encode
+        # per reel, never read again once the object store has it.
+        for path in discard:
+            try:
+                if os.path.exists(path):
+                    os.unlink(path)
+            except OSError as exc:  # pragma: no cover - best effort
+                print(f'[TASKS] could not remove artifact {path}: {exc}')
 
 
 # ── Blurhash ─────────────────────────────────────────────────────────────────

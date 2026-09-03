@@ -12,6 +12,8 @@ The cases that matter are the ones that used to be wrong:
   originals     _process_image saved over the upload, destroying it
   idempotency   nothing checked `processed`, so a re-run re-encoded already
                 compressed output and lost quality on every pass
+  artifacts     the transcode and thumbnail were written under MEDIA_ROOT and
+                left there after upload, filling the worker's disk
 """
 
 import pytest
@@ -251,3 +253,77 @@ def test_rendering_twice_is_stable(tmp_path):
     assert os.path.getsize(first) == os.path.getsize(second)
     with Image.open(first) as a, Image.open(second) as b:
         assert a.size == b.size == (THUMB_WIDTH, THUMB_HEIGHT)
+
+
+# ---------------------------------------------------------------------------
+# Artifact cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_publish_removes_the_local_copy_once_it_reaches_s3(tmp_path, monkeypatch):
+    """
+    The disk-fill regression.
+
+    A 720p transcode per reel was written under MEDIA_ROOT and left there for
+    good once S3 had it. Nothing ever read those again.
+    """
+    from api.tasks import media as media_tasks
+
+    artifact = tmp_path / 'reel_1_720p.mp4'
+    artifact.write_bytes(b'x' * 1024)
+    discard = []
+
+    monkeypatch.setattr(media_tasks, '_upload_to_s3', lambda p, k: f'https://cdn/{k}')
+
+    url = media_tasks._publish(str(artifact), 'reels/processed/reel_1_720p.mp4', discard)
+
+    assert url == 'https://cdn/reels/processed/reel_1_720p.mp4'
+    assert discard == [str(artifact)], 'not queued for deletion'
+    # _publish queues; the task's finally block unlinks.
+    assert artifact.exists()
+
+
+def test_publish_keeps_the_local_copy_when_the_upload_fails(tmp_path, monkeypatch):
+    """
+    The deletion must never outrun the upload.
+
+    On upload failure the caller serves the local path, so removing it would
+    leave the reel pointing at a file that no longer exists.
+    """
+    from django.conf import settings
+
+    from api.tasks import media as media_tasks
+
+    media_root = tmp_path / 'media'
+    (media_root / 'reels').mkdir(parents=True)
+    artifact = media_root / 'reels' / 'reel_2.jpg'
+    artifact.write_bytes(b'y' * 512)
+    discard = []
+
+    monkeypatch.setattr(media_tasks, '_upload_to_s3', lambda p, k: None)
+    monkeypatch.setattr(settings, 'MEDIA_ROOT', str(media_root))
+
+    url = media_tasks._publish(str(artifact), 'reels/reel_2.jpg', discard)
+
+    assert discard == [], 'queued a file that is still being served'
+    assert artifact.exists()
+    assert url.replace(chr(92), '/') == 'reels/reel_2.jpg', 'expected a relative fallback path'
+
+
+def test_publish_honours_discard_none(tmp_path, monkeypatch):
+    """
+    Passing discard=None protects the original upload.
+
+    When image optimisation fails the task ships the source file itself. That
+    path is the user's original, not an artifact this task created, so it must
+    never be queued for deletion even though it uploads successfully.
+    """
+    from api.tasks import media as media_tasks
+
+    original = tmp_path / 'original.jpg'
+    original.write_bytes(b'z' * 256)
+
+    monkeypatch.setattr(media_tasks, '_upload_to_s3', lambda p, k: 'https://cdn/x.jpg')
+
+    assert media_tasks._publish(str(original), 'x.jpg', None) == 'https://cdn/x.jpg'
+    assert original.exists()
