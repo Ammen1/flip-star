@@ -936,6 +936,13 @@ urlpatterns = [
     path('wallet/telebirr/query/', telebirr_query_order, name='telebirr-query'),
     path('wallet/telebirrUssdPurchase/', telebirr_ussd_purchase, name='telebirr-ussd-purchase'),
     path('webhooks/telebirrUssdPurchase/', telebirr_ussd_webhook, name='telebirr-ussd-webhook'),
+    # Same view without the trailing slash. Telebirr registered
+    # `http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase` -- no
+    # slash -- and APPEND_SLASH answers a slashless POST with a 301. Their
+    # Axis2 client does not replay the body on a redirect, so every
+    # confirmation arrived as an empty GET and was dropped. Unnamed so
+    # reverse() keeps returning the canonical slashed form.
+    path('webhooks/telebirrUssdPurchase', telebirr_ussd_webhook),
     # ============ WALLET (Admin) ============
     path('admin/wallet/config/', admin_wallet_config, name='admin-wallet-config'),
     path('admin/wallet/user/<int:user_id>/', admin_user_wallet, name='admin-user-wallet'),
@@ -1059,6 +1066,7 @@ urlpatterns = [
         telebirr_ussd_subscription_webhook,
         name='telebirr-ussd-subscription-webhook',
     ),
+    path('webhooks/telebirrSubscriptionUssd', telebirr_ussd_subscription_webhook),
     path(
         'subscription/validate-token/',
         validate_subscription_token,
@@ -1094,6 +1102,14 @@ urlpatterns = [
         telebirr_direct_debit_webhook,
         name='telebirr-direct-debit-webhook',
     ),
+    # Telebirr's own capture shows them POSTing
+    # `/api/webhooks/telebirrDirectDebit/` -- camelCase, matching their other
+    # Result Addresses. Only the kebab-case spelling above was ever served,
+    # so their mandate confirmations hit the 404 handler. Both spellings,
+    # both with and without the trailing slash.
+    path('webhooks/telebirrDirectDebit/', telebirr_direct_debit_webhook),
+    path('webhooks/telebirrDirectDebit', telebirr_direct_debit_webhook),
+    path('webhooks/telebirr-direct-debit', telebirr_direct_debit_webhook),
     path('telebirr/b2c/initiate/', initiate_b2c_payment, name='telebirr-b2c-initiate'),
     path('telebirr/b2c/payments/', list_b2c_payments, name='telebirr-b2c-payments'),
     path('webhooks/telebirrB2C/', telebirr_b2c_webhook, name='telebirr-b2c-webhook'),

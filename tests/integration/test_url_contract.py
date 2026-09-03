@@ -191,11 +191,21 @@ def test_total_route_count_is_stable():
     Result Address omits the trailing slash and APPEND_SLASH turns a
     slashless POST into a 301 that drops the body.
 
+    +2 for the slashless aliases of webhooks/telebirrUssdPurchase and
+    webhooks/telebirrSubscriptionUssd, for the same reason. Telebirr registered
+    `http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase` with no
+    trailing slash, so every USSD confirmation was redirected and lost.
+
+    +3 for webhooks/telebirrDirectDebit -- Telebirr's packet capture shows them
+    posting the camelCase spelling, which was never routed at all (only
+    kebab-case webhooks/telebirr-direct-debit was), plus the slashless variant
+    of each spelling.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 303, (
+    assert len(urlpatterns) == 308, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )
