@@ -73,6 +73,14 @@ data:
   # serves the API at both /api/ and /api/v1/.
   TELEBIRR_USSD_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrUssdPurchase/"
   TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrSubscriptionUssd/"
+
+  # B2C payout callbacks. Unlike the USSD flows -- where Telebirr uses a Result
+  # Address registered against the merchant and ignores what we send -- the B2C
+  # ResultURL is read from each request, so this value actually takes effect.
+  # It was still pointing at uat.flipstar.et:6082, a closed port on a public
+  # hostname their VPN cannot route to, so winner payout confirmations were
+  # being lost the same way subscription ones were.
+  TELEBIRR_B2C_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrB2C/"
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.

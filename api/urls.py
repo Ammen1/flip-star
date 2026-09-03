@@ -1097,6 +1097,12 @@ urlpatterns = [
     path('telebirr/b2c/initiate/', initiate_b2c_payment, name='telebirr-b2c-initiate'),
     path('telebirr/b2c/payments/', list_b2c_payments, name='telebirr-b2c-payments'),
     path('webhooks/telebirrB2C/', telebirr_b2c_webhook, name='telebirr-b2c-webhook'),
+    # Same view without the trailing slash. Telebirr's registered Result
+    # Address is `.../webhooks/telebirrB2C` and APPEND_SLASH answers a
+    # slashless POST with a 301 -- their SOAP client does not follow it, so the
+    # body is discarded and the payout confirmation is lost. Unnamed so
+    # reverse() keeps returning the canonical slashed form.
+    path('webhooks/telebirrB2C', telebirr_b2c_webhook),
     # CRM Gift Integration (data gifts) + Telebirr B2C winner gifts (cash)
     path(
         'admin/crm/packages/',

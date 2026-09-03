@@ -187,11 +187,15 @@ def test_total_route_count_is_stable():
     The MA is configured without the trailing slash and APPEND_SLASH turns
     a slashless POST into a 301 that drops the body.
 
+    +1 for the slashless alias of webhooks/telebirrB2C. Telebirr's registered
+    Result Address omits the trailing slash and APPEND_SLASH turns a
+    slashless POST into a 301 that drops the body.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 302, (
+    assert len(urlpatterns) == 303, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )
