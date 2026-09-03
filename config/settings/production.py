@@ -113,6 +113,23 @@ def _validate() -> None:
 # published port 8000). Keep that port closed, or set SECURE_SSL_REDIRECT=false.
 
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
+
+# Payment provider callbacks are exempt from the HTTPS redirect.
+#
+# Telebirr's registered Result Address is plain HTTP and they cannot change it.
+# SecurityMiddleware would answer a plain-HTTP callback with a 301, and their
+# SOAP client does not follow redirects -- the POST body is discarded, the
+# confirmation is lost, and the payment silently never completes. That is the
+# failure that left 29 subscriptions and 25 coin purchases pending after the
+# 29 Aug rebuild.
+#
+# Scoped to /api/webhooks/ and /api/v1/webhooks/ only; every other path keeps
+# the redirect. These arrive over the operator VPN, not the public internet,
+# so the transport is not open regardless.
+SECURE_REDIRECT_EXEMPT = [
+    r'^api/webhooks/',
+    r'^api/v1/webhooks/',
+]
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
