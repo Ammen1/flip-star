@@ -32,6 +32,8 @@ from api.models.subscription import (
 from api.services.subscription_access import (
     active_subscription_for,
     already_subscribed_payload,
+    payment_pending_payload,
+    pending_subscription_payment,
 )
 from api.services.superapp_sms_service import superapp_sms_service
 from common.security import EncryptedPayloadMixin, encrypted_endpoint
@@ -47,7 +49,7 @@ ONEVAS_PRODUCTS = settings.ONEVAS_PRODUCTS
 
 # App Links (placeholders - update with actual URLs)
 # WEB_APP_LINK = "https://api.uat.flipstar.et?subscription_tp=true"
-WEB_APP_LINK = 'https://uat.flipstar.et'
+WEB_APP_LINK = 'https://uat.flipstar.et/register?subscription_tp=true&phone={masked_phone}'
 MOBILE_APP_LINK = 'https://play.google.com/store/apps/details?id=com.postworq.mobile'
 
 
@@ -2338,6 +2340,21 @@ def telebirr_ussd_subscription_initiate(request):
             already_subscribed_payload(existing),
             status=status.HTTP_409_CONFLICT,
         )
+
+    # And refuse while a previous push is still unconfirmed.
+    #
+    # The check above only sees an *active* subscription. A payment whose
+    # callback has not arrived leaves the subscription pending, so the caller
+    # still looks like a non-subscriber and can be charged again -- which is
+    # what happens whenever the telebirr result URL is unreachable.
+    if (
+        pending_subscription_payment(
+            user=request.user if request.user.is_authenticated else None,
+            phone_number=phone_number,
+        )
+        is not None
+    ):
+        return Response(payment_pending_payload(), status=status.HTTP_409_CONFLICT)
 
     amount = f'{float(tier.price_etb):.2f}'
 

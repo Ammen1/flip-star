@@ -1,0 +1,589 @@
+{
+  "info": {
+    "_postman_id": "3d81b6c2-91a4-4f0e-8b57-2c7d4e9a1f36",
+    "name": "FlipStar - TIMWE Datasync",
+    "description": "The SyncOrderRelation callback TIMWE's Master Aggregator calls when a subscription relationship is created or removed.\n\n## One endpoint, not several\n\nUnlike the OneVAS webhooks, TIMWE carries the operation in the payload rather than the URL. Subscribe, unsubscribe and update all arrive at the same address and differ only in `updateType` (1, 2, 3).\n\n## Reachability\n\n`baseUrl` defaults to the tunnel address `https://172.16.170.2:443`, which resolves **only** from the staging server or from TIMWE's side of the IPsec tunnel. From anywhere else it times out, which is correct rather than a fault.\n\nTo run this from a laptop, either point `baseUrl` at `https://api.uat.flipstar.et` (same code, public path) or open an SSH forward:\n\n```\nssh -L 8443:172.16.170.2:443 root@sky-staging-server\n```\n\nand set `baseUrl` to `https://localhost:8443`.\n\n## Turn off certificate verification\n\nSettings -> General -> **SSL certificate verification: OFF**. The certificate is issued for a hostname, so connecting by IP is a mismatch and every request otherwise fails at the TLS handshake.\n\n## Expect 2032 until products are mapped\n\nThe lookup is `SubscriptionTier.product_id`. Until TIMWE supplies real product IDs and they are set on the tiers, every well-formed request answers 2032. That is documented behaviour, not a bug.\n\n## No authentication\n\nSyncOrderRelation carries no credentials -- the guide states the message header is empty. Access is controlled by source IP (`TIMWE_ALLOWED_IPS`) and by the tunnel itself. An Authorization header is ignored.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Subscription lifecycle",
+      "item": [
+        {
+          "name": "Subscribe (updateType 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soapenv:Body>\n    <ns1:syncOrderRelation xmlns:ns1=\"http://www.csapi.org/schema/parlayx/data/sync/v1_0/local\">\n      <ns1:userID>\n        <ID>{{msisdn}}</ID>\n        <type>0</type>\n      </ns1:userID>\n      <ns1:spID>{{spID}}</ns1:spID>\n      <ns1:productID>{{productID}}</ns1:productID>\n      <ns1:serviceID>{{serviceID}}</ns1:serviceID>\n      <ns1:serviceList>{{serviceID}}</ns1:serviceList>\n      <ns1:updateType>1</ns1:updateType>\n      <ns1:updateTime>20260901120000</ns1:updateTime>\n      <ns1:updateDesc>Addition</ns1:updateDesc>\n      <ns1:effectiveTime>20260901120000</ns1:effectiveTime>\n      <ns1:expiryTime>20361231160000</ns1:expiryTime>\n      <ns1:extensionInfo>\n        <item><key>transactionID</key><value>{{$guid}}</value></item>\n        <item><key>orderKey</key><value>{{$randomInt}}</value></item>\n        <item><key>keyword</key><value>sub</value></item>\n        <item><key>channelID</key><value>1</value></item>\n      </ns1:extensionInfo>\n    </ns1:syncOrderRelation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "A user subscribes by SMS or WEB. Creates and activates a SubscriptionPlan once TIMWE_INTEGRATION_ENABLED is on; until then the event is recorded and answered 0."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"productID is mapped to a tier\", function () {",
+                  "    pm.expect(",
+                  "        code,",
+                  "        \"2032 means no SubscriptionTier has product_id=\" +",
+                  "            pm.variables.get(\"productID\") +",
+                  "            \". Expected until TIMWE supplies the real product IDs.\"",
+                  "    ).to.not.eql(\"2032\");",
+                  "    pm.expect(code).to.eql(\"0\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Unsubscribe (updateType 2)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soapenv:Body>\n    <ns1:syncOrderRelation xmlns:ns1=\"http://www.csapi.org/schema/parlayx/data/sync/v1_0/local\">\n      <ns1:userID>\n        <ID>{{msisdn}}</ID>\n        <type>0</type>\n      </ns1:userID>\n      <ns1:spID>{{spID}}</ns1:spID>\n      <ns1:productID>{{productID}}</ns1:productID>\n      <ns1:serviceID>{{serviceID}}</ns1:serviceID>\n      <ns1:serviceList>{{serviceID}}</ns1:serviceList>\n      <ns1:updateType>2</ns1:updateType>\n      <ns1:updateTime>20260901120000</ns1:updateTime>\n      <ns1:updateDesc>Deletion</ns1:updateDesc>\n      <ns1:effectiveTime>20260901120000</ns1:effectiveTime>\n      <ns1:expiryTime>20361231160000</ns1:expiryTime>\n      <ns1:extensionInfo>\n        <item><key>transactionID</key><value>{{$guid}}</value></item>\n        <item><key>orderKey</key><value>{{$randomInt}}</value></item>\n        <item><key>keyword</key><value>unsub</value></item>\n        <item><key>channelID</key><value>1</value></item>\n      </ns1:extensionInfo>\n    </ns1:syncOrderRelation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "A user unsubscribes. Cancels the active plan for this tier only -- cancelling Daily never touches Monthly. If nothing is active the event is recorded and still answered 0, because 2031 would make the MA retry a cancellation we can never satisfy."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"productID is mapped to a tier\", function () {",
+                  "    pm.expect(",
+                  "        code,",
+                  "        \"2032 means no SubscriptionTier has product_id=\" +",
+                  "            pm.variables.get(\"productID\") +",
+                  "            \". Expected until TIMWE supplies the real product IDs.\"",
+                  "    ).to.not.eql(\"2032\");",
+                  "    pm.expect(code).to.eql(\"0\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Update (updateType 3)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soapenv:Body>\n    <ns1:syncOrderRelation xmlns:ns1=\"http://www.csapi.org/schema/parlayx/data/sync/v1_0/local\">\n      <ns1:userID>\n        <ID>{{msisdn}}</ID>\n        <type>0</type>\n      </ns1:userID>\n      <ns1:spID>{{spID}}</ns1:spID>\n      <ns1:productID>{{productID}}</ns1:productID>\n      <ns1:serviceID>{{serviceID}}</ns1:serviceID>\n      <ns1:serviceList>{{serviceID}}</ns1:serviceList>\n      <ns1:updateType>3</ns1:updateType>\n      <ns1:updateTime>20260901120000</ns1:updateTime>\n      <ns1:updateDesc>Update</ns1:updateDesc>\n      <ns1:effectiveTime>20260901120000</ns1:effectiveTime>\n      <ns1:expiryTime>20361231160000</ns1:expiryTime>\n      <ns1:extensionInfo>\n        <item><key>transactionID</key><value>{{$guid}}</value></item>\n        <item><key>orderKey</key><value>{{$randomInt}}</value></item>\n        <item><key>keyword</key><value>upd</value></item>\n        <item><key>channelID</key><value>1</value></item>\n      </ns1:extensionInfo>\n    </ns1:syncOrderRelation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "The guide defines 'Update' without saying what changes. Recorded, with no subscription state change."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"productID is mapped to a tier\", function () {",
+                  "    pm.expect(",
+                  "        code,",
+                  "        \"2032 means no SubscriptionTier has product_id=\" +",
+                  "            pm.variables.get(\"productID\") +",
+                  "            \". Expected until TIMWE supplies the real product IDs.\"",
+                  "    ).to.not.eql(\"2032\");",
+                  "    pm.expect(code).to.eql(\"0\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rejections",
+      "item": [
+        {
+          "name": "Empty body -> 1211",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "No body at all. Rejected before anything else runs."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"1211, reason names the empty body\", function () {",
+                  "    pm.expect(code).to.eql(\"1211\");",
+                  "    pm.expect(desc.toLowerCase()).to.include(\"empty\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Malformed XML -> 1211",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope><soapenv:Body>broken</soapenv:Bodyy></soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "Mismatched closing tag. Shows the parser validates structure rather than pattern-matching fields out of a string."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"1211 for malformed XML\", function () {",
+                  "    pm.expect(code).to.eql(\"1211\");",
+                  "    pm.expect(desc.toLowerCase()).to.include(\"well-formed\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Missing userID -> 1211",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soapenv:Body>\n    <ns1:syncOrderRelation xmlns:ns1=\"http://www.csapi.org/schema/parlayx/data/sync/v1_0/local\">\n      <ns1:spID>{{spID}}</ns1:spID>\n      <ns1:productID>{{productID}}</ns1:productID>\n      <ns1:serviceID>{{serviceID}}</ns1:serviceID>\n      <ns1:updateType>1</ns1:updateType>\n      <ns1:updateTime>20260901120000</ns1:updateTime>\n    </ns1:syncOrderRelation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "userID is mandatory. The description names the missing field so TIMWE can correct it without a round trip."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"1211 naming userID\", function () {",
+                  "    pm.expect(code).to.eql(\"1211\");",
+                  "    pm.expect(desc.toLowerCase()).to.include(\"userid\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "DOCTYPE rejected -> 1211",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<?xml version=\"1.0\"?>\n<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]>\n<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soapenv:Body>\n    <ns1:syncOrderRelation xmlns:ns1=\"http://www.csapi.org/schema/parlayx/data/sync/v1_0/local\">\n      <ns1:userID><ID>&xxe;</ID><type>0</type></ns1:userID>\n      <ns1:spID>{{spID}}</ns1:spID>\n      <ns1:productID>{{productID}}</ns1:productID>\n      <ns1:serviceID>{{serviceID}}</ns1:serviceID>\n      <ns1:updateType>1</ns1:updateType>\n      <ns1:updateTime>20260901120000</ns1:updateTime>\n    </ns1:syncOrderRelation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "XXE guard. A document type declaration is refused before parsing, so an external entity is never resolved."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"1211, and no file contents echoed back\", function () {",
+                  "    pm.expect(code).to.eql(\"1211\");",
+                  "    pm.expect(pm.response.text()).to.not.include(\"root:\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "Unknown productID -> 2032",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/xml; charset=utf-8"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\">\n  <soapenv:Body>\n    <ns1:syncOrderRelation xmlns:ns1=\"http://www.csapi.org/schema/parlayx/data/sync/v1_0/local\">\n      <ns1:userID>\n        <ID>{{msisdn}}</ID>\n        <type>0</type>\n      </ns1:userID>\n      <ns1:spID>{{spID}}</ns1:spID>\n      <ns1:productID>9999999999</ns1:productID>\n      <ns1:serviceID>{{serviceID}}</ns1:serviceID>\n      <ns1:serviceList>{{serviceID}}</ns1:serviceList>\n      <ns1:updateType>1</ns1:updateType>\n      <ns1:updateTime>20260901120000</ns1:updateTime>\n      <ns1:updateDesc>Addition</ns1:updateDesc>\n      <ns1:effectiveTime>20260901120000</ns1:effectiveTime>\n      <ns1:expiryTime>20361231160000</ns1:expiryTime>\n      <ns1:extensionInfo>\n        <item><key>transactionID</key><value>{{$guid}}</value></item>\n        <item><key>orderKey</key><value>{{$randomInt}}</value></item>\n        <item><key>keyword</key><value>sub</value></item>\n        <item><key>channelID</key><value>1</value></item>\n      </ns1:extensionInfo>\n    </ns1:syncOrderRelation>\n  </soapenv:Body>\n</soapenv:Envelope>",
+              "options": {
+                "raw": {
+                  "language": "xml"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/timwe/sync-order-relation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "timwe",
+                "sync-order-relation"
+              ]
+            },
+            "description": "A product mapping to no SubscriptionTier. 2032 tells the MA to stop rather than retry a product we will never recognise."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The response is SOAP, not JSON. Reading the code by regex rather than",
+                  "// xml2Json keeps this independent of how Postman maps namespace prefixes.",
+                  "const raw = pm.response.text();",
+                  "const codeMatch = raw.match(/<ns1:result>(\\d+)<\\/ns1:result>/);",
+                  "const descMatch = raw.match(/<ns1:resultDescription>([^<]*)<\\/ns1:resultDescription>/);",
+                  "const code = codeMatch ? codeMatch[1] : null;",
+                  "const desc = descMatch ? descMatch[1] : \"\";",
+                  "",
+                  "pm.test(\"HTTP 200 with a SOAP body\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"xml\");",
+                  "    pm.expect(code, \"no <ns1:result> element in the response\").to.not.be.null;",
+                  "});",
+                  "",
+                  "console.log(\"result \" + code + \" - \" + desc);",
+                  "",
+                  "pm.test(\"2032 for an unmapped product\", function () {",
+                  "    pm.expect(code).to.eql(\"2032\");",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://172.16.170.2:443",
+      "description": "Tunnel address. Use https://api.uat.flipstar.et to run from outside."
+    },
+    {
+      "key": "msisdn",
+      "value": "251912345678",
+      "description": "Subscriber number with country code, no + prefix."
+    },
+    {
+      "key": "spID",
+      "value": "001100",
+      "description": "Allocated by TIMWE at registration."
+    },
+    {
+      "key": "productID",
+      "value": "1000000423",
+      "description": "Example value from the integration guide. Replace with the real one."
+    },
+    {
+      "key": "serviceID",
+      "value": "0011002000001100",
+      "description": "Allocated by TIMWE per service."
+    }
+  ]
+}

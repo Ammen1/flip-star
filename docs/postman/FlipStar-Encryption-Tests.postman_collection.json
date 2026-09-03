@@ -1,0 +1,1006 @@
+{
+  "info": {
+    "_postman_id": "8f2c1a44-6d3e-4b57-9c21-0a7e5b3d9f10",
+    "name": "FlipStar — Encrypted Transport Tests",
+    "description": "Exercises FlipStar's end-to-end encrypted request/response layer against staging.\n\n## What this covers\n\nTwenty-odd endpoints (auth, wallet, direct-debit, charging) refuse a plain JSON body. They expect a NaCl Box envelope:\n\n```\nHeader  X-Client-Public-Key: <base64 of a 32-byte X25519 public key>\nBody    {\"encrypted\": <b64 ciphertext>,\n         \"nonce\":     <b64 24-byte nonce>,\n         \"checksum\":  <sha256 hex of the plaintext JSON>}\n```\n\n## Why the crypto happens server-side here\n\nPostman's sandbox has CryptoJS but no NaCl/libsodium, so it cannot build an X25519 box natively. The API exposes three helper endpoints that perform the CLIENT half of the exchange for you:\n\n- `GET  /api/v1/crypto/test/keypair/`\n- `POST /api/v1/crypto/test/encrypt/`\n- `POST /api/v1/crypto/test/decrypt/`\n\nThey are gated on `CRYPTO_TEST_ENDPOINTS_ENABLED`, which is `true` in staging and `false` everywhere else. Enabled, they let anyone who can reach the API mint a valid envelope for any payload — that is the opposite of what E2E encryption is for, which is why they must never be on in production. When off they return **404**, not 403: a route that is switched off should not confirm it exists.\n\nA real client generates its keypair locally with tweetnacl/libsodium and never transmits the private half. See `scripts/encrypted_request_example.py` for that version.\n\n## Running it\n\nRun the whole collection in order (Runner, or folder by folder). Folder 0 seeds the keypair every other folder depends on. Select the **FlipStar - Staging** environment, or rely on the collection-level `baseUrl`.\n\n## Three details that produce a generic 400\n\n1. The plaintext is `json.dumps(data, separators=(',', ':'), sort_keys=True)` — compact separators AND sorted keys. The checksum is over that exact string.\n2. Send only the ciphertext. PyNaCl's `encrypt()` prepends the nonce; the nonce travels in its own field here, so including it twice breaks the decrypt.\n3. Nonces are single-use for 24 hours. Replaying one returns **409**, not 400.\n\nServer-side order is decrypt → replay → checksum, so a reused nonce reports 409 even when the checksum is also wrong.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.uat.flipstar.et" },
+    { "key": "token", "value": "" },
+    { "key": "clientPublicKey", "value": "" },
+    { "key": "clientPrivateKey", "value": "" },
+    { "key": "serverPublicKey", "value": "" },
+    { "key": "encrypted", "value": "" },
+    { "key": "nonce", "value": "" },
+    { "key": "checksum", "value": "" },
+    { "key": "freshEncrypted", "value": "" },
+    { "key": "freshNonce", "value": "" },
+    { "key": "freshChecksum", "value": "" },
+    { "key": "badChecksum", "value": "" },
+    { "key": "badEncrypted", "value": "" },
+    { "key": "respEncrypted", "value": "" },
+    { "key": "respNonce", "value": "" },
+    { "key": "respChecksum", "value": "" },
+    { "key": "regUsername", "value": "" },
+    { "key": "regEmail", "value": "" },
+    { "key": "regPassword", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 · Setup",
+      "description": "Fetches the server key and a throwaway client keypair. Everything downstream depends on these variables, so run this folder first.",
+      "item": [
+        {
+          "name": "0.1 Server public key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const j = pm.response.json();",
+                  "",
+                  "pm.test('returns a public key', () => {",
+                  "    pm.expect(j).to.have.property('publicKey');",
+                  "    pm.expect(j.publicKey).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('algorithm is X25519', () => pm.expect(j.algorithm).to.eql('X25519'));",
+                  "",
+                  "pm.test('public key is 32 bytes base64-encoded', () => {",
+                  "    // 32 raw bytes -> 44 base64 chars with one '=' of padding.",
+                  "    pm.expect(j.publicKey).to.have.lengthOf(44);",
+                  "});",
+                  "",
+                  "pm.test('no private key is ever exposed here', () => {",
+                  "    pm.expect(Object.keys(j)).to.not.include('privateKey');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('serverPublicKey', j.publicKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/public-key/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "public-key", ""]
+            },
+            "description": "The one crypto endpoint that stays on in production. Public by design — it is the key clients encrypt toward. Returns 503 if key initialization has not completed."
+          },
+          "response": []
+        },
+        {
+          "name": "0.2 Throwaway client keypair",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK — test endpoints are enabled on this environment', () => {",
+                  "    if (pm.response.code === 404) {",
+                  "        throw new Error('404: CRYPTO_TEST_ENDPOINTS_ENABLED is false here. ' +",
+                  "            'That is correct for production. Point baseUrl at staging.');",
+                  "    }",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const j = pm.response.json();",
+                  "",
+                  "pm.test('returns a full client identity', () => {",
+                  "    pm.expect(j).to.have.property('publicKey');",
+                  "    pm.expect(j).to.have.property('privateKey');",
+                  "    pm.expect(j).to.have.property('serverPublicKey');",
+                  "});",
+                  "",
+                  "pm.test('the helper warns that this is not real-client behaviour', () => {",
+                  "    pm.expect(j.warning).to.be.a('string').and.include('never');",
+                  "});",
+                  "",
+                  "pm.test('server key matches the public endpoint', () => {",
+                  "    pm.expect(j.serverPublicKey).to.eql(pm.collectionVariables.get('serverPublicKey'));",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('clientPublicKey', j.publicKey);",
+                  "pm.collectionVariables.set('clientPrivateKey', j.privateKey);",
+                  "pm.collectionVariables.set('serverPublicKey', j.serverPublicKey);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/keypair/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "keypair", ""]
+            },
+            "description": "Generates an X25519 keypair server-side and hands back both halves. A production client does this locally and never transmits the private key — there is no registration step, the key is asserted per request via the X-Client-Public-Key header."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1 · Round trip — auth/register (no token)",
+      "description": "The full three-step exchange against a real encrypted endpoint. `register` is AllowAny, so this needs no credentials.\n\nNote this creates a real user in staging. The username is randomised per run so repeated runs do not collide.",
+      "item": [
+        {
+          "name": "1.1 Encrypt the register payload",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Unique per run so re-running the collection does not collide with",
+                  "// a user created by the previous run.",
+                  "const n = Date.now().toString().slice(-9);",
+                  "pm.collectionVariables.set('regUsername', 'enc_test_' + n);",
+                  "pm.collectionVariables.set('regEmail', 'enc_test_' + n + '@example.com');",
+                  "pm.collectionVariables.set('regPassword', 'EncTest!' + n);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const j = pm.response.json();",
+                  "",
+                  "pm.test('envelope carries exactly the three wire fields', () => {",
+                  "    pm.expect(j.body).to.have.all.keys('encrypted', 'nonce', 'checksum');",
+                  "});",
+                  "",
+                  "pm.test('nonce is 24 bytes base64-encoded', () => {",
+                  "    // 24 raw bytes -> 32 base64 chars, no padding.",
+                  "    pm.expect(j.body.nonce).to.have.lengthOf(32);",
+                  "});",
+                  "",
+                  "pm.test('checksum is a sha256 hex digest', () => {",
+                  "    pm.expect(j.body.checksum).to.match(/^[0-9a-f]{64}$/);",
+                  "});",
+                  "",
+                  "pm.test('public key returned matches the private key we supplied', () => {",
+                  "    pm.expect(j.clientPublicKey).to.eql(pm.collectionVariables.get('clientPublicKey'));",
+                  "});",
+                  "",
+                  "pm.test('the header to send is spelled out for us', () => {",
+                  "    pm.expect(j.header).to.have.property('X-Client-Public-Key');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('encrypted', j.body.encrypted);",
+                  "pm.collectionVariables.set('nonce', j.body.nonce);",
+                  "pm.collectionVariables.set('checksum', j.body.checksum);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"username\": \"{{regUsername}}\",\n    \"email\": \"{{regEmail}}\",\n    \"password\": \"{{regPassword}}\"\n  },\n  \"clientPrivateKey\": \"{{clientPrivateKey}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/encrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "encrypt", ""]
+            },
+            "description": "Supplying clientPrivateKey keeps the same identity as folder 0, which is what lets step 1.3 decrypt the response. Omit it and a fresh keypair is generated and returned alongside the envelope."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 POST /auth/register/ — encrypted",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the encryption layer accepted the envelope', () => {",
+                  "    // Anything but a crypto rejection means decrypt succeeded and the",
+                  "    // view body actually ran. That is what this collection is testing;",
+                  "    // business-logic failures are a separate concern.",
+                  "    if (pm.response.code === 400 || pm.response.code === 409) {",
+                  "        let code = null;",
+                  "        try { code = pm.response.json().code; } catch (e) { /* encrypted body */ }",
+                  "        pm.expect(code, 'response code field').to.not.be.oneOf(",
+                  "            ['decryption_failed', 'replay_detected']);",
+                  "    }",
+                  "});",
+                  "",
+                  "pm.test('registration succeeded (201)', () => pm.response.to.have.status(201));",
+                  "",
+                  "const j = pm.response.json();",
+                  "",
+                  "pm.test('the response is itself encrypted', () => {",
+                  "    pm.expect(j).to.have.all.keys('encrypted', 'nonce', 'checksum');",
+                  "});",
+                  "",
+                  "pm.test('no plaintext leaked into the response', () => {",
+                  "    pm.expect(pm.response.text()).to.not.include(pm.collectionVariables.get('regUsername'));",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('respEncrypted', j.encrypted);",
+                  "pm.collectionVariables.set('respNonce', j.nonce);",
+                  "pm.collectionVariables.set('respChecksum', j.checksum);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{encrypted}}\",\n  \"nonce\": \"{{nonce}}\",\n  \"checksum\": \"{{checksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "The real call. Encrypted endpoints encrypt their responses too, so the 201 body is an envelope, not readable JSON — step 1.3 opens it."
+          },
+          "response": []
+        },
+        {
+          "name": "1.3 Decrypt the response",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const j = pm.response.json();",
+                  "",
+                  "pm.test('response decrypts to readable JSON', () => {",
+                  "    pm.expect(j).to.have.property('decrypted');",
+                  "    pm.expect(j.decrypted).to.be.an('object');",
+                  "});",
+                  "",
+                  "pm.test('the decrypted body describes the user we registered', () => {",
+                  "    pm.expect(JSON.stringify(j.decrypted)).to.include(",
+                  "        pm.collectionVariables.get('regUsername'));",
+                  "});",
+                  "",
+                  "console.log('Decrypted response:', JSON.stringify(j.decrypted, null, 2));",
+                  "",
+                  "// If the endpoint returned an auth token, carry it forward so folder 2",
+                  "// can run without manual setup.",
+                  "const t = j.decrypted && (j.decrypted.token || j.decrypted.key ||",
+                  "          (j.decrypted.data && j.decrypted.data.token));",
+                  "if (t) {",
+                  "    pm.collectionVariables.set('token', t);",
+                  "    console.log('Captured auth token for folder 2.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{respEncrypted}}\",\n  \"nonce\": \"{{respNonce}}\",\n  \"checksum\": \"{{respChecksum}}\",\n  \"clientPrivateKey\": \"{{clientPrivateKey}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/decrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "decrypt", ""]
+            },
+            "description": "Replay checking is deliberately off on this helper: it decrypts a response the server itself produced, and consuming that nonce would poison the cache for a payload that was never a request."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2 · Round trip — authenticated (wallet/withdraw)",
+      "description": "Same three steps with an Authorization header. Needs `token` — folder 1.3 sets it automatically if registration returns one, otherwise fill it in yourself.\n\nThe assertion here is deliberately *not* 200. A withdrawal can legitimately fail on business rules (insufficient balance, no wallet). What this folder proves is that the encryption layer worked: the request decrypted and the view body ran. Anything other than `decryption_failed` demonstrates that.",
+      "item": [
+        {
+          "name": "2.1 Encrypt the withdraw payload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('encrypted', j.body.encrypted);",
+                  "pm.collectionVariables.set('nonce', j.body.nonce);",
+                  "pm.collectionVariables.set('checksum', j.body.checksum);",
+                  "",
+                  "pm.test('a fresh nonce was issued', () => {",
+                  "    pm.expect(j.body.nonce).to.have.lengthOf(32);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"amount\": 100\n  },\n  \"clientPrivateKey\": \"{{clientPrivateKey}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/encrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "encrypt", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 POST /wallet/withdraw/ — encrypted + authenticated",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('not rejected by the encryption layer', () => {",
+                  "    let code = null;",
+                  "    try { code = pm.response.json().code; } catch (e) { /* encrypted body */ }",
+                  "    pm.expect(code, 'response code field').to.not.eql('decryption_failed');",
+                  "});",
+                  "",
+                  "pm.test('authentication was accepted', () => {",
+                  "    pm.expect(pm.response.code, 'set {{token}} if this is 401').to.not.eql(401);",
+                  "});",
+                  "",
+                  "// A 400 here is usually business logic (insufficient funds, no wallet),",
+                  "// which still proves decryption succeeded — the view body ran to produce it.",
+                  "console.log('Status', pm.response.code, '-', pm.response.text().slice(0, 300));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" },
+              { "key": "Authorization", "value": "Token {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{encrypted}}\",\n  \"nonce\": \"{{nonce}}\",\n  \"checksum\": \"{{checksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/wallet/withdraw/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "wallet", "withdraw", ""]
+            },
+            "description": "Order of operations server-side is authentication → permissions → decrypt. A bad token therefore returns 401 before the envelope is even looked at."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3 · Failure modes",
+      "description": "The negative cases. Each one pins a specific rejection so a regression in the crypto layer shows up as a changed status code rather than silently weakened validation.\n\nServer-side order is **decrypt → replay → checksum**, which is why the tampered-checksum case mints a fresh envelope: on a reused nonce the replay check fires first and you get 409 instead of 400.",
+      "item": [
+        {
+          "name": "3.1 Missing X-Client-Public-Key → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('reports a decryption failure', () => {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.code).to.eql('decryption_failed');",
+                  "    pm.expect(j.error).to.include('X-Client-Public-Key');",
+                  "});",
+                  "",
+                  "pm.test('rejected before the view body ran', () => {",
+                  "    // No user should have been created by a request that never decrypted.",
+                  "    pm.expect(pm.response.text()).to.not.include('username');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{encrypted}}\",\n  \"nonce\": \"{{nonce}}\",\n  \"checksum\": \"{{checksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "A valid envelope with no header. The decorator raises before the view body runs at all."
+          },
+          "response": []
+        },
+        {
+          "name": "3.2 Plain JSON body → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('reports a decryption failure', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('decryption_failed');",
+                  "});",
+                  "",
+                  "pm.test('names the three fields it wanted', () => {",
+                  "    const e = pm.response.json().error;",
+                  "    pm.expect(e).to.include('encrypted');",
+                  "    pm.expect(e).to.include('nonce');",
+                  "    pm.expect(e).to.include('checksum');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"plaintext_attempt\",\n  \"email\": \"plain@example.com\",\n  \"password\": \"hunter2hunter2\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "The header is present but the body is ordinary JSON. This is the mistake most frontend integrations hit first."
+          },
+          "response": []
+        },
+        {
+          "name": "3.3 Replay the exact envelope from 1.2 → 409",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Folder 2 overwrites {{encrypted}}. Re-mint nothing here — instead this",
+                  "// request deliberately reuses the *withdraw* envelope from 2.1 if folder 2",
+                  "// ran, or the register envelope otherwise. Either way the nonce has",
+                  "// already been consumed by a prior request, which is the condition under",
+                  "// test.",
+                  "if (!pm.collectionVariables.get('nonce')) {",
+                  "    throw new Error('Run folder 1 (and optionally 2) before this test.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 409, not 400', () => pm.response.to.have.status(409));",
+                  "",
+                  "pm.test('reported as a replay, not an integrity failure', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('replay_detected');",
+                  "});",
+                  "",
+                  "// A nonce must never be reused for a given keypair. An attacker resending",
+                  "// a captured message verbatim carries a nonce the server has already seen,",
+                  "// so this is treated as a security event rather than a bad payload.",
+                  "// The window is 24 hours."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{encrypted}}\",\n  \"nonce\": \"{{nonce}}\",\n  \"checksum\": \"{{checksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "Byte-identical resend of an envelope already accepted. Decryption and authentication both succeed — it is a genuine message — and the nonce cache is what rejects it."
+          },
+          "response": []
+        },
+        {
+          "name": "3.4 Mint a fresh envelope (for the tamper tests)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('freshEncrypted', j.body.encrypted);",
+                  "pm.collectionVariables.set('freshNonce', j.body.nonce);",
+                  "pm.collectionVariables.set('freshChecksum', j.body.checksum);",
+                  "",
+                  "// Flip the last hex digit of the checksum. Ciphertext and nonce stay",
+                  "// valid, so decryption and the replay check both pass and the checksum",
+                  "// comparison is the only thing left to fail.",
+                  "const c = j.body.checksum;",
+                  "const last = c.slice(-1);",
+                  "pm.collectionVariables.set('badChecksum', c.slice(0, -1) + (last === '0' ? '1' : '0'));",
+                  "",
+                  "// Corrupt one byte of ciphertext, keeping it valid base64, so Poly1305",
+                  "// authentication fails instead.",
+                  "const e = j.body.encrypted;",
+                  "const ch = e.charAt(5);",
+                  "pm.collectionVariables.set('badEncrypted',",
+                  "    e.slice(0, 5) + (ch === 'A' ? 'B' : 'A') + e.slice(6));",
+                  "",
+                  "pm.test('tampered values actually differ from the originals', () => {",
+                  "    pm.expect(pm.collectionVariables.get('badChecksum')).to.not.eql(c);",
+                  "    pm.expect(pm.collectionVariables.get('badEncrypted')).to.not.eql(e);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"username\": \"tamper_probe\",\n    \"email\": \"tamper@example.com\",\n    \"password\": \"TamperProbe!1\"\n  },\n  \"clientPrivateKey\": \"{{clientPrivateKey}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/encrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "encrypt", ""]
+            },
+            "description": "Setup only — no assertion about the crypto layer itself. Each tamper test below needs an unused nonce, because the replay check runs before the checksum comparison."
+          },
+          "response": []
+        },
+        {
+          "name": "3.5 Tampered ciphertext → 400 (authentication)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('reported as a decryption failure', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('decryption_failed');",
+                  "});",
+                  "",
+                  "pm.test('the error does not say which part was wrong', () => {",
+                  "    // Deliberately generic: distinguishing bad key from corrupt ciphertext",
+                  "    // from wrong nonce would give an attacker an oracle to probe a forged",
+                  "    // payload with.",
+                  "    const e = pm.response.json().error.toLowerCase();",
+                  "    pm.expect(e).to.not.include('nonce');",
+                  "    pm.expect(e).to.not.include('checksum');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{badEncrypted}}\",\n  \"nonce\": \"{{freshNonce}}\",\n  \"checksum\": \"{{freshChecksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "One byte of ciphertext altered. Poly1305 authentication fails inside box.decrypt, before the nonce is ever recorded."
+          },
+          "response": []
+        },
+        {
+          "name": "3.6 Mint another fresh envelope",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('freshEncrypted', j.body.encrypted);",
+                  "pm.collectionVariables.set('freshNonce', j.body.nonce);",
+                  "",
+                  "const c = j.body.checksum;",
+                  "const last = c.slice(-1);",
+                  "pm.collectionVariables.set('badChecksum', c.slice(0, -1) + (last === '0' ? '1' : '0'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": {\n    \"username\": \"checksum_probe\",\n    \"email\": \"checksum@example.com\",\n    \"password\": \"ChecksumProbe!1\"\n  },\n  \"clientPrivateKey\": \"{{clientPrivateKey}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/encrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "encrypt", ""]
+            },
+            "description": "3.5 consumed the previous nonce (the replay cache records it on first sight, even when the request then fails), so the checksum test needs its own."
+          },
+          "response": []
+        },
+        {
+          "name": "3.7 Tampered checksum → 400 (integrity)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400, not 409', () => {",
+                  "    // 409 here would mean the nonce was already used and the replay check",
+                  "    // fired first — re-run 3.6 to mint a fresh envelope.",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('reported as a decryption failure', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('decryption_failed');",
+                  "});",
+                  "",
+                  "// Decryption and authentication both succeeded — the ciphertext is",
+                  "// genuine. The checksum is computed over",
+                  "//   json.dumps(data, separators=(',', ':'), sort_keys=True)",
+                  "// so a client that serialises differently fails here even with correct",
+                  "// keys, which is the single most common integration bug."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{freshEncrypted}}\",\n  \"nonce\": \"{{freshNonce}}\",\n  \"checksum\": \"{{badChecksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "Valid ciphertext, unused nonce, wrong checksum. Isolates the integrity check from the authentication and replay checks."
+          },
+          "response": []
+        },
+        {
+          "name": "3.8 Malformed envelope (nonce omitted) → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('reported as a decryption failure', () => {",
+                  "    pm.expect(pm.response.json().code).to.eql('decryption_failed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Client-Public-Key", "value": "{{clientPublicKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{freshEncrypted}}\",\n  \"checksum\": \"{{freshChecksum}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register", ""]
+            },
+            "description": "Structurally incomplete. A common symptom of sending PyNaCl's encrypt() output directly, where the nonce is prepended to the ciphertext instead of travelling in its own field."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4 · Test-helper input validation",
+      "description": "The helpers themselves reject bad input rather than returning something unusable. Worth pinning — these run unauthenticated wherever they are enabled.",
+      "item": [
+        {
+          "name": "4.1 encrypt with a non-object payload → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('explains the expected shape', () => {",
+                  "    pm.expect(pm.response.json().error).to.include('payload');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": \"this is a string, not an object\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/encrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "encrypt", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4.2 encrypt with an invalid private key → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('names the offending field', () => {",
+                  "    pm.expect(pm.response.json().error).to.include('clientPrivateKey');",
+                  "});",
+                  "",
+                  "pm.test('does not echo the rejected key back', () => {",
+                  "    pm.expect(pm.response.text()).to.not.include('bm90LWEta2V5');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payload\": { \"hello\": \"world\" },\n  \"clientPrivateKey\": \"bm90LWEta2V5\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/encrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "encrypt", ""]
+            },
+            "description": "The public key in the response is always derived from the private key actually used, never trusted separately, so a bad private key cannot produce a mismatched pair."
+          },
+          "response": []
+        },
+        {
+          "name": "4.3 decrypt with fields missing → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('lists every missing field at once', () => {",
+                  "    const e = pm.response.json().error;",
+                  "    pm.expect(e).to.include('nonce');",
+                  "    pm.expect(e).to.include('checksum');",
+                  "    pm.expect(e).to.include('clientPrivateKey');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{respEncrypted}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/decrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "decrypt", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4.4 decrypt with the wrong private key → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected with 400', () => pm.response.to.have.status(400));",
+                  "",
+                  "pm.test('the response envelope is readable only to its intended holder', () => {",
+                  "    pm.expect(pm.response.json()).to.not.have.property('decrypted');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"encrypted\": \"{{respEncrypted}}\",\n  \"nonce\": \"{{respNonce}}\",\n  \"checksum\": \"{{respChecksum}}\",\n  \"clientPrivateKey\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/decrypt/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "decrypt", ""]
+            },
+            "description": "A well-formed 32-byte key that is not the one the response was encrypted toward. Proves the response envelope is genuinely bound to the client keypair rather than merely encoded."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5 · Production safety",
+      "description": "The helpers in folders 0–4 must not exist in production. Point `baseUrl` at production and run this folder: it passes only when they are switched off.",
+      "item": [
+        {
+          "name": "5.1 keypair helper must 404 in production",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Expected to FAIL against staging (200) and PASS against production (404).",
+                  "// Http404 rather than 403 is deliberate: a route that is switched off",
+                  "// should not confirm that it exists.",
+                  "const host = pm.variables.replaceIn('{{baseUrl}}');",
+                  "",
+                  "if (host.indexOf('uat') !== -1 || host.indexOf('staging') !== -1 || host.indexOf('localhost') !== -1) {",
+                  "    pm.test('SKIPPED — staging is expected to have these enabled', () => {",
+                  "        pm.expect(pm.response.code).to.eql(200);",
+                  "    });",
+                  "} else {",
+                  "    pm.test('test helpers are disabled (404)', () => pm.response.to.have.status(404));",
+                  "",
+                  "    pm.test('does not leak that the route exists', () => {",
+                  "        pm.expect(pm.response.code).to.not.eql(403);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/test/keypair/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "test", "keypair", ""]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 public-key endpoint stays available everywhere",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK in every environment', () => pm.response.to.have.status(200));",
+                  "",
+                  "pm.test('returns only the public half', () => {",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j).to.have.property('publicKey');",
+                  "    pm.expect(Object.keys(j)).to.not.include('privateKey');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/crypto/public-key/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "crypto", "public-key", ""]
+            },
+            "description": "This one is public by design and must keep working in production — clients cannot encrypt toward the server without it."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

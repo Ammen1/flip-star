@@ -12836,7 +12836,10 @@
               "type": "noauth"
             }
           },
-          "response": []
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
         },
         {
           "name": "GET public settings",
@@ -12865,7 +12868,10 @@
               "type": "noauth"
             }
           },
-          "response": []
+          "response": [],
+          "auth": {
+            "type": "noauth"
+          }
         }
       ]
     },

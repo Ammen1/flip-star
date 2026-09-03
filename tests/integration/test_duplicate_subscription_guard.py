@@ -171,7 +171,13 @@ def no_real_payments(monkeypatch):
 
     def _spy(**kwargs):
         sent.append(kwargs)
-        return {'success': True, 'originator_conversation_id': 'SHOULD-NOT-HAPPEN'}
+        # Unique per call: the view stores this as onevas_transaction_id, which
+        # is unique, so a constant would collide the moment a test legitimately
+        # initiates twice.
+        return {
+            'success': True,
+            'originator_conversation_id': f'TEST-CONV-{len(sent)}',
+        }
 
     monkeypatch.setattr(
         subscription_views.telebirr_direct_debit_service,
@@ -215,3 +221,110 @@ def test_a_non_subscriber_is_still_allowed_through(
 
     assert response.status_code != 409, response.content
     assert len(no_real_payments) == 1
+
+
+# ─── the gap ALREADY_SUBSCRIBED cannot see ────────────────────────────────────
+#
+# A payment whose callback never lands leaves the subscription *pending*, so
+# the caller still looks like a non-subscriber: the active-subscription guard
+# does not fire and they can be charged again. This is the live UAT failure --
+# nothing has listened on the telebirr result port since the cluster rebuild,
+# so every USSD confirmation is lost and every subscription stays pending.
+
+
+@pytest.fixture
+def fresh_caller(db, tier):
+    """Someone with no subscription at all -- the state a lost callback leaves."""
+    u = User.objects.create_user(username='pending_user', password='x')
+    u.profile.phone_number = '251911222333'
+    u.profile.save()
+    yield u
+    u.delete()
+
+
+def test_a_lost_callback_leaves_no_active_subscription_to_guard_on(fresh_caller):
+    """Establishes why a second guard is needed at all."""
+    from api.services.subscription_access import pending_subscription_payment
+
+    assert active_subscription_for(user=fresh_caller) is None
+    assert pending_subscription_payment(user=fresh_caller) is None
+
+
+def test_a_second_tap_is_refused_while_the_first_is_unconfirmed(
+    fresh_caller, tier, encrypted_client_keys, no_real_payments
+):
+    first = call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+    assert first.status_code != 409, first.content
+    assert len(no_real_payments) == 1, 'the first attempt should go through'
+
+    second = call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+
+    assert second.status_code == 409, second.content
+    # The charge that would have been duplicated never happened.
+    assert len(no_real_payments) == 1
+
+
+def test_repeated_taps_charge_exactly_once(
+    fresh_caller, tier, encrypted_client_keys, no_real_payments
+):
+    for _ in range(6):
+        call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+
+    assert len(no_real_payments) == 1
+
+
+def test_an_unauthenticated_repeat_is_refused_by_phone(
+    db, tier, encrypted_client_keys, no_real_payments
+):
+    """The SuperApp flow, where the pending payment carries only a phone."""
+    phone = '251955666777'
+    call_initiate(encrypted_client_keys, tier.id, phone_number=phone)
+    assert len(no_real_payments) == 1
+
+    again = call_initiate(encrypted_client_keys, tier.id, phone_number=phone)
+
+    assert again.status_code == 409, again.content
+    assert len(no_real_payments) == 1
+
+
+def test_a_different_caller_is_unaffected(
+    fresh_caller, tier, encrypted_client_keys, no_real_payments
+):
+    call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+    call_initiate(encrypted_client_keys, tier.id, phone_number='251977888999')
+
+    assert len(no_real_payments) == 2
+
+
+def test_the_block_expires_so_a_lost_callback_is_not_a_permanent_lockout(
+    fresh_caller, tier, encrypted_client_keys, no_real_payments
+):
+    """A confirmation that never arrives must not bar them from ever subscribing."""
+    from api.models.subscription import SubscriptionPayment
+    from api.services.subscription_access import PENDING_PAYMENT_WINDOW_SECONDS
+
+    call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+    assert len(no_real_payments) == 1
+
+    # Age the pending payment past the window.
+    SubscriptionPayment.objects.filter(status='pending').update(
+        created_at=timezone.now() - timedelta(seconds=PENDING_PAYMENT_WINDOW_SECONDS + 60)
+    )
+
+    later = call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+
+    assert later.status_code != 409, later.content
+    assert len(no_real_payments) == 2
+
+
+def test_the_refusal_says_it_is_confirming_not_that_it_failed(
+    fresh_caller, tier, encrypted_client_keys, no_real_payments
+):
+    """Telling them it failed is what invites the duplicate charge."""
+    from api.services.subscription_access import payment_pending_payload
+
+    call_initiate(encrypted_client_keys, tier.id, user=fresh_caller)
+    payload = payment_pending_payload()
+
+    assert payload['code'] == 'PAYMENT_PENDING'
+    assert 'confirm' in payload['error'].lower()

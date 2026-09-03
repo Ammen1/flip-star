@@ -14,6 +14,8 @@ Kept separate from the view so posting endpoints do not have to import view
 code, and so the rule has somewhere to be tested on its own.
 """
 
+from datetime import timedelta
+
 from django.db import models
 from django.utils import timezone
 
@@ -118,4 +120,56 @@ def already_subscribed_payload(plan, message=None):
         'code': ALREADY_SUBSCRIBED_CODE,
         'error': message or 'You already have an active subscription.',
         'subscription': subscription_summary(plan),
+    }
+
+
+PAYMENT_PENDING_CODE = 'PAYMENT_PENDING'
+
+#: How long after a USSD push a repeat attempt is treated as a double-tap
+#: rather than a fresh purchase. Long enough to cover a confirmation that is
+#: merely slow; short enough that a confirmation which never arrives does not
+#: lock the caller out of subscribing for good.
+PENDING_PAYMENT_WINDOW_SECONDS = 10 * 60
+
+
+def pending_subscription_payment(user=None, phone_number=None, within_seconds=None):
+    """A USSD subscription payment already awaiting confirmation, or None.
+
+    Guards the gap the ``ALREADY_SUBSCRIBED`` check cannot see. That one keys
+    on an *active* subscription, but a payment whose callback has not landed
+    leaves the subscription *pending* -- so the caller looks like a
+    non-subscriber, taps again, and is charged again. That is not hypothetical:
+    when the telebirr callback has nowhere to land, every one of these stays
+    pending indefinitely.
+    """
+    from api.models.subscription import SubscriptionPayment
+
+    window = PENDING_PAYMENT_WINDOW_SECONDS if within_seconds is None else within_seconds
+    since = timezone.now() - timedelta(seconds=window)
+
+    qs = SubscriptionPayment.objects.filter(status='pending', created_at__gte=since)
+
+    if user is not None and getattr(user, 'is_authenticated', False):
+        found = qs.filter(user=user).order_by('-created_at').first()
+        if found:
+            return found
+
+    if phone_number:
+        # Unauthenticated initiates record the phone here, since there is no
+        # account to attach the payment to yet.
+        return qs.filter(metadata__phone_number=phone_number).order_by('-created_at').first()
+
+    return None
+
+
+def payment_pending_payload(message=None):
+    """The refusal returned when a previous payment is still confirming."""
+    return {
+        'success': False,
+        'code': PAYMENT_PENDING_CODE,
+        'error': message
+        or (
+            'Your previous payment is still being confirmed. '
+            'Please wait a moment before trying again.'
+        ),
     }
