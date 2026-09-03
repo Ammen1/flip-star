@@ -71,8 +71,8 @@ data:
   #
   # Unversioned /api/webhooks/ matches what Telebirr has mapped; config/urls.py
   # serves the API at both /api/ and /api/v1/.
-  TELEBIRR_USSD_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrUssdPurchase/"
-  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrSubscriptionUssd/"
+  TELEBIRR_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase/"
+  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrSubscriptionUssd/"
 
   # B2C payout callbacks. Unlike the USSD flows -- where Telebirr uses a Result
   # Address registered against the merchant and ignores what we send -- the B2C
