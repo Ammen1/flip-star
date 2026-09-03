@@ -72,7 +72,13 @@ data:
   # Unversioned /api/webhooks/ matches what Telebirr has mapped; config/urls.py
   # serves the API at both /api/ and /api/v1/.
   TELEBIRR_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase/"
-  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrSubscriptionUssd/"
+  # Same address as the coin callback, deliberately. Telebirr registers ONE
+  # Result Address per merchant and ignores the ResultURL we send on USSD
+  # pushes, so every confirmation -- coin and subscription alike -- arrives
+  # at telebirrUssdPurchase. api/views/wallet.py routes on the payload:
+  # no matching CoinTransaction means it looks for a SubscriptionPayment.
+  # Pointing this at a distinct path would just be a URL nothing ever calls.
+  TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase/"
 
   # B2C payout callbacks. Unlike the USSD flows -- where Telebirr uses a Result
   # Address registered against the merchant and ignores what we send -- the B2C
