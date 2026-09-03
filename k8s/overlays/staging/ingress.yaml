@@ -90,6 +90,28 @@ spec:
     - host: uat.flipstar.et
       http:
         paths:
+          # Telebirr's registered Result Address is
+          # http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase --
+          # this hostname, not api.uat.flipstar.et. The host-less rule above
+          # cannot serve it: that one only matches Hosts no named rule claims,
+          # and this is a named rule, so `path: /` below swallowed the callback
+          # and handed it to the SPA's static nginx, which answers 405 to any
+          # POST. Listed before `/` for readability only -- nginx-ingress
+          # matches the longest prefix regardless of order.
+          - path: /api/webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+          - path: /api/v1/webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
           - path: /
             pathType: Prefix
             backend:
