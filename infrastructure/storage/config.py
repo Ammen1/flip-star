@@ -41,7 +41,18 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
     region_name = _either('REGION_NAME', 'AWS_S3_REGION_NAME', default='us-east-1')
     endpoint_url = _either('S3_ENDPOINT_URL', 'AWS_S3_ENDPOINT_URL')
 
-    custom_domain = f'{bucket_name}.s3.amazonaws.com' if bucket_name else None
+    # The public host media is served from. Derived from the endpoint when one
+    # is set: hardcoding the AWS form produced `<bucket>.s3.amazonaws.com` for
+    # an Ethio Telecom OBS deployment, a domain that does not exist. That value
+    # is what SecurityHeadersMiddleware puts in the CSP img-src/media-src
+    # allowlist, so every real media URL was outside the policy and the browser
+    # refused to load it -- posts rendered with an empty frame and no error.
+    if endpoint_url:
+        custom_domain = endpoint_url.split('://', 1)[-1].rstrip('/')
+    elif bucket_name:
+        custom_domain = f'{bucket_name}.s3.amazonaws.com'
+    else:
+        custom_domain = None
 
     # Uploaded media must be publicly readable (profile photos, reel media) --
     # without an explicit ACL, django-storages sends none at all, so an
@@ -52,6 +63,39 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
     # S3_DEFAULT_ACL= (empty) rather than have every upload fail.
     default_acl = config('S3_DEFAULT_ACL', default='public-read') or None
 
+    # Sign every media URL, or serve stable ones?
+    #
+    # django-storages defaults this to True, which presigns every URL with a
+    # fresh X-Amz-Date and X-Amz-Signature. For a feed that is pathological:
+    # each API response hands the browser a DIFFERENT url for the same object,
+    # so the cache key changes every time and nothing is ever reused. Scrolling
+    # back re-downloads an image already on disk, and a CDN can never hold an
+    # edge copy. The signatures also expire (an hour by default), so a page
+    # left open long enough starts answering 403.
+    #
+    # Signing buys nothing while default_acl is public-read: the unsigned URL
+    # serves the same bytes to anyone who asks. So it defaults off exactly when
+    # the objects are public, and stays on when they are not -- a private
+    # bucket still needs signatures, and the cost of re-downloading is the
+    # correct price for access control.
+    #
+    # Override with S3_QUERYSTRING_AUTH when the two need to be decoupled.
+    querystring_auth = config(
+        'S3_QUERYSTRING_AUTH',
+        default=(default_acl != 'public-read'),
+        cast=bool,
+    )
+
+    # Cache-Control written onto uploaded objects. Media is immutable: the key
+    # contains the upload's own name, and processing writes to a new key rather
+    # than overwriting, so a stored copy never goes stale. Without this header
+    # the browser revalidates on every view even when the URL is stable.
+    object_parameters = {
+        'CacheControl': config(
+            'S3_CACHE_CONTROL', default='public, max-age=31536000, immutable'
+        ),
+    }
+
     resolved: dict[str, Any] = {
         'access_key_id': access_key_id,
         'secret_access_key': secret_access_key,
@@ -61,6 +105,8 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
         'custom_domain': custom_domain,
         'staticfiles_storage': WHITENOISE_STORAGE,
         'use_ssl': False,
+        'querystring_auth': querystring_auth,
+        'object_parameters': object_parameters,
         'media_url': media_url,
         'default_acl': default_acl,
     }
@@ -72,9 +118,13 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
     resolved['default_file_storage'] = S3_STORAGE
 
     if endpoint_url:
-        # Self-hosted MinIO.
+        # Self-hosted MinIO, or a provider's S3-compatible endpoint.
         resolved['media_url'] = f'{endpoint_url}/{bucket_name}/media/'
-        resolved['use_ssl'] = config('S3_USE_SSL', default=False, cast=bool)
+        # Defaults on. An http:// endpoint puts every media URL outside the
+        # CSP's img-src/media-src, which permit the https: scheme only, so the
+        # browser blocks them before a request is made. It also sends the
+        # access key and signature in clear over the network.
+        resolved['use_ssl'] = config('S3_USE_SSL', default=True, cast=bool)
     else:
         # AWS S3.
         resolved['media_url'] = f'https://{custom_domain}/media/'

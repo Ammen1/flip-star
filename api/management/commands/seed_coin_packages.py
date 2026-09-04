@@ -1,37 +1,49 @@
+"""
+Seed the coin packages offered for Telebirr purchase.
+
+The lineup lives in api/services/coin_packages.py, which api/views/wallet.py
+also reads for its empty-table fallback. Keeping it there rather than here
+means the prices a user is shown before seeding and the rows created by
+seeding cannot drift apart.
+
+Idempotent: keyed on price_etb, so re-running updates the existing row rather
+than creating a second one at the same price. Any active package whose price
+is no longer offered is deactivated rather than deleted -- CoinTransaction
+rows reference these, and removing one would orphan the audit trail for
+purchases already made against it.
+"""
+
 from django.core.management.base import BaseCommand
 
 from api.models.contest import CoinPackage
+from api.services.coin_packages import COIN_PACKAGES, SUPPORTED_PRICES
 
 
 class Command(BaseCommand):
-    help = 'Seed/update coin packages for Telebirr purchase'
+    help = 'Seed/update coin packages for Telebirr purchase (idempotent)'
 
     def handle(self, *args, **options):
-        # Matches the fallback lineup api/views/wallet.py:get_wallet_config
-        # already serves when the CoinPackage table is empty -- seeding the
-        # real rows with the same numbers keeps both paths consistent,
-        # rather than porting master's own (different) price/coin tiers.
-        packages_data = [
-            {'name': 'Starter Pack', 'price_etb': 10, 'coin_amount': 100, 'bonus_coins': 0, 'is_featured': False, 'sort_order': 1},
-            {'name': 'Good Value', 'price_etb': 25, 'coin_amount': 250, 'bonus_coins': 25, 'is_featured': False, 'sort_order': 2},
-            {'name': 'Most Popular', 'price_etb': 50, 'coin_amount': 500, 'bonus_coins': 75, 'is_featured': True, 'sort_order': 3},
-            {'name': 'Best Deal', 'price_etb': 100, 'coin_amount': 1000, 'bonus_coins': 200, 'is_featured': False, 'sort_order': 4},
-            {'name': 'Premium Package', 'price_etb': 250, 'coin_amount': 2500, 'bonus_coins': 625, 'is_featured': False, 'sort_order': 5},
-        ]
+        stale = CoinPackage.objects.filter(is_active=True).exclude(price_etb__in=SUPPORTED_PRICES)
+        stale_names = list(stale.values_list('name', 'price_etb'))
+        deactivated = stale.update(is_active=False)
 
-        target_prices = {p['price_etb'] for p in packages_data}
-        stale_count = CoinPackage.objects.exclude(price_etb__in=target_prices).update(is_active=False)
-        if stale_count:
-            self.stdout.write(self.style.WARNING(f'Deactivated {stale_count} stale package(s) not in the current lineup'))
+        if deactivated:
+            for name, price in stale_names:
+                self.stdout.write(
+                    self.style.WARNING(f'Deactivated: {name} - {price} ETB (no longer offered)')
+                )
 
-        for pkg_data in packages_data:
+        for pkg_data in COIN_PACKAGES:
             pkg, created = CoinPackage.objects.update_or_create(
                 price_etb=pkg_data['price_etb'],
                 defaults={**pkg_data, 'is_active': True},
             )
             action = 'Created' if created else 'Updated'
-            self.stdout.write(self.style.SUCCESS(
-                f'{action}: {pkg.name} - {pkg.price_etb} ETB = {pkg.get_total_coins()} coins',
-            ))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'{action}: {pkg.name} - {pkg.price_etb} ETB = {pkg.get_total_coins()} coins',
+                )
+            )
 
-        self.stdout.write(self.style.SUCCESS('Coin packages seeded successfully.'))
+        active = CoinPackage.objects.filter(is_active=True).count()
+        self.stdout.write(self.style.SUCCESS(f'Coin packages seeded. Active: {active}'))

@@ -249,6 +249,12 @@ if _storage['endpoint_url']:
 if _storage['default_acl']:
     AWS_DEFAULT_ACL = _storage['default_acl']
 
+# Stable, cacheable media URLs. See infrastructure/storage/config.py: presigned
+# URLs rotate their signature on every call, so the same object arrives under a
+# new URL in every API response and no browser or CDN cache can ever hit.
+AWS_QUERYSTRING_AUTH = _storage['querystring_auth']
+AWS_S3_OBJECT_PARAMETERS = _storage['object_parameters']
+
 # Video MIME types must be registered for range-request streaming to work.
 mimetypes.add_type('video/mp4', '.mp4', True)
 mimetypes.add_type('video/webm', '.webm', True)

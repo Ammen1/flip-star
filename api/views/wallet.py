@@ -31,6 +31,15 @@ from api.models.contest import CoinPackage, CoinTransaction, UserCoinBalance
 from api.models.core import UserProfile
 from api.models.wallet import WalletConfig, WithdrawalRequest
 from api.serializers.core import UserSerializer
+from api.services.coin_packages import (
+    fallback_payload,
+    pending_coin_purchase,
+    purchase_pending_payload,
+)
+from api.services.telebirr_registration import (
+    NOT_REGISTERED_CODE,
+    classify_initiation_failure,
+)
 from api.views.core import _normalize_ethiopian_phone
 from common.security import encrypted_endpoint
 
@@ -597,53 +606,9 @@ def public_wallet_config(request):
         ]
     except Exception:
         # Table may not exist yet - return default packages
-        packages = [
-            {
-                'id': 1,
-                'name': 'Starter Pack',
-                'price_etb': '10.0',
-                'coin_amount': 100,
-                'bonus_coins': 0,
-                'total_coins': 100,
-                'is_featured': False,
-            },
-            {
-                'id': 2,
-                'name': 'Good Value',
-                'price_etb': '25.0',
-                'coin_amount': 250,
-                'bonus_coins': 25,
-                'total_coins': 275,
-                'is_featured': False,
-            },
-            {
-                'id': 3,
-                'name': 'Most Popular',
-                'price_etb': '50.0',
-                'coin_amount': 500,
-                'bonus_coins': 75,
-                'total_coins': 575,
-                'is_featured': True,
-            },
-            {
-                'id': 4,
-                'name': 'Best Deal',
-                'price_etb': '100.0',
-                'coin_amount': 1000,
-                'bonus_coins': 200,
-                'total_coins': 1200,
-                'is_featured': False,
-            },
-            {
-                'id': 5,
-                'name': 'Premium Package',
-                'price_etb': '250.0',
-                'coin_amount': 2500,
-                'bonus_coins': 625,
-                'total_coins': 3125,
-                'is_featured': False,
-            },
-        ]
+        # Single source of truth, shared with seed_coin_packages so the
+        # lineup shown before seeding matches the rows the seed creates.
+        packages = fallback_payload()
 
     return Response(
         {
@@ -1631,6 +1596,21 @@ def telebirr_ussd_purchase(request):
     if normalized_phone:
         phone_number = normalized_phone
 
+    # Refuse a second push while one is still outstanding. Without this a
+    # double tap sends two prompts to the handset, and confirming both debits
+    # the user twice -- each push carries its own OriginatorConversationID, so
+    # both callbacks credit legitimately and nothing downstream can tell the
+    # two apart.
+    existing = pending_coin_purchase(request.user, package)
+    if existing is not None:
+        logger.info(
+            '[USSD PURCHASE] Duplicate suppressed for user=%s package=%s, pending=%s',
+            request.user.id,
+            package.id,
+            existing.payment_reference,
+        )
+        return Response(purchase_pending_payload(existing), status=status.HTTP_409_CONFLICT)
+
     amount = f'{float(package.price_etb):.2f}'
     coins = package.get_total_coins()
 
@@ -1640,12 +1620,46 @@ def telebirr_ussd_purchase(request):
         coins=coins,
     )
     if not result.get('success'):
+        # Record the attempt. A failed initiation previously returned without
+        # writing anything, so a user reporting "it did not work" left no trace
+        # to investigate. payment_reference stays empty: nothing reached
+        # Telebirr, so there is no conversation to reconcile against -- and the
+        # duplicate guard above deliberately ignores rows without one, so this
+        # record never blocks the retry it exists to document.
+        error_text = result.get('error', 'USSD Push payment initiation failed')
+
+        # One place decides what the user sees: an unregistered customer gets
+        # the registration prompt, everything else the ordinary error. The
+        # provider's own text never reaches the client -- ResponseDesc echoes
+        # request fields and internal identifiers.
+        payload, reason = classify_initiation_failure(result, package)
+        unregistered = payload.get('code') == NOT_REGISTERED_CODE
+
+        CoinTransaction.objects.create(
+            user=request.user,
+            transaction_type='purchase',
+            coins=0,
+            payment_method='telebirr_ussd',
+            package=package,
+            description=f'Failed USSD Push initiation for {package.name}: {error_text}'[:255],
+            is_successful=False,
+        )
+        logger.warning(
+            '[USSD PURCHASE] Initiation failed for user=%s package=%s: %s',
+            request.user.id,
+            package.id,
+            reason,
+        )
+
+        # 402 for an unregistered customer, not 502: nothing is wrong upstream,
+        # the request simply cannot be completed until they have an account.
+        # The client switches on `code`, so this stays distinguishable from a
+        # genuine provider outage without parsing prose.
         return Response(
-            {
-                'error': result.get('error', 'USSD Push payment initiation failed'),
-                'details': result,
-            },
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            payload,
+            status=(
+                status.HTTP_402_PAYMENT_REQUIRED if unregistered else status.HTTP_502_BAD_GATEWAY
+            ),
         )
 
     CoinTransaction.objects.create(
