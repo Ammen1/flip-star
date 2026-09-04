@@ -92,6 +92,26 @@ data:
   # hostname their VPN cannot route to, so winner payout confirmations were
   # being lost the same way subscription ones were.
   TELEBIRR_B2C_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrB2C/"
+
+  # H5 / SuperApp (Fabric) async payment notification.
+  #
+  # This was set in .env but never in the ConfigMap, so the deployed pod ran
+  # with it empty and every InApp order was created with notify_url: "". With
+  # nowhere to push the result, a payment only completed while the client was
+  # still polling -- the frontend gives up after 90s (POLL_TIMEOUT_MS). Pay,
+  # then background the app or lose signal, and the money moved while the
+  # order stayed pending with nothing left to correct it.
+  #
+  # A PUBLIC address, unlike the USSD and B2C URLs above. Those callbacks come
+  # from Telebirr's SOAP gateway over the IPsec link, so they use 10.0.0.93.
+  # H5 notifications originate from superapp.ethiomobilemoney.et over the open
+  # internet, which cannot reach a VPN address. api.uat.flipstar.et resolves
+  # publicly and serves a valid certificate -- verified reachable, 200 on
+  # /health/ -- so it is the right host here and a bare IP is not: Telebirr
+  # validates TLS, and the cert does not cover 196.189.236.140.
+  TELEBIRR_NOTIFY_URL: "https://api.uat.flipstar.et/api/v1/wallet/telebirr-callback/"
+  TELEBIRR_REDIRECT_URL: "https://uat.flipstar.et/wallet"
+
   DB_HOST: "postgres.flipstar-staging.svc.cluster.local"
   REDIS_HOST: "redis.flipstar-staging.svc.cluster.local"
   # The API's own origin plus the local dev servers a frontend runs on.
