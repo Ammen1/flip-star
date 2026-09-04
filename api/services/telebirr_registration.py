@@ -42,7 +42,10 @@ from __future__ import annotations
 import logging
 import re
 
-from decouple import config
+# Vault first, .env only as a fallback -- reading decouple directly here would
+# bypass the secrets layer, which tests/unit/test_no_hardcoded_secrets.py
+# enforces. Same import style as infrastructure/storage/config.py.
+from infrastructure.secrets import secret as config
 
 logger = logging.getLogger(__name__)
 

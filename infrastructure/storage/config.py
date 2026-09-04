@@ -91,9 +91,7 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
     # than overwriting, so a stored copy never goes stale. Without this header
     # the browser revalidates on every view even when the URL is stable.
     object_parameters = {
-        'CacheControl': config(
-            'S3_CACHE_CONTROL', default='public, max-age=31536000, immutable'
-        ),
+        'CacheControl': config('S3_CACHE_CONTROL', default='public, max-age=31536000, immutable'),
     }
 
     resolved: dict[str, Any] = {

@@ -3,13 +3,16 @@ Regression test for the seed_coin_packages management command -- ported
 from the master branch, missing entirely in the current project before this
 change.
 
-Deliberately does NOT port master's own price/coin lineup: current's
-CoinPackage model has no allows_airtime field (master's version references
-it), and api/views/wallet.py:get_wallet_config already has its own fallback
-package lineup (10/25/50/100/250 ETB) with different numbers from master's
-(10/50/100/500/1000 ETB). Seeding master's mismatched tiers would leave the
-DB rows out of sync with that fallback and with whatever the frontend
-expects. The ported command seeds the lineup that fallback already declares.
+The lineup is no longer duplicated. It lived in two places -- this command
+and get_wallet_config's empty-table fallback -- which is why the original
+version of this file warned at length about keeping them in sync. Both now
+import api/services/coin_packages.py, so the prices a user is shown before
+seeding and the rows created by seeding cannot disagree.
+
+Telebirr is configured for exactly 10, 50, 100, 250 and 500 ETB. The 25 ETB
+tier this file used to assert was retired when 500 was added; an amount
+Telebirr does not recognise is rejected at their gateway after the user has
+already confirmed the USSD prompt.
 
 Uses the real `db` fixture -- see tests/conftest.py's MIGRATIONS_ARE_REPLAYABLE.
 """
@@ -32,7 +35,9 @@ def test_seed_coin_packages_creates_the_five_tiers(db):
 
     packages = CoinPackage.objects.filter(is_active=True).order_by('sort_order')
     assert packages.count() == 5
-    assert [p.price_etb for p in packages] == [10, 25, 50, 100, 250]
+    # Compared as ints: price_etb comes back as Decimal('10.00'), and pinning
+    # the string form would pin decimal_places, which is a schema detail.
+    assert [int(p.price_etb) for p in packages] == [10, 50, 100, 250, 500]
 
     most_popular = packages.get(name='Most Popular')
     assert most_popular.is_featured is True
@@ -47,7 +52,9 @@ def test_seed_coin_packages_is_idempotent(db):
 
 
 def test_seed_coin_packages_deactivates_stale_packages(db):
-    stale = CoinPackage.objects.create(name='Old Discontinued Pack', price_etb=15, coin_amount=150, is_active=True)
+    stale = CoinPackage.objects.create(
+        name='Old Discontinued Pack', price_etb=15, coin_amount=150, is_active=True
+    )
 
     call_command('seed_coin_packages', stdout=io.StringIO())
 

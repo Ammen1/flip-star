@@ -58,13 +58,15 @@ KNOWN_BROKEN = {
 # necessarily a bug. api.js describes what the WEB app encrypts, and the web
 # app does not call every endpoint -- a route only the mobile client uses can
 # sit here harmlessly, because mobile keeps its own manifest
-# (scripts/generate_encrypted_routes.py). The baseline exists so a NEW
+# (Flipstar-Mobile/src/security/encryptedRoutes.js). The baseline exists so a NEW
 # disagreement fails the build; proving which of these are live bugs needs
 # per-endpoint knowledge of which client calls them.
 #
-# One group is worth investigating first: /messages/* is explicitly excluded
-# in isEncryptedEndpoint() as multipart-incompatible, yet those views decrypt.
-# The web app would get decryption_failed on all three.
+# The /messages/* group that used to sit here is gone: api.js excluded all of
+# /messages/ as multipart-incompatible when only the message-send route is,
+# so the web app sent plaintext to five views that decrypt and got 400 on
+# every one -- including creating a conversation to share a post. The
+# exclusion is now scoped to that single route, matching mobile.
 KNOWN_SERVER_ONLY_ENCRYPTED = {
     '/eligibility/age/',
     '/eligibility/phone/',
@@ -77,9 +79,6 @@ KNOWN_SERVER_ONLY_ENCRYPTED = {
     '/legal/',
     '/legal/user/history/',
     '/legal/user/pending/',
-    '/messages/conversations/',
-    '/messages/unread-count/',
-    '/messages/users/search/',
     '/profile/privacy/',
     '/profile/privacy/update/',
     '/push/public-key/',
