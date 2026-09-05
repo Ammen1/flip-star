@@ -83,11 +83,31 @@ def reels_trending(request):
 
     week_ago = timezone.now() - timedelta(days=7)
 
+    # Boosted posts rank first here too.
+    #
+    # /reels/trending/ and /explorer/trending/ are two different views serving
+    # the same idea; the web Trending tab calls the explorer one, but this is
+    # public API and mobile may use it. Leaving one boost-aware and the other
+    # not would mean a boost worked or did not depending on the client.
+    from django.db.models import Exists, OuterRef
+
+    from api.models.boost import BoostCampaign
+
+    active_boost = BoostCampaign.objects.filter(
+        reel=OuterRef('pk'),
+        status='active',
+        end_time__gt=timezone.now(),
+        coins_remaining__gt=0,
+    )
+
     reels = (
         _annotated_reels(request.user)
         .filter(created_at__gte=week_ago)
-        .annotate(engagement=Count('reel_votes') + Count('comments'))
-        .order_by('-engagement', '-created_at')
+        .annotate(
+            engagement=Count('reel_votes') + Count('comments'),
+            has_active_boost=Exists(active_boost),
+        )
+        .order_by('-has_active_boost', '-engagement', '-created_at')
     )
 
     # Optional ?category=<slug>. Absent or "all" leaves the feed untouched, so

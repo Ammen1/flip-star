@@ -3697,9 +3697,30 @@ def get_trending_reels(request):
                         hashtag_filter |= Q(caption__icontains=f'#{tag}')
                     queryset = queryset.filter(hashtag_filter)
 
+        # An active boost lifts a post in Trending.
+        #
+        # Nothing read the boost state before this: `is_boosted` was set when a
+        # campaign started and never consulted by any feed, `injection_ratio`
+        # was configured and used nowhere, and boost/eligible/ was served but
+        # called by no client. A user paid coins and got no visibility at all.
+        #
+        # The condition matches get_eligible_boosts exactly rather than
+        # restating it -- status, an end time in the future, and budget left --
+        # so "boosted" cannot come to mean two different things depending on
+        # which code path asks.
+        from api.models.boost import BoostCampaign
+
+        active_boost = BoostCampaign.objects.filter(
+            reel=OuterRef('pk'),
+            status='active',
+            end_time__gt=timezone.now(),
+            coins_remaining__gt=0,
+        )
+
         queryset = queryset.select_related('user', 'user__profile').annotate(
             comment_count_db=Count('comments', distinct=True),
             votes_count_db=Count('reel_votes', distinct=True),
+            has_active_boost=Exists(active_boost),
         )
         if request.user.is_authenticated:
             queryset = queryset.annotate(
@@ -3708,7 +3729,9 @@ def get_trending_reels(request):
                     SavedPost.objects.filter(user=request.user, reel=OuterRef('pk'))
                 ),
             )
-        queryset = queryset.order_by('-votes', '-created_at')[:limit]
+        # Boosted first, then the existing order untouched. Ranking within each
+        # group is unchanged, so an unboosted feed looks exactly as it did.
+        queryset = queryset.order_by('-has_active_boost', '-votes', '-created_at')[:limit]
 
         from api.serializers.core import build_feed_context
 
