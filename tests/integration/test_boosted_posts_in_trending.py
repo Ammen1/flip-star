@@ -263,3 +263,120 @@ def test_both_endpoints_use_the_same_definition_of_active():
         src = Path(module.__file__).read_text(encoding='utf-8')
         assert "status='active'" in src
         assert 'coins_remaining__gt=0' in src
+
+
+# ---------------------------------------------------------------------------
+# Expiry sweep
+# ---------------------------------------------------------------------------
+
+
+def test_a_finished_campaign_is_marked_completed(author):
+    """
+    Nothing retired boost campaigns before this.
+
+    Staging holds one that ended fourteen hours ago, still status='active'.
+    Trending is immune because it re-checks end_time, but anything filtering
+    on status alone is not.
+    """
+    from api.tasks.boost import expire_boost_campaigns
+
+    reel = make_reel(author)
+    campaign = boost(reel)
+    BoostCampaign.objects.filter(pk=campaign.pk).update(
+        end_time=timezone.now() - timezone.timedelta(hours=1)
+    )
+
+    expire_boost_campaigns()
+
+    campaign.refresh_from_db()
+    assert campaign.status == 'completed'
+
+
+def test_a_running_campaign_is_left_alone(author):
+    from api.tasks.boost import expire_boost_campaigns
+
+    reel = make_reel(author)
+    campaign = boost(reel, hours=24)
+
+    expire_boost_campaigns()
+
+    campaign.refresh_from_db()
+    assert campaign.status == 'active'
+
+
+def test_the_sweep_is_idempotent(author):
+    """Re-running immediately must be a no-op, not a second completion."""
+    from api.tasks.boost import expire_boost_campaigns
+
+    reel = make_reel(author)
+    campaign = boost(reel)
+    BoostCampaign.objects.filter(pk=campaign.pk).update(
+        end_time=timezone.now() - timezone.timedelta(hours=1)
+    )
+
+    first = expire_boost_campaigns()
+    second = expire_boost_campaigns()
+
+    assert 'Completed 1' in first
+    assert 'Completed 0' in second
+
+
+def test_unspent_coins_are_reported_not_silently_taken(author):
+    """
+    Refunding is a commercial decision, not this task's to make.
+
+    The amount is surfaced so it can be reconciled deliberately; moving a
+    customer's coins on our own initiative is the one thing this must not do.
+    """
+    from api.tasks.boost import expire_boost_campaigns
+
+    reel = make_reel(author)
+    campaign = boost(reel, coins_remaining=442)
+    BoostCampaign.objects.filter(pk=campaign.pk).update(
+        end_time=timezone.now() - timezone.timedelta(hours=1)
+    )
+
+    result = expire_boost_campaigns()
+
+    campaign.refresh_from_db()
+    assert '442' in result
+    assert campaign.coins_remaining == 442, 'the balance was altered'
+
+
+def test_the_post_flag_is_cleared(author):
+    """A finished boost must not leave the post looking boosted."""
+    from api.tasks.boost import expire_boost_campaigns
+
+    reel = make_reel(author)
+    campaign = boost(reel)
+    Reel.objects.filter(pk=reel.pk).update(is_boosted=True)
+    BoostCampaign.objects.filter(pk=campaign.pk).update(
+        end_time=timezone.now() - timezone.timedelta(hours=1)
+    )
+
+    expire_boost_campaigns()
+
+    reel.refresh_from_db()
+    assert reel.is_boosted is False
+
+
+def test_a_newer_live_boost_survives_an_older_one_expiring(author):
+    """
+    A post can carry several campaigns over its life. Clearing the flag
+    unconditionally when an old one expires would switch off a boost the user
+    is still paying for.
+    """
+    from api.tasks.boost import expire_boost_campaigns
+
+    reel = make_reel(author)
+    old = boost(reel)
+    boost(reel, hours=24)  # still running
+    Reel.objects.filter(pk=reel.pk).update(is_boosted=True)
+    BoostCampaign.objects.filter(pk=old.pk).update(
+        end_time=timezone.now() - timezone.timedelta(hours=1)
+    )
+
+    expire_boost_campaigns()
+
+    reel.refresh_from_db()
+    assert reel.is_boosted is True, 'a live boost was switched off'

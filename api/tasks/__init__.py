@@ -7,6 +7,7 @@ Task functions are thin: they resolve arguments, call into ``api/services`` or
 ``api/integrations``, and handle retries. Business rules do not live here.
 """
 
+from api.tasks.boost import expire_boost_campaigns
 from api.tasks.leaderboards import (
     auto_select_campaign_winners,
     generate_daily_leaderboards,
@@ -22,6 +23,7 @@ from api.tasks.media import (
 )
 
 __all__ = [
+    'expire_boost_campaigns',
     'auto_select_campaign_winners',
     'cleanup_typing_indicators',
     'generate_daily_leaderboards',

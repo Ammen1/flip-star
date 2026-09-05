@@ -65,6 +65,15 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.auto_select_campaign_winners',
         'schedule': 3600.0,  # Run every hour to check for ended campaigns
     },
+    # Nothing retired finished boost campaigns, so they stayed status='active'
+    # indefinitely -- leaving Reel.is_boosted set and any consumer that trusts
+    # status alone treating a finished boost as live. Every 5 minutes because
+    # the granularity a buyer notices is "my boost ended", not "some time
+    # today"; the query is a single indexed filter, so the cost is negligible.
+    'expire-boost-campaigns': {
+        'task': 'api.tasks.expire_boost_campaigns',
+        'schedule': 300.0,
+    },
 }
 
 # Auto-discover tasks in all registered apps
