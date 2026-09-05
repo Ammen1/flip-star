@@ -2275,35 +2275,29 @@ class ReelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def vote(self, request, pk=None):
         from api.models import Notification
-        from api.models.contest import UserCoinBalance
-        from api.models.wallet import WalletConfig
+        from api.services.campaign_charges import InsufficientCoins, charge_engagement
 
         reel = self.get_object()
-        vote, created = Vote.objects.get_or_create(user=request.user, reel=reel)
+
+        # The vote and the charge commit together or not at all. Previously the
+        # rollback was a manual vote.delete() after the charge failed, which
+        # left a window where a crash between the two kept an unpaid vote.
+        try:
+            with transaction.atomic():
+                vote, created = Vote.objects.get_or_create(user=request.user, reel=reel)
+                if created:
+                    charge_engagement(request.user, reel, 'like')
+                    # F() rather than `reel.votes += 1`: two concurrent likes
+                    # both read the same value and one increment is lost.
+                    Reel.objects.filter(pk=reel.pk).update(votes=F('votes') + 1)
+                    reel.refresh_from_db(fields=['votes'])
+        except InsufficientCoins as exc:
+            return Response(
+                insufficient_coins_payload(exc.required, exc.available, message=exc.message),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if created:
-            # Charge coin cost if this is a campaign post (admin-configurable, default 0)
-            if reel.is_campaign_post and reel.user != request.user:
-                cost = WalletConfig.get_config().cost_like
-                if cost and cost > 0:
-                    balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-                    try:
-                        balance.spend_coins(
-                            cost,
-                            'campaign_like',
-                            reel=reel,
-                            description=f'Like on campaign post #{reel.id}',
-                        )
-                    except ValueError as e:
-                        # Roll back the vote since payment failed
-                        vote.delete()
-                        return Response(
-                            insufficient_coins_payload(cost, balance.balance, message=str(e)),
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-            reel.votes += 1
-            reel.save()
-
             # Create notification for reel owner (don't notify self)
             if reel.user != request.user:
                 Notification.objects.create(
@@ -2342,31 +2336,25 @@ class ReelViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def share(self, request, pk=None):
         """Increment share count for a reel"""
-        from api.models.contest import UserCoinBalance
-        from api.models.wallet import WalletConfig
+        from api.services.campaign_charges import InsufficientCoins, charge_engagement
 
         reel = self.get_object()
 
-        # Charge coin cost if this is a campaign post (admin-configurable, default 0)
-        if reel.is_campaign_post and request.user.is_authenticated and reel.user != request.user:
-            cost = WalletConfig.get_config().cost_share
-            if cost and cost > 0:
-                balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-                try:
-                    balance.spend_coins(
-                        cost,
-                        'campaign_share',
-                        reel=reel,
-                        description=f'Share on campaign post #{reel.id}',
-                    )
-                except ValueError as e:
-                    return Response(
-                        insufficient_coins_payload(cost, balance.balance, message=str(e)),
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-        reel.shares += 1
-        reel.save()
-        return Response({'shares': reel.shares})
+        # once=True: sharing has no uniqueness constraint of its own, so every
+        # double-tap, retry and refresh used to deduct again. The prior
+        # CoinTransaction is the ledger that makes a repeat free.
+        try:
+            with transaction.atomic():
+                charged = charge_engagement(request.user, reel, 'share', once=True)
+                Reel.objects.filter(pk=reel.pk).update(shares=F('shares') + 1)
+        except InsufficientCoins as exc:
+            return Response(
+                insufficient_coins_payload(exc.required, exc.available, message=exc.message),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reel.refresh_from_db(fields=['shares'])
+        return Response({'shares': reel.shares, 'coins_charged': charged})
 
     @action(detail=True, methods=['get', 'post'])
     def comments(self, request, pk=None):
@@ -2399,28 +2387,20 @@ class ReelViewSet(viewsets.ModelViewSet):
                     {'error': 'Comment text is required'}, status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Charge coin cost if this is a campaign post (admin-configurable, default 0)
-            if reel.is_campaign_post and reel.user != request.user:
-                from api.models.contest import UserCoinBalance
-                from api.models.wallet import WalletConfig
+            from api.services.campaign_charges import InsufficientCoins, charge_engagement
 
-                cost = WalletConfig.get_config().cost_comment
-                if cost and cost > 0:
-                    balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-                    try:
-                        balance.spend_coins(
-                            cost,
-                            'campaign_comment',
-                            reel=reel,
-                            description=f'Comment on campaign post #{reel.id}',
-                        )
-                    except ValueError as e:
-                        return Response(
-                            insufficient_coins_payload(cost, balance.balance, message=str(e)),
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-
-            comment = Comment.objects.create(user=request.user, reel=reel, text=text)
+            # Comment first, then charge, both in one block. The old order
+            # deducted before the comment existed and outside any transaction,
+            # so a failure in between charged the user for nothing.
+            try:
+                with transaction.atomic():
+                    comment = Comment.objects.create(user=request.user, reel=reel, text=text)
+                    charge_engagement(request.user, reel, 'comment')
+            except InsufficientCoins as exc:
+                return Response(
+                    insufficient_coins_payload(exc.required, exc.available, message=exc.message),
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             # Notification is created automatically by signal in signals.py
 

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -14,6 +15,8 @@ from api.models.campaign_extended import (
     PostScore,
     UserCampaignStats,
 )
+from api.services.campaign_charges import InsufficientCoins, charge_engagement
+from api.services.coin_purchase import insufficient_coins_payload
 from common.security import encrypted_endpoint
 
 # ==================== CAMPAIGN DISCOVERY ====================
@@ -252,21 +255,48 @@ def create_campaign_post(request):
                 print(f'[CAMPAIGN_POST] Thumbnail generation failed: {e}')
                 # Continue without thumbnail if generation fails
 
-    reel = Reel.objects.create(
-        user=request.user,
-        caption=caption,
-        hashtags=hashtags,
-        media=media_file,
-        image=thumbnail_file,
-        campaign=campaign,
-        theme=theme,
-        is_campaign_post=True,
-    )
+    # This endpoint charged nothing at all. api/views/core.py:create_post has
+    # always deducted cost_post_create, but that is a different view on a
+    # different route -- so whichever client posts here got a campaign entry
+    # for free while web users paid. The two now use the same helper, so the
+    # price cannot depend on which endpoint a client happens to call.
+    #
+    # The reel, its score row and the charge commit together: an
+    # InsufficientCoins here rolls back the post rather than leaving an
+    # unpaid entry awaiting moderation.
+    try:
+        with transaction.atomic():
+            reel = Reel.objects.create(
+                user=request.user,
+                caption=caption,
+                hashtags=hashtags,
+                media=media_file,
+                image=thumbnail_file,
+                campaign=campaign,
+                theme=theme,
+                is_campaign_post=True,
+            )
 
-    # Create post score entry for moderation
-    post_score = PostScore.objects.create(
-        reel=reel, campaign=campaign, theme=theme, user=request.user, moderation_status='pending'
-    )
+            # Create post score entry for moderation
+            post_score = PostScore.objects.create(
+                reel=reel,
+                campaign=campaign,
+                theme=theme,
+                user=request.user,
+                moderation_status='pending',
+            )
+
+            charge_engagement(
+                request.user,
+                reel,
+                'post',
+                description=f'Campaign entry for {campaign.title}'[:255],
+            )
+    except InsufficientCoins as exc:
+        return Response(
+            insufficient_coins_payload(exc.required, exc.available, message=exc.message),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Update or create user stats
     stats, created = UserCampaignStats.objects.get_or_create(user=request.user, campaign=campaign)
