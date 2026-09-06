@@ -1,16 +1,21 @@
 """Serializers for Direct Messaging."""
-from rest_framework import serializers
+
 from django.contrib.auth.models import User
+from rest_framework import serializers
+
 from api.models.messaging import Conversation, Message
 
 
 def _profile_photo_url(user):
+    # A missing profile, an unset photo, or a storage backend that cannot build
+    # a URL are all ordinary states here -- an avatar is decoration on a message
+    # list, and none of them should cost the caller their inbox.
     try:
         pf = user.profile.profile_photo
         if pf and pf.name:
             return pf.name if pf.name.startswith('http') else pf.url
-    except Exception:
-        pass
+    except (AttributeError, ValueError):
+        return None
     return None
 
 
@@ -30,24 +35,96 @@ class MessageSerializer(serializers.ModelSerializer):
     is_own = serializers.SerializerMethodField()
     is_editable = serializers.BooleanField(read_only=True)
     media_url = serializers.SerializerMethodField()
+    shared_post = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
         fields = [
-            'id', 'conversation', 'sender', 'text',
-            'media_url', 'media_type', 'media_name', 'media_size', 'media_duration',
-            'created_at', 'edited_at', 'is_deleted',
-            'is_own', 'is_editable',
+            'id',
+            'conversation',
+            'sender',
+            'text',
+            'media_url',
+            'media_type',
+            'media_name',
+            'media_size',
+            'media_duration',
+            'created_at',
+            'edited_at',
+            'is_deleted',
+            'is_own',
+            'is_editable',
+            'shared_post',
         ]
         read_only_fields = [
-            'id', 'sender', 'created_at', 'edited_at', 'is_deleted',
-            'is_own', 'is_editable', 'conversation',
-            'media_url', 'media_type', 'media_name', 'media_size', 'media_duration',
+            'id',
+            'sender',
+            'created_at',
+            'edited_at',
+            'is_deleted',
+            'is_own',
+            'is_editable',
+            'conversation',
+            'media_url',
+            'media_type',
+            'media_name',
+            'media_size',
+            'media_duration',
+            'shared_post',
         ]
 
     def get_is_own(self, obj):
         request = self.context.get('request')
         return bool(request and request.user.is_authenticated and obj.sender_id == request.user.id)
+
+    def get_shared_post(self, obj):
+        """Enough of the referenced post to render a card, and nothing more.
+
+        Returns None when no post is attached, which is every message that is
+        not a share -- so a client that does not know this field behaves
+        exactly as before.
+
+        A deleted post leaves shared_reel NULL by SET_NULL, so an old share
+        degrades to a plain text bubble rather than a card linking nowhere.
+        Only the fields a preview actually needs are sent; the full post is one
+        tap away and already has an endpoint.
+        """
+        reel = obj.shared_reel
+        if reel is None:
+            return None
+
+        request = self.context.get('request')
+
+        def absolute(value):
+            name = getattr(value, 'name', '') or ''
+            if not name:
+                return None
+            if name.startswith('http://') or name.startswith('https://'):
+                return name
+            try:
+                url = value.url
+            except Exception:
+                return None
+            if request and not url.startswith('http'):
+                return request.build_absolute_uri(url)
+            return url
+
+        author = getattr(reel, 'user', None)
+        return {
+            'id': reel.id,
+            'caption': (reel.caption or '')[:200],
+            # Prefer the generated thumbnail: it is the small, cheap still made
+            # for exactly this purpose. Falling back to the full image keeps
+            # posts that predate thumbnails from showing an empty card.
+            'thumbnail': absolute(reel.thumbnail) or absolute(reel.image),
+            'is_video': bool(getattr(reel, 'media', None)),
+            'author': {
+                'id': author.id,
+                'username': author.username,
+            }
+            if author
+            else None,
+        }
 
     def get_media_url(self, obj):
         if not obj.media:
@@ -72,6 +149,9 @@ class MessageSerializer(serializers.ModelSerializer):
         if instance.is_deleted:
             data['text'] = ''
             data['media_url'] = None
+            # The share card is content too -- leaving it would keep the post
+            # preview visible on a message the sender deleted.
+            data['shared_post'] = None
         return data
 
 
@@ -83,13 +163,21 @@ class ConversationSerializer(serializers.ModelSerializer):
     Falls back to per-object queries if annotations are missing (e.g. when a
     single conversation is serialized right after a POST).
     """
+
     other_user = serializers.SerializerMethodField()
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
-        fields = ['id', 'other_user', 'last_message', 'unread_count', 'last_message_at', 'created_at']
+        fields = [
+            'id',
+            'other_user',
+            'last_message',
+            'unread_count',
+            'last_message_at',
+            'created_at',
+        ]
 
     def get_other_user(self, obj):
         request = self.context.get('request')

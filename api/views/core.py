@@ -2112,6 +2112,7 @@ class ReelViewSet(viewsets.ModelViewSet):
             'vote',
             'comments',
             'share',
+            'share_with',
         ]:
             self.permission_classes = [IsAuthenticated]  # Require auth for modifying operations
         return super().get_permissions()
@@ -2355,6 +2356,129 @@ class ReelViewSet(viewsets.ModelViewSet):
 
         reel.refresh_from_db(fields=['shares'])
         return Response({'shares': reel.shares, 'coins_charged': charged})
+
+    @action(detail=True, methods=['post'], url_path='share-with')
+    def share_with(self, request, pk=None):
+        """Send this post to one or more users as a direct message.
+
+        Composes what already exists -- Conversation, Message and the same
+        charge_engagement the `share` action uses -- rather than adding a
+        parallel notion of sharing. The client previously did this itself:
+        for each recipient it created a conversation, posted a message with a
+        "[POST_ID:n]" marker in the text, then called `share` again. That is
+        three round trips per recipient and it produced two defects this
+        endpoint exists to fix.
+
+        The first is the share count. `share` was called once per recipient,
+        so sending to five people counted five shares for one action. Here the
+        count moves once, after the sends succeed, no matter how many
+        recipients there were.
+
+        The second is atomicity. A client that failed halfway left some
+        recipients messaged and the rest not, with no way to tell which. The
+        whole send is one transaction.
+
+        Body: {"user_ids": [2, 7, 9]}
+        """
+        from api.models.messaging import Conversation, Message
+        from api.services.campaign_charges import InsufficientCoins, charge_engagement
+
+        reel = self.get_object()
+
+        raw_ids = request.data.get('user_ids')
+        if raw_ids is None and request.data.get('user_id') is not None:
+            # Single-recipient spelling, so the simple case stays simple.
+            raw_ids = [request.data.get('user_id')]
+
+        if not isinstance(raw_ids, list | tuple) or not raw_ids:
+            return Response(
+                {'error': 'user_ids must be a non-empty list of user IDs.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # A share sheet is a scrollable list; a request naming hundreds of
+        # recipients is not a user tapping avatars, so it is refused rather
+        # than served as a fan-out primitive.
+        if len(raw_ids) > 20:
+            return Response(
+                {'error': 'Cannot share with more than 20 users at once.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            wanted = {int(value) for value in raw_ids}
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'user_ids must contain integers.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Sending a post to yourself has no meaning here -- it would create a
+        # conversation with one participant. Dropped rather than rejected, so
+        # selecting yourself among five people still sends to the other four.
+        wanted.discard(request.user.id)
+        if not wanted:
+            return Response(
+                {'error': 'Choose at least one other user to share with.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        recipients = list(User.objects.filter(id__in=wanted, is_active=True))
+        found_ids = {user.id for user in recipients}
+        missing = sorted(wanted - found_ids)
+        if not recipients:
+            return Response(
+                {
+                    'error': 'None of the selected users could be found.',
+                    'invalid_user_ids': missing,
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            with transaction.atomic():
+                # Charged once for the action, not once per recipient, and
+                # once=True keeps a retry free -- the same rule `share` uses.
+                charged = charge_engagement(request.user, reel, 'share', once=True)
+
+                for recipient in recipients:
+                    conversation = Conversation.between(request.user, recipient)
+                    if conversation is None:
+                        conversation = Conversation.objects.create()
+                        conversation.participants.add(request.user, recipient)
+
+                    Message.objects.create(
+                        conversation=conversation,
+                        sender=request.user,
+                        # The post travels as a reference. Text is left empty
+                        # so the recipient's card renders from the live post
+                        # rather than from a caption frozen at send time.
+                        text='',
+                        media_type=Message.MEDIA_POST,
+                        shared_reel=reel,
+                    )
+                    Conversation.objects.filter(pk=conversation.pk).update(
+                        last_message_at=timezone.now()
+                    )
+
+                # Once, after the sends -- not once per recipient.
+                Reel.objects.filter(pk=reel.pk).update(shares=F('shares') + 1)
+        except InsufficientCoins as exc:
+            return Response(
+                insufficient_coins_payload(exc.required, exc.available, message=exc.message),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reel.refresh_from_db(fields=['shares'])
+        return Response(
+            {
+                'shared': True,
+                'shares': reel.shares,
+                'coins_charged': charged,
+                'recipient_ids': sorted(found_ids),
+                'invalid_user_ids': missing,
+            }
+        )
 
     @action(detail=True, methods=['get', 'post'])
     def comments(self, request, pk=None):

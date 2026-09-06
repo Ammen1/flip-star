@@ -71,6 +71,28 @@ class Conversation(models.Model):
         """Return the other user in a 1-on-1 conversation."""
         return self.participants.exclude(id=user.id).first()
 
+    @classmethod
+    def between(cls, user_a, user_b):
+        """The existing 1-on-1 conversation between two users, or None.
+
+        The membership test cannot be written as a single annotated query.
+        Chaining ``.filter(participants=a).filter(participants=b)`` is right --
+        two joins, meaning "has both" -- but a ``Count('participants')`` on top
+        of it counts the joined rows rather than the members, so it yields 1
+        and matches nothing. Hence the explicit count per candidate, which is
+        what ``list_or_create_conversations`` has always done; this is that rule
+        given a name so a second caller cannot get it subtly wrong.
+
+        Candidates are few in practice: the filter has already narrowed to
+        conversations containing both users, which for 1-on-1 chats is at most
+        one.
+        """
+        candidates = cls.objects.filter(participants=user_a).filter(participants=user_b).distinct()
+        for conversation in candidates:
+            if conversation.participants.count() == 2:
+                return conversation
+        return None
+
 
 class Message(models.Model):
     MEDIA_TEXT = 'text'
@@ -78,12 +100,17 @@ class Message(models.Model):
     MEDIA_VIDEO = 'video'
     MEDIA_AUDIO = 'audio'
     MEDIA_FILE = 'file'
+    # A shared post carries no uploaded file of its own -- the media it shows
+    # belongs to the referenced reel -- so it is a distinct type rather than a
+    # variant of image/video.
+    MEDIA_POST = 'post'
     MEDIA_TYPE_CHOICES = [
         (MEDIA_TEXT, 'Text'),
         (MEDIA_IMAGE, 'Image'),
         (MEDIA_VIDEO, 'Video'),
         (MEDIA_AUDIO, 'Audio / Voice'),
         (MEDIA_FILE, 'File'),
+        (MEDIA_POST, 'Shared post'),
     ]
 
     DELIVERY_SENDING = 'sending'
@@ -111,6 +138,26 @@ class Message(models.Model):
         max_length=16,
         choices=MEDIA_TYPE_CHOICES,
         default=MEDIA_TEXT,
+    )
+    # A post shared into the chat, held as a reference rather than a copy.
+    #
+    # Sharing previously worked by appending a literal "[POST_ID:35]" marker to
+    # the message text and having the client regex it back out. That carried
+    # three problems this field removes: the recipient's card could show only
+    # "Shared Post / Tap to view" because the text had no author, caption or
+    # thumbnail to render; any user could type the marker by hand and forge a
+    # share card for a post they cannot see; and a deleted post left a marker
+    # pointing at nothing.
+    #
+    # SET_NULL rather than CASCADE: when the post goes, the conversation should
+    # keep its history and show "this post is no longer available" -- deleting
+    # a reel must not delete messages between two other people.
+    shared_reel = models.ForeignKey(
+        'api.Reel',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='shares_in_messages',
     )
     media_name = models.CharField(max_length=255, blank=True, default='')
     media_size = models.PositiveIntegerField(null=True, blank=True)
