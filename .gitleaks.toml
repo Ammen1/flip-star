@@ -48,13 +48,32 @@ paths = [
   '''api/migrations/0057_create_subscription_tiers\.py$''',
   '''scripts/populate_subscription_tiers\.py$''',
 
-  # False positive in migration 0103: the dependency tuple ('api', '0102_timwe_integration')
-  # is flagged as a generic-api-key because the word 'api' appears next to a
-  # long alphanumeric string. This is a standard Django migration dependency, not a secret.
-  '''api/migrations/0103_rename_api_timwech_status_6d2b84_idx_api_timwech_status_093182_idx_and_more\.py$''',
 ]
 
 regexes = [
+  # Django migration dependency names, e.g. the tuple
+  #     dependencies = [('api', '0108_campaign_engagement_weights')]
+  # gitleaks' generic-api-key rule sees the word 'api' beside a long
+  # alphanumeric string and reports the migration name as the secret.
+  # Verified by running the scanner locally: the captured value is exactly
+  # '0108_campaign_engagement_weights'.
+  #
+  # Matched by SHAPE, not by file path. A path entry for migration 0103 used
+  # to sit above; it fixed one file and left the next to fail -- which is what
+  # happened
+  # when 0109 and 0110 were added. Every migration whose parent has a long
+  # enough name trips the same rule, so this covers all of them, including ones
+  # not written yet. That path entry was verified redundant against this regex
+  # and removed -- it exempted a whole file, so a real key added to migration
+  # 0103 later would never have been caught.
+  #
+  # It stays narrow: only a four-digit number, an underscore, then lowercase
+  # letters, digits and underscores to the end. A credential of that exact
+  # shape is implausible. Crucially this is a VALUE allowlist, not a path
+  # exemption -- a real key sitting elsewhere in a migration file still
+  # fails the build.
+  '''^[0-9]{4}_[a-z0-9_]+$''',
+
   # `VAULT_TOKEN=` is empty in .env.example, so gitleaks' generic-api-key rule
   # runs past the blank line and captures the NEXT assignment as the "secret".
   # The captured value is literally `VAULT_KV_MOUNT=secret` -- Vault's default
