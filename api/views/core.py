@@ -1864,6 +1864,26 @@ class DraftViewSet(viewsets.ModelViewSet):
         return Response({'message': 'Draft deleted'})
 
 
+def engagement_response(reel, **extra):
+    """The response every engagement endpoint returns.
+
+    Carries the four counts read back from the database plus the resulting
+    leaderboard score, so a client never computes the score itself and never
+    has to guess which spelling of "comments" a given endpoint used.
+
+    The score is included on ordinary posts too, weighted by the defaults. It
+    simply has no leaderboard to appear on -- which is the honest answer, and
+    cheaper than making every caller branch on whether a post is in a campaign.
+    """
+    from api.services.scoring.leaderboard import campaign_for_reel, reel_engagement_payload
+
+    payload = reel_engagement_payload(reel, campaign_for_reel(reel))
+    payload.update(extra)
+    # Retained because existing clients read it; same number as `likes`.
+    payload['votes'] = payload['likes']
+    return payload
+
+
 class ReelViewSet(viewsets.ModelViewSet):
     queryset = Reel.objects.all()
     serializer_class = ReelSerializer
@@ -2355,7 +2375,7 @@ class ReelViewSet(viewsets.ModelViewSet):
             )
 
         reel.refresh_from_db(fields=['shares'])
-        return Response({'shares': reel.shares, 'coins_charged': charged})
+        return Response(engagement_response(reel, coins_charged=charged))
 
     @action(detail=True, methods=['post'], url_path='share-with')
     def share_with(self, request, pk=None):
@@ -2471,13 +2491,13 @@ class ReelViewSet(viewsets.ModelViewSet):
 
         reel.refresh_from_db(fields=['shares'])
         return Response(
-            {
-                'shared': True,
-                'shares': reel.shares,
-                'coins_charged': charged,
-                'recipient_ids': sorted(found_ids),
-                'invalid_user_ids': missing,
-            }
+            engagement_response(
+                reel,
+                coins_charged=charged,
+                shared=True,
+                recipient_ids=sorted(found_ids),
+                invalid_user_ids=missing,
+            )
         )
 
     @action(detail=True, methods=['get', 'post'])

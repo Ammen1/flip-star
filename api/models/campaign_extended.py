@@ -6,7 +6,20 @@ from django.utils import timezone
 from .campaign import Campaign, CampaignEntry
 
 class CampaignScoringConfig(models.Model):
-    """Configurable scoring weights for campaigns - supports Daily, Weekly, Monthly, Grand types"""
+    """Configurable scoring weights for campaigns - supports Daily, Weekly, Monthly, Grand types
+
+    The four engagement weights default to the platform formula:
+
+        score = likes x 1 + comments x 2 + shares x 5 + gifts x 10
+
+    Shares and gifts previously defaulted to 3 and 5. Nothing observed the
+    difference, because both call sites hardcoded the share count to zero and
+    the weight multiplied nothing -- see api/services/scoring/leaderboard.py,
+    which is now the single implementation of the formula above.
+
+    These stay per-campaign and per-type: a campaign may weight its own
+    engagement differently, and the defaults are only what it starts from.
+    """
     campaign = models.OneToOneField(Campaign, on_delete=models.CASCADE, related_name='scoring_config')
     
     # ============================================================================
@@ -19,8 +32,8 @@ class CampaignScoringConfig(models.Model):
     # Engagement weights for daily
     daily_likes_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, help_text='Points per like (Daily)')
     daily_comments_weight = models.DecimalField(max_digits=5, decimal_places=2, default=2.0, help_text='Points per comment (Daily)')
-    daily_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=3.0, help_text='Points per share (Daily)')
-    daily_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per unique gifter on a post (Daily)')
+    daily_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per share (Daily)')
+    daily_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=10.0, help_text='Points per unique gifter on a post (Daily)')
     
     # Gamification weights for daily
     daily_spin_reward_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points for daily spin reward')
@@ -47,8 +60,8 @@ class CampaignScoringConfig(models.Model):
     # Engagement weights for weekly
     weekly_likes_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, help_text='Points per like (Weekly)')
     weekly_comments_weight = models.DecimalField(max_digits=5, decimal_places=2, default=2.0, help_text='Points per comment (Weekly)')
-    weekly_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=3.0, help_text='Points per share (Weekly)')
-    weekly_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per unique gifter on a post (Weekly)')
+    weekly_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per share (Weekly)')
+    weekly_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=10.0, help_text='Points per unique gifter on a post (Weekly)')
     
     # Gamification weights for weekly
     weekly_spin_reward_weight = models.DecimalField(max_digits=5, decimal_places=2, default=3.0, help_text='Points for spin reward (Weekly)')
@@ -70,8 +83,8 @@ class CampaignScoringConfig(models.Model):
     # Engagement weights for monthly
     monthly_likes_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, help_text='Points per like (Monthly)')
     monthly_comments_weight = models.DecimalField(max_digits=5, decimal_places=2, default=2.0, help_text='Points per comment (Monthly)')
-    monthly_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=3.0, help_text='Points per share (Monthly)')
-    monthly_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per unique gifter on a post (Monthly)')
+    monthly_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per share (Monthly)')
+    monthly_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=10.0, help_text='Points per unique gifter on a post (Monthly)')
     
     # Gamification weights for monthly
     monthly_spin_reward_weight = models.DecimalField(max_digits=5, decimal_places=2, default=2.0, help_text='Points for spin reward (Monthly)')
@@ -96,8 +109,8 @@ class CampaignScoringConfig(models.Model):
     # Phase 1: Qualification (similar to monthly)
     grand_qualification_likes_weight = models.DecimalField(max_digits=5, decimal_places=2, default=1.0, help_text='Points per like (Qualification)')
     grand_qualification_comments_weight = models.DecimalField(max_digits=5, decimal_places=2, default=2.0, help_text='Points per comment (Qualification)')
-    grand_qualification_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=3.0, help_text='Points per share (Qualification)')
-    grand_qualification_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per unique gifter on a post (Qualification)')
+    grand_qualification_shares_weight = models.DecimalField(max_digits=5, decimal_places=2, default=5.0, help_text='Points per share (Qualification)')
+    grand_qualification_gifts_weight = models.DecimalField(max_digits=5, decimal_places=2, default=10.0, help_text='Points per unique gifter on a post (Qualification)')
     
     # Phase 2: Final Judging
     grand_judging_weight = models.DecimalField(max_digits=3, decimal_places=2, default=0.70, help_text='Weight for judge/admin scoring (0.0-1.0)')

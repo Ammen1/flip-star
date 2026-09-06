@@ -25,6 +25,13 @@ class SubscriptionTier(models.Model):
     duration_type = models.CharField(max_length=20, choices=DURATION_CHOICES)
     duration_days = models.IntegerField(null=True, blank=True, help_text='Null for OnDemand')
     price_etb = models.DecimalField(max_digits=10, decimal_places=2)
+    bonus_coins = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            'Bonus coins granted each time this tier activates or renews. '
+            'These are tracked separately and cannot be used to send gifts.'
+        ),
+    )
     price_coins = models.IntegerField(
         null=True, blank=True, help_text='Coin price (e.g., 100 coins)'
     )
@@ -217,6 +224,9 @@ class SubscriptionPlan(models.Model):
     # subscription is fully expired.
     grace_started_at = models.DateTimeField(null=True, blank=True)
     grace_expires_at = models.DateTimeField(null=True, blank=True)
+    # When this period's subscription bonus coins were credited. Guards
+    # against a retried webhook or a repeated activate() paying twice.
+    bonus_coins_granted_at = models.DateTimeField(null=True, blank=True)
 
     # Additional data
     metadata = models.JSONField(default=dict, blank=True)
@@ -268,7 +278,7 @@ class SubscriptionPlan(models.Model):
         self.save(update_fields=['grace_started_at', 'grace_expires_at', 'updated_at'])
 
     def activate(self):
-        """Activate subscription"""
+        """Activate subscription, granting the tier's bonus coins."""
         self.status = 'active'
         self.start_date = timezone.now()
         if self.tier and self.tier.duration_days:
@@ -277,6 +287,40 @@ class SubscriptionPlan(models.Model):
             self.end_date = timezone.now() + timezone.timedelta(days=total_days)
             self.next_renewal_date = timezone.now() + timezone.timedelta(days=total_days)
         self.save()
+        self._grant_bonus_coins()
+
+    def _grant_bonus_coins(self):
+        """Credit the tier's bonus coins for this subscription period.
+
+        Once per period, not once per call. ``activate()`` is reached from
+        several places -- first purchase, renewal, a retried webhook -- and a
+        webhook that arrives twice must not pay twice, so the grant is stamped
+        and a stamp from the current period blocks a repeat. A renewal sets a
+        new ``start_date``, which is what makes the next period's grant due.
+
+        Bonus coins go to their own bucket, which is what makes them unusable
+        for gifts: see UserCoinBalance.giftable_balance.
+        """
+        tier = self.tier
+        if not tier or not getattr(tier, 'bonus_coins', 0):
+            return
+        if not self.user_id:
+            # SMS subscriptions exist before a user claims them; there is no
+            # wallet to credit yet.
+            return
+        if self.bonus_coins_granted_at and self.start_date:
+            if self.bonus_coins_granted_at >= self.start_date:
+                return
+
+        from api.models.contest import UserCoinBalance
+
+        balance, _ = UserCoinBalance.objects.get_or_create(user=self.user)
+        balance.add_bonus(
+            tier.bonus_coins,
+            description=f'{tier.name} subscription bonus',
+        )
+        self.bonus_coins_granted_at = timezone.now()
+        self.save(update_fields=['bonus_coins_granted_at', 'updated_at'])
 
     def cancel(self, reason=''):
         """Cancel subscription"""

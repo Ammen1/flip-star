@@ -178,6 +178,13 @@ def wallet_summary(request):
                 # for gifting. A user needs to see which kind they hold.
                 'telebirr_purchased': balance.telebirr_purchased_balance,
                 'airtime_purchased': balance.airtime_purchased_balance,
+                # Subscription bonus coins. Sent separately from `purchased`
+                # precisely so a client cannot show them as spendable on a
+                # gift -- they are not, and the backend refuses.
+                'bonus': balance.bonus_balance,
+                # What may actually fund a gift. Named explicitly so the gift
+                # UI does not have to re-derive the rule and get it wrong.
+                'giftable': balance.giftable_balance,
             },
             'points': {
                 'current': request.user.profile.points,
