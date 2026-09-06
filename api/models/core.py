@@ -276,6 +276,24 @@ class Reel(models.Model):
     original_image = models.CharField(max_length=500, blank=True, default='')
 
     thumbnail = models.ImageField(upload_to='thumbnails/', null=True, blank=True)
+
+    # Quality variants, all optional.
+    #
+    # `media` stays the 720p transcode every existing client already asks for,
+    # so nothing that reads it needs to change. These are additive: a post
+    # processed before they existed has empty strings, and the API omits what
+    # is empty, so an old client and an old post both behave exactly as now.
+    #
+    # 360p and 480p exist because the audience is on Ethiopian mobile data,
+    # where a 720p file is often the difference between a video that plays and
+    # one that buffers. Storage is cheap; a stalled feed is not.
+    media_360 = models.CharField(max_length=500, blank=True, default='')
+    media_480 = models.CharField(max_length=500, blank=True, default='')
+
+    # Image variants, same reasoning. `thumbnail` is the 320x720 crop used for
+    # posters and cards; these keep the source aspect ratio for the post body.
+    image_small = models.CharField(max_length=500, blank=True, default='')
+    image_medium = models.CharField(max_length=500, blank=True, default='')
     blurhash = models.CharField(max_length=100, blank=True, default='')
     duration = models.FloatField(null=True, blank=True)
     processed = models.BooleanField(default=False)

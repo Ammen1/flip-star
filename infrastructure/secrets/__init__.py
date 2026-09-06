@@ -11,6 +11,7 @@ did before Vault was introduced. See ``docs/secrets.md``.
 """
 
 from infrastructure.secrets.provider import (
+    NO_DOTENV,
     UNSET,
     SecretProvider,
     default_provider,
@@ -19,6 +20,7 @@ from infrastructure.secrets.provider import (
 from infrastructure.secrets.vault import VaultClient, VaultUnavailable
 
 __all__ = [
+    'NO_DOTENV',
     'UNSET',
     'SecretProvider',
     'VaultClient',

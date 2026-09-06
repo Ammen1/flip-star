@@ -123,3 +123,43 @@ def encrypted_client_keys():
     finally:
         key_manager.reset()
         redis_store.reset_client()
+
+
+@pytest.fixture
+def hermetic_config(monkeypatch):
+    """
+    Resolve configuration from the environment alone, ignoring ``.env``.
+
+    Why this is needed
+    ------------------
+    ``SecretProvider`` resolves env -> Vault -> ``.env`` -> default. That order
+    is correct, and a value set with ``monkeypatch.setenv`` genuinely wins. The
+    gap is at the other end: ``monkeypatch.delenv`` only removes a key from the
+    environment, so resolution fell through to whatever the developer happens
+    to keep in their own ``.env``. A test saying "this variable is not set"
+    could not actually express it.
+
+    That is not hypothetical. With ``DB_HOST=flipstar_postgres`` in a local
+    ``.env``, the database-resolution tests failed on a developer machine and
+    passed in CI, where no ``.env`` exists. The storage tests were passing only
+    because the storage keys in that same file happened to be empty -- luck,
+    not isolation, and it would have flipped the moment someone filled them in.
+
+    Vault is switched off here too, so these tests neither depend on a token
+    nor attempt a network call during resolution.
+
+    Opt in by requesting this fixture. It is deliberately not autouse: tests
+    that legitimately exercise the real layering should keep getting it.
+    """
+    from infrastructure.secrets import NO_DOTENV, SecretProvider
+    from infrastructure.secrets import provider as provider_module
+
+    monkeypatch.delenv('VAULT_ADDR', raising=False)
+
+    # env=None keeps os.environ live, so monkeypatch.setenv/delenv inside the
+    # test still reach the provider -- the point is to drop the .env layer
+    # underneath them, not to freeze the environment.
+    provider = SecretProvider(dotenv=NO_DOTENV)
+    monkeypatch.setattr(provider_module, 'default_provider', provider)
+
+    return provider

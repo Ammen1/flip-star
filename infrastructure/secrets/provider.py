@@ -59,6 +59,27 @@ BOOTSTRAP_KEYS = frozenset(
     }
 )
 
+
+def _real_dotenv(key: str) -> Any:
+    """The default ``.env`` layer: python-decouple reading the project file."""
+    return dotenv_config(key)
+
+
+def NO_DOTENV(key: str) -> Any:  # noqa: N802 - a constant-like injectable
+    """
+    A ``.env`` layer that holds nothing.
+
+    Pass as ``SecretProvider(dotenv=NO_DOTENV)`` to resolve against the
+    environment and Vault alone. This exists because "absent from the
+    environment" and "absent everywhere" were previously indistinguishable: a
+    caller that unsets a variable still fell through to whatever the developer
+    happens to have in their own ``.env``, so the same code resolved
+    differently on two machines. Tests are where that bites first, but the
+    ambiguity is the resolver's, not the test's.
+    """
+    raise UndefinedValueError(key)
+
+
 _TRUE = {'1', 'true', 'yes', 'on', 't', 'y'}
 _FALSE = {'0', 'false', 'no', 'off', 'f', 'n', ''}
 
@@ -78,8 +99,18 @@ def _as_bool(value: Any) -> bool:
 class SecretProvider:
     """Resolves configuration values across the environment, Vault and .env."""
 
-    def __init__(self, env: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        env: dict[str, str] | None = None,
+        dotenv: Callable[[str], Any] | None = None,
+    ) -> None:
         self._env = env if env is not None else os.environ
+        # The .env layer is injectable for the same reason `env` is: all three
+        # sources should be substitutable, and hard-wiring one of them to a
+        # module-level global made this provider impossible to construct in a
+        # known-empty state. Defaults to the real file, so ordinary use is
+        # unchanged.
+        self._dotenv: Callable[[str], Any] = dotenv if dotenv is not None else _real_dotenv
         self._vault: VaultClient | None = None
         self._vault_secrets: dict[str, str] | None = None
         self._vault_initialised = False
@@ -144,9 +175,9 @@ class SecretProvider:
             if found:
                 return True, value
 
-        # .env file, via decouple. UndefinedValueError means "not present".
+        # .env file. UndefinedValueError means "not present".
         try:
-            return True, dotenv_config(key)
+            return True, self._dotenv(key)
         except UndefinedValueError:
             return False, None
 
@@ -211,7 +242,7 @@ class SecretProvider:
                 return 'vault'
 
         try:
-            dotenv_config(key)
+            self._dotenv(key)
             return 'dotenv'
         except UndefinedValueError:
             return 'unset'

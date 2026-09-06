@@ -159,6 +159,95 @@ def _render_thumbnail(source_path, out_path):
 # ── Video processing ─────────────────────────────────────────────────────────
 
 
+#: The transcode ladder, smallest first.
+#:
+#: 360p and 480p exist for the audience this app actually has: Ethiopian
+#: mobile data, where a 720p file is frequently the difference between a video
+#: that plays and one that buffers to a stop. The CRF rises as height falls --
+#: a small frame tolerates more compression before artefacts show, and the
+#: point of the rung is bytes, not fidelity.
+#:
+#: 1080p is deliberately absent. The source is phone video, the feed renders
+#: at most a phone-width column, and a 1080p rung would cost storage and
+#: encode time to serve pixels nobody sees.
+#: Image widths, smallest first. Same reasoning as the video ladder: the
+#: full-size still is often over a megabyte, and a feed column is at most a
+#: phone wide. `thumbnail` is a 320x720 CROP for posters and cards; these keep
+#: the source aspect ratio, so they can stand in for the post body itself.
+IMAGE_LADDER = (
+    ('image_small', 360),
+    ('image_medium', 720),
+)
+
+VIDEO_LADDER = (
+    ('media_360', 360, 30),
+    ('media_480', 480, 28),
+    ('media_720', 720, 23),
+)
+
+
+def _transcode(input_path, out_path, height, crf):
+    """One rung of the ladder. Returns the path, or None if encoding failed.
+
+    A failed rung is not fatal: the caller keeps whichever rungs succeeded, and
+    the API simply does not advertise the missing one. Losing 360p is worth far
+    less than losing the post.
+    """
+    import ffmpeg
+
+    try:
+        (
+            ffmpeg.input(input_path)
+            .output(
+                out_path,
+                vcodec='libx264',
+                acodec='aac',
+                # -2 keeps the source aspect and rounds width to an even number,
+                # which H.264 requires; a fixed width would letterbox portrait.
+                vf=f'scale=-2:{height}',
+                crf=crf,
+                preset='fast',
+                # Moves the index to the front so a player can start on the
+                # first bytes instead of seeking to the end first -- the single
+                # most important flag for progressive playback.
+                movflags='faststart',
+                # Caps the audio too; 128k stereo on a 360p rung is a waste.
+                audio_bitrate='96k' if height <= 480 else '128k',
+            )
+            .overwrite_output()
+            .run(quiet=True)
+        )
+        return out_path
+    except Exception as exc:
+        print(f'[TASKS] {height}p transcode failed: {exc}')
+        return None
+
+
+def _resize_image(input_path, out_path, width):
+    """Width-constrained copy that never upscales. Returns the path or None."""
+    from PIL import Image, ImageOps
+
+    try:
+        with Image.open(input_path) as img:
+            img = ImageOps.exif_transpose(img)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGB')
+
+            # A source narrower than the target is left alone: enlarging adds
+            # bytes without adding detail, and the caller can serve the
+            # original instead.
+            if img.width <= width:
+                return None
+
+            height = round(img.height * (width / img.width))
+            img = img.resize((width, height), Image.LANCZOS)
+            img.save(out_path, 'JPEG', quality=82, optimize=True, progressive=True)
+        return out_path
+    except Exception as exc:
+        print(f'[TASKS] {width}px image variant failed: {exc}')
+        return None
+
+
 def _process_video(input_path, reel_id):
     """Compress to 720p H.264/AAC, extract thumbnail, return (video_path, thumb_path, duration)."""
     import ffmpeg
@@ -174,20 +263,29 @@ def _process_video(input_path, reel_id):
     probe = ffmpeg.probe(input_path)
     duration = float(probe['format'].get('duration', 0))
 
-    (
-        ffmpeg.input(input_path)
-        .output(
-            out_video,
-            vcodec='libx264',
-            acodec='aac',
-            vf='scale=-2:720',
-            crf=23,
-            preset='fast',
-            movflags='faststart',
-        )
-        .overwrite_output()
-        .run(quiet=True)
-    )
+    # Never upscale. A 480p source re-encoded to 720p is larger, slower and
+    # no sharper -- the rung is skipped rather than manufactured.
+    source_height = 0
+    for stream in probe.get('streams', []):
+        if stream.get('codec_type') == 'video':
+            source_height = int(stream.get('height') or 0)
+            break
+
+    variants = {}
+    for field, height, crf in VIDEO_LADDER:
+        if source_height and height > source_height:
+            continue
+        path = os.path.join(processed_dir, f'reel_{reel_id}_{height}p.mp4')
+        if _transcode(input_path, path, height, crf):
+            variants[field] = path
+
+    # 720p is what `media` has always pointed at and what every existing client
+    # requests, so it stays the primary. If the ladder produced nothing above
+    # 360p -- a very small source, or failed encodes -- the largest that did
+    # succeed takes its place rather than leaving the post unplayable.
+    out_video = variants.get('media_720') or variants.get('media_480') or variants.get('media_360')
+    if not out_video:
+        raise RuntimeError(f'no video rung encoded for reel {reel_id}')
 
     # Seek 10% in (capped at 1s) rather than frame 0: the opening frame of a
     # phone recording is often black or mid-autofocus.
@@ -208,7 +306,9 @@ def _process_video(input_path, reel_id):
     if os.path.exists(raw_frame):
         os.unlink(raw_frame)
 
-    return out_video, out_thumb, duration
+    # variants keeps the smaller rungs so the caller can upload and record
+    # them; out_video remains the primary for backward compatibility.
+    return out_video, out_thumb, duration, variants
 
 
 def _process_image(input_path, out_path, max_px=1080):
@@ -298,7 +398,7 @@ def process_reel_media(self, reel_id):
             if not input_path or not os.path.exists(input_path):
                 return f'Reel {reel_id}: video file not accessible'
 
-            out_video, out_thumb, duration = _process_video(input_path, reel_id)
+            out_video, out_thumb, duration, variants = _process_video(input_path, reel_id)
 
             # Try S3 upload first; fall back to relative local path
             video_url = _publish(out_video, f'reels/processed/reel_{reel_id}_720p.mp4', discard)
@@ -307,6 +407,19 @@ def process_reel_media(self, reel_id):
                 if out_thumb
                 else ''
             )
+
+            # The smaller rungs. Uploaded individually so one failure costs
+            # that rung alone -- the post still publishes with whatever else
+            # made it, and the API advertises only what exists.
+            variant_urls = {}
+            for field, height, _crf in VIDEO_LADDER:
+                if field == 'media_720' or field not in variants:
+                    continue
+                url = _publish(
+                    variants[field], f'reels/processed/reel_{reel_id}_{height}p.mp4', discard
+                )
+                if url:
+                    variant_urls[field] = url
 
             # original_media records where the untouched upload lives before
             # `media` is repointed at the transcode, so processing can be re-run
@@ -319,6 +432,7 @@ def process_reel_media(self, reel_id):
                 duration=duration,
                 processed=True,
                 processing_failed=False,
+                **variant_urls,
             )
 
         elif image_val:
@@ -360,6 +474,19 @@ def process_reel_media(self, reel_id):
                 else img_url
             )
 
+            # Width variants, generated from the SOURCE rather than from
+            # out_image -- resizing an already-recompressed JPEG stacks
+            # artefacts, and the source is right here.
+            variant_urls = {}
+            for field, width in IMAGE_LADDER:
+                variant_path = os.path.join(processed_dir, f'reel_{reel_id}_{width}w.jpg')
+                if _resize_image(input_path, variant_path, width):
+                    url = _publish(
+                        variant_path, f'reels/variants/reel_{reel_id}_{width}w.jpg', discard
+                    )
+                    if url:
+                        variant_urls[field] = url
+
             _write_reel_fields(
                 reel_id,
                 original_image=reel.original_image or image_val,
@@ -367,6 +494,7 @@ def process_reel_media(self, reel_id):
                 thumbnail=thumb_url,
                 processed=True,
                 processing_failed=False,
+                **variant_urls,
             )
 
         else:

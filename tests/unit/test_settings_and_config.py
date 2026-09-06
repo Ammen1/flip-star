@@ -11,9 +11,15 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 # Database resolution
 # ---------------------------------------------------------------------------
+#
+# These take `hermetic_config` (tests/conftest.py) so resolution sees the
+# environment and nothing else. Without it `monkeypatch.delenv` means only
+# "absent from os.environ", and the ambient .env supplies the value instead --
+# which made these two fail on a machine with DB_HOST set locally while
+# passing in CI.
 
 
-def test_use_docker_db_overrides_managed_host(monkeypatch):
+def test_use_docker_db_overrides_managed_host(monkeypatch, hermetic_config):
     """A stray RENDER var must not redirect a self-hosted deploy at a managed DB."""
     from infrastructure.database import config as db_config
 
@@ -24,7 +30,7 @@ def test_use_docker_db_overrides_managed_host(monkeypatch):
     assert db_config.is_managed_host() is False
 
 
-def test_use_docker_db_selects_the_docker_postgres(monkeypatch, tmp_path):
+def test_use_docker_db_selects_the_docker_postgres(monkeypatch, tmp_path, hermetic_config):
     """
     ``USE_DOCKER_DB=true`` means the docker-compose PostgreSQL, not SQLite.
 
@@ -57,7 +63,7 @@ def test_use_docker_db_selects_the_docker_postgres(monkeypatch, tmp_path):
     assert resolved['HOST'] == 'postgres'
 
 
-def test_sqlite_is_used_only_when_explicitly_requested(monkeypatch, tmp_path):
+def test_sqlite_is_used_only_when_explicitly_requested(monkeypatch, tmp_path, hermetic_config):
     """SQLite is reachable, but only by asking for it by name."""
     from infrastructure.database import config as db_config
 
@@ -92,7 +98,7 @@ def test_no_sqlite_fallback_helper_exists():
 # ---------------------------------------------------------------------------
 
 
-def test_storage_falls_back_to_filesystem_without_credentials(monkeypatch):
+def test_storage_falls_back_to_filesystem_without_credentials(monkeypatch, hermetic_config):
     from infrastructure.storage import config as storage_config
 
     for var in (
@@ -111,7 +117,7 @@ def test_storage_falls_back_to_filesystem_without_credentials(monkeypatch):
     assert resolved['media_url'] == '/media/'
 
 
-def test_storage_accepts_legacy_aws_prefixed_names(monkeypatch):
+def test_storage_accepts_legacy_aws_prefixed_names(monkeypatch, hermetic_config):
     """
     ``env.production.example`` documented AWS_-prefixed names the code did not
     read, silently disabling object storage (audit finding H-06). Both spellings
@@ -131,7 +137,7 @@ def test_storage_accepts_legacy_aws_prefixed_names(monkeypatch):
     assert resolved['bucket_name'] == 'flipstar-media'
 
 
-def test_storage_defaults_to_public_read_acl(monkeypatch):
+def test_storage_defaults_to_public_read_acl(monkeypatch, hermetic_config):
     """
     Uploaded media (profile photos, reel video/images) must be publicly
     readable. Without an explicit ACL, django-storages sends none at all and
@@ -148,7 +154,7 @@ def test_storage_defaults_to_public_read_acl(monkeypatch):
     assert resolved['default_acl'] == 'public-read'
 
 
-def test_storage_default_acl_can_be_disabled(monkeypatch):
+def test_storage_default_acl_can_be_disabled(monkeypatch, hermetic_config):
     """
     A bucket with S3 'Bucket owner enforced' Object Ownership rejects ACL
     headers outright -- an operator on such a bucket must be able to turn

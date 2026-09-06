@@ -1,6 +1,27 @@
-from rest_framework import serializers
 from django.contrib.auth.models import User
-from api.models import UserProfile, Draft, Reel, Comment, CommentLike, CommentReply, SavedPost, Vote, Quest, UserQuest, Subscription, NotificationPreference, Competition, Winner, Follow, Report, Notification, Category, Block
+from rest_framework import serializers
+
+from api.models import (
+    Block,
+    Category,
+    Comment,
+    CommentLike,
+    CommentReply,
+    Competition,
+    Draft,
+    Follow,
+    Notification,
+    NotificationPreference,
+    Quest,
+    Reel,
+    Report,
+    SavedPost,
+    Subscription,
+    UserProfile,
+    UserQuest,
+    Vote,
+    Winner,
+)
 
 
 def build_feed_context(request):
@@ -12,8 +33,7 @@ def build_feed_context(request):
     if request and getattr(request, 'user', None) and request.user.is_authenticated:
         try:
             ctx['followed_user_ids'] = set(
-                Follow.objects.filter(follower=request.user)
-                .values_list('following_id', flat=True)
+                Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
             )
         except Exception:
             ctx['followed_user_ids'] = set()
@@ -21,28 +41,42 @@ def build_feed_context(request):
         ctx['followed_user_ids'] = set()
     return ctx
 
+
 class UserSerializer(serializers.ModelSerializer):
     followers_count = serializers.SerializerMethodField()
     following_count = serializers.SerializerMethodField()
     profile_photo = serializers.SerializerMethodField()
     bio = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'is_superuser', 'followers_count', 'following_count', 'profile_photo', 'bio', 'is_following']
-    
+        fields = [
+            'id',
+            'username',
+            'email',
+            'first_name',
+            'last_name',
+            'is_staff',
+            'is_superuser',
+            'followers_count',
+            'following_count',
+            'profile_photo',
+            'bio',
+            'is_following',
+        ]
+
     def get_followers_count(self, obj):
         # Use prefetched count if available
         if hasattr(obj, '_prefetched_followers_count'):
             return obj._prefetched_followers_count
         return obj.followers.count()
-    
+
     def get_following_count(self, obj):
         if hasattr(obj, '_prefetched_following_count'):
             return obj._prefetched_following_count
         return obj.following.count()
-    
+
     def get_profile_photo(self, obj):
         try:
             profile = obj.profile
@@ -51,13 +85,13 @@ class UserSerializer(serializers.ModelSerializer):
         except UserProfile.DoesNotExist:
             pass
         return None
-    
+
     def get_bio(self, obj):
         try:
             return obj.profile.bio
         except UserProfile.DoesNotExist:
             return ''
-    
+
     def get_is_following(self, obj):
         request = self.context.get('request')
         if not (request and request.user.is_authenticated):
@@ -77,13 +111,22 @@ class FeedUserSerializer(serializers.ModelSerializer):
     two extra DB queries per reel.  `is_following` still resolves in O(1)
     from `context['followed_user_ids']` set by the view.
     """
+
     profile_photo = serializers.SerializerMethodField()
     full_name = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'full_name', 'profile_photo', 'is_following']
+        fields = [
+            'id',
+            'username',
+            'first_name',
+            'last_name',
+            'full_name',
+            'profile_photo',
+            'is_following',
+        ]
 
     def get_full_name(self, obj):
         # Avoid calling obj.get_full_name() which accesses fields individually
@@ -97,8 +140,11 @@ class FeedUserSerializer(serializers.ModelSerializer):
             pf = obj.profile.profile_photo
             if pf and pf.name:
                 return pf.name if pf.name.startswith('http') else pf.url
-        except Exception:
-            pass
+        except (AttributeError, ValueError):
+            # No profile row, or a file field with no backing storage. Both
+            # mean "no photo", which is what returning None says -- deliberately
+            # not a failed response for a missing avatar.
+            return None
         return None
 
     def get_is_following(self, obj):
@@ -110,16 +156,35 @@ class FeedUserSerializer(serializers.ModelSerializer):
             return obj.id in followed
         return Follow.objects.filter(follower=request.user, following=obj).exists()
 
+
 class UserProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
 
     class Meta:
         model = UserProfile
-        fields = ['id', 'user', 'username', 'profile_photo', 'bio', 'xp', 'level', 'streak', 'last_checkin',
-                  'coins', 'coins_earned_total', 'coins_spent_total',
-                  'points', 'points_earned_total', 'points_withdrawn_total',
-                  'login_streak', 'last_login_date', 'longest_login_streak', 'phone_number']
+        fields = [
+            'id',
+            'user',
+            'username',
+            'profile_photo',
+            'bio',
+            'xp',
+            'level',
+            'streak',
+            'last_checkin',
+            'coins',
+            'coins_earned_total',
+            'coins_spent_total',
+            'points',
+            'points_earned_total',
+            'points_withdrawn_total',
+            'login_streak',
+            'last_login_date',
+            'longest_login_streak',
+            'phone_number',
+        ]
+
 
 class DraftSerializer(serializers.ModelSerializer):
     # image/media/audio_file are intentionally left as ModelSerializer's
@@ -129,7 +194,20 @@ class DraftSerializer(serializers.ModelSerializer):
     # below instead.
     class Meta:
         model = Draft
-        fields = ['id', 'image', 'media', 'caption', 'hashtags', 'overlay_text', 'filter', 'audio_file', 'audio_volume_level', 'original_volume_level', 'created_at', 'updated_at']
+        fields = [
+            'id',
+            'image',
+            'media',
+            'caption',
+            'hashtags',
+            'overlay_text',
+            'filter',
+            'audio_file',
+            'audio_volume_level',
+            'original_volume_level',
+            'created_at',
+            'updated_at',
+        ]
 
     def _build_url(self, field, request):
         if not field:
@@ -172,14 +250,49 @@ class ReelSerializer(serializers.ModelSerializer):
     category_slug = serializers.CharField(source='category.slug', read_only=True, default=None)
 
     thumbnail = serializers.SerializerMethodField()
+    # Quality variants. Every one is optional and omitted when absent, so a
+    # client written before they existed sees the response it always saw,
+    # and a post processed before they existed simply advertises fewer.
+    media_variants = serializers.SerializerMethodField()
+    image_variants = serializers.SerializerMethodField()
     blurhash = serializers.CharField(read_only=True)
     duration = serializers.FloatField(read_only=True)
     processed = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Reel
-        fields = ['id', 'user', 'image', 'media', 'thumbnail', 'blurhash', 'duration', 'processed', 'caption', 'hashtags', 'hashtags_list', 'overlay_text', 'votes', 'view_count', 'comment_count', 'shares', 'gift_count', 'created_at', 'is_liked', 'is_saved', 'recent_comments', 'is_campaign_post', 'campaign_id', 'campaign_title', 'category', 'category_name', 'category_slug']
-    
+        fields = [
+            'id',
+            'user',
+            'image',
+            'media',
+            'thumbnail',
+            'blurhash',
+            'duration',
+            'processed',
+            'caption',
+            'hashtags',
+            'hashtags_list',
+            'overlay_text',
+            'votes',
+            'view_count',
+            'comment_count',
+            'shares',
+            'gift_count',
+            'created_at',
+            'is_liked',
+            'is_saved',
+            'recent_comments',
+            'is_campaign_post',
+            'campaign_id',
+            'campaign_title',
+            'category',
+            'category_name',
+            'category_slug',
+            'media_variants',
+            'image_variants',
+        ]
+
     def _build_url(self, field, request):
         """Build absolute URL for a file field, handling both local and Cloudinary storage."""
         try:
@@ -198,8 +311,9 @@ class ReelSerializer(serializers.ModelSerializer):
                 if request:
                     return request.build_absolute_uri(name)
                 from django.conf import settings
+
                 base = getattr(settings, 'BACKEND_URL', 'https://postworq.onrender.com')
-                return f"{base}{name}"
+                return f'{base}{name}'
 
             # Only paths we intentionally write as relative Django media paths
             # are valid (e.g. reels/fallback_5.webm from our local fallback code).
@@ -217,8 +331,9 @@ class ReelSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(url)
             from django.conf import settings
+
             base = getattr(settings, 'BACKEND_URL', 'https://postworq.onrender.com')
-            return f"{base}{url}"
+            return f'{base}{url}'
         except Exception:
             return None
 
@@ -230,17 +345,98 @@ class ReelSerializer(serializers.ModelSerializer):
 
     def get_thumbnail(self, obj):
         return self._build_url(obj.thumbnail, self.context.get('request'))
-    
+
+    def _build_stored_url(self, value, request):
+        """Resolve a variant path held in a plain CharField.
+
+        The variant fields are CharFields, not FileFields, because the pipeline
+        writes whatever ``_publish`` hands back: an absolute S3 URL normally,
+        or a MEDIA_ROOT-relative path when the upload failed and the local file
+        is what is being served. ``_build_url`` cannot resolve the second case
+        -- it reaches for ``field.url``, and a str has no such attribute, so
+        every variant came back None through the broad except.
+
+        Returning None here means "this rung does not exist"; the caller drops
+        the key rather than advertising a URL that would 404.
+        """
+        if not value:
+            return None
+
+        name = str(value)
+        if name.startswith('http://') or name.startswith('https://'):
+            return name
+
+        if name.startswith('/'):
+            return self._absolute(name, request)
+
+        # Same guard as _build_url: only paths we intentionally write are
+        # resolvable. Anything else would have storage invent a phantom URL.
+        if not name.startswith('reels/'):
+            return None
+
+        try:
+            from django.core.files.storage import default_storage
+
+            url = default_storage.url(name)
+        except Exception:
+            return None
+
+        if not url:
+            return None
+        if url.startswith('http://') or url.startswith('https://'):
+            return url
+        return self._absolute(url, request)
+
+    def _absolute(self, path, request):
+        """Make a root-relative URL absolute, with or without a request."""
+        if request:
+            return request.build_absolute_uri(path)
+        from django.conf import settings
+
+        base = getattr(settings, 'BACKEND_URL', 'https://postworq.onrender.com')
+        return f'{base}{path}'
+
+    def get_media_variants(self, obj):
+        """Smaller video rungs, keyed by height.
+
+        Returned as a dict rather than flat `video_360` fields so a client can
+        iterate what is offered instead of probing for names, and so adding a
+        rung later needs no serializer change.
+
+        `media` remains the primary and is unchanged -- a client that ignores
+        this key behaves exactly as before.
+        """
+        request = self.context.get('request')
+        out = {}
+        for key, field in (('360', 'media_360'), ('480', 'media_480')):
+            url = self._build_stored_url(getattr(obj, field, ''), request)
+            if url:
+                out[key] = url
+        return out or None
+
+    def get_image_variants(self, obj):
+        """Width-constrained stills, keyed by width. Same contract as above."""
+        request = self.context.get('request')
+        out = {}
+        for key, field in (('360', 'image_small'), ('720', 'image_medium')):
+            url = self._build_stored_url(getattr(obj, field, ''), request)
+            if url:
+                out[key] = url
+        return out or None
+
     def get_comment_count(self, obj):
         # Always use actual count to ensure accuracy
         try:
             return obj.comments.count()
-        except:
+        except (AttributeError, TypeError):
+            # Reached when the relation is absent or has been replaced by a
+            # prefetch that cannot be counted. Zero is the honest answer for a
+            # feed card; it must not take the whole response down.
             return 0
-    
+
     def get_hashtags_list(self, obj):
         return obj.get_hashtags_list()
-    
+
     def get_is_liked(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
         if hasattr(obj, 'is_liked_db'):
@@ -248,24 +444,30 @@ class ReelSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             from api.models import Vote
+
             return Vote.objects.filter(user=request.user, reel=obj).exists()
         return False
-    
+
     def get_votes(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
         if hasattr(obj, 'votes_count_db'):
             return obj.votes_count_db
         # Fallback to separate query only when annotation not available
         from api.models import Vote
+
         return Vote.objects.filter(reel=obj).count()
-    
+
     def get_gift_count(self, obj):
         # Query GiftTransaction directly to count gifts for this reel
-        from api.models.gift import GiftTransaction
         from django.db.models import Sum
-        result = GiftTransaction.objects.filter(reel_id=obj.id).aggregate(total=Sum('quantity'))['total']
+
+        from api.models.gift import GiftTransaction
+
+        result = GiftTransaction.objects.filter(reel_id=obj.id).aggregate(total=Sum('quantity'))[
+            'total'
+        ]
         return result or 0
-    
+
     def get_is_saved(self, obj):
         # Use DB annotation if available (set by ReelViewSet.get_queryset)
         if hasattr(obj, 'is_saved_db'):
@@ -273,9 +475,10 @@ class ReelSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             from api.models import SavedPost
+
             return SavedPost.objects.filter(user=request.user, reel=obj).exists()
         return False
-    
+
     def get_recent_comments(self, obj):
         # Use prefetched comments if available (set by ReelViewSet.get_queryset with prefetch_related)
         if hasattr(obj, 'prefetched_comments'):
@@ -283,20 +486,26 @@ class ReelSerializer(serializers.ModelSerializer):
             return CommentSerializer(comments, many=True).data
         # Fallback to query only when prefetch not available
         from api.models import Comment
-        recent_comments = Comment.objects.filter(reel=obj).select_related('user').order_by('-created_at')[:3]
+
+        recent_comments = (
+            Comment.objects.filter(reel=obj).select_related('user').order_by('-created_at')[:3]
+        )
         return CommentSerializer(recent_comments, many=True).data
+
 
 class CommentSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
-    
+
     class Meta:
         model = Comment
         fields = ['id', 'user', 'reel', 'text', 'created_at']
+
 
 class CommentLikeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CommentLike
         fields = ['id', 'user', 'comment', 'created_at']
+
 
 class CommentReplySerializer(serializers.ModelSerializer):
     class Meta:
@@ -304,37 +513,54 @@ class CommentReplySerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'comment', 'text', 'created_at', 'edited_at', 'is_deleted']
         read_only_fields = ['created_at', 'edited_at', 'is_deleted']
 
+
 class SavedPostSerializer(serializers.ModelSerializer):
     class Meta:
         model = SavedPost
         fields = ['id', 'user', 'reel', 'created_at']
+
 
 class VoteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vote
         fields = ['id', 'user', 'reel', 'created_at']
 
+
 class QuestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Quest
         fields = ['id', 'title', 'description', 'xp_reward', 'is_active']
 
+
 class UserQuestSerializer(serializers.ModelSerializer):
     quest = QuestSerializer(read_only=True)
-    
+
     class Meta:
         model = UserQuest
         fields = ['id', 'quest', 'completed', 'completed_at']
+
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subscription
         fields = ['id', 'plan', 'started_at', 'expires_at']
 
+
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationPreference
-        fields = ['id', 'email_notifications', 'push_notifications', 'sms_notifications', 'phone', 'likes', 'comments', 'follows', 'messages']
+        fields = [
+            'id',
+            'email_notifications',
+            'push_notifications',
+            'sms_notifications',
+            'phone',
+            'likes',
+            'comments',
+            'follows',
+            'messages',
+        ]
+
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -356,35 +582,57 @@ class RegisterSerializer(serializers.ModelSerializer):
         # Signals will handle profile creation
         return user
 
+
 class CompetitionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Competition
-        fields = ['id', 'title', 'description', 'start_date', 'end_date', 'prize', 'is_active', 'created_at']
+        fields = [
+            'id',
+            'title',
+            'description',
+            'start_date',
+            'end_date',
+            'prize',
+            'is_active',
+            'created_at',
+        ]
+
 
 class WinnerSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     competition = CompetitionSerializer(read_only=True)
     reel = ReelSerializer(read_only=True)
-    
+
     class Meta:
         model = Winner
-        fields = ['id', 'competition', 'user', 'reel', 'votes_received', 'prize_claimed', 'announced_at']
+        fields = [
+            'id',
+            'competition',
+            'user',
+            'reel',
+            'votes_received',
+            'prize_claimed',
+            'announced_at',
+        ]
+
 
 class FollowSerializer(serializers.ModelSerializer):
     follower = UserSerializer(read_only=True)
     following = UserSerializer(read_only=True)
-    
+
     class Meta:
         model = Follow
         fields = ['id', 'follower', 'following', 'created_at']
 
+
 class BlockSerializer(serializers.ModelSerializer):
     blocker = UserSerializer(read_only=True)
     blocked = UserSerializer(read_only=True)
-    
+
     class Meta:
         model = Block
         fields = ['id', 'blocker', 'blocked', 'created_at']
+
 
 class ReportSerializer(serializers.ModelSerializer):
     reported_by = UserSerializer(read_only=True)
@@ -394,42 +642,65 @@ class ReportSerializer(serializers.ModelSerializer):
     moderation_actions = serializers.SerializerMethodField()
     # Write-only FK fields so frontend can submit IDs
     reported_user_id = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), source='reported_user', write_only=True, required=False, allow_null=True
+        queryset=User.objects.all(),
+        source='reported_user',
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
     reported_reel_id = serializers.PrimaryKeyRelatedField(
-        queryset=Reel.objects.all(), source='reported_reel', write_only=True, required=False, allow_null=True
+        queryset=Reel.objects.all(),
+        source='reported_reel',
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
     reported_comment_id = serializers.PrimaryKeyRelatedField(
-        queryset=Comment.objects.all(), source='reported_comment', write_only=True, required=False, allow_null=True
+        queryset=Comment.objects.all(),
+        source='reported_comment',
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
 
     class Meta:
         model = Report
         fields = [
-            'id', 'reported_by',
-            'reported_user', 'reported_user_id',
-            'reported_reel', 'reported_reel_id',
+            'id',
+            'reported_by',
+            'reported_user',
+            'reported_user_id',
+            'reported_reel',
+            'reported_reel_id',
             'reported_comment_id',
-            'target_type', 'report_type', 'description',
-            'status', 'priority',
-            'resolution_notes', 'reviewed_by',
-            'created_at', 'updated_at', 'resolved_at',
+            'target_type',
+            'report_type',
+            'description',
+            'status',
+            'priority',
+            'resolution_notes',
+            'reviewed_by',
+            'created_at',
+            'updated_at',
+            'resolved_at',
             'moderation_actions',
         ]
 
     def get_moderation_actions(self, obj):
-        from api.models import ModerationAction
         actions = obj.moderation_actions.all().order_by('-created_at')
-        return [{
-            'id': action.id,
-            'action_taken': action.action_taken,
-            'reason_details': action.reason_details,
-            'moderator': action.moderator.username if action.moderator else None,
-            'created_at': action.created_at,
-            'undone': action.undone,
-            'undone_by': action.undone_by.username if action.undone_by else None,
-            'undone_at': action.undone_at,
-        } for action in actions]
+        return [
+            {
+                'id': action.id,
+                'action_taken': action.action_taken,
+                'reason_details': action.reason_details,
+                'moderator': action.moderator.username if action.moderator else None,
+                'created_at': action.created_at,
+                'undone': action.undone,
+                'undone_by': action.undone_by.username if action.undone_by else None,
+                'undone_at': action.undone_at,
+            }
+            for action in actions
+        ]
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -438,8 +709,18 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Notification
-        fields = ['id', 'sender', 'notification_type', 'reel', 'comment', 'message', 'is_read', 'created_at']
+        fields = [
+            'id',
+            'sender',
+            'notification_type',
+            'reel',
+            'comment',
+            'message',
+            'is_read',
+            'created_at',
+        ]
         read_only_fields = ['id', 'created_at']
+
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
