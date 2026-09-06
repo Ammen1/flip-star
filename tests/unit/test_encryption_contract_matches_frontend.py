@@ -52,46 +52,26 @@ KNOWN_BROKEN = {
     '/privacy/policy/summary/',
 }
 
-# The mirror direction, recorded as a baseline rather than fixed here.
+# The mirror direction: views that decrypt, called by a client that sends
+# plaintext. Now empty, and it should stay that way.
 #
-# Read this list with care: unlike KNOWN_BROKEN above, not every entry is
-# necessarily a bug. api.js describes what the WEB app encrypts, and the web
-# app does not call every endpoint -- a route only the mobile client uses can
-# sit here harmlessly, because mobile keeps its own manifest
-# (Flipstar-Mobile/src/security/encryptedRoutes.js). The baseline exists so a NEW
-# disagreement fails the build; proving which of these are live bugs needs
-# per-endpoint knowledge of which client calls them.
+# These were recorded as a baseline on the theory that some might be
+# mobile-only routes the web app never calls. That theory was wrong, and
+# /explorer/trending/ proved it: api.js gates RESPONSE decryption on the same
+# isEncryptedEndpoint() check, so a missing entry left the envelope unwrapped
+# and every caller read an empty list off it. The Trending tab returned a full
+# feed and rendered "Nothing trending yet" -- no error, nothing in the console,
+# for as long as the entry was missing.
+#
+# So an entry here is not "probably fine, mobile-only". It is a feature that
+# silently shows nothing. Fix the mismatch rather than adding to this set.
 #
 # The /messages/* group that used to sit here is gone: api.js excluded all of
 # /messages/ as multipart-incompatible when only the message-send route is,
 # so the web app sent plaintext to five views that decrypt and got 400 on
 # every one -- including creating a conversation to share a post. The
 # exclusion is now scoped to that single route, matching mobile.
-KNOWN_SERVER_ONLY_ENCRYPTED = {
-    '/eligibility/age/',
-    '/eligibility/phone/',
-    '/explorer/hashtag/',
-    '/explorer/trending-hashtags/',
-    '/explorer/trending/',
-    '/grand-finale/',
-    '/grand-finale/vote/',
-    '/leaderboard/',
-    '/legal/',
-    '/legal/user/history/',
-    '/legal/user/pending/',
-    '/profile/privacy/',
-    '/profile/privacy/update/',
-    '/push/public-key/',
-    '/push/subscribe/',
-    '/push/unsubscribe/',
-    '/reels/following/',
-    '/reels/not-interested/',
-    '/reels/not-interested/undo/',
-    '/reels/saved/',
-    '/reels/trending/',
-    '/search/',
-    '/upload/check/',
-}
+KNOWN_SERVER_ONLY_ENCRYPTED = set()
 
 # Endpoints excluded here for reasons the URLconf cannot express.
 KNOWN_PLAINTEXT = {

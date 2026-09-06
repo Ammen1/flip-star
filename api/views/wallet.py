@@ -166,6 +166,18 @@ def wallet_summary(request):
                 'total': balance.balance,
                 'earned': balance.earned_balance,
                 'purchased': balance.purchased_balance,
+                # The split behind `purchased`. The wallet screen has always
+                # read these two, and never received them -- so a user with
+                # every coin bought via Telebirr saw a 421 total above three
+                # zeroes, which reads as a bug in the balance rather than a
+                # missing breakdown.
+                #
+                # They are not interchangeable, which is why the split is worth
+                # showing: spend_coins(restrict_earned=True) will only draw on
+                # telebirr_purchased_balance, so airtime coins cannot be used
+                # for gifting. A user needs to see which kind they hold.
+                'telebirr_purchased': balance.telebirr_purchased_balance,
+                'airtime_purchased': balance.airtime_purchased_balance,
             },
             'points': {
                 'current': request.user.profile.points,
