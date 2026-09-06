@@ -74,3 +74,10 @@ coverage.xml
 *.swo
 .DS_Store
 Thumbs.db
+
+# Nested application repos, each with its own .git directory.
+# They were committed by accident as bare gitlinks (no .gitmodules), which
+# shows them on GitHub as greyed-out folders nobody can open. Ignored so a
+# stray `git add .` cannot re-add them; the code lives in its own repo.
+Flipstar-web/
+Flipstar-Mobile/
