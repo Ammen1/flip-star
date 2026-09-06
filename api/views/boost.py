@@ -1,17 +1,24 @@
-from django.shortcuts import get_object_or_404
-from django.db.models import Q, Sum, F, Count
-from django.utils import timezone
+from datetime import timedelta
+from decimal import Decimal
+
 from django.db import transaction
+from django.db.models import Count
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from decimal import Decimal, InvalidOperation
 
-from api.models import User, Reel, UserProfile
-from api.models.boost import BoostConfig, BoostCampaign, BoostImpression, BoostEngagement, BoostStats
+from api.models import Reel
+from api.models.boost import (
+    BoostCampaign,
+    BoostConfig,
+    BoostEngagement,
+    BoostImpression,
+)
 from api.models.contest import UserCoinBalance
+from api.services.concurrency import claim_transition
 from common.security import encrypted_endpoint
-from datetime import timedelta
 
 
 @api_view(['GET'])
@@ -23,32 +30,59 @@ def get_boost_config(request):
         config = BoostConfig.objects.first()
         if not config:
             config = BoostConfig.objects.create()
-        
-        return Response({
-            'base_hourly_rate': float(config.base_hourly_rate),
-            'discounts': {
-                '6hr': config.discount_6hr,
-                '12hr': config.discount_12hr,
-                '24hr': config.discount_24hr,
-                '3day': config.discount_3day,
-                '7day': config.discount_7day,
-            },
-            'duration_options': [
-                {'hours': 1, 'label': '1 Hour', 'cost': float(config.calculate_cost(1, False))},
-                {'hours': 6, 'label': '6 Hours', 'label_extra': '17% off', 'cost': float(config.calculate_cost(6, False))},
-                {'hours': 12, 'label': '12 Hours', 'label_extra': '33% off', 'cost': float(config.calculate_cost(12, False))},
-                {'hours': 24, 'label': '24 Hours', 'label_extra': '42% off', 'cost': float(config.calculate_cost(24, False))},
-                {'hours': 72, 'label': '3 Days', 'label_extra': '56% off', 'cost': float(config.calculate_cost(72, False))},
-                {'hours': 168, 'label': '7 Days', 'label_extra': '71% off', 'cost': float(config.calculate_cost(168, False))},
-            ],
-            'premium_targeting_surcharge': config.premium_targeting_surcharge,
-            'platform_fee_percent': config.platform_fee_percent,
-            'base_impression_rate': config.base_impression_rate,
-            'user_limits': {
-                'max_daily_boosts': config.max_daily_boosts_per_user,
-                'max_active_per_post': config.max_active_boosts_per_post,
-            },
-        })
+
+        return Response(
+            {
+                'base_hourly_rate': float(config.base_hourly_rate),
+                'discounts': {
+                    '6hr': config.discount_6hr,
+                    '12hr': config.discount_12hr,
+                    '24hr': config.discount_24hr,
+                    '3day': config.discount_3day,
+                    '7day': config.discount_7day,
+                },
+                'duration_options': [
+                    {'hours': 1, 'label': '1 Hour', 'cost': float(config.calculate_cost(1, False))},
+                    {
+                        'hours': 6,
+                        'label': '6 Hours',
+                        'label_extra': '17% off',
+                        'cost': float(config.calculate_cost(6, False)),
+                    },
+                    {
+                        'hours': 12,
+                        'label': '12 Hours',
+                        'label_extra': '33% off',
+                        'cost': float(config.calculate_cost(12, False)),
+                    },
+                    {
+                        'hours': 24,
+                        'label': '24 Hours',
+                        'label_extra': '42% off',
+                        'cost': float(config.calculate_cost(24, False)),
+                    },
+                    {
+                        'hours': 72,
+                        'label': '3 Days',
+                        'label_extra': '56% off',
+                        'cost': float(config.calculate_cost(72, False)),
+                    },
+                    {
+                        'hours': 168,
+                        'label': '7 Days',
+                        'label_extra': '71% off',
+                        'cost': float(config.calculate_cost(168, False)),
+                    },
+                ],
+                'premium_targeting_surcharge': config.premium_targeting_surcharge,
+                'platform_fee_percent': config.platform_fee_percent,
+                'base_impression_rate': config.base_impression_rate,
+                'user_limits': {
+                    'max_daily_boosts': config.max_daily_boosts_per_user,
+                    'max_active_per_post': config.max_active_boosts_per_post,
+                },
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
@@ -64,27 +98,31 @@ def calculate_boost_cost(request):
         target_age_min = request.data.get('target_age_min')
         target_age_max = request.data.get('target_age_max')
         target_location = request.data.get('target_location')
-        
+
         config = BoostConfig.objects.first()
         if not config:
             config = BoostConfig.objects.create()
-        
+
         # Check if premium targeting is used
         has_premium_targeting = bool(
-            target_gender and target_gender != 'all' or
-            target_age_min or target_age_max or
-            target_location
+            target_gender
+            and target_gender != 'all'
+            or target_age_min
+            or target_age_max
+            or target_location
         )
-        
+
         cost = config.calculate_cost(duration_hours, has_premium_targeting)
         expected_impressions = config.get_expected_impressions(cost)
-        
-        return Response({
-            'cost': float(cost),
-            'expected_impressions': expected_impressions,
-            'has_premium_targeting': has_premium_targeting,
-            'premium_surcharge_applied': has_premium_targeting,
-        })
+
+        return Response(
+            {
+                'cost': float(cost),
+                'expected_impressions': expected_impressions,
+                'has_premium_targeting': has_premium_targeting,
+                'premium_surcharge_applied': has_premium_targeting,
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=400)
 
@@ -102,50 +140,53 @@ def create_boost_campaign(request):
         target_age_min = request.data.get('target_age_min')
         target_age_max = request.data.get('target_age_max')
         target_location = request.data.get('target_location', '')
-        
+
         # Validate reel exists and belongs to user
         reel = get_object_or_404(Reel, id=reel_id, user=user)
-        
+
         # Get or create config
         config = BoostConfig.objects.first()
         if not config:
             config = BoostConfig.objects.create()
-        
+
         # Check user limits
         today = timezone.now().date()
-        boosts_today = BoostCampaign.objects.filter(
-            user=user,
-            created_at__date=today
-        ).count()
-        
+        boosts_today = BoostCampaign.objects.filter(user=user, created_at__date=today).count()
+
         if boosts_today >= config.max_daily_boosts_per_user:
-            return Response({
-                'error': f'Daily boost limit reached ({config.max_daily_boosts_per_user} per day)'
-            }, status=400)
-        
+            return Response(
+                {
+                    'error': f'Daily boost limit reached ({config.max_daily_boosts_per_user} per day)'
+                },
+                status=400,
+            )
+
         # Check active boosts on this post
         active_boosts = BoostCampaign.objects.filter(
-            reel=reel,
-            status='active',
-            end_time__gt=timezone.now()
+            reel=reel, status='active', end_time__gt=timezone.now()
         ).count()
-        
+
         if active_boosts >= config.max_active_boosts_per_post:
-            return Response({
-                'error': f'Maximum active boosts for this post reached ({config.max_active_boosts_per_post})'
-            }, status=400)
-        
+            return Response(
+                {
+                    'error': f'Maximum active boosts for this post reached ({config.max_active_boosts_per_post})'
+                },
+                status=400,
+            )
+
         # Check if premium targeting is used
         has_premium_targeting = bool(
-            target_gender and target_gender != 'all' or
-            target_age_min or target_age_max or
-            target_location
+            target_gender
+            and target_gender != 'all'
+            or target_age_min
+            or target_age_max
+            or target_location
         )
-        
+
         # Calculate cost
         cost = config.calculate_cost(duration_hours, has_premium_targeting)
         expected_impressions = config.get_expected_impressions(cost)
-        
+
         # Check user has enough coins. This is a soft pre-check for a fast,
         # friendly 400 -- the authoritative guard is the locked balance
         # read inside spend_coins() below, which is what actually prevents
@@ -155,11 +196,14 @@ def create_boost_campaign(request):
         coin_balance, _ = UserCoinBalance.objects.get_or_create(user=user)
         cost_int = int(cost)
         if coin_balance.balance < cost_int:
-            return Response({
-                'error': 'Insufficient coins',
-                'required': cost_int,
-                'available': coin_balance.balance
-            }, status=400)
+            return Response(
+                {
+                    'error': 'Insufficient coins',
+                    'required': cost_int,
+                    'available': coin_balance.balance,
+                },
+                status=400,
+            )
 
         # Calculate hourly budget for pacing
         hourly_budget = cost / duration_hours
@@ -174,15 +218,19 @@ def create_boost_campaign(request):
             # silently drifted out of sync with it.
             try:
                 coin_balance.spend_coins(
-                    cost_int, transaction_type='boost_campaign',
+                    cost_int,
+                    transaction_type='boost_campaign',
                     description=f'Boost campaign for reel #{reel.id}',
                 )
             except ValueError:
-                return Response({
-                    'error': 'Insufficient coins',
-                    'required': cost_int,
-                    'available': coin_balance.balance,
-                }, status=400)
+                return Response(
+                    {
+                        'error': 'Insufficient coins',
+                        'required': cost_int,
+                        'available': coin_balance.balance,
+                    },
+                    status=400,
+                )
             profile.coins = coin_balance.balance
             profile.coins_spent_total += cost_int
             profile.save(update_fields=['coins', 'coins_spent_total'])
@@ -210,20 +258,22 @@ def create_boost_campaign(request):
                 # MIGRATIONS_ARE_REPLAYABLE history).
                 target_location=target_location or '',
             )
-            
+
             # Update reel
             reel.is_boosted = True
             reel.active_boost_campaign = campaign
             reel.save()
-        
-        return Response({
-            'success': True,
-            'campaign_id': campaign.id,
-            'cost': float(cost),
-            'expected_impressions': expected_impressions,
-            'end_time': campaign.end_time.isoformat(),
-            'remaining_coins': profile.coins,
-        })
+
+        return Response(
+            {
+                'success': True,
+                'campaign_id': campaign.id,
+                'cost': float(cost),
+                'expected_impressions': expected_impressions,
+                'end_time': campaign.end_time.isoformat(),
+                'remaining_coins': profile.coins,
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
@@ -236,10 +286,65 @@ def get_user_boost_campaigns(request):
     try:
         user = request.user
         campaigns = BoostCampaign.objects.filter(user=user).order_by('-created_at')
-        
+
         campaigns_data = []
         for campaign in campaigns:
-            campaigns_data.append({
+            campaigns_data.append(
+                {
+                    'id': campaign.id,
+                    'reel_id': campaign.reel.id,
+                    'reel_caption': campaign.reel.caption[:100] if campaign.reel.caption else '',
+                    'duration_hours': campaign.duration_hours,
+                    'coins_spent': float(campaign.coins_spent),
+                    'coins_remaining': float(campaign.coins_remaining),
+                    'start_time': campaign.start_time.isoformat(),
+                    'end_time': campaign.end_time.isoformat(),
+                    'status': campaign.status,
+                    'expected_impressions': campaign.expected_impressions,
+                    'impressions_served': campaign.impressions_served,
+                    'engagement_count': campaign.engagement_count,
+                    'progress_percent': campaign.get_progress_percent(),
+                    'time_remaining_hours': campaign.get_time_remaining(),
+                    'is_active': campaign.is_active(),
+                    'targeting': {
+                        'gender': campaign.target_gender,
+                        'age_min': campaign.target_age_min,
+                        'age_max': campaign.target_age_max,
+                        'location': campaign.target_location,
+                    }
+                    if campaign.target_gender or campaign.target_age_min or campaign.target_location
+                    else None,
+                }
+            )
+
+        return Response({'campaigns': campaigns_data})
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@encrypted_endpoint
+def get_boost_campaign_detail(request, campaign_id):
+    """Get detailed information about a specific boost campaign"""
+    try:
+        user = request.user
+        campaign = get_object_or_404(BoostCampaign, id=campaign_id, user=user)
+
+        # Get engagement breakdown
+        engagements = (
+            campaign.engagements.values('engagement_type')
+            .annotate(count=Count('id'))
+            .order_by('engagement_type')
+        )
+
+        engagement_breakdown = {e['engagement_type']: e['count'] for e in engagements}
+
+        # Get daily stats
+        daily_stats = campaign.daily_stats.order_by('-date')[:7]
+
+        return Response(
+            {
                 'id': campaign.id,
                 'reel_id': campaign.reel.id,
                 'reel_caption': campaign.reel.caption[:100] if campaign.reel.caption else '',
@@ -255,71 +360,26 @@ def get_user_boost_campaigns(request):
                 'progress_percent': campaign.get_progress_percent(),
                 'time_remaining_hours': campaign.get_time_remaining(),
                 'is_active': campaign.is_active(),
+                'engagement_breakdown': engagement_breakdown,
+                'daily_stats': [
+                    {
+                        'date': stat.date.isoformat(),
+                        'impressions': stat.impressions_served,
+                        'engagements': stat.engagements,
+                        'coins_spent': float(stat.coins_spent),
+                    }
+                    for stat in daily_stats
+                ],
                 'targeting': {
                     'gender': campaign.target_gender,
                     'age_min': campaign.target_age_min,
                     'age_max': campaign.target_age_max,
                     'location': campaign.target_location,
-                } if campaign.target_gender or campaign.target_age_min or campaign.target_location else None,
-            })
-        
-        return Response({'campaigns': campaigns_data})
-    except Exception as e:
-        return Response({'error': str(e)}, status=500)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-@encrypted_endpoint
-def get_boost_campaign_detail(request, campaign_id):
-    """Get detailed information about a specific boost campaign"""
-    try:
-        user = request.user
-        campaign = get_object_or_404(BoostCampaign, id=campaign_id, user=user)
-        
-        # Get engagement breakdown
-        engagements = campaign.engagements.values('engagement_type').annotate(
-            count=Count('id')
-        ).order_by('engagement_type')
-        
-        engagement_breakdown = {e['engagement_type']: e['count'] for e in engagements}
-        
-        # Get daily stats
-        daily_stats = campaign.daily_stats.order_by('-date')[:7]
-        
-        return Response({
-            'id': campaign.id,
-            'reel_id': campaign.reel.id,
-            'reel_caption': campaign.reel.caption[:100] if campaign.reel.caption else '',
-            'duration_hours': campaign.duration_hours,
-            'coins_spent': float(campaign.coins_spent),
-            'coins_remaining': float(campaign.coins_remaining),
-            'start_time': campaign.start_time.isoformat(),
-            'end_time': campaign.end_time.isoformat(),
-            'status': campaign.status,
-            'expected_impressions': campaign.expected_impressions,
-            'impressions_served': campaign.impressions_served,
-            'engagement_count': campaign.engagement_count,
-            'progress_percent': campaign.get_progress_percent(),
-            'time_remaining_hours': campaign.get_time_remaining(),
-            'is_active': campaign.is_active(),
-            'engagement_breakdown': engagement_breakdown,
-            'daily_stats': [
-                {
-                    'date': stat.date.isoformat(),
-                    'impressions': stat.impressions_served,
-                    'engagements': stat.engagements,
-                    'coins_spent': float(stat.coins_spent),
                 }
-                for stat in daily_stats
-            ],
-            'targeting': {
-                'gender': campaign.target_gender,
-                'age_min': campaign.target_age_min,
-                'age_max': campaign.target_age_max,
-                'location': campaign.target_location,
-            } if campaign.target_gender or campaign.target_age_min or campaign.target_location else None,
-        })
+                if campaign.target_gender or campaign.target_age_min or campaign.target_location
+                else None,
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
@@ -332,45 +392,74 @@ def cancel_boost_campaign(request, campaign_id):
     try:
         user = request.user
         campaign = get_object_or_404(BoostCampaign, id=campaign_id, user=user)
-        
+
         if campaign.status != 'active':
             return Response({'error': 'Campaign is not active'}, status=400)
-        
+
         config = BoostConfig.objects.first()
         if not config:
             config = BoostConfig.objects.create()
-        
+
         # Calculate refund
         refund_amount = campaign.coins_remaining
-        cancellation_fee = refund_amount * (Decimal(config.cancellation_fee_percent) / Decimal('100'))
+        cancellation_fee = refund_amount * (
+            Decimal(config.cancellation_fee_percent) / Decimal('100')
+        )
         final_refund = refund_amount - cancellation_fee
-        
-        # Use transaction
+
         with transaction.atomic():
-            # Refund coins
-            user.profile.coins += int(final_refund)
-            user.profile.save()
-            
-            # Update campaign
-            campaign.status = 'cancelled'
-            campaign.cancelled_at = timezone.now()
-            campaign.coins_remaining = Decimal('0')
-            campaign.refund_amount = final_refund
-            campaign.refunded_at = timezone.now()
-            campaign.save()
-            
+            # Claim the cancellation before paying anything out.
+            #
+            # The status check above reads a value fetched before this request
+            # did any work, and two taps on Cancel both passed it. Neither held
+            # a lock, so both went on to refund: the user was paid twice for
+            # one campaign, and the second refund_amount overwrote the first in
+            # the record, hiding the duplicate.
+            #
+            # A single conditional UPDATE settles it. Exactly one caller finds
+            # the campaign still active; the other gets zero rows and returns
+            # without touching the wallet. Everything that must move with the
+            # status moves in the same statement, so a crash cannot leave a
+            # cancelled campaign still holding coins.
+            claimed = claim_transition(
+                BoostCampaign,
+                campaign.id,
+                expect='active',
+                to='cancelled',
+                cancelled_at=timezone.now(),
+                coins_remaining=Decimal('0'),
+                refund_amount=final_refund,
+                refunded_at=timezone.now(),
+            )
+            if not claimed:
+                campaign.refresh_from_db()
+                return Response(
+                    {'error': f'Campaign is {campaign.status}, cannot cancel'}, status=400
+                )
+
+            # Refunded through the locking helper. `profile.coins += n` read and
+            # wrote in separate statements, so one of two concurrent credits
+            # was lost -- and a bare save() rewrote every column of the profile
+            # from a pre-race snapshot.
+            if final_refund > 0:
+                user.profile.add_coins(int(final_refund), total_field=None)
+
             # Update reel if this was the active campaign
-            if campaign.reel.active_boost_campaign == campaign:
-                campaign.reel.is_boosted = False
-                campaign.reel.active_boost_campaign = None
-                campaign.reel.save()
-        
-        return Response({
-            'success': True,
-            'refund_amount': float(final_refund),
-            'cancellation_fee': float(cancellation_fee),
-            'remaining_coins': user.profile.coins,
-        })
+            if campaign.reel.active_boost_campaign_id == campaign.id:
+                Reel.objects.filter(pk=campaign.reel_id).update(
+                    is_boosted=False, active_boost_campaign=None
+                )
+
+        campaign.refresh_from_db()
+
+        return Response(
+            {
+                'success': True,
+                'refund_amount': float(final_refund),
+                'cancellation_fee': float(cancellation_fee),
+                'remaining_coins': user.profile.coins,
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
@@ -383,17 +472,17 @@ def pause_boost_campaign(request, campaign_id):
     try:
         user = request.user
         campaign = get_object_or_404(BoostCampaign, id=campaign_id, user=user)
-        
+
         if campaign.status != 'active':
             return Response({'error': 'Campaign is not active'}, status=400)
-        
+
         campaign.status = 'paused'
         campaign.save()
-        
+
         # Update reel
         campaign.reel.is_boosted = False
         campaign.reel.save()
-        
+
         return Response({'success': True})
     except Exception as e:
         return Response({'error': str(e)}, status=500)
@@ -407,21 +496,21 @@ def resume_boost_campaign(request, campaign_id):
     try:
         user = request.user
         campaign = get_object_or_404(BoostCampaign, id=campaign_id, user=user)
-        
+
         if campaign.status != 'paused':
             return Response({'error': 'Campaign is not paused'}, status=400)
-        
+
         if timezone.now() >= campaign.end_time:
             return Response({'error': 'Campaign has expired'}, status=400)
-        
+
         campaign.status = 'active'
         campaign.save()
-        
+
         # Update reel
         campaign.reel.is_boosted = True
         campaign.reel.active_boost_campaign = campaign
         campaign.reel.save()
-        
+
         return Response({'success': True})
     except Exception as e:
         return Response({'error': str(e)}, status=500)
@@ -435,65 +524,67 @@ def get_eligible_boosts(request):
     try:
         user = request.user
         profile = user.profile
-        
+
         # Get active campaigns with remaining budget
         now = timezone.now()
-        eligible_campaigns = BoostCampaign.objects.filter(
-            status='active',
-            end_time__gt=now,
-            coins_remaining__gt=0
-        ).select_related('reel', 'reel__user').prefetch_related('impressions')
-        
+        eligible_campaigns = (
+            BoostCampaign.objects.filter(status='active', end_time__gt=now, coins_remaining__gt=0)
+            .select_related('reel', 'reel__user')
+            .prefetch_related('impressions')
+        )
+
         # Filter by targeting and frequency capping
         filtered_campaigns = []
         for campaign in eligible_campaigns:
             # Skip if user is the post owner
             if campaign.reel.user == user:
                 continue
-            
+
             # Check if user already follows (boosts are for non-followers)
             from api.models import Follow
+
             is_follower = Follow.objects.filter(
-                follower=user,
-                following=campaign.reel.user
+                follower=user, following=campaign.reel.user
             ).exists()
             if is_follower:
                 continue
-            
+
             # Check targeting
             if campaign.target_gender and campaign.target_gender != 'all':
                 if profile.gender != campaign.target_gender:
                     continue
-            
+
             if campaign.target_age_min and profile.age < campaign.target_age_min:
                 continue
-            
+
             if campaign.target_age_max and profile.age > campaign.target_age_max:
                 continue
-            
+
             if campaign.target_location and profile.city != campaign.target_location:
                 continue
-            
+
             # Check frequency capping
             config = BoostConfig.objects.first()
             if config:
                 last_view = BoostImpression.objects.filter(
                     campaign=campaign,
                     viewer=user,
-                    viewed_at__gte=now - timedelta(hours=config.frequency_cap_hours)
+                    viewed_at__gte=now - timedelta(hours=config.frequency_cap_hours),
                 ).exists()
                 if last_view:
                     continue
-            
+
             filtered_campaigns.append(campaign)
-        
+
         # Return reel IDs for feed injection
         reel_ids = [campaign.reel.id for campaign in filtered_campaigns]
-        
-        return Response({
-            'eligible_reel_ids': reel_ids,
-            'count': len(reel_ids),
-        })
+
+        return Response(
+            {
+                'eligible_reel_ids': reel_ids,
+                'count': len(reel_ids),
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=500)
 
@@ -506,53 +597,49 @@ def record_boost_impression(request):
     try:
         user = request.user
         reel_id = request.data.get('reel_id')
-        
+
         # Find active campaign for this reel
         campaign = BoostCampaign.objects.filter(
-            reel_id=reel_id,
-            status='active',
-            end_time__gt=timezone.now(),
-            coins_remaining__gt=0
+            reel_id=reel_id, status='active', end_time__gt=timezone.now(), coins_remaining__gt=0
         ).first()
-        
+
         if not campaign:
             return Response({'success': False, 'message': 'No active campaign'})
-        
+
         # Check frequency cap
         config = BoostConfig.objects.first()
         if config:
             last_view = BoostImpression.objects.filter(
                 campaign=campaign,
                 viewer=user,
-                viewed_at__gte=timezone.now() - timedelta(hours=config.frequency_cap_hours)
+                viewed_at__gte=timezone.now() - timedelta(hours=config.frequency_cap_hours),
             ).exists()
             if last_view:
                 return Response({'success': False, 'message': 'Frequency cap reached'})
-        
+
         # Record impression
-        impression, created = BoostImpression.objects.get_or_create(
-            campaign=campaign,
-            viewer=user
-        )
-        
+        impression, created = BoostImpression.objects.get_or_create(campaign=campaign, viewer=user)
+
         if created:
             # Update campaign stats
             campaign.impressions_served += 1
-            
+
             # Deduct coins based on pacing
-            coins_to_deduct = campaign.hourly_budget / config.base_impression_rate if config else Decimal('1')
+            coins_to_deduct = (
+                campaign.hourly_budget / config.base_impression_rate if config else Decimal('1')
+            )
             if campaign.coins_remaining >= coins_to_deduct:
                 campaign.coins_remaining -= coins_to_deduct
             else:
                 campaign.coins_remaining = Decimal('0')
                 campaign.status = 'exhausted'
-            
+
             campaign.save()
-            
+
             # Update reel stats
             campaign.reel.total_boost_impressions += 1
             campaign.reel.save()
-        
+
         return Response({'success': True})
     except Exception as e:
         return Response({'error': str(e)}, status=500)
@@ -567,33 +654,29 @@ def record_boost_engagement(request):
         user = request.user
         reel_id = request.data.get('reel_id')
         engagement_type = request.data.get('engagement_type')  # 'like', 'comment', 'share'
-        
+
         # Find active campaign for this reel
         campaign = BoostCampaign.objects.filter(
-            reel_id=reel_id,
-            status='active',
-            end_time__gt=timezone.now()
+            reel_id=reel_id, status='active', end_time__gt=timezone.now()
         ).first()
-        
+
         if not campaign:
             return Response({'success': False, 'message': 'No active campaign'})
-        
+
         # Record engagement
         engagement, created = BoostEngagement.objects.get_or_create(
-            campaign=campaign,
-            user=user,
-            engagement_type=engagement_type
+            campaign=campaign, user=user, engagement_type=engagement_type
         )
-        
+
         if created:
             # Update campaign stats
             campaign.engagement_count += 1
             campaign.save()
-            
+
             # Update reel stats
             campaign.reel.total_boost_engagements += 1
             campaign.reel.save()
-        
+
         return Response({'success': True})
     except Exception as e:
         return Response({'error': str(e)}, status=500)
@@ -608,41 +691,41 @@ def check_pacing_engine(request):
         config = BoostConfig.objects.first()
         if not config:
             config = BoostConfig.objects.create()
-        
+
         now = timezone.now()
-        
+
         # Get all active campaigns
         active_campaigns = BoostCampaign.objects.filter(
-            status='active',
-            end_time__gt=now,
-            coins_remaining__gt=0
+            status='active', end_time__gt=now, coins_remaining__gt=0
         )
-        
+
         paused_count = 0
         for campaign in active_campaigns:
             hours_elapsed = (now - campaign.start_time).total_seconds() / 3600
             expected_spend = campaign.hourly_budget * hours_elapsed
-            
+
             # Calculate actual spend
             actual_spend = campaign.coins_spent - campaign.coins_remaining
-            
+
             # If we spent more than expected + tolerance, pause the campaign
             if actual_spend > expected_spend * config.pacing_tolerance:
                 campaign.status = 'paused'
                 campaign.save()
-                
+
                 # Update reel
                 if campaign.reel.active_boost_campaign == campaign:
                     campaign.reel.is_boosted = False
                     campaign.reel.active_boost_campaign = None
                     campaign.reel.save()
-                
+
                 paused_count += 1
-        
-        return Response({
-            'success': True,
-            'campaigns_checked': active_campaigns.count(),
-            'campaigns_paused': paused_count,
-        })
+
+        return Response(
+            {
+                'success': True,
+                'campaigns_checked': active_campaigns.count(),
+                'campaigns_paused': paused_count,
+            }
+        )
     except Exception as e:
         return Response({'error': str(e)}, status=500)

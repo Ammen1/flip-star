@@ -5,7 +5,8 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q
+from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, Value
+from django.db.models.functions import Greatest
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
@@ -2331,9 +2332,19 @@ class ReelViewSet(viewsets.ModelViewSet):
 
             return Response({'has_voted': True, 'is_liked': True, 'votes': reel.votes})
         else:
-            vote.delete()
-            reel.votes -= 1
-            reel.save()
+            # Unlike. The like path above already used F(); this one did
+            # `reel.votes -= 1; reel.save()`, which is the same lost-update bug
+            # in reverse -- and worse, a bare save() rewrites every column from
+            # a snapshot taken before the read, so an unlike could silently
+            # roll back a share or a view that landed in between.
+            #
+            # The delete and the decrement commit together: a decrement without
+            # its delete would drift the count below the rows that justify it.
+            with transaction.atomic():
+                deleted, _ = Vote.objects.filter(pk=vote.pk).delete()
+                if deleted:
+                    Reel.objects.filter(pk=reel.pk).update(votes=Greatest(F('votes') - 1, Value(0)))
+            reel.refresh_from_db(fields=['votes'])
 
             # Delete notification when unliked
             if reel.user != request.user:

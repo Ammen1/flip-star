@@ -1,9 +1,5 @@
-from datetime import timedelta
-
-from django.conf import settings
-from django.contrib.auth.models import User
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -19,7 +15,7 @@ from api.models.campaign import (
     CampaignVote,
     CampaignWinner,
 )
-from api.models.campaign_extended import CampaignTheme, PostScore, UserCampaignStats
+from api.models.campaign_extended import PostScore, UserCampaignStats
 from common.security import encrypted_endpoint
 
 
@@ -35,28 +31,31 @@ def get_image_url(image_field, request=None):
             return url  # Already absolute (Cloudinary, S3, etc.)
         if request:
             return request.build_absolute_uri(url)
-        return f"https://postworq.onrender.com{url}"
-    except:
+        return f'https://postworq.onrender.com{url}'
+    except (AttributeError, ValueError):
+        # An unset field or a storage backend that cannot build a URL. An image
+        # is decoration on a campaign card; neither should fail the response.
         return None
+
 
 # Admin Campaign Management
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def admin_campaigns_list(request):
     """Get all campaigns for admin"""
-    print(f"[CAMPAIGN LIST] User: {request.user}, Is Staff: {request.user.is_staff}")
+    print(f'[CAMPAIGN LIST] User: {request.user}, Is Staff: {request.user.is_staff}')
     campaigns = Campaign.objects.all().order_by('-created_at')
-    print(f"[CAMPAIGN LIST] Total campaigns: {campaigns.count()}")
-    
+    print(f'[CAMPAIGN LIST] Total campaigns: {campaigns.count()}')
+
     # Filters
     status_filter = request.GET.get('status')
     if status_filter:
         campaigns = campaigns.filter(status=status_filter)
-    
+
     master_campaign_filter = request.GET.get('master_campaign')
     if master_campaign_filter:
         campaigns = campaigns.filter(master_campaign_id=master_campaign_filter)
-    
+
     # Annotate with live counts from the database
     campaigns = campaigns.annotate(
         live_entries=Count('entries', distinct=True),
@@ -68,41 +67,46 @@ def admin_campaigns_list(request):
     page_size = int(request.GET.get('page_size', 20))
     start = (page - 1) * page_size
     end = start + page_size
-    
+
     total = campaigns.count()
     campaigns_page = campaigns[start:end]
-    
+
     data = []
     for c in campaigns_page:
         image_url = get_image_url(c.image, request)
-        
-        data.append({
-            'id': c.id,
-            'title': c.title,
-            'description': c.description,
-            'campaign_type': c.campaign_type,
-            'image': image_url,
-            'prize_title': c.prize_title,
-            'prize_value': str(c.prize_value),
-            'status': c.status,
-            'start_date': c.start_date,
-            'entry_deadline': c.entry_deadline,
-            'voting_start': c.voting_start,
-            'voting_end': c.voting_end,
-            'total_entries': c.live_entries or 0,
-            'total_votes': c.live_votes or 0,
-            'winner_count': c.winner_count,
-            'winners_announced': c.winners_announced,
-            'created_at': c.created_at,
-        })
-    
-    return Response({
-        'campaigns': data,
-        'total': total,
-        'page': page,
-        'page_size': page_size,
-        'total_pages': (total + page_size - 1) // page_size
-    })
+
+        data.append(
+            {
+                'id': c.id,
+                'title': c.title,
+                'description': c.description,
+                'campaign_type': c.campaign_type,
+                'image': image_url,
+                'prize_title': c.prize_title,
+                'prize_value': str(c.prize_value),
+                'status': c.status,
+                'start_date': c.start_date,
+                'entry_deadline': c.entry_deadline,
+                'voting_start': c.voting_start,
+                'voting_end': c.voting_end,
+                'total_entries': c.live_entries or 0,
+                'total_votes': c.live_votes or 0,
+                'winner_count': c.winner_count,
+                'winners_announced': c.winners_announced,
+                'created_at': c.created_at,
+            }
+        )
+
+    return Response(
+        {
+            'campaigns': data,
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size,
+        }
+    )
+
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
@@ -110,17 +114,17 @@ def admin_campaigns_list(request):
 def admin_campaign_create(request):
     """Create new campaign"""
     try:
-        print("=== Campaign Creation Debug ===")
-        print("request.data keys:", request.data.keys())
-        print("request.FILES keys:", request.FILES.keys())
-        print("Has image in FILES:", 'image' in request.FILES)
-        
+        print('=== Campaign Creation Debug ===')
+        print('request.data keys:', request.data.keys())
+        print('request.FILES keys:', request.FILES.keys())
+        print('Has image in FILES:', 'image' in request.FILES)
+
         # Convert empty date strings to None
         start_date = request.data.get('start_date') or None
         entry_deadline = request.data.get('entry_deadline') or None
         voting_start = request.data.get('voting_start') or None
         voting_end = request.data.get('voting_end') or None
-        
+
         campaign = Campaign.objects.create(
             title=request.data.get('title'),
             description=request.data.get('description'),
@@ -139,96 +143,119 @@ def admin_campaign_create(request):
             voting_start=voting_start,
             voting_end=voting_end,
             winner_count=request.data.get('winner_count', 1),
-            created_by=request.user
+            created_by=request.user,
         )
-        
+
         # Handle image upload
         if 'image' in request.FILES:
-            print("Image file found:", request.FILES['image'].name)
+            print('Image file found:', request.FILES['image'].name)
             campaign.image = request.FILES['image']
             campaign.save()
-            print("Image saved to:", campaign.image.name)
+            print('Image saved to:', campaign.image.name)
         else:
-            print("No image file in request.FILES")
-        
+            print('No image file in request.FILES')
+
         # Notify eligible users if campaign is active
         if campaign.status == 'active':
             notify_eligible_users(campaign)
-        
-        return Response({
-            'id': campaign.id,
-            'message': 'Campaign created successfully',
-            'image_url': campaign.image.url if campaign.image else None
-        }, status=status.HTTP_201_CREATED)
+
+        return Response(
+            {
+                'id': campaign.id,
+                'message': 'Campaign created successfully',
+                'image_url': campaign.image.url if campaign.image else None,
+            },
+            status=status.HTTP_201_CREATED,
+        )
     except Exception as e:
-        print("Error creating campaign:", str(e))
+        print('Error creating campaign:', str(e))
         import traceback
+
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['PATCH'])
 @permission_classes([IsAdminUser])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def admin_campaign_update(request, campaign_id):
     """Update campaign"""
-    print(f"[UPDATE] Campaign ID: {campaign_id}, User: {request.user}, Method: {request.method}")
+    print(f'[UPDATE] Campaign ID: {campaign_id}, User: {request.user}, Method: {request.method}')
     print(f"[UPDATE] Auth header: {request.headers.get('Authorization', 'None')[:20]}...")
-    
+
     try:
         campaign = Campaign.objects.get(id=campaign_id)
-        print(f"[UPDATE] Found campaign: {campaign.title}")
-        
-        for field in ['title', 'description', 'prize_title', 'prize_description', 'prize_value', 
-                      'status', 'campaign_type', 'min_followers', 'min_level', 'min_votes_per_reel', 
-                      'required_hashtags', 'start_date', 'entry_deadline', 'voting_start', 
-                      'voting_end', 'winner_count']:
+        print(f'[UPDATE] Found campaign: {campaign.title}')
+
+        for field in [
+            'title',
+            'description',
+            'prize_title',
+            'prize_description',
+            'prize_value',
+            'status',
+            'campaign_type',
+            'min_followers',
+            'min_level',
+            'min_votes_per_reel',
+            'required_hashtags',
+            'start_date',
+            'entry_deadline',
+            'voting_start',
+            'voting_end',
+            'winner_count',
+        ]:
             if field in request.data:
                 setattr(campaign, field, request.data[field])
-                print(f"[UPDATE] Set {field}: {request.data[field]}")
-        
+                print(f'[UPDATE] Set {field}: {request.data[field]}')
+
         # Handle image upload
         if 'image' in request.FILES:
             print(f"[UPDATE] Image file: {request.FILES['image'].name}")
             campaign.image = request.FILES['image']
-        
+
         campaign.save()
-        print(f"[UPDATE] Campaign {campaign_id} saved successfully")
-        
+        print(f'[UPDATE] Campaign {campaign_id} saved successfully')
+
         # If status changed to voting, notify participants
         if request.data.get('status') == 'voting':
             notify_voting_started(campaign)
-        
+
         return Response({'message': 'Campaign updated successfully'})
     except Campaign.DoesNotExist:
-        print(f"[UPDATE] Campaign {campaign_id} NOT FOUND in database")
+        print(f'[UPDATE] Campaign {campaign_id} NOT FOUND in database')
         return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        print(f"[UPDATE] ERROR: {str(e)}")
+        print(f'[UPDATE] ERROR: {str(e)}')
         import traceback
+
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['DELETE'])
 @permission_classes([IsAdminUser])
 def admin_campaign_delete(request, campaign_id):
     """Delete campaign"""
-    print(f"[DELETE] Campaign ID: {campaign_id}, User: {request.user}, Method: {request.method}")
+    print(f'[DELETE] Campaign ID: {campaign_id}, User: {request.user}, Method: {request.method}')
     print(f"[DELETE] Auth header: {request.headers.get('Authorization', 'None')[:20]}...")
-    
+
     try:
         campaign = Campaign.objects.get(id=campaign_id)
-        print(f"[DELETE] Found campaign: {campaign.title}, deleting...")
+        print(f'[DELETE] Found campaign: {campaign.title}, deleting...')
         campaign.delete()
-        print(f"[DELETE] Campaign {campaign_id} deleted successfully")
+        print(f'[DELETE] Campaign {campaign_id} deleted successfully')
         return Response({'message': 'Campaign deleted successfully'})
     except Campaign.DoesNotExist:
-        print(f"[DELETE] Campaign {campaign_id} NOT FOUND in database")
+        print(f'[DELETE] Campaign {campaign_id} NOT FOUND in database')
         return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        print(f"[DELETE] ERROR: {str(e)}")
+        print(f'[DELETE] ERROR: {str(e)}')
         import traceback
+
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
@@ -237,29 +264,35 @@ def admin_campaign_entries(request, campaign_id):
     try:
         campaign = Campaign.objects.get(id=campaign_id)
         entries = CampaignEntry.objects.filter(campaign=campaign).select_related('user', 'reel')
-        
-        data = [{
-            'id': entry.id,
-            'user': {
-                'id': entry.user.id,
-                'username': entry.user.username,
-            },
-            'reel': {
-                'id': entry.reel.id,
-                'caption': entry.reel.caption,
-                'image': request.build_absolute_uri(entry.reel.image.url) if entry.reel.image else None,
-            },
-            'vote_count': entry.vote_count,
-            'rank': entry.rank,
-            'is_winner': entry.is_winner,
-            'approved': entry.approved,
-            'disqualified': entry.disqualified,
-            'submitted_at': entry.submitted_at,
-        } for entry in entries]
-        
+
+        data = [
+            {
+                'id': entry.id,
+                'user': {
+                    'id': entry.user.id,
+                    'username': entry.user.username,
+                },
+                'reel': {
+                    'id': entry.reel.id,
+                    'caption': entry.reel.caption,
+                    'image': request.build_absolute_uri(entry.reel.image.url)
+                    if entry.reel.image
+                    else None,
+                },
+                'vote_count': entry.vote_count,
+                'rank': entry.rank,
+                'is_winner': entry.is_winner,
+                'approved': entry.approved,
+                'disqualified': entry.disqualified,
+                'submitted_at': entry.submitted_at,
+            }
+            for entry in entries
+        ]
+
         return Response(data)
     except Campaign.DoesNotExist:
         return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
@@ -280,25 +313,20 @@ def admin_announce_winners(request, campaign_id):
             if campaign.winners_announced:
                 return Response(
                     {'error': 'Winners have already been announced for this campaign'},
-                    status=status.HTTP_409_CONFLICT
+                    status=status.HTTP_409_CONFLICT,
                 )
 
             # Get top entries by vote count
-            top_entries = list(CampaignEntry.objects.filter(
-                campaign=campaign,
-                approved=True,
-                disqualified=False
-            ).order_by('-vote_count')[:campaign.winner_count])
+            top_entries = list(
+                CampaignEntry.objects.filter(
+                    campaign=campaign, approved=True, disqualified=False
+                ).order_by('-vote_count')[: campaign.winner_count]
+            )
 
             # Create winners
             for rank, entry in enumerate(top_entries, 1):
                 winner, created = CampaignWinner.objects.get_or_create(
-                    campaign=campaign,
-                    rank=rank,
-                    defaults={
-                        'entry': entry,
-                        'user': entry.user
-                    }
+                    campaign=campaign, rank=rank, defaults={'entry': entry, 'user': entry.user}
                 )
                 entry.is_winner = True
                 entry.rank = rank
@@ -309,7 +337,7 @@ def admin_announce_winners(request, campaign_id):
                     campaign=campaign,
                     user=entry.user,
                     notification_type='winner_announced',
-                    message=f'Congratulations! You won {rank} place in {campaign.title}!'
+                    message=f'Congratulations! You won {rank} place in {campaign.title}!',
                 )
 
             campaign.winners_announced = True
@@ -320,22 +348,25 @@ def admin_announce_winners(request, campaign_id):
     except Campaign.DoesNotExist:
         return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
 
+
 # User Campaign APIs
 @api_view(['GET'])
 @encrypted_endpoint
 def user_campaigns_list(request):
     """Get active campaigns for users (public endpoint)"""
     now = timezone.now()
-    
+
     # Get status filter from query params
     status_filter = request.GET.get('status', 'all')
-    
+
     if status_filter == 'active':
         campaigns = Campaign.objects.filter(status='active').order_by('-created_at')
     elif status_filter == 'voting':
         campaigns = Campaign.objects.filter(status='voting').order_by('-created_at')
     elif status_filter == 'upcoming':
-        campaigns = Campaign.objects.filter(status='draft', start_date__gt=now).order_by('start_date')
+        campaigns = Campaign.objects.filter(status='draft', start_date__gt=now).order_by(
+            'start_date'
+        )
     elif status_filter == 'completed':
         campaigns = Campaign.objects.filter(status='completed').order_by('-voting_end')
     elif status_filter == 'draft':
@@ -343,12 +374,14 @@ def user_campaigns_list(request):
     else:
         # 'all' or any unknown value — show everything except cancelled
         campaigns = Campaign.objects.exclude(status='cancelled').order_by('-created_at')
-    
+
     # Annotate with live counts
-    campaigns = list(campaigns.annotate(
-        live_entries=Count('entries', distinct=True),
-        live_votes=Sum('entries__vote_count'),
-    ))
+    campaigns = list(
+        campaigns.annotate(
+            live_entries=Count('entries', distinct=True),
+            live_votes=Sum('entries__vote_count'),
+        )
+    )
 
     # Check if user is authenticated
     is_authenticated = request.user and request.user.is_authenticated
@@ -361,14 +394,13 @@ def user_campaigns_list(request):
     if is_authenticated and campaigns:
         entered_ids = set(
             CampaignEntry.objects.filter(
-                user=user,
-                campaign_id__in=[c.id for c in campaigns]
+                user=user, campaign_id__in=[c.id for c in campaigns]
             ).values_list('campaign_id', flat=True)
         )
 
     # Compute now once for all is_active / is_voting_open checks
     now = timezone.now()
-    
+
     data = []
     for c in campaigns:
         # Check if user is eligible (only if authenticated)
@@ -381,99 +413,126 @@ def user_campaigns_list(request):
 
         # Inline is_active / is_voting_open without extra now() calls
         c_is_active = (
-            c.status == 'active' and
-            c.start_date and c.entry_deadline and
-            c.start_date <= now <= c.entry_deadline
+            c.status == 'active'
+            and c.start_date
+            and c.entry_deadline
+            and c.start_date <= now <= c.entry_deadline
         )
         c_is_voting = (
-            c.status == 'voting' and
-            c.voting_start and c.voting_end and
-            c.voting_start <= now <= c.voting_end
+            c.status == 'voting'
+            and c.voting_start
+            and c.voting_end
+            and c.voting_start <= now <= c.voting_end
         )
 
         image_url = get_image_url(c.image, request)
-        
-        data.append({
-            'id': c.id,
-            'title': c.title,
-            'description': c.description,
-            'campaign_type': c.campaign_type,
-            'image': image_url,
-            'prize_title': c.prize_title,
-            'prize_value': str(c.prize_value),
-            'status': c.status,
-            'start_date': c.start_date,
-            'entry_deadline': c.entry_deadline,
-            'voting_start': c.voting_start,
-            'voting_end': c.voting_end,
-            'total_entries': c.live_entries or 0,
-            'total_votes': c.live_votes or 0,
-            'is_eligible': is_eligible,
-            'has_entered': c.id in entered_ids,
-            'is_active': c_is_active,
-            'is_voting_open': c_is_voting,
-        })
-    
+
+        data.append(
+            {
+                'id': c.id,
+                'title': c.title,
+                'description': c.description,
+                'campaign_type': c.campaign_type,
+                'image': image_url,
+                'prize_title': c.prize_title,
+                'prize_value': str(c.prize_value),
+                'status': c.status,
+                'start_date': c.start_date,
+                'entry_deadline': c.entry_deadline,
+                'voting_start': c.voting_start,
+                'voting_end': c.voting_end,
+                'total_entries': c.live_entries or 0,
+                'total_votes': c.live_votes or 0,
+                'is_eligible': is_eligible,
+                'has_entered': c.id in entered_ids,
+                'is_active': c_is_active,
+                'is_voting_open': c_is_voting,
+            }
+        )
+
     return Response(data)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
 def user_campaign_enter(request, campaign_id):
     """Enter a campaign with a reel"""
-    print(f"[CAMPAIGN ENTER] Campaign ID: {campaign_id}, User: {request.user}")
-    print(f"[CAMPAIGN ENTER] Request data: {request.data}")
-    
+    print(f'[CAMPAIGN ENTER] Campaign ID: {campaign_id}, User: {request.user}')
+    print(f'[CAMPAIGN ENTER] Request data: {request.data}')
+
     try:
         campaign = Campaign.objects.get(id=campaign_id)
         user = request.user
         reel_id = request.data.get('reel_id')
-        
-        print(f"[CAMPAIGN ENTER] Campaign: {campaign.title}, Status: {campaign.status}")
-        print(f"[CAMPAIGN ENTER] Reel ID: {reel_id}")
-        
+
+        print(f'[CAMPAIGN ENTER] Campaign: {campaign.title}, Status: {campaign.status}')
+        print(f'[CAMPAIGN ENTER] Reel ID: {reel_id}')
+
         # Check if campaign accepts entries (active or voting status)
         if campaign.status not in ('active', 'voting'):
-            print(f"[CAMPAIGN ENTER] Campaign not active (status={campaign.status})")
-            return Response({'error': 'Campaign is not accepting entries'}, status=status.HTTP_400_BAD_REQUEST)
-        
+            print(f'[CAMPAIGN ENTER] Campaign not active (status={campaign.status})')
+            return Response(
+                {'error': 'Campaign is not accepting entries'}, status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Get reel
         try:
             reel = Reel.objects.get(id=reel_id, user=user)
-            print(f"[CAMPAIGN ENTER] Found reel: {reel.id}")
+            print(f'[CAMPAIGN ENTER] Found reel: {reel.id}')
         except Reel.DoesNotExist:
-            print(f"[CAMPAIGN ENTER] Reel {reel_id} not found for user {user.username}")
+            print(f'[CAMPAIGN ENTER] Reel {reel_id} not found for user {user.username}')
             return Response({'error': 'Reel not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         # Check eligibility
         user_profile = user.profile if hasattr(user, 'profile') else None
         follower_count = Follow.objects.filter(following=user).count()
-        
+
         if campaign.min_followers > 0 and follower_count < campaign.min_followers:
-            return Response({'error': f'You need at least {campaign.min_followers} followers'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if user_profile and campaign.min_level > user_profile.level:
-            return Response({'error': f'You need to be level {campaign.min_level}'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if campaign.min_votes_per_reel > 0 and reel.votes < campaign.min_votes_per_reel:
-            return Response({'error': f'Reel needs at least {campaign.min_votes_per_reel} votes'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create entry (one per user per campaign - idempotent)
-        already_entered = CampaignEntry.objects.filter(campaign=campaign, user=user).exists()
-        if not already_entered:
-            entry = CampaignEntry.objects.create(campaign=campaign, user=user, reel=reel)
-            campaign.total_entries += 1
-            campaign.save()
-            CampaignNotification.objects.create(
-                campaign=campaign, user=user,
-                notification_type='entry_approved',
-                message=f'Your entry to {campaign.title} has been approved!'
+            return Response(
+                {'error': f'You need at least {campaign.min_followers} followers'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            print(f"[CAMPAIGN ENTER] Entry created: {entry.id}")
+
+        if user_profile and campaign.min_level > user_profile.level:
+            return Response(
+                {'error': f'You need to be level {campaign.min_level}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if campaign.min_votes_per_reel > 0 and reel.votes < campaign.min_votes_per_reel:
+            return Response(
+                {'error': f'Reel needs at least {campaign.min_votes_per_reel} votes'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create entry (one per user per campaign).
+        #
+        # get_or_create, not exists()-then-create. The check and the insert were
+        # two statements, so two taps on Join both saw no entry and both tried
+        # to create one -- CampaignEntry's unique_together caught the duplicate,
+        # but as an unhandled IntegrityError, i.e. a 500 on an action that had
+        # in fact already succeeded. get_or_create handles that collision and
+        # reports the existing row instead.
+        entry, created = CampaignEntry.objects.get_or_create(
+            campaign=campaign, user=user, defaults={'reel': reel}
+        )
+        if created:
+            # F(), not `campaign.total_entries += 1; campaign.save()`: two
+            # concurrent joins both read the same count and one increment was
+            # lost, so the campaign under-reported its own entrants.
+            Campaign.objects.filter(pk=campaign.pk).update(total_entries=F('total_entries') + 1)
+            campaign.refresh_from_db(fields=['total_entries'])
+            CampaignNotification.objects.create(
+                campaign=campaign,
+                user=user,
+                notification_type='entry_approved',
+                message=f'Your entry to {campaign.title} has been approved!',
+            )
+            print(f'[CAMPAIGN ENTER] Entry created: {entry.id}')
         else:
-            entry = CampaignEntry.objects.get(campaign=campaign, user=user)
-            print(f"[CAMPAIGN ENTER] Existing entry reused: {entry.id}")
-        
+            print(f'[CAMPAIGN ENTER] Existing entry reused: {entry.id}')
+
         # Bridge to new PostScore system so post appears in feed
         post_score_id = None
         try:
@@ -493,7 +552,7 @@ def user_campaign_enter(request, campaign_id):
                     'theme': active_theme,
                     'user': user,
                     'moderation_status': 'approved',
-                }
+                },
             )
             if not ps_created and post_score.moderation_status != 'approved':
                 post_score.moderation_status = 'approved'
@@ -502,30 +561,40 @@ def user_campaign_enter(request, campaign_id):
             # Update user campaign stats
             stats, _ = UserCampaignStats.objects.get_or_create(user=user, campaign=campaign)
             stats.total_posts = PostScore.objects.filter(user=user, campaign=campaign).count()
-            stats.approved_posts = PostScore.objects.filter(user=user, campaign=campaign, moderation_status='approved').count()
+            stats.approved_posts = PostScore.objects.filter(
+                user=user, campaign=campaign, moderation_status='approved'
+            ).count()
             stats.save(update_fields=['total_posts', 'approved_posts'])
 
             post_score_id = post_score.id
-            print(f"[CAMPAIGN ENTER] PostScore id={post_score_id}, approved={post_score.moderation_status}")
+            print(
+                f'[CAMPAIGN ENTER] PostScore id={post_score_id}, approved={post_score.moderation_status}'
+            )
         except Exception as bridge_err:
             import traceback
-            print(f"[CAMPAIGN ENTER] PostScore bridge error (entry still created): {bridge_err}")
+
+            print(f'[CAMPAIGN ENTER] PostScore bridge error (entry still created): {bridge_err}')
             traceback.print_exc()
 
-        return Response({
-            'message': 'Successfully entered campaign',
-            'entry_id': entry.id,
-            'post_score_id': post_score_id,
-        }, status=status.HTTP_201_CREATED)
-        
+        return Response(
+            {
+                'message': 'Successfully entered campaign',
+                'entry_id': entry.id,
+                'post_score_id': post_score_id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     except Campaign.DoesNotExist:
-        print(f"[CAMPAIGN ENTER] Campaign {campaign_id} not found")
+        print(f'[CAMPAIGN ENTER] Campaign {campaign_id} not found')
         return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
     except Exception as e:
-        print(f"[CAMPAIGN ENTER] ERROR: {str(e)}")
+        print(f'[CAMPAIGN ENTER] ERROR: {str(e)}')
         import traceback
+
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -535,43 +604,54 @@ def user_campaign_vote(request, entry_id):
     try:
         entry = CampaignEntry.objects.get(id=entry_id)
         user = request.user
-        
+
         # Check if voting is open
         if not entry.campaign.is_voting_open():
-            return Response({'error': 'Voting is not open for this campaign'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if user already voted
-        if CampaignVote.objects.filter(entry=entry, user=user).exists():
-            return Response({'error': 'You have already voted for this entry'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create vote
-        CampaignVote.objects.create(entry=entry, user=user)
-        
-        # Update entry vote count
-        entry.vote_count += 1
-        entry.save()
-        
-        # Update campaign total votes
-        entry.campaign.total_votes += 1
-        entry.campaign.save()
-        
+            return Response(
+                {'error': 'Voting is not open for this campaign'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # One vote per user per entry.
+        #
+        # exists()-then-create left a window between the two statements.
+        # CampaignVote's unique_together closed it at the database, but as an
+        # unhandled IntegrityError -- a 500 on a second tap, for a vote that had
+        # already been recorded. get_or_create reports the collision instead.
+        _, created = CampaignVote.objects.get_or_create(entry=entry, user=user)
+        if not created:
+            return Response(
+                {'error': 'You have already voted for this entry'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Both counters move with F(). They previously read, added and saved in
+        # separate statements, so two votes arriving together lost one -- and
+        # the bare save() wrote back every other column from a stale snapshot.
+        CampaignEntry.objects.filter(pk=entry.pk).update(vote_count=F('vote_count') + 1)
+        Campaign.objects.filter(pk=entry.campaign_id).update(total_votes=F('total_votes') + 1)
+        entry.refresh_from_db(fields=['vote_count'])
+        entry.campaign.refresh_from_db(fields=['total_votes'])
+
         # Update rankings for all entries in this campaign
         update_campaign_rankings(entry.campaign)
-        
+
         # Update engagement score in real-time using CampaignScoringConfig
-        from api.models.campaign_extended import CampaignScoringConfig, PostScore
+        from api.models.campaign_extended import PostScore
+
         try:
             post_score = PostScore.objects.filter(reel=entry.reel, campaign=entry.campaign).first()
             if post_score:
                 post_score.update_engagement_score()
-                print(f"[CAMPAIGN VOTE] Updated engagement score for reel {entry.reel.id}")
+                print(f'[CAMPAIGN VOTE] Updated engagement score for reel {entry.reel.id}')
         except Exception as e:
-            print(f"[CAMPAIGN VOTE] Error updating engagement score: {e}")
-        
+            print(f'[CAMPAIGN VOTE] Error updating engagement score: {e}')
+
         return Response({'message': 'Vote recorded successfully'})
-        
+
     except CampaignEntry.DoesNotExist:
         return Response({'error': 'Entry not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -580,16 +660,25 @@ def user_campaign_detail(request, campaign_id):
     """Get campaign details with entries"""
     try:
         campaign = Campaign.objects.get(id=campaign_id)
-        entries = list(CampaignEntry.objects.filter(
-            campaign=campaign,
-            approved=True,
-            disqualified=False
-        ).select_related('user', 'reel').only(
-            'id', 'vote_count', 'rank', 'is_winner',
-            'user__id', 'user__username',
-            'reel__id', 'reel__caption', 'reel__image', 'reel__media', 'reel__thumbnail',
-        ).order_by('-vote_count'))
-        
+        entries = list(
+            CampaignEntry.objects.filter(campaign=campaign, approved=True, disqualified=False)
+            .select_related('user', 'reel')
+            .only(
+                'id',
+                'vote_count',
+                'rank',
+                'is_winner',
+                'user__id',
+                'user__username',
+                'reel__id',
+                'reel__caption',
+                'reel__image',
+                'reel__media',
+                'reel__thumbnail',
+            )
+            .order_by('-vote_count')
+        )
+
         is_authenticated = request.user.is_authenticated
         user = request.user if is_authenticated else None
 
@@ -598,78 +687,87 @@ def user_campaign_detail(request, campaign_id):
         if user and entries:
             voted_entry_ids = set(
                 CampaignVote.objects.filter(
-                    user=user,
-                    entry_id__in=[e.id for e in entries]
+                    user=user, entry_id__in=[e.id for e in entries]
                 ).values_list('entry_id', flat=True)
             )
-        
-        entries_data = [{
-            'id': entry.id,
-            'user': {
-                'id': entry.user.id,
-                'username': entry.user.username,
-            },
-            'reel': {
-                'id': entry.reel.id,
-                'caption': entry.reel.caption,
-                'image': get_image_url(entry.reel.image, request) if entry.reel.image else None,
-                'media': get_image_url(entry.reel.media, request) if entry.reel.media else None,
-                'thumbnail': get_image_url(entry.reel.thumbnail, request) if entry.reel.thumbnail else (get_image_url(entry.reel.image, request) if entry.reel.image else None),
-            },
-            'vote_count': entry.vote_count,
-            'rank': entry.rank,
-            'is_winner': entry.is_winner,
-            'user_voted': entry.id in voted_entry_ids,
-        } for entry in entries]
-        
+
+        entries_data = [
+            {
+                'id': entry.id,
+                'user': {
+                    'id': entry.user.id,
+                    'username': entry.user.username,
+                },
+                'reel': {
+                    'id': entry.reel.id,
+                    'caption': entry.reel.caption,
+                    'image': get_image_url(entry.reel.image, request) if entry.reel.image else None,
+                    'media': get_image_url(entry.reel.media, request) if entry.reel.media else None,
+                    'thumbnail': get_image_url(entry.reel.thumbnail, request)
+                    if entry.reel.thumbnail
+                    else (get_image_url(entry.reel.image, request) if entry.reel.image else None),
+                },
+                'vote_count': entry.vote_count,
+                'rank': entry.rank,
+                'is_winner': entry.is_winner,
+                'user_voted': entry.id in voted_entry_ids,
+            }
+            for entry in entries
+        ]
+
         image_url = get_image_url(campaign.image, request)
-        
-        return Response({
-            'id': campaign.id,
-            'title': campaign.title,
-            'description': campaign.description,
-            'campaign_type': campaign.campaign_type,
-            'image': image_url,
-            'prize_title': campaign.prize_title,
-            'prize_description': campaign.prize_description,
-            'prize_value': str(campaign.prize_value),
-            'status': campaign.status,
-            'start_date': campaign.start_date,
-            'entry_deadline': campaign.entry_deadline,
-            'voting_start': campaign.voting_start,
-            'voting_end': campaign.voting_end,
-            'total_entries': campaign.total_entries,
-            'total_votes': campaign.total_votes,
-            'winners_announced': campaign.winners_announced,
-            'winner_count': campaign.winner_count,
-            'min_followers': campaign.min_followers,
-            'min_level': campaign.min_level,
-            'min_votes_per_reel': campaign.min_votes_per_reel,
-            'required_hashtags': campaign.required_hashtags,
-            'current_user_id': user.id if user else None,
-            'entries': entries_data,
-        })
-        
+
+        return Response(
+            {
+                'id': campaign.id,
+                'title': campaign.title,
+                'description': campaign.description,
+                'campaign_type': campaign.campaign_type,
+                'image': image_url,
+                'prize_title': campaign.prize_title,
+                'prize_description': campaign.prize_description,
+                'prize_value': str(campaign.prize_value),
+                'status': campaign.status,
+                'start_date': campaign.start_date,
+                'entry_deadline': campaign.entry_deadline,
+                'voting_start': campaign.voting_start,
+                'voting_end': campaign.voting_end,
+                'total_entries': campaign.total_entries,
+                'total_votes': campaign.total_votes,
+                'winners_announced': campaign.winners_announced,
+                'winner_count': campaign.winner_count,
+                'min_followers': campaign.min_followers,
+                'min_level': campaign.min_level,
+                'min_votes_per_reel': campaign.min_votes_per_reel,
+                'required_hashtags': campaign.required_hashtags,
+                'current_user_id': user.id if user else None,
+                'entries': entries_data,
+            }
+        )
+
     except Campaign.DoesNotExist:
         return Response({'error': 'Campaign not found'}, status=status.HTTP_404_NOT_FOUND)
+
 
 # Helper functions
 def update_campaign_rankings(campaign):
     """Update rankings for all entries in a campaign based on vote count"""
-    entries = list(CampaignEntry.objects.filter(
-        campaign=campaign,
-        approved=True,
-        disqualified=False
-    ).only('id', 'rank').order_by('-vote_count', '-created_at'))
-    
+    entries = list(
+        CampaignEntry.objects.filter(campaign=campaign, approved=True, disqualified=False)
+        .only('id', 'rank')
+        .order_by('-vote_count', '-created_at')
+    )
+
     for rank, entry in enumerate(entries, start=1):
         entry.rank = rank
     CampaignEntry.objects.bulk_update(entries, ['rank'])
+
 
 def notify_eligible_users(campaign):
     """Notify users who are eligible for the campaign"""
     # This would integrate with your notification system
     pass
+
 
 def notify_voting_started(campaign):
     """Notify participants that voting has started"""
@@ -679,5 +777,5 @@ def notify_voting_started(campaign):
             campaign=campaign,
             user=entry.user,
             notification_type='voting_started',
-            message=f'Voting has started for {campaign.title}! Good luck!'
+            message=f'Voting has started for {campaign.title}! Good luck!',
         )

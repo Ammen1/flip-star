@@ -149,11 +149,13 @@ def test_a_renewal_grants_the_next_period(subscriber):
     plan.activate()
     assert bonus_of(subscriber) == 500
 
-    # Stand in for the previous period having ended.
+    # Stand in for the previous period having ended: the subscription lapsed,
+    # and the bonus stamp was released for the next period.
     SubscriptionPlan.objects.filter(pk=plan.pk).update(
-        bonus_coins_granted_at=timezone.now() - timezone.timedelta(days=31)
+        status='expired', end_date=timezone.now() - timezone.timedelta(days=1)
     )
     plan.refresh_from_db()
+    plan.clear_bonus_grant()
 
     plan.activate()
 

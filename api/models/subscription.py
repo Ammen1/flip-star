@@ -279,24 +279,44 @@ class SubscriptionPlan(models.Model):
 
     def activate(self):
         """Activate subscription, granting the tier's bonus coins."""
+        now = timezone.now()
+
+        # Was this subscription already running before the call? That is what
+        # separates a duplicate activation from a genuine one, and it has to be
+        # read before the fields below are overwritten.
+        already_running = self.status == 'active' and self.end_date and self.end_date > now
+
         self.status = 'active'
-        self.start_date = timezone.now()
+        self.start_date = now
         if self.tier and self.tier.duration_days:
             # Add free trial days to the duration
             total_days = self.tier.duration_days + self.free_trial_days
-            self.end_date = timezone.now() + timezone.timedelta(days=total_days)
-            self.next_renewal_date = timezone.now() + timezone.timedelta(days=total_days)
+            self.end_date = now + timezone.timedelta(days=total_days)
+            self.next_renewal_date = now + timezone.timedelta(days=total_days)
         self.save()
-        self._grant_bonus_coins()
+
+        if not already_running:
+            self._grant_bonus_coins()
 
     def _grant_bonus_coins(self):
         """Credit the tier's bonus coins for this subscription period.
 
-        Once per period, not once per call. ``activate()`` is reached from
-        several places -- first purchase, renewal, a retried webhook -- and a
-        webhook that arrives twice must not pay twice, so the grant is stamped
-        and a stamp from the current period blocks a repeat. A renewal sets a
-        new ``start_date``, which is what makes the next period's grant due.
+        Once per period, not once per call. ``activate()`` is reached from a
+        first purchase, a renewal, and a webhook the provider may deliver more
+        than once, so the caller decides whether a grant is due -- see
+        ``already_running`` above -- and this method makes it happen at most
+        once even so.
+
+        The guard is a conditional UPDATE, not a read-then-check. An earlier
+        version compared ``bonus_coins_granted_at`` against ``start_date``,
+        which ``activate()`` had just reset to now: the stamp was always older
+        than the value it was checked against, so the guard never fired and a
+        repeat activation granted a second time. It passed in testing only
+        because a coarse system clock returned identical timestamps for two
+        calls in quick succession.
+
+        Claiming the stamp first means the credit happens only for the caller
+        that moved it from NULL, and two workers racing here cannot both win.
 
         Bonus coins go to their own bucket, which is what makes them unusable
         for gifts: see UserCoinBalance.giftable_balance.
@@ -308,9 +328,20 @@ class SubscriptionPlan(models.Model):
             # SMS subscriptions exist before a user claims them; there is no
             # wallet to credit yet.
             return
-        if self.bonus_coins_granted_at and self.start_date:
-            if self.bonus_coins_granted_at >= self.start_date:
-                return
+
+        from api.services.concurrency import claim_transition
+
+        # NULL -> now(). Exactly one caller performs this; anyone else, retry or
+        # concurrent worker, gets False and credits nothing.
+        granted = claim_transition(
+            type(self),
+            self.pk,
+            field='bonus_coins_granted_at',
+            expect=None,
+            to=timezone.now(),
+        )
+        if not granted:
+            return
 
         from api.models.contest import UserCoinBalance
 
@@ -319,8 +350,17 @@ class SubscriptionPlan(models.Model):
             tier.bonus_coins,
             description=f'{tier.name} subscription bonus',
         )
-        self.bonus_coins_granted_at = timezone.now()
-        self.save(update_fields=['bonus_coins_granted_at', 'updated_at'])
+        self.refresh_from_db(fields=['bonus_coins_granted_at'])
+
+    def clear_bonus_grant(self):
+        """Release the bonus stamp so the next period can be granted.
+
+        Called when a period genuinely ends. Kept separate from ``activate()``
+        so that "a new period began" is an explicit decision rather than a
+        side effect of any code path that happens to re-activate.
+        """
+        type(self).objects.filter(pk=self.pk).update(bonus_coins_granted_at=None)
+        self.bonus_coins_granted_at = None
 
     def cancel(self, reason=''):
         """Cancel subscription"""
