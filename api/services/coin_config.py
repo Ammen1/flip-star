@@ -382,6 +382,7 @@ def usage_for_campaign(campaign):
 
 
 __all__ = [
+    'EDITABLE_FIELDS',
     'PLATFORM_DEFAULTS',
     'PLATFORM_LIMIT_FIELDS',
     'CoinConfigError',
@@ -390,6 +391,143 @@ __all__ = [
     'default_for_organization',
     'resolve_for_campaign',
     'snapshot_for_campaign',
+    'apply_changes',
     'usage_for_campaign',
+    'usage_for_organization',
     'validate_against_platform_limits',
 ]
+
+# ---------------------------------------------------------------------------
+# Editing configuration, with an audit trail
+# ---------------------------------------------------------------------------
+
+#: Fields a caller may change. An allowlist, so `organization`, `campaign`,
+#: `distributed` and `locked_at` are unreachable from any request: ownership
+#: cannot be reassigned, and the spent counter cannot be edited to free up
+#: budget that was already paid out.
+EDITABLE_FIELDS = (
+    'like_reward',
+    'comment_reward',
+    'share_reward',
+    'gift_reward',
+    'participation_reward',
+    'completion_reward',
+    'max_reward_per_user',
+    'max_daily_reward_per_user',
+    'budget',
+    'rewards_enabled',
+    'is_active',
+)
+
+
+def apply_changes(config, changes, *, actor, reason=''):
+    """Update a configuration and record what changed, or change nothing.
+
+    Validation runs against a copy before anything is written, so a rejected
+    value leaves both the row and the audit trail untouched -- an audit
+    containing changes that never took effect would be worse than no audit.
+
+    Returns the list of audit entries created, which is empty when the caller
+    submitted no actual change. Re-submitting the same values is not an edit
+    and does not litter the trail.
+
+    Rejects rather than clamps. An administrator who asked for 100 and silently
+    got 50 would go on believing the campaign pays 100.
+    """
+    from django.db import transaction as db_transaction
+
+    from api.models.coin_config import CoinConfigurationAudit
+
+    proposed = {field: value for field, value in changes.items() if field in EDITABLE_FIELDS}
+    if not proposed:
+        return []
+
+    for field, value in proposed.items():
+        if field in ('rewards_enabled', 'is_active'):
+            continue
+        try:
+            numeric = int(value)
+        except (TypeError, ValueError) as exc:
+            raise CoinConfigError(f'{field} must be a whole number.', code='invalid') from exc
+        if numeric < 0:
+            raise CoinConfigError(f'{field} cannot be negative.', code='negative')
+        proposed[field] = numeric
+
+    # Validate on a detached copy: the real row must not carry rejected values
+    # even briefly, in case anything else reads it mid-transaction.
+    candidate = _copy_for_validation(config, proposed)
+    validate_against_platform_limits(candidate)
+
+    # A budget cannot be cut below what has already been paid out; the
+    # database constraint would refuse it anyway, less legibly.
+    new_budget = proposed.get('budget', config.budget)
+    if new_budget and new_budget < (config.distributed or 0):
+        raise CoinConfigError(
+            f'Budget cannot be set below the {config.distributed} coins already distributed.',
+            code='below_distributed',
+        )
+
+    entries = []
+    with db_transaction.atomic():
+        changed_fields = []
+        for field, value in proposed.items():
+            previous = getattr(config, field)
+            if previous == value:
+                continue
+            setattr(config, field, value)
+            changed_fields.append(field)
+            entries.append(
+                CoinConfigurationAudit(
+                    configuration=config,
+                    organization_id=config.organization_id,
+                    campaign_id=config.campaign_id,
+                    field=field,
+                    previous_value=str(previous),
+                    new_value=str(value),
+                    changed_by=actor,
+                    reason=reason or '',
+                )
+            )
+
+        if not changed_fields:
+            return []
+
+        config.save(update_fields=[*changed_fields, 'updated_at'])
+        for entry in entries:
+            entry.configuration = config
+        CoinConfigurationAudit.objects.bulk_create(entries)
+
+    return entries
+
+
+def _copy_for_validation(config, proposed):
+    from api.models.coin_config import CoinConfiguration
+
+    candidate = CoinConfiguration(
+        organization_id=config.organization_id,
+        campaign_id=config.campaign_id,
+    )
+    for field in EDITABLE_FIELDS:
+        setattr(candidate, field, getattr(config, field))
+    for field, value in proposed.items():
+        setattr(candidate, field, value)
+    return candidate
+
+
+def usage_for_organization(organization):
+    """Budget totals across an organization's campaigns."""
+    from django.db.models import Sum
+
+    from api.models.coin_config import CoinConfiguration
+
+    rows = CoinConfiguration.objects.filter(
+        organization=organization, campaign__isnull=False
+    ).aggregate(budget=Sum('budget'), distributed=Sum('distributed'))
+
+    budget = rows['budget'] or 0
+    distributed = rows['distributed'] or 0
+    return {
+        'budget': budget,
+        'distributed': distributed,
+        'remaining': max(0, budget - distributed) if budget else None,
+    }

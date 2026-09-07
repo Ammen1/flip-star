@@ -328,6 +328,15 @@ from api.views.campaign_user import (
     update_consistency_scores,
     update_engagement_scores,
 )
+from api.views.coin_management import (
+    campaign_coin_config,
+    coin_config_audit,
+    coin_usage_overview,
+    organization_coin_config,
+    organizations_coin_overview,
+    platform_coin_limits,
+    reward_transactions,
+)
 from api.views.contest import (
     admin_contest_dashboard,
     admin_judging_portal,
@@ -751,6 +760,30 @@ urlpatterns = [
         organization_campaign_approve,
         name='organization-campaign-approve',
     ),
+    # ── Coin management ─────────────────────────────────────────────────────
+    # One surface, two audiences. Super Admin names an organization; an
+    # organization admin never does -- theirs comes from their account and an
+    # organization id in the request is not read.
+    path('admin/coin-limits/', platform_coin_limits, name='platform-coin-limits'),
+    path(
+        'admin/coin-management/organizations/',
+        organizations_coin_overview,
+        name='coin-organizations-overview',
+    ),
+    path(
+        'admin/organizations/<int:organization_id>/coin-config/',
+        organization_coin_config,
+        name='admin-organization-coin-config',
+    ),
+    path('organization/coin-config/', organization_coin_config, name='organization-coin-config'),
+    path(
+        'campaigns/<int:campaign_id>/coin-config/',
+        campaign_coin_config,
+        name='campaign-coin-config',
+    ),
+    path('coin-usage/', coin_usage_overview, name='coin-usage-overview'),
+    path('coin-rewards/', reward_transactions, name='coin-reward-transactions'),
+    path('coin-audit/', coin_config_audit, name='coin-config-audit'),
     path('organization/dashboard/', organization_dashboard, name='organization-dashboard'),
     path(
         'organization/campaigns/<int:campaign_id>/analytics/',

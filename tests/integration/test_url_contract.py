@@ -224,11 +224,18 @@ def test_total_route_count_is_stable():
     all campaigns would disclose another organization volume without
     rendering a row.
 
+    +8 for coin management (api/views/coin_management.py): platform ceilings,
+    the Super Admin organization overview, organization coin config (reachable
+    both as /admin/organizations/<id>/coin-config/ and /organization/coin-config/,
+    the same view -- an organization admin never names an organization, so the
+    id is simply not read for them), campaign coin config, usage, reward
+    transactions and the audit log.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 323, (
+    assert len(urlpatterns) == 331, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )
