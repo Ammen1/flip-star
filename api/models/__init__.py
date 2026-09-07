@@ -70,6 +70,9 @@ from .campaign_extended import (
 )
 from .master_campaign import MasterCampaign, MasterCampaignParticipant
 
+# --- Coin configuration -----------------------------------------------------
+from .coin_config import CampaignRewardGrant, CoinConfiguration, CoinConfigurationAudit
+
 # --- Organizations ----------------------------------------------------------
 from .organization import Organization, UserRealm, UserRole
 

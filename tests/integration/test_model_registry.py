@@ -85,18 +85,44 @@ def test_model_count_is_stable():
     this project uses Django's built-in auth.User, so there is no separate
     user table to add and none was created.
 
+    113 adds the organization coin economy (api/models/coin_config.py):
+    CoinConfiguration (per-organization rates with optional per-campaign
+    overrides), CoinConfigurationAudit (who changed a coin value, from what,
+    to what) and CampaignRewardGrant (the idempotency record that makes a
+    retried reward a no-op).
+
+    These do not duplicate the three coin concepts that already existed:
+    CampaignScoringConfig holds LEADERBOARD weights, WalletConfig.cost_* holds
+    what an engagement costs the actor, and WalletConfig.*_reward held what it
+    should pay -- globally, and credited to nobody. The new models add the
+    missing per-organization axis and leave all three alone.
+
     Update it deliberately when the model set genuinely changes.
     """
-    assert len(list(_api_models())) == 110
+    assert len(list(_api_models())) == 113
 
 
 @pytest.mark.parametrize(
     'name',
     [
-        'UserProfile', 'Reel', 'Comment', 'Vote', 'Follow', 'Block',
-        'WalletConfig', 'WithdrawalRequest', 'UserCoinBalance', 'CoinTransaction',
-        'SubscriptionPlan', 'SubscriptionTier', 'DirectDebitMandate',
-        'Campaign', 'PostScore', 'BoostCampaign', 'Gift', 'Conversation',
+        'UserProfile',
+        'Reel',
+        'Comment',
+        'Vote',
+        'Follow',
+        'Block',
+        'WalletConfig',
+        'WithdrawalRequest',
+        'UserCoinBalance',
+        'CoinTransaction',
+        'SubscriptionPlan',
+        'SubscriptionTier',
+        'DirectDebitMandate',
+        'Campaign',
+        'PostScore',
+        'BoostCampaign',
+        'Gift',
+        'Conversation',
     ],
 )
 def test_key_models_importable_from_package_root(name):

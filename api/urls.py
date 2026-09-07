@@ -698,7 +698,6 @@ urlpatterns = [
     # Campaign Management (Admin)
     path('admin/campaigns/', admin_campaigns_list, name='admin-campaigns-list'),
     path('admin/campaigns/create/', admin_campaign_create, name='admin-campaign-create'),
-
     # Super Admin: organizations and their administrators. Platform-level,
     # gated on IsFlipstarUser -- an organization cannot create organizations or
     # appoint its own administrators.
@@ -718,7 +717,6 @@ urlpatterns = [
         create_organization_admin,
         name='admin-organization-create-admin',
     ),
-
     # Organization-scoped campaign management. Separate from the admin
     # endpoints above, which are is_staff-only: every lookup below resolves
     # through visible_campaigns, so an id from another organization is not
