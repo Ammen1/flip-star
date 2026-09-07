@@ -568,3 +568,118 @@ def test_a_member_cannot_reach_a_campaign_detail(member, org_a):
     response = call(views.organization_campaign_detail, member, campaign_id=campaign.id)
 
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Dashboard, analytics, leaderboard and posts
+# ---------------------------------------------------------------------------
+#
+# These endpoints exist so the organization dashboard has data to show. They
+# were the gap flagged in the isolation report: the is_staff-only equivalents
+# in campaign_admin.py carry no ownership check, so the organization-facing
+# versions resolve every campaign through get_campaign_for instead.
+
+
+def test_the_dashboard_counts_only_the_callers_organization(a_maker, org_a, org_b):
+    """
+    Aggregates leak differently from lists.
+
+    A total computed over every campaign and then displayed to one
+    organization discloses the other's volume without ever showing a row. The
+    filter is applied before the counting.
+    """
+    make_campaign(org_a, status='draft')
+    make_campaign(org_a, status='active')
+    make_campaign(org_b, status='active')
+    make_campaign(org_b, status='completed')
+
+    response = call(views.organization_dashboard, a_maker)
+
+    assert response.status_code == 200
+    assert response.data['campaigns']['total'] == 2
+    assert response.data['campaigns']['active'] == 1
+    assert response.data['organization']['name'] == 'Org A'
+
+
+def test_the_dashboard_reports_what_the_user_may_do(a_maker, a_checker, org_a):
+    """Advisory only -- every endpoint re-checks -- but the UI needs it to
+    render honestly rather than guess."""
+    maker_caps = call(views.organization_dashboard, a_maker).data['capabilities']
+    checker_caps = call(views.organization_dashboard, a_checker).data['capabilities']
+
+    assert maker_caps['can_author'] is True
+    assert maker_caps['can_review'] is False
+    assert checker_caps['can_review'] is True
+    assert checker_caps['can_author'] is False
+
+
+def test_analytics_are_refused_for_another_organizations_campaign(a_maker, org_b):
+    foreign = make_campaign(org_b)
+
+    response = call(views.organization_campaign_analytics, a_maker, campaign_id=foreign.id)
+
+    assert response.status_code == 404
+
+
+def test_analytics_work_for_your_own_campaign(a_maker, org_a):
+    campaign = make_campaign(org_a)
+
+    response = call(views.organization_campaign_analytics, a_maker, campaign_id=campaign.id)
+
+    assert response.status_code == 200
+    assert response.data['campaign']['id'] == campaign.id
+    assert set(response.data['engagement']) == {'likes', 'comments', 'shares', 'gifts'}
+
+
+def test_analytics_use_the_platform_scoring_weights(a_maker, org_a):
+    """The formula is not redefined here -- 1 / 2 / 5 / 10 comes from the
+    scoring service."""
+    campaign = make_campaign(org_a)
+
+    weights = call(views.organization_campaign_analytics, a_maker, campaign_id=campaign.id).data[
+        'weights'
+    ]
+
+    assert weights == {'likes': 1.0, 'comments': 2.0, 'shares': 5.0, 'gifts': 10.0}
+
+
+def test_the_leaderboard_is_refused_for_another_organizations_campaign(a_maker, org_b):
+    foreign = make_campaign(org_b)
+
+    response = call(views.organization_campaign_leaderboard, a_maker, campaign_id=foreign.id)
+
+    assert response.status_code == 404
+
+
+def test_campaign_posts_are_refused_for_another_organizations_campaign(a_maker, org_b):
+    """
+    The ownership chain, end to end.
+
+    A post is reached through its campaign and the campaign through the
+    account, so there is no path by which one organization addresses another's
+    post -- a post id is never accepted directly.
+    """
+    foreign = make_campaign(org_b)
+
+    response = call(views.organization_campaign_posts, a_maker, campaign_id=foreign.id)
+
+    assert response.status_code == 404
+
+
+def test_campaign_posts_work_for_your_own_campaign(a_maker, org_a):
+    campaign = make_campaign(org_a)
+
+    response = call(views.organization_campaign_posts, a_maker, campaign_id=campaign.id)
+
+    assert response.status_code == 200
+    assert response.data['campaign']['id'] == campaign.id
+
+
+def test_a_member_gets_nothing_from_the_dashboard(member, org_a):
+    make_campaign(org_a)
+
+    response = call(views.organization_dashboard, member)
+
+    assert response.status_code == 200
+    assert response.data['campaigns']['total'] == 0
+    assert response.data['organization'] is None

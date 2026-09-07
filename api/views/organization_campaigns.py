@@ -22,6 +22,7 @@ create it comes from the account; on update the field is not writable at all,
 so a campaign cannot be moved between organizations by any request.
 """
 
+from django.db.models.functions import Coalesce
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -37,7 +38,11 @@ from api.services.campaign_workflow import (
     submit,
 )
 from api.services.realms import (
+    can_author,
+    can_create_campaign,
     can_modify_campaign,
+    is_checker,
+    organization_of,
     visible_campaigns,
 )
 
@@ -269,3 +274,171 @@ def organization_campaign_reject(request, campaign_id):
     except WorkflowError as exc:
         return _workflow_response(exc)
     return Response({'status': campaign.status, 'approval': audit_trail(campaign)})
+
+
+# ---------------------------------------------------------------------------
+# Dashboard, analytics, posts and leaderboard -- all organization-scoped
+# ---------------------------------------------------------------------------
+#
+# These close the gap flagged in the isolation report: the equivalents in
+# campaign_admin.py are is_staff-only and carry no ownership check, so opening
+# them to organization users would have leaked across organizations. Rather
+# than loosen those, the organization-facing versions below resolve every
+# campaign through get_campaign_for, which means an id from another
+# organization is not found.
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def organization_dashboard(request):
+    """Headline numbers for the caller's own organization.
+
+    Every aggregate is computed over `visible_campaigns`, so the totals cannot
+    include another organization's work even by accident -- the filter is
+    applied before the counting, not after.
+    """
+    from django.db.models import Count, Q, Sum
+
+    scoped = visible_campaigns(request.user, Campaign.objects.all())
+
+    totals = scoped.aggregate(
+        total=Count('id'),
+        draft=Count('id', filter=Q(status='draft')),
+        submitted=Count('id', filter=Q(status='submitted')),
+        approved=Count('id', filter=Q(status='approved')),
+        active=Count('id', filter=Q(status='active')),
+        completed=Count('id', filter=Q(status='completed')),
+        rejected=Count('id', filter=Q(status='rejected')),
+        entries=Coalesce(Sum('total_entries'), 0),
+    )
+
+    organization = organization_of(request.user)
+    return Response(
+        {
+            'organization': (
+                {'id': organization.id, 'name': organization.name, 'code': organization.code}
+                if organization
+                else None
+            ),
+            'campaigns': totals,
+            'recent': [
+                serialize(c)
+                for c in scoped.select_related('organization').order_by('-created_at')[:5]
+            ],
+            # What the signed-in user may do, so the UI can render honestly
+            # rather than guessing. Advisory only -- every endpoint re-checks.
+            'capabilities': {
+                'can_create': can_create_campaign(request.user),
+                'can_author': can_author(request.user),
+                'can_review': is_checker(request.user),
+            },
+        }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def organization_campaign_analytics(request, campaign_id):
+    """Engagement analytics for one campaign the caller owns.
+
+    Counts come from api/services/scoring/leaderboard.py, the single
+    implementation of what an engagement is -- so these figures and the
+    leaderboard agree by construction rather than by coincidence.
+    """
+    campaign = get_campaign_for(request.user, campaign_id)
+
+    from api.services.scoring.leaderboard import (
+        campaign_participant_totals,
+        campaign_reels,
+        resolve_weights,
+    )
+
+    posts = campaign_reels(campaign)
+    rows = campaign_participant_totals(campaign, posts)
+
+    totals = {'likes': 0, 'comments': 0, 'shares': 0, 'gifts': 0}
+    for row in rows:
+        for key in totals:
+            totals[key] += row[key]
+
+    return Response(
+        {
+            'campaign': {'id': campaign.id, 'title': campaign.title, 'status': campaign.status},
+            'participants': len(rows),
+            'posts': posts.count(),
+            'engagement': totals,
+            'leaderboard_score': sum(r['leaderboard_score'] for r in rows),
+            'weights': {k: float(v) for k, v in resolve_weights(campaign).items()},
+        }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def organization_campaign_leaderboard(request, campaign_id):
+    """Leaderboard for one campaign the caller owns.
+
+    Reuses the platform scoring formula unchanged
+    (likes x1 + comments x2 + shares x5 + gifts x10); this endpoint only
+    decides WHO may read it, never how it is computed.
+    """
+    campaign = get_campaign_for(request.user, campaign_id)
+
+    from django.contrib.auth import get_user_model
+
+    from api.services.scoring.leaderboard import campaign_participant_totals, campaign_reels
+
+    rows = campaign_participant_totals(campaign, campaign_reels(campaign))
+    users = {u.id: u for u in get_user_model().objects.filter(id__in=[r['user_id'] for r in rows])}
+
+    return Response(
+        {
+            'campaign': {'id': campaign.id, 'title': campaign.title},
+            'entries': [
+                {
+                    **row,
+                    'username': getattr(users.get(row['user_id']), 'username', None),
+                }
+                for row in rows[:100]
+            ],
+        }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def organization_campaign_posts(request, campaign_id):
+    """Posts entered into one campaign the caller owns.
+
+    The ownership chain in full: the post is reached through the campaign, and
+    the campaign through the account. A post id is never accepted directly,
+    so there is no path by which one organization can address another's post.
+    """
+    campaign = get_campaign_for(request.user, campaign_id)
+
+    from api.models.campaign_extended import PostScore
+    from api.services.scoring.leaderboard import reel_engagement
+
+    entries = (
+        PostScore.objects.filter(campaign=campaign)
+        .select_related('reel', 'user')
+        .order_by('-created_at')[:100]
+    )
+
+    return Response(
+        {
+            'campaign': {'id': campaign.id, 'title': campaign.title},
+            'count': len(entries),
+            'results': [
+                {
+                    'post_id': entry.reel_id,
+                    'author': entry.user.username,
+                    'moderation_status': entry.moderation_status,
+                    'caption': (entry.reel.caption or '')[:140] if entry.reel else '',
+                    'engagement': reel_engagement(entry.reel) if entry.reel else None,
+                    'created_at': entry.created_at,
+                }
+                for entry in entries
+            ],
+        }
+    )

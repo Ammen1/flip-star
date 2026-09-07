@@ -390,13 +390,17 @@ from api.views.legal import (
     get_user_acceptances,
 )
 from api.views.organization_campaigns import (
+    organization_campaign_analytics,
     organization_campaign_approve,
     organization_campaign_delete,
     organization_campaign_detail,
+    organization_campaign_leaderboard,
     organization_campaign_list,
+    organization_campaign_posts,
     organization_campaign_reject,
     organization_campaign_submit,
     organization_campaign_update,
+    organization_dashboard,
 )
 from api.views.organizations import (
     create_organization_admin,
@@ -748,6 +752,22 @@ urlpatterns = [
         'organization/campaigns/<int:campaign_id>/approve/',
         organization_campaign_approve,
         name='organization-campaign-approve',
+    ),
+    path('organization/dashboard/', organization_dashboard, name='organization-dashboard'),
+    path(
+        'organization/campaigns/<int:campaign_id>/analytics/',
+        organization_campaign_analytics,
+        name='organization-campaign-analytics',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/leaderboard/',
+        organization_campaign_leaderboard,
+        name='organization-campaign-leaderboard',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/posts/',
+        organization_campaign_posts,
+        name='organization-campaign-posts',
     ),
     path(
         'organization/campaigns/<int:campaign_id>/reject/',

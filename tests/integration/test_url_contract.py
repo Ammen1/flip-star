@@ -214,11 +214,21 @@ def test_total_route_count_is_stable():
     organizations and appointing their administrators is platform-level, not
     something an organization may do for itself.
 
+    +4 for the organization dashboard surface
+    (api/views/organization_campaigns.py: dashboard, per-campaign analytics,
+    leaderboard and posts). These exist so an organization dashboard has data
+    to show without reaching the is_staff-only equivalents in
+    campaign_admin.py, which carry no ownership check. Each resolves its
+    campaign through get_campaign_for, and the dashboard aggregates are
+    computed over visible_campaigns before counting -- a total taken across
+    all campaigns would disclose another organization volume without
+    rendering a row.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 319, (
+    assert len(urlpatterns) == 323, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )
