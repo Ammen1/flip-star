@@ -38,13 +38,17 @@ from api.services.campaign_workflow import (
     submit,
 )
 from api.services.realms import (
+    RealmValidationError,
     can_author,
     can_create_campaign,
     can_modify_campaign,
     is_checker,
+    is_organization_user,
+    organization_for_new_campaign,
     organization_of,
     visible_campaigns,
 )
+from common.permissions.realms import CanCreateCampaign
 
 #: Fields a maker may change through the update endpoint.
 #:
@@ -117,6 +121,100 @@ def _workflow_response(exc):
     else:
         code = status.HTTP_400_BAD_REQUEST
     return Response({'error': str(exc), 'code': exc.code}, status=code)
+
+
+# ---------------------------------------------------------------------------
+# Create
+# ---------------------------------------------------------------------------
+
+#: Fields accepted when creating a campaign.
+#:
+#: The same allowlist as EDITABLE_FIELDS, for the same reasons: `organization`
+#: is absent because ownership comes from the account, and `status` is absent
+#: because a new campaign is always a draft.
+CREATABLE_FIELDS = EDITABLE_FIELDS
+
+#: NOT NULL with no database default, so an omitted key has to become '' here
+#: rather than reaching the database as None and failing as an IntegrityError.
+REQUIRED_TEXT_FIELDS = ('description', 'prize_title', 'prize_description')
+
+
+@api_view(['POST'])
+@permission_classes([CanCreateCampaign])
+def organization_campaign_create(request):
+    """Create a campaign owned by the caller's organization.
+
+    Why this exists alongside ``admin_campaign_create``
+    ---------------------------------------------------
+    The admin endpoint lives under ``/api/v1/admin/``, and every path under
+    that prefix is refused to non-staff accounts by ``AdminPathGuardMiddleware``
+    -- a deliberate chokepoint, so that one missing decorator among dozens of
+    admin views is not a broken-access-control bug. An organization admin is
+    not staff, so the guard rejected them before any permission class ran, with
+    the generic "You do not have permission to perform this action."
+
+    The fix belongs here rather than in the guard. Letting organization
+    accounts through the admin prefix would expose every endpoint behind it and
+    leave per-view decorators as the only defence -- precisely what the
+    chokepoint exists to backstop.
+
+    Status is not accepted
+    ----------------------
+    A new campaign is always a draft. Taking `status` from the request would
+    let a maker create an already-active campaign and never face a checker,
+    making approval optional -- and an approval step the author can skip is not
+    an approval step. Status moves only through submit/approve/reject.
+    """
+    # Checked first, and by realm rather than by what the service raises. A
+    # platform account's campaigns are unowned, which this endpoint cannot
+    # express; and a superuser falling through to the service below would be
+    # told 'This account may not create campaigns', which is untrue of them --
+    # they may, just not here.
+    if not is_organization_user(request.user):
+        return Response(
+            {
+                'error': (
+                    'This endpoint creates campaigns for an organization. '
+                    'Platform campaigns are created through the admin endpoint.'
+                ),
+                'code': 'not_an_organization_account',
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        # The single place ownership is decided. For an organization user this
+        # returns their own organization and ignores anything the body said.
+        organization = organization_for_new_campaign(request.user)
+    except RealmValidationError as exc:
+        # An organization account with no organization. Both validation and a
+        # database constraint forbid it, so this is a guard, not a path.
+        return Response({'error': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+    title = (request.data.get('title') or '').strip()
+    if not title:
+        return Response({'error': 'title is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Allowlist. An empty string is treated as "not supplied" so that a form
+    # posting blank optional fields gets the model's defaults rather than
+    # writing '' into a date column.
+    fields = {
+        field: request.data[field]
+        for field in CREATABLE_FIELDS
+        if request.data.get(field) not in ('', None)
+    }
+    fields['title'] = title
+    for field in REQUIRED_TEXT_FIELDS:
+        fields.setdefault(field, '')
+
+    campaign = Campaign.objects.create(
+        created_by=request.user,
+        organization=organization,
+        status='draft',
+        **fields,
+    )
+
+    return Response(serialize(campaign, detail=True), status=status.HTTP_201_CREATED)
 
 
 # ---------------------------------------------------------------------------

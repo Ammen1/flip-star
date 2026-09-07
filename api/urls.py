@@ -401,6 +401,7 @@ from api.views.legal import (
 from api.views.organization_campaigns import (
     organization_campaign_analytics,
     organization_campaign_approve,
+    organization_campaign_create,
     organization_campaign_delete,
     organization_campaign_detail,
     organization_campaign_leaderboard,
@@ -734,6 +735,14 @@ urlpatterns = [
         'organization/campaigns/',
         organization_campaign_list,
         name='organization-campaign-list',
+    ),
+    # Deliberately not under 'admin/': AdminPathGuardMiddleware refuses that
+    # whole prefix to non-staff accounts, and an organization admin is not
+    # staff. See organization_campaign_create for why the guard is left alone.
+    path(
+        'organization/campaigns/create/',
+        organization_campaign_create,
+        name='organization-campaign-create',
     ),
     path(
         'organization/campaigns/<int:campaign_id>/',
