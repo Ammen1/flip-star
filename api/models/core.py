@@ -10,6 +10,8 @@ from django.contrib.auth.models import User
 from django.db import models, transaction
 from django.utils import timezone
 
+from api.models.organization import UserRealm, UserRole
+
 # Concrete relation target. Everything else this module references across
 # module boundaries is declared as a string ('Campaign', 'CampaignTheme') and
 # resolved lazily by Django, which keeps the import graph acyclic.
@@ -48,6 +50,51 @@ class UserProfile(models.Model):
     streak = models.IntegerField(default=0)
     last_checkin = models.DateTimeField(null=True, blank=True)
     language = models.CharField(max_length=10, default='en')
+
+    # ── Realm, role and organization ────────────────────────────────────────
+    #
+    # These live here rather than on User because this project uses Django's
+    # built-in auth.User, which cannot take new fields. UserProfile is the
+    # existing one-to-one extension and is created for every account by a
+    # post_save signal, so every user has exactly one realm.
+    #
+    # `realm` defaults to MEMBER deliberately. It is the least-privileged
+    # value, so an account that should have been something else is merely
+    # under-powered until corrected -- whereas defaulting to FLIPSTAR would
+    # silently hand platform access to every existing row. The migration that
+    # adds this column leaves staff accounts on MEMBER too, and reports them
+    # for a human to promote.
+    realm = models.CharField(
+        max_length=20,
+        choices=UserRealm.choices,
+        default=UserRealm.MEMBER,
+        db_index=True,
+        help_text='What kind of account this is. Every user has exactly one.',
+    )
+    # Nullable on purpose: no role is the normal state. Read a missing role as
+    # "cannot act", never as "unrestricted".
+    role = models.CharField(  # noqa: DJ001 - NULL is meaningful here, see below
+        max_length=20,
+        choices=UserRole.choices,
+        # null, not blank='': "no role" is a distinct state from a role whose
+        # name happens to be empty, and UserRole has no empty member. Code
+        # reads None as 'cannot act', which an empty string would not convey.
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Optional responsibility (maker/checker) within the realm.',
+    )
+    # PROTECT: an organization with users attached must not be deletable out
+    # from under them, leaving ORGANIZATION-realm accounts with no owner and
+    # no way to satisfy the realm's own invariant.
+    organization = models.ForeignKey(
+        'api.Organization',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='members',
+        help_text='Required when realm is ORGANIZATION; empty otherwise.',
+    )
 
     # Gamification - Coins
     coins = models.IntegerField(default=0, help_text='User coin balance')
@@ -132,8 +179,41 @@ class UserProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            # The invariant the ownership model rests on, enforced by the
+            # database rather than only by application code: an ORGANIZATION
+            # account always has an organization, and no other realm does.
+            #
+            # A CheckConstraint so it holds for bulk updates, data migrations
+            # and psql sessions -- every path that clean() never sees.
+            models.CheckConstraint(
+                check=(
+                    models.Q(realm='ORGANIZATION', organization__isnull=False)
+                    | (~models.Q(realm='ORGANIZATION') & models.Q(organization__isnull=True))
+                ),
+                name='profile_organization_matches_realm',
+            ),
+        ]
+
     def __str__(self):
         return f'{self.user.username} - Level {self.level}'
+
+    def clean(self):
+        """Reject invalid realm/role/organization combinations.
+
+        Runs for the Django admin and any ModelForm. The database constraint
+        below independently guarantees the realm/organization half -- this is
+        the readable error, that is the guarantee.
+        """
+        from django.core.exceptions import ValidationError
+
+        from api.services.realms import RealmValidationError, validate_profile
+
+        try:
+            validate_profile(self.realm, self.role, self.organization)
+        except RealmValidationError as exc:
+            raise ValidationError(str(exc)) from exc
 
     def is_telebirr_user(self):
         """Whether this user has ever paid via Telebirr -- used to gate

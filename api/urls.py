@@ -389,6 +389,21 @@ from api.views.legal import (
     get_pending_acceptances,
     get_user_acceptances,
 )
+from api.views.organization_campaigns import (
+    organization_campaign_approve,
+    organization_campaign_delete,
+    organization_campaign_detail,
+    organization_campaign_list,
+    organization_campaign_reject,
+    organization_campaign_submit,
+    organization_campaign_update,
+)
+from api.views.organizations import (
+    create_organization_admin,
+    organization_campaigns,
+    organization_detail,
+    organization_list_create,
+)
 from api.views.reels import reels_following, reels_saved, reels_trending
 from api.views.scoring import (
     admin_calculate_final_scores,
@@ -679,6 +694,66 @@ urlpatterns = [
     # Campaign Management (Admin)
     path('admin/campaigns/', admin_campaigns_list, name='admin-campaigns-list'),
     path('admin/campaigns/create/', admin_campaign_create, name='admin-campaign-create'),
+
+    # Super Admin: organizations and their administrators. Platform-level,
+    # gated on IsFlipstarUser -- an organization cannot create organizations or
+    # appoint its own administrators.
+    path('admin/organizations/', organization_list_create, name='admin-organization-list'),
+    path(
+        'admin/organizations/<int:organization_id>/',
+        organization_detail,
+        name='admin-organization-detail',
+    ),
+    path(
+        'admin/organizations/<int:organization_id>/campaigns/',
+        organization_campaigns,
+        name='admin-organization-campaigns',
+    ),
+    path(
+        'admin/organizations/<int:organization_id>/admins/',
+        create_organization_admin,
+        name='admin-organization-create-admin',
+    ),
+
+    # Organization-scoped campaign management. Separate from the admin
+    # endpoints above, which are is_staff-only: every lookup below resolves
+    # through visible_campaigns, so an id from another organization is not
+    # found rather than merely refused.
+    path(
+        'organization/campaigns/',
+        organization_campaign_list,
+        name='organization-campaign-list',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/',
+        organization_campaign_detail,
+        name='organization-campaign-detail',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/update/',
+        organization_campaign_update,
+        name='organization-campaign-update',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/delete/',
+        organization_campaign_delete,
+        name='organization-campaign-delete',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/submit/',
+        organization_campaign_submit,
+        name='organization-campaign-submit',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/approve/',
+        organization_campaign_approve,
+        name='organization-campaign-approve',
+    ),
+    path(
+        'organization/campaigns/<int:campaign_id>/reject/',
+        organization_campaign_reject,
+        name='organization-campaign-reject',
+    ),
     path(
         'admin/campaigns/<int:campaign_id>/update/',
         admin_campaign_update,

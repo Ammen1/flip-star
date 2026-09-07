@@ -78,9 +78,16 @@ def test_model_count_is_stable():
     (unpublished reel drafts, api/models/core.py); and PrivilegeAuditLog
     (admin grant/revoke audit trail, api/models/admin.py -- master declares
     this model but never writes to it; admin_grant_admin now does).
+
+    110 adds Organization (api/models/organization.py), which owns campaigns
+    and scopes what an ORGANIZATION-realm user may see. Realm and role are
+    fields on the existing UserProfile rather than models of their own --
+    this project uses Django's built-in auth.User, so there is no separate
+    user table to add and none was created.
+
     Update it deliberately when the model set genuinely changes.
     """
-    assert len(list(_api_models())) == 109
+    assert len(list(_api_models())) == 110
 
 
 @pytest.mark.parametrize(

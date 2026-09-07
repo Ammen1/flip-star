@@ -16,6 +16,8 @@ from api.models.campaign import (
     CampaignWinner,
 )
 from api.models.campaign_extended import PostScore, UserCampaignStats
+from api.services.realms import RealmValidationError, organization_for_new_campaign
+from common.permissions.realms import CanCreateCampaign
 from common.security import encrypted_endpoint
 
 
@@ -109,11 +111,32 @@ def admin_campaigns_list(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([CanCreateCampaign])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def admin_campaign_create(request):
-    """Create new campaign"""
+    """Create a campaign, owned by the creator's organization.
+
+    Ownership is derived from the authenticated account and never read from
+    the request. A body carrying `organization` or `organization_id` does not
+    fail -- the field simply has no effect, because nothing here reads it. That
+    is what stops an organization user creating a campaign under a different
+    organization.
+    """
     try:
+        # The owner, decided by who is asking. None means a platform campaign,
+        # which is what a Flipstar-created campaign is.
+        try:
+            # The requested id is consulted only for platform staff; for an
+            # organization user the service ignores it and returns their own.
+            owning_organization = organization_for_new_campaign(
+                request.user,
+                requested_organization_id=(
+                    request.data.get('organization') or request.data.get('organization_id')
+                ),
+            )
+        except RealmValidationError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
         print('=== Campaign Creation Debug ===')
         print('request.data keys:', request.data.keys())
         print('request.FILES keys:', request.FILES.keys())
@@ -144,6 +167,8 @@ def admin_campaign_create(request):
             voting_end=voting_end,
             winner_count=request.data.get('winner_count', 1),
             created_by=request.user,
+            # From the account, not from request.data.
+            organization=owning_organization,
         )
 
         # Handle image upload

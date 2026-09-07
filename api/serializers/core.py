@@ -48,6 +48,12 @@ class UserSerializer(serializers.ModelSerializer):
     profile_photo = serializers.SerializerMethodField()
     bio = serializers.SerializerMethodField()
     is_following = serializers.SerializerMethodField()
+    # Realm, role and organization. All read-only: these decide what an
+    # account may do, so they are changed through administrative workflows and
+    # never by a user PATCHing their own profile.
+    realm = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -58,6 +64,9 @@ class UserSerializer(serializers.ModelSerializer):
             'first_name',
             'last_name',
             'is_staff',
+            'realm',
+            'role',
+            'organization',
             'is_superuser',
             'followers_count',
             'following_count',
@@ -65,6 +74,34 @@ class UserSerializer(serializers.ModelSerializer):
             'bio',
             'is_following',
         ]
+
+    def get_realm(self, obj):
+        """The account's realm. Always present -- every user has exactly one."""
+        from api.services.realms import realm_of
+
+        return realm_of(obj)
+
+    def get_role(self, obj):
+        """The optional maker/checker role, or null.
+
+        Null is the normal answer and means "no role", which grants nothing.
+        """
+        from api.services.realms import role_of
+
+        return role_of(obj)
+
+    def get_organization(self, obj):
+        """The owning organization, or null.
+
+        Only id and name: enough for a client to label the account, without
+        exposing status, who created it, or anything else internal.
+        """
+        from api.services.realms import organization_of
+
+        organization = organization_of(obj)
+        if organization is None:
+            return None
+        return {'id': organization.id, 'name': organization.name}
 
     def get_followers_count(self, obj):
         # Use prefetched count if available

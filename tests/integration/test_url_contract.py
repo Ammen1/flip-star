@@ -201,11 +201,24 @@ def test_total_route_count_is_stable():
     kebab-case webhooks/telebirr-direct-debit was), plus the slashless variant
     of each spelling.
 
+    +7 for the organization-scoped campaign surface
+    (api/views/organization_campaigns.py: list, detail, update, delete, submit,
+    approve, reject). These are separate from the admin campaign routes because
+    those are is_staff-only and an ORGANIZATION-realm user is not staff. Every
+    lookup in the new views resolves through visible_campaigns, so a campaign
+    id belonging to another organization is not found rather than refused.
+
+    +4 for the Super Admin organization surface
+    (api/views/organizations.py: list/create, detail/update, campaigns-for-one,
+    create-organization-admin). Gated on IsFlipstarUser -- creating
+    organizations and appointing their administrators is platform-level, not
+    something an organization may do for itself.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 308, (
+    assert len(urlpatterns) == 319, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )

@@ -68,6 +68,7 @@ from .campaign_extended import (
     WinnerFrequencyRecord,
     WinnerSelection,
 )
+from .organization import Organization, UserRealm, UserRole
 from .master_campaign import MasterCampaign, MasterCampaignParticipant
 
 # --- Contest (legacy 90-day system) -----------------------------------------
@@ -160,6 +161,9 @@ from .support import SupportRequest
 from .admin import APIKey, AdminNotification, PlatformMetrics, PlatformSettings, SecurityEvent, SystemLog
 
 __all__ = [
+    'Organization',
+    'UserRealm',
+    'UserRole',
     # re-exported for backward compatibility
     'User',
     # core
