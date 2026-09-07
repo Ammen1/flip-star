@@ -80,6 +80,19 @@ ignore = [
 # runs on CHANGED files, so adding a coin bucket would otherwise require
 # writing __str__ for twelve unrelated models in the same commit.
 "api/models/contest.py" = ["DJ008"]
+# api/models/__init__.py groups its re-exports into commented sections
+# ("# --- Campaigns ---", "# --- Wallet ---") and carries a long note
+# explaining why api/models/auth.py is deliberately NOT re-exported. isort
+# treats the whole run as one block and would sort it alphabetically, which
+# detaches every comment from the imports it describes -- the auth note in
+# particular ends up above the platform-administration imports, where it reads
+# as documentation for the wrong thing. Verified with `ruff check --diff`.
+#
+# Pre-existing: the committed file already fails this rule. Excluded rather
+# than reordered for the same reason as api/urls.py above -- the blocking lint
+# gate runs on CHANGED files, so adding one re-export would otherwise require
+# destroying the file's structure in the same commit.
+"api/models/__init__.py" = ["I001"]
 # Tests may use hardcoded credentials and asserts.
 "tests/**/*.py" = ["S105", "S106", "S101"]
 

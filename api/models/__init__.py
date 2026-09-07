@@ -68,8 +68,10 @@ from .campaign_extended import (
     WinnerFrequencyRecord,
     WinnerSelection,
 )
-from .organization import Organization, UserRealm, UserRole
 from .master_campaign import MasterCampaign, MasterCampaignParticipant
+
+# --- Organizations ----------------------------------------------------------
+from .organization import Organization, UserRealm, UserRole
 
 # --- Contest (legacy 90-day system) -----------------------------------------
 from .contest import (
@@ -130,7 +132,14 @@ from .boost import (
 )
 
 # --- Gifts ------------------------------------------------------------------
-from .gift import Gift, GiftCombo, GiftTransaction, UserGiftStats, WinnerGiftPackage, WinnerGiftTransaction
+from .gift import (
+    Gift,
+    GiftCombo,
+    GiftTransaction,
+    UserGiftStats,
+    WinnerGiftPackage,
+    WinnerGiftTransaction,
+)
 
 # --- CRM (Ethio Telecom data-gift integration) -------------------------------
 from .crm import CRMGiftAuditLog, CRMGiftPackage, CRMGiftTransaction
@@ -139,7 +148,13 @@ from .crm import CRMGiftAuditLog, CRMGiftPackage, CRMGiftTransaction
 from .messaging import Conversation, Message, MessageRead
 
 # --- Legal ------------------------------------------------------------------
-from .legal import ConsentHistory, LegalDocument, LegalDocumentVersion, UserConsent, UserLegalAcceptance
+from .legal import (
+    ConsentHistory,
+    LegalDocument,
+    LegalDocumentVersion,
+    UserConsent,
+    UserLegalAcceptance,
+)
 
 # --- Support --------------------------------------------------------------
 from .support import SupportRequest
@@ -158,7 +173,14 @@ from .support import SupportRequest
 # raise a database error at runtime and need a separate fix.
 
 # --- Platform administration ------------------------------------------------
-from .admin import APIKey, AdminNotification, PlatformMetrics, PlatformSettings, SecurityEvent, SystemLog
+from .admin import (
+    APIKey,
+    AdminNotification,
+    PlatformMetrics,
+    PlatformSettings,
+    SecurityEvent,
+    SystemLog,
+)
 
 __all__ = [
     'Organization',
@@ -167,46 +189,123 @@ __all__ = [
     # re-exported for backward compatibility
     'User',
     # core
-    'Block', 'Category', 'Comment', 'CommentLike', 'CommentReply', 'Competition',
-    'Draft', 'Follow', 'Mention', 'ModerationAction', 'NotInterested', 'Notification',
-    'NotificationPreference', 'PushSubscription', 'Quest', 'Reel', 'Report',
-    'SavedPost', 'Subscription', 'UserProfile', 'UserQuest', 'Vote', 'Winner',
+    'Block',
+    'Category',
+    'Comment',
+    'CommentLike',
+    'CommentReply',
+    'Competition',
+    'Draft',
+    'Follow',
+    'Mention',
+    'ModerationAction',
+    'NotInterested',
+    'Notification',
+    'NotificationPreference',
+    'PushSubscription',
+    'Quest',
+    'Reel',
+    'Report',
+    'SavedPost',
+    'Subscription',
+    'UserProfile',
+    'UserQuest',
+    'Vote',
+    'Winner',
     # campaigns
-    'Campaign', 'CampaignEntry', 'CampaignNotification', 'CampaignVote',
-    'CampaignWinner', 'CampaignBadge', 'CampaignScoringConfig', 'CampaignTheme',
-    'GamificationActivity', 'GrandFinalist', 'JudgeScore', 'Leaderboard',
-    'LeaderboardEntry', 'PostScore', 'PublicVote', 'SelectedWinner',
-    'UserCampaignStats', 'WinnerFrequencyRecord', 'WinnerSelection',
-    'MasterCampaign', 'MasterCampaignParticipant',
+    'Campaign',
+    'CampaignEntry',
+    'CampaignNotification',
+    'CampaignVote',
+    'CampaignWinner',
+    'CampaignBadge',
+    'CampaignScoringConfig',
+    'CampaignTheme',
+    'GamificationActivity',
+    'GrandFinalist',
+    'JudgeScore',
+    'Leaderboard',
+    'LeaderboardEntry',
+    'PostScore',
+    'PublicVote',
+    'SelectedWinner',
+    'UserCampaignStats',
+    'WinnerFrequencyRecord',
+    'WinnerSelection',
+    'MasterCampaign',
+    'MasterCampaignParticipant',
     # contest
-    'AntiCheatLog', 'CoinPackage', 'CoinTransaction', 'ContestLeaderboard',
-    'ContestPostScore', 'ContestTimeline', 'EligibilityVerification',
-    'ExtraEntryPurchase', 'GiftToCreator', 'GrandFinaleEntry', 'PostBoost',
-    'UserCoinBalance', 'UserSubscription', 'UserTier',
+    'AntiCheatLog',
+    'CoinPackage',
+    'CoinTransaction',
+    'ContestLeaderboard',
+    'ContestPostScore',
+    'ContestTimeline',
+    'EligibilityVerification',
+    'ExtraEntryPurchase',
+    'GiftToCreator',
+    'GrandFinaleEntry',
+    'PostBoost',
+    'UserCoinBalance',
+    'UserSubscription',
+    'UserTier',
     # wallet
-    'WalletConfig', 'WithdrawalRequest',
+    'WalletConfig',
+    'WithdrawalRequest',
     # subscriptions
-    'AdminRole', 'ExpiredSubscriptionAction', 'OnevasChargingTransaction',
-    'OnevasWebhookLog', 'PendingTelebirrMandate', 'PromoCode', 'SubscriptionCoinTransaction',
-    'SubscriptionFeatureUsage', 'SubscriptionHistory', 'SubscriptionPayment',
-    'SubscriptionPlan', 'SubscriptionReport', 'SubscriptionTier',
-    'TrialPopupLog', 'UserPromoUsage',
+    'AdminRole',
+    'ExpiredSubscriptionAction',
+    'OnevasChargingTransaction',
+    'OnevasWebhookLog',
+    'PendingTelebirrMandate',
+    'PromoCode',
+    'SubscriptionCoinTransaction',
+    'SubscriptionFeatureUsage',
+    'SubscriptionHistory',
+    'SubscriptionPayment',
+    'SubscriptionPlan',
+    'SubscriptionReport',
+    'SubscriptionTier',
+    'TrialPopupLog',
+    'UserPromoUsage',
     # payments
-    'B2CPaymentTransaction', 'DirectDebitMandate', 'DirectDebitTransaction',
+    'B2CPaymentTransaction',
+    'DirectDebitMandate',
+    'DirectDebitTransaction',
     # advertising
-    'BoostCampaign', 'BoostConfig', 'BoostEngagement', 'BoostImpression',
+    'BoostCampaign',
+    'BoostConfig',
+    'BoostEngagement',
+    'BoostImpression',
     'BoostStats',
     # gifts
-    'Gift', 'GiftCombo', 'GiftTransaction', 'UserGiftStats',
-    'WinnerGiftPackage', 'WinnerGiftTransaction',
+    'Gift',
+    'GiftCombo',
+    'GiftTransaction',
+    'UserGiftStats',
+    'WinnerGiftPackage',
+    'WinnerGiftTransaction',
     # crm
-    'CRMGiftAuditLog', 'CRMGiftPackage', 'CRMGiftTransaction',
+    'CRMGiftAuditLog',
+    'CRMGiftPackage',
+    'CRMGiftTransaction',
     # messaging
-    'Conversation', 'Message', 'MessageRead',
+    'Conversation',
+    'Message',
+    'MessageRead',
     # legal
-    'ConsentHistory', 'LegalDocument', 'LegalDocumentVersion', 'UserConsent', 'UserLegalAcceptance',
+    'ConsentHistory',
+    'LegalDocument',
+    'LegalDocumentVersion',
+    'UserConsent',
+    'UserLegalAcceptance',
     # support
     'SupportRequest',
     # platform administration
-    'APIKey', 'AdminNotification', 'PlatformMetrics', 'PlatformSettings', 'SecurityEvent', 'SystemLog',
+    'APIKey',
+    'AdminNotification',
+    'PlatformMetrics',
+    'PlatformSettings',
+    'SecurityEvent',
+    'SystemLog',
 ]
