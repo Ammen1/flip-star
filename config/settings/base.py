@@ -466,6 +466,13 @@ TIMWE_CHARGE_TIMEOUT = config('TIMWE_CHARGE_TIMEOUT', default=60, cast=int)
 TIMWE_ALLOWED_IPS = [
     ip.strip() for ip in config('TIMWE_ALLOWED_IPS', default='').split(',') if ip.strip()
 ]
+# Log the full inbound and outbound SOAP bodies for the datasync endpoint.
+#
+# On during onboarding, because the MA's requests are the only evidence of what
+# it actually sends and the DB row alone cannot be watched live. Note what this
+# puts in the log stream: the payload carries the subscriber's MSISDN, so this
+# should be turned off once the integration is live and the traffic is real.
+TIMWE_LOG_PAYLOADS = config('TIMWE_LOG_PAYLOADS', default=True, cast=bool)
 
 ONEVAS_APPLICATION_KEY = config('ONEVAS_APPLICATION_KEY', default='')
 ONEVAS_PRODUCT_NUMBER = config('ONEVAS_PRODUCT_NUMBER', default='')

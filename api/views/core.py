@@ -2873,6 +2873,27 @@ class WinnerViewSet(EncryptedPayloadMixin, viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
+def _follow_user_id_param(value, name):
+    """A user id taken from the query string, or a refusal.
+
+    These values land in a filter on an integer column, so anything
+    non-numeric raises ValueError deep inside the ORM -- past any handler that
+    could describe it -- and surfaces as an unhandled 500.
+
+    The usual source is a client interpolating an id it does not have yet,
+    arriving literally as ``?follower=undefined``. That is a malformed
+    request, not a server fault, so it is answered as one. A well-formed id
+    that matches nothing still returns an empty list, which is the honest
+    answer to "who does user 999 follow".
+    """
+    from rest_framework.exceptions import ValidationError
+
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValidationError({name: f'Expected a numeric user id, got {value!r}.'}) from None
+
+
 class FollowViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     serializer_class = FollowSerializer
     permission_classes = [IsAuthenticated]
@@ -2893,10 +2914,12 @@ class FollowViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
 
         if following_id:
             # Get users who follow the user with following_id (i.e., following_id is being followed)
-            return Follow.objects.filter(following_id=following_id)
+            return Follow.objects.filter(
+                following_id=_follow_user_id_param(following_id, 'following')
+            )
         elif follower_id:
             # Get users who the follower_id follows (i.e., follower_id is the follower)
-            return Follow.objects.filter(follower_id=follower_id)
+            return Follow.objects.filter(follower_id=_follow_user_id_param(follower_id, 'follower'))
         else:
             # Default: return who the current user is following
             return Follow.objects.filter(follower=self.request.user)

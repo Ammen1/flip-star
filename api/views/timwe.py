@@ -50,7 +50,36 @@ logger = logging.getLogger(__name__)
 SOAP_CONTENT_TYPE = 'text/xml; charset=utf-8'
 
 
+#: Cap on what reaches the log, matching the slice stored on TimweSyncOrderLog.
+#: The parser already refuses anything over 64 KiB, so this only bounds the
+#: pathological case rather than truncating ordinary traffic.
+LOG_PAYLOAD_LIMIT = 20000
+
+
+def _log_payloads() -> bool:
+    """Whether to write full SOAP bodies to the log."""
+    return bool(getattr(settings, 'TIMWE_LOG_PAYLOADS', True))
+
+
+def _truncate(text: str) -> str:
+    if len(text) <= LOG_PAYLOAD_LIMIT:
+        return text
+    return f'{text[:LOG_PAYLOAD_LIMIT]}... [{len(text) - LOG_PAYLOAD_LIMIT} more chars]'
+
+
 def _soap(body: str, status: int = 200) -> HttpResponse:
+    """Build the SOAP response, logging it on the way out.
+
+    Every return path in this module goes through here, so this one place
+    covers all of them -- the allowlist rejection, the parse failure, the
+    unmapped product, observation mode and the applied case alike.
+    """
+    if _log_payloads():
+        logger.info(
+            'TIMWE syncOrderRelation <-- response %s\n%s',
+            status,
+            _truncate(body),
+        )
     return HttpResponse(body, status=status, content_type=SOAP_CONTENT_TYPE)
 
 
@@ -78,14 +107,26 @@ def _source_allowed(request) -> bool:
 @permission_classes([AllowAny])
 def timwe_sync_order_relation(request):
     """Receive one syncOrderRelation notification from the MA."""
+    raw = request.body or b''
+
+    # Read and logged before the allowlist check, so a request rejected by
+    # source IP is still visible -- otherwise the one failure mode you most
+    # need to see is the one that leaves no trace.
+    if _log_payloads():
+        logger.info(
+            'TIMWE syncOrderRelation --> request from %s (%s, %d bytes)\n%s',
+            get_client_ip(request),
+            request.META.get('CONTENT_TYPE', ''),
+            len(raw),
+            _truncate(raw.decode('utf-8', errors='replace')),
+        )
+
     if not _source_allowed(request):
         logger.warning('TIMWE syncOrderRelation rejected: source not in TIMWE_ALLOWED_IPS')
         return _soap(
             build_error_response(SYNC_INTERNAL_ERROR, 'Request rejected.'),
             status=403,
         )
-
-    raw = request.body or b''
 
     try:
         relation = parse_sync_order_relation(raw)
