@@ -42,7 +42,8 @@ from api.integrations.timwe.errors import (
     SYNC_ORDER_RELATION_ERRORS,
     SYNC_SERVICE_NOT_FOUND,
 )
-from api.models import SubscriptionTier, TimweSyncOrderLog
+from api.models import TimweSyncOrderLog
+from api.services.subscription_tiers import resolve_tier
 from common.security.client_ip import get_client_ip
 
 logger = logging.getLogger(__name__)
@@ -160,18 +161,29 @@ def timwe_sync_order_relation(request):
         extensions=relation.extensions,
     )
 
-    tier = SubscriptionTier.objects.filter(product_id=relation.product_id).first()
+    # Product id first, then the subscriber's own SMS keyword -- the same
+    # order the OneVAS webhook uses. TIMWE and OneVAS front the same products
+    # but have not always quoted the same ids for them, and a subscriber who
+    # texted '1' has said which plan they want regardless of that.
+    tier = resolve_tier(product_id=relation.product_id, keyword=relation.keyword)
     if tier is None:
         # 2032 is precisely this case: the service the product belongs to does
         # not exist on our side. Returning it tells the MA to stop rather than
         # retry a product we will never recognise.
         log.result_code = SYNC_SERVICE_NOT_FOUND
         log.result_description = SYNC_ORDER_RELATION_ERRORS[SYNC_SERVICE_NOT_FOUND]
-        log.error_message = f'No SubscriptionTier maps to productID {relation.product_id}.'
+        log.error_message = (
+            f'No SubscriptionTier maps to productID {relation.product_id} '
+            f'or keyword {relation.keyword!r}.'
+        )
         log.save(update_fields=['result_code', 'result_description', 'error_message'])
         logger.warning(
             'TIMWE syncOrderRelation for an unmapped product',
-            extra={'product_id': relation.product_id, 'event': relation.event_label},
+            extra={
+                'product_id': relation.product_id,
+                'keyword': relation.keyword,
+                'event': relation.event_label,
+            },
         )
         return _soap(build_error_response(SYNC_SERVICE_NOT_FOUND))
 
