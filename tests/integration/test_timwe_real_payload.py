@@ -77,6 +77,14 @@ REAL_ENVELOPE = (
 
 MSISDN = '251925873168'
 
+#: The same envelope with a productID the seeded catalogue actually holds.
+#: Migration 0057 sets daily=10000302850, which is what the live partner log
+#: quoted -- so this is the realistic shape for the subscribe path.
+SEEDED_ENVELOPE = REAL_ENVELOPE.replace(
+    '<ns1:productID>1000030022</ns1:productID>',
+    '<ns1:productID>10000302850</ns1:productID>',
+)
+
 
 def post(client, body=REAL_ENVELOPE):
     return client.post(URL, data=body.encode('utf-8'), content_type=SOAP_CONTENT_TYPE)
@@ -288,3 +296,119 @@ def test_a_retried_notification_does_not_subscribe_twice(client):
     post(client)
 
     assert SubscriptionPlan.objects.count() == 1
+
+
+# ---------------------------------------------------------------------------
+# The rest of the OneVAS business logic, which TIMWE was missing
+# ---------------------------------------------------------------------------
+
+
+@override_settings(TIMWE_INTEGRATION_ENABLED=True)
+def test_the_payment_is_recorded(client, monkeypatch):
+    """Revenue was not being recorded at all for TIMWE subscribers."""
+    from api.models import SubscriptionPayment
+
+    sent = []
+    monkeypatch.setattr(
+        'api.services.sms_subscription.send_subscription_sms',
+        lambda phone, message, tier: sent.append((phone, message)),
+    )
+
+    post(client, SEEDED_ENVELOPE)
+
+    payment = SubscriptionPayment.objects.get()
+    assert payment.payment_method == 'timwe'
+    assert payment.status == 'completed'
+    assert payment.duration_type == 'daily'
+
+
+@override_settings(TIMWE_INTEGRATION_ENABLED=True)
+def test_the_subscriber_is_texted_the_otp(client, monkeypatch):
+    """
+    The point of the SMS channel.
+
+    Without this the subscriber is charged and has no way into the service --
+    no link, no OTP. It was missing entirely.
+    """
+    sent = []
+    monkeypatch.setattr(
+        'api.services.sms_subscription.send_subscription_sms',
+        lambda phone, message, tier: sent.append((phone, message)),
+    )
+
+    post(client, SEEDED_ENVELOPE)
+
+    assert len(sent) == 1
+    phone, message = sent[0]
+    assert phone == MSISDN
+    plan = SubscriptionPlan.objects.get()
+    assert plan.setup_otp
+    assert plan.setup_otp in message
+    assert 'STOP1' in message  # how to cancel a daily plan
+    assert 'Flipstar' in message
+
+
+@override_settings(TIMWE_INTEGRATION_ENABLED=True)
+def test_a_failed_sms_does_not_fail_the_request(client, monkeypatch):
+    """
+    A non-zero result makes the MA retry a charge we have already applied.
+
+    So a gateway outage must not turn one subscription into several.
+    """
+
+    def boom(*args, **kwargs):
+        raise RuntimeError('sms gateway down')
+
+    monkeypatch.setattr('api.services.sms_subscription.send_subscription_sms', boom)
+
+    response = post(client, SEEDED_ENVELOPE)
+
+    assert b'<ns1:result>0</ns1:result>' in response.content
+    assert SubscriptionPlan.objects.count() == 1
+
+
+@override_settings(TIMWE_INTEGRATION_ENABLED=True)
+def test_a_first_time_subscriber_gets_a_free_trial_day(client, monkeypatch):
+    monkeypatch.setattr('api.services.sms_subscription.send_subscription_sms', lambda *a, **k: None)
+
+    post(client, SEEDED_ENVELOPE)
+
+    assert SubscriptionPlan.objects.get().free_trial_days == 1
+
+
+@override_settings(TIMWE_INTEGRATION_ENABLED=True)
+def test_a_returning_subscriber_gets_no_second_free_trial(client, monkeypatch):
+    """Judged on the phone number, so unsubscribing cannot earn a fresh trial."""
+    monkeypatch.setattr('api.services.sms_subscription.send_subscription_sms', lambda *a, **k: None)
+    SubscriptionPlan.objects.create(
+        user=None,
+        tier=SubscriptionTier.objects.get(duration_type='daily'),
+        duration_type='daily',
+        onevas_phone_number=MSISDN,
+        status='cancelled',
+    )
+
+    post(client, SEEDED_ENVELOPE)
+
+    created = SubscriptionPlan.objects.filter(status='active').get()
+    assert created.free_trial_days == 0
+
+
+@override_settings(TIMWE_INTEGRATION_ENABLED=True)
+def test_switching_plan_cancels_the_previous_one(client, monkeypatch):
+    """One subscriber, one plan -- otherwise they are billed for both."""
+    monkeypatch.setattr('api.services.sms_subscription.send_subscription_sms', lambda *a, **k: None)
+    weekly = SubscriptionTier.objects.get(duration_type='weekly')
+    SubscriptionPlan.objects.create(
+        user=None,
+        tier=weekly,
+        duration_type='weekly',
+        onevas_phone_number=MSISDN,
+        status='active',
+    )
+
+    post(client, SEEDED_ENVELOPE)
+
+    assert SubscriptionPlan.objects.filter(status='active').count() == 1
+    assert SubscriptionPlan.objects.get(status='active').duration_type == 'daily'
+    assert SubscriptionPlan.objects.get(duration_type='weekly').status == 'cancelled'

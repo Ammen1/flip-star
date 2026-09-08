@@ -43,6 +43,7 @@ from api.integrations.timwe.errors import (
     SYNC_SERVICE_NOT_FOUND,
 )
 from api.models import TimweSyncOrderLog
+from api.services.sms_subscription import resolve_subscriber
 from api.services.subscription_tiers import resolve_tier
 from common.security.client_ip import get_client_ip
 
@@ -187,7 +188,9 @@ def timwe_sync_order_relation(request):
         )
         return _soap(build_error_response(SYNC_SERVICE_NOT_FOUND))
 
-    user = _resolve_user(relation.msisdn)
+    # The same lookup the subscription service uses, so the account attributed
+    # on the log row is the one the plan will be attached to.
+    user = resolve_subscriber(relation.msisdn)
     if user is not None:
         log.user = user
 
@@ -220,42 +223,6 @@ def timwe_sync_order_relation(request):
     return _soap(build_response(SYNC_OK, description))
 
 
-def _resolve_user(msisdn: str):
-    """Find the FlipStar account behind an MSISDN, or None."""
-    if not msisdn:
-        return None
-
-    from api.models import SubscriptionPlan, UserProfile
-
-    profile = UserProfile.objects.filter(phone_number=msisdn).select_related('user').first()
-    if profile is not None:
-        return profile.user
-
-    plan = (
-        SubscriptionPlan.objects.filter(onevas_phone_number=msisdn).select_related('user').first()
-    )
-    return plan.user if plan is not None else None
-
-
-def _find_active_plan(relation, tier, user):
-    """
-    Locate the live subscription this notification refers to.
-
-    Two lookup paths, because a subscriber may reach us before they have an
-    account: by user when the MSISDN resolved to one, and by phone number for
-    the SMS-first case where the row carries no user until they register.
-    Both are scoped to the tier, so cancelling Daily never touches Monthly.
-    """
-    from api.models import SubscriptionPlan
-
-    qs = SubscriptionPlan.objects.filter(tier=tier, status='active')
-    if user is not None:
-        return qs.filter(user=user).first()
-    if relation.msisdn:
-        return qs.filter(user__isnull=True, onevas_phone_number=relation.msisdn).first()
-    return None
-
-
 def _apply_relation(relation, tier, user):
     """
     Apply one subscription change announced by the MA.
@@ -265,19 +232,21 @@ def _apply_relation(relation, tier, user):
     duplicate or a no-op is a successful request that changed nothing, and the
     two must stay distinguishable when reconciling against TIMWE's own records.
 
+    The work itself lives in ``api/services/sms_subscription.py``, shared with
+    the OneVAS webhook. This function decides *whether* to act; that module
+    decides *what* acting means, so the two aggregators cannot drift apart on
+    free trials, renewals, payment records or the message the subscriber gets.
+
     Reached only when TIMWE_INTEGRATION_ENABLED is true. Until the OneVAS
     webhooks are removed, that flag is the only thing keeping this from
     granting subscriptions in parallel with them.
     """
-    from django.db import transaction
+    from api.services import sms_subscription
 
-    from api.models import SubscriptionHistory, SubscriptionPlan
-
-    # The MA retries on anything other than result 0, and a retried
-    # subscribe must not produce a second subscription. transactionID is the
-    # MA's own identifier for the event, so it is the right idempotency key.
-    # The current log row is still applied=False at this point, so it cannot
-    # match itself.
+    # The MA retries on anything other than result 0, and a retried subscribe
+    # must not produce a second subscription. transactionID is the MA's own
+    # identifier for the event, so it is the right idempotency key. The current
+    # log row is still applied=False at this point, so it cannot match itself.
     if (
         relation.transaction_id
         and TimweSyncOrderLog.objects.filter(
@@ -286,84 +255,76 @@ def _apply_relation(relation, tier, user):
     ):
         return False, 'Already applied; duplicate transactionID.'
 
+    metadata = {
+        'source': 'timwe',
+        'product_id': relation.product_id,
+        'service_id': relation.service_id,
+        'transaction_id': relation.transaction_id,
+        'order_key': relation.order_key,
+        'keyword': relation.keyword,
+    }
+
     if relation.is_subscribe:
-        with transaction.atomic():
-            if _find_active_plan(relation, tier, user) is not None:
-                return False, 'Subscription already active.'
+        if not relation.msisdn:
+            # userID/type said this is not a mobile subscriber, so there is no
+            # number to bill, to text, or to key the plan on.
+            return False, 'No MSISDN on the notification; nothing to subscribe.'
 
-            plan = SubscriptionPlan.objects.create(
-                user=user,
+        result = sms_subscription.subscribe(
+            phone_number=relation.msisdn,
+            tier=tier,
+            payment_method='timwe',
+            metadata=metadata,
+            # Already resolved by the caller and recorded on the log row.
+            user=user,
+        )
+
+        # The SMS is the point of the SMS channel: without it the subscriber
+        # has been charged and has no way into what they paid for. Sent outside
+        # the subscription transaction, and never allowed to fail the request --
+        # a non-zero result makes the MA retry a charge we have already applied.
+        try:
+            message = sms_subscription.build_welcome_message(
                 tier=tier,
-                duration_type=tier.duration_type,
-                # Reusing the onevas_* column deliberately rather than adding a
-                # parallel timwe_phone_number: _resolve_user already searches
-                # it, and every existing subscription query keys off it. A
-                # second phone column would mean auditing all of them.
-                onevas_phone_number=relation.msisdn,
-                subscription_source='sms',
-                status='pending',
+                result=result,
+                phone_number=relation.msisdn,
+                base_url=settings.TIMWE_SUBSCRIPTION_LINK_BASE,
             )
-            # activate() owns the date arithmetic -- it adds
-            # tier.duration_days + free_trial_days, and leaves end_date null
-            # for OnDemand, which has no duration by definition.
-            plan.activate()
-
-            SubscriptionHistory.objects.create(
-                user=user,
-                subscription=plan,
-                tier=tier,
-                action='created',
-                reason='Subscribed via TIMWE',
-                metadata={
-                    'source': 'timwe',
-                    'product_id': relation.product_id,
-                    'service_id': relation.service_id,
-                    'transaction_id': relation.transaction_id,
-                    'order_key': relation.order_key,
-                    'keyword': relation.keyword,
-                },
+            sms_subscription.send_subscription_sms(relation.msisdn, message, tier)
+        except Exception:
+            logger.exception(
+                'TIMWE subscription applied but the welcome SMS failed',
+                extra={'plan_id': str(result.plan.id)},
             )
 
         logger.info(
-            'TIMWE subscription activated',
+            'TIMWE subscription %s',
+            result.action,
             extra={'product_id': relation.product_id, 'tier': tier.name},
         )
-        return True, 'Subscription activated.'
+        return True, f'Subscription {result.action}.'
 
     if relation.is_unsubscribe:
-        with transaction.atomic():
-            plan = _find_active_plan(relation, tier, user)
-            if plan is None:
-                # Deliberately not 2031 ("subscription relationship does not
-                # exist"). The MA is reporting something it has already done;
-                # answering with an error makes it retry a cancellation we can
-                # never satisfy. Recorded, and reconciled from the log.
-                return False, 'No active subscription to cancel.'
-
-            plan.cancel(reason='Unsubscribed via TIMWE')
-
-            SubscriptionHistory.objects.create(
-                user=plan.user,
-                subscription=plan,
-                tier=tier,
-                action='cancelled',
-                reason='Unsubscribed via TIMWE',
-                metadata={
-                    'source': 'timwe',
-                    'product_id': relation.product_id,
-                    'transaction_id': relation.transaction_id,
-                    'order_key': relation.order_key,
-                    'update_reason': relation.update_reason,
-                },
-            )
+        cancelled = sms_subscription.unsubscribe(
+            phone_number=relation.msisdn,
+            duration_type=tier.duration_type,
+            reason='Unsubscribed via TIMWE',
+            metadata={**metadata, 'update_reason': relation.update_reason},
+            user=user,
+        )
+        if not cancelled:
+            # Deliberately not 2031 ("subscription relationship does not
+            # exist"). The MA is reporting something it has already done;
+            # answering with an error makes it retry a cancellation we can
+            # never satisfy. Recorded, and reconciled from the log.
+            return False, 'No active subscription to cancel.'
 
         logger.info(
             'TIMWE subscription cancelled',
-            extra={'product_id': relation.product_id, 'tier': tier.name},
+            extra={'product_id': relation.product_id, 'count': len(cancelled)},
         )
         return True, 'Subscription cancelled.'
 
-    # updateType 3. The guide defines it as "Update" without saying what
-    # changes, and every documented reason code arrives on 1 or 2. Recorded
-    # rather than guessed at; revisit if one ever appears in the log.
-    return False, 'Update recorded; no subscription change.'
+    # updateType 3 (Update) carries product metadata rather than a state
+    # change: nothing we hold is affected, so it is recorded and acknowledged.
+    return False, 'Update recorded; no subscription change required.'

@@ -88,7 +88,10 @@ def test_subscribe_activates_a_plan(daily_tier, user):
     applied, description = _apply_relation(_relation(), daily_tier, user)
 
     assert applied is True
-    assert description == 'Subscription activated.'
+    # 'created' rather than 'activated': the description now distinguishes a
+    # first subscription from a renewal, which is what reconciliation against
+    # TIMWE's own records needs.
+    assert description == 'Subscription created.'
 
     plan = SubscriptionPlan.objects.get(user=user, tier=daily_tier)
     assert plan.status == 'active'
@@ -116,14 +119,25 @@ def test_subscribe_records_history(daily_tier, user):
     assert entry.metadata['transaction_id'] == 'TX-1'
 
 
-def test_subscribe_twice_does_not_create_a_second_plan(daily_tier, user):
-    """The MA retries anything that is not result 0."""
+def test_a_second_charge_renews_rather_than_duplicating(daily_tier, user):
+    """
+    A *new* transactionID on an active plan means the MA charged again.
+
+    This used to answer 'Subscription already active' and do nothing, which
+    meant a subscriber was billed for a period they never received. It now
+    renews in place -- one plan, extended -- matching the OneVAS webhook.
+    A retry of the *same* transactionID is still refused; that is the test
+    below.
+    """
     _apply_relation(_relation(), daily_tier, user)
+    before = SubscriptionPlan.objects.get(user=user, tier=daily_tier).end_date
+
     applied, description = _apply_relation(_relation(transaction_id='TX-2'), daily_tier, user)
 
-    assert applied is False
-    assert description == 'Subscription already active.'
+    assert applied is True
+    assert description == 'Subscription renewed.'
     assert SubscriptionPlan.objects.filter(user=user, tier=daily_tier).count() == 1
+    assert SubscriptionPlan.objects.get(user=user, tier=daily_tier).end_date >= before
 
 
 def test_duplicate_transaction_id_is_not_applied_twice(daily_tier, user):

@@ -516,3 +516,12 @@ AT_API_KEY = config('AT_API_KEY', default='')
 from common.constants.logging import build_logging_config  # noqa: E402
 
 LOGGING = build_logging_config(level=config('LOG_LEVEL', default='INFO'), json_format=False)
+
+# Where the welcome SMS sends a new subscriber to redeem their OTP.
+#
+# Separate from the OneVAS link so the two channels can be pointed at
+# different front ends during the migration; same default, since today they
+# are the same app.
+TIMWE_SUBSCRIPTION_LINK_BASE = config(
+    'TIMWE_SUBSCRIPTION_LINK_BASE', default='https://uat.flipstar.et/register'
+)

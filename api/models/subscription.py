@@ -207,7 +207,16 @@ class SubscriptionPlan(models.Model):
     auto_renew = models.BooleanField(default=False)
     payment_method = models.CharField(
         max_length=20,
-        choices=[('onevas', 'Onevas Airtime'), ('telebirr', 'Telebirr'), ('coins', 'Coins')],
+        # 'timwe' is the Master Aggregator replacing OneVAS. Both are airtime
+        # billing over the same SMS channel, but they are recorded separately
+        # so revenue can be attributed during the migration, when both are
+        # live at once.
+        choices=[
+            ('onevas', 'Onevas Airtime'),
+            ('timwe', 'TIMWE Airtime'),
+            ('telebirr', 'Telebirr'),
+            ('coins', 'Coins'),
+        ],
         default='onevas',
     )
 
@@ -409,6 +418,7 @@ class SubscriptionPayment(models.Model):
 
     PAYMENT_METHOD_CHOICES = [
         ('onevas', 'Onevas Airtime'),
+        ('timwe', 'TIMWE Airtime'),
         ('telebirr', 'Telebirr'),
         ('coins', 'Coins'),
     ]
