@@ -28,6 +28,7 @@ is live and carries real payments. This is where it should move when it is next
 touched, and until then the two must be changed together.
 """
 
+import logging
 import uuid
 
 from django.db import transaction
@@ -39,6 +40,8 @@ from api.models import (
     SubscriptionPlan,
     UserProfile,
 )
+
+logger = logging.getLogger(__name__)
 
 #: What a subscriber texts to cancel, per plan. Quoted in the welcome SMS, so
 #: it has to match what the aggregator is configured to recognise.
@@ -324,13 +327,29 @@ def build_welcome_message(*, tier, result, phone_number, base_url):
     )
 
 
-def send_subscription_sms(phone_number, message, tier):
-    """Send over the aggregator's SMS channel.
+def send_subscription_sms(phone_number, message, tier, *, idempotency_key=None):
+    """Queue the subscriber's message on the configured gateway.
 
-    Routed through the existing OneVAS sender rather than a second client:
-    there is one SMS gateway, and it is already keyed per tier. Imported
-    locally because that lives in a view module.
+    Goes through the SMS gateway abstraction rather than any one provider:
+    TIMWE SMPP in production, and nothing here knows that. It returns once the
+    message is durable, not once it is delivered -- delivery is asynchronous
+    over SMPP and is tracked on SmsMessage.
+
+    ``idempotency_key`` is what stops a retried subscription notification
+    producing a second OTP that invalidates the first. Callers that can name
+    the event -- by the aggregator's transaction id, say -- should pass one.
     """
-    from api.views.subscription import OnevasWebhookView
+    from api.services.sms.dispatch import SmsNotQueued, queue_sms
 
-    return OnevasWebhookView().send_sms(phone_number, message, tier.duration_type)
+    try:
+        queue_sms(
+            phone_number=phone_number,
+            text=message,
+            purpose='subscription_welcome',
+            idempotency_key=idempotency_key,
+            tier_type=tier.duration_type,
+        )
+    except SmsNotQueued:
+        logger.warning('Subscription SMS not queued for %s', phone_number)
+        return False
+    return True

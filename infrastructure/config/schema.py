@@ -217,6 +217,88 @@ SCHEMA: tuple[Key, ...] = (
     _k('TIMWE_CURRENCY', group='timwe'),
     _k('TIMWE_CHARGE_TIMEOUT', kind='int', group='timwe'),
     _k('TIMWE_ALLOWED_IPS', kind='csv', group='timwe'),
+    # -- timwe smpp -----------------------------------------------------------
+    # Deliberately separate from TIMWE_SP_ID / TIMWE_SP_PASSWORD above. Those
+    # are the HTTP charging API credentials and are read only by
+    # api/integrations/timwe/charge.py. The SMPP link is a different protocol
+    # with its own login, and two integration documents quote two different
+    # SP identifiers (300263 and 015164), so nothing here is inferred from
+    # them -- every SMPP value is set explicitly by an operator.
+    _k(
+        'SMS_PROVIDER',
+        group='sms',
+        doc="Which SMS gateway delivers application SMS. 'timwe_smpp' in "
+        "production. 'onevas_http' is legacy and unsupported; 'console' logs "
+        'instead of sending, for local development.',
+    ),
+    _k('TIMWE_SMPP_HOST', group='sms', doc='SMPP gateway host, e.g. 10.175.206.42.'),
+    _k('TIMWE_SMPP_PORT', kind='int', group='sms', doc='SMPP gateway TCP port, e.g. 6986.'),
+    _k(
+        'TIMWE_SMPP_SYSTEM_ID',
+        group='sms',
+        doc='SMPP bind login (system_id). This is the SMPP account name, NOT '
+        'the charging API TIMWE_SP_ID -- set it from the SMPP credentials '
+        'TIMWE supplied, even if the two happen to match.',
+    ),
+    _k(
+        'TIMWE_SMPP_PASSWORD',
+        group='sms',
+        doc='SMPP bind password. Secret: resolve through Vault, never log it.',
+    ),
+    _k(
+        'TIMWE_SMPP_SYSTEM_TYPE',
+        group='sms',
+        doc='SMPP system_type sent on bind. Blank unless TIMWE specify one.',
+    ),
+    _k(
+        'TIMWE_SMPP_SOURCE_ADDR',
+        group='sms',
+        doc='Source address shown on the handset (the short code or SP ID). '
+        'Distinct from system_id: one authenticates the link, this one labels '
+        'the message.',
+    ),
+    _k(
+        'TIMWE_SMPP_SOURCE_TON',
+        kind='int',
+        group='sms',
+        doc='Type of Number for the source address. 5 = alphanumeric, '
+        '3 = national/short code, 1 = international.',
+    ),
+    _k(
+        'TIMWE_SMPP_SOURCE_NPI',
+        kind='int',
+        group='sms',
+        doc='Numbering Plan Indicator for the source address. 0 = unknown, 1 = ISDN.',
+    ),
+    _k(
+        'TIMWE_SMPP_DEST_TON',
+        kind='int',
+        group='sms',
+        doc='Type of Number for the destination MSISDN. 1 = international.',
+    ),
+    _k(
+        'TIMWE_SMPP_DEST_NPI',
+        kind='int',
+        group='sms',
+        doc='Numbering Plan Indicator for the destination MSISDN. 1 = ISDN.',
+    ),
+    _k(
+        'TIMWE_SMPP_SERVICE_TYPE',
+        group='sms',
+        doc='SMPP service_type on submit_sm. Blank unless TIMWE require one.',
+    ),
+    _k(
+        'TIMWE_SMPP_REGISTERED_DELIVERY',
+        kind='int',
+        group='sms',
+        doc='registered_delivery on submit_sm. 1 requests a delivery receipt; ' '0 disables DLR.',
+    ),
+    _k(
+        'TIMWE_SMPP_ENQUIRE_LINK_SECONDS',
+        kind='int',
+        group='sms',
+        doc='Keepalive interval on an idle bind.',
+    ),
     _k('ONEVAS_APPLICATION_KEY', group='onevas'),
     _k('ONEVAS_PRODUCT_NUMBER', group='onevas'),
     _k('ONEVAS_SMS_URL', group='onevas'),

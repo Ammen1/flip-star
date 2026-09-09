@@ -2,7 +2,6 @@
 
 import logging
 
-import requests
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -53,7 +52,7 @@ class SuperAppSMSService:
 
     def _send_sms(self, phone_number, text, duration_type='weekly'):
         """
-        Send SMS via Onevas API (same logic as Direct Debit)
+        Queue an SMS for delivery over the configured gateway.
 
         Args:
             phone_number: User's phone number (format: 2519...)
@@ -61,46 +60,26 @@ class SuperAppSMSService:
             duration_type: Plan duration type (daily, weekly, monthly)
 
         Returns:
-            bool: True if SMS sent successfully, False otherwise
+            bool: True if the message was recorded and queued.
+
+        The OneVAS HTTP POST that used to live here is gone -- SMS goes over
+        TIMWE SMPP now, from a worker rather than from this call. True means
+        queued, not delivered; SmsMessage.status carries the latter.
         """
+        from api.services.sms.dispatch import SmsNotQueued, queue_sms
+
         try:
-            config = self._get_product_config(duration_type)
-
-            payload = {
-                'application_key': config['application_key'],
-                'phone_number': phone_number,
-                'product_number': config['product_id'],
-                'text': text,
-            }
-
-            logger.info(f'[SuperApp SMS] Sending SMS to {phone_number}')
-            logger.info(f'[SuperApp SMS] Message: {text[:100]}...')
-            logger.info(
-                f"[SuperApp SMS] Using app_key: {config['application_key'][:10]}..., product: {config['product_id']}"
+            queue_sms(
+                phone_number=phone_number,
+                text=text,
+                purpose='superapp',
+                tier_type=duration_type,
             )
-
-            response = requests.post(
-                self.ONEVAS_SMS_URL,
-                json=payload,
-                timeout=self.timeout,
-                headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
-            )
-
-            logger.info(f'[SuperApp SMS] Response status: {response.status_code}')
-            logger.info(f'[SuperApp SMS] Response body: {response.text}')
-
-            if response.status_code == 200:
-                logger.info(f'[SuperApp SMS] SMS sent successfully to {phone_number}')
-                return True
-            else:
-                logger.error(
-                    f'[SuperApp SMS] Failed to send SMS. Status: {response.status_code}, Response: {response.text}'
-                )
-                return False
-
-        except Exception as e:
-            logger.error(f'[SuperApp SMS] Error sending SMS: {str(e)}')
+        except SmsNotQueued as exc:
+            logger.warning('[SuperApp SMS] Not queued for %s: %s', phone_number, exc)
             return False
+        logger.info('[SuperApp SMS] Queued for %s', phone_number)
+        return True
 
     def send_subscription_success(self, phone_number, plan_name, amount, duration_type, end_date):
         """

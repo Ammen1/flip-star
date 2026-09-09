@@ -185,6 +185,8 @@ from .admin import (
     SystemLog,
 )
 
+from api.models.sms import SmsMessage, SmsStatus
+
 __all__ = [
     'Organization',
     'UserRealm',
@@ -311,4 +313,6 @@ __all__ = [
     'PlatformSettings',
     'SecurityEvent',
     'SystemLog',
+    'SmsMessage',
+    'SmsStatus',
 ]

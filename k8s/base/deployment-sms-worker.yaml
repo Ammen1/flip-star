@@ -1,0 +1,121 @@
+# SMS worker -- the single owner of the TIMWE SMPP session.
+#
+# Why this is its own Deployment rather than another celery-worker replica
+# -----------------------------------------------------------------------
+# SMPP is one authenticated, long-lived TCP session, and operators cap how
+# many an account may hold. The general worker runs 2 replicas at
+# --concurrency=4, so putting SMS there would open up to eight binds and have
+# eight processes writing to sockets that smpplib does not guard.
+#
+# So: exactly one replica, --pool=solo (one process, no prefork children),
+# consuming only the `sms` queue. CELERY_TASK_ROUTES in config/settings/base.py
+# routes api.tasks.sms.* here; the general workers never see those tasks
+# because they consume the default queue and are not given -Q sms.
+#
+# strategy: Recreate, not RollingUpdate. A surge would briefly run two
+# processes and therefore two binds -- the exact thing this file exists to
+# prevent. A few seconds with no SMS worker is harmless: messages are already
+# durable in the database and on the broker, and are picked up on restart.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-sms-worker
+  labels:
+    app.kubernetes.io/name: flipstar-backend
+    app.kubernetes.io/component: sms-worker
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-backend
+      app.kubernetes.io/component: sms-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-backend
+        app.kubernetes.io/component: sms-worker
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      serviceAccountName: flipstar-backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sms-worker
+          image: ghcr.io/ammen1/flip-star-backend-celery:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: flipstar-backend-config
+            - secretRef:
+                name: flipstar-backend-vault-approle
+          env:
+            # Only this process binds SMPP. api/celery.py checks this flag on
+            # worker_init; every other worker leaves it false and never opens
+            # a session.
+            - name: SMS_WORKER
+              value: "true"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # --pool=solo: the task runs in this process, so the SMPP client
+          # singleton and the reader thread that receives delivery receipts
+          # are the same ones the task submits through. A prefork pool would
+          # put the session in the parent and the task in a child.
+          #
+          # No --max-tasks-per-child: recycling would drop the bind.
+          command:
+            - celery
+            - -A
+            - config
+            - worker
+            - --loglevel=info
+            - --pool=solo
+            - --queues=sms
+            - --hostname=sms@%h
+          # `inspect ping` proves the worker is consuming, matching the
+          # convention in deployment-celery-worker.yaml. It does not prove the
+          # SMPP bind is up -- that is what /api/v1/admin/sms/health/ reports,
+          # and it is deliberately not a liveness condition: an SMPP outage
+          # should not restart-loop a worker that is correctly queueing.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "celery -A config inspect ping -d sms@$HOSTNAME --timeout=8"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 15
+            failureThreshold: 20
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A config inspect ping -d sms@$HOSTNAME --timeout=8"]
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 3
+          # SIGTERM reaches celery, which stops consuming and lets the current
+          # task finish; api/celery.py's worker_shutdown handler then unbinds
+          # the SMPP session so the gateway frees the slot immediately rather
+          # than waiting for it to time out.
+          terminationGracePeriodSeconds: 60
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -525,3 +525,53 @@ LOGGING = build_logging_config(level=config('LOG_LEVEL', default='INFO'), json_f
 TIMWE_SUBSCRIPTION_LINK_BASE = config(
     'TIMWE_SUBSCRIPTION_LINK_BASE', default='https://uat.flipstar.et/register'
 )
+
+# ---------------------------------------------------------------------------
+# SMS delivery
+# ---------------------------------------------------------------------------
+# TIMWE SMPP replaced OneVAS HTTP as the transport for every application SMS.
+# There is deliberately no fallback: a silent failover to OneVAS would send
+# subscribers messages over a gateway that is being decommissioned, and would
+# hide an SMPP outage instead of surfacing it.
+#
+# 'console' exists for local development, where there is no gateway to reach.
+# Production must set 'timwe_smpp' explicitly -- api/services/sms/__init__.py
+# refuses to start on an unknown value rather than picking one.
+SMS_PROVIDER = config('SMS_PROVIDER', default='timwe_smpp')
+
+# The SMPP link. Separate from TIMWE_SP_ID/TIMWE_SP_PASSWORD above, which are
+# the HTTP charging API's credentials -- see infrastructure/config/schema.py.
+TIMWE_SMPP_HOST = config('TIMWE_SMPP_HOST', default='')
+TIMWE_SMPP_PORT = config('TIMWE_SMPP_PORT', default=0, cast=int)
+TIMWE_SMPP_SYSTEM_ID = config('TIMWE_SMPP_SYSTEM_ID', default='')
+TIMWE_SMPP_PASSWORD = config('TIMWE_SMPP_PASSWORD', default='')
+TIMWE_SMPP_SYSTEM_TYPE = config('TIMWE_SMPP_SYSTEM_TYPE', default='')
+
+# Addressing. TON/NPI defaults follow the common Ethiopian short-code setup:
+# an international destination MSISDN (251...) and a national short code as
+# the source. TIMWE may require different values -- they are settings, not
+# constants, for exactly that reason.
+TIMWE_SMPP_SOURCE_ADDR = config('TIMWE_SMPP_SOURCE_ADDR', default='')
+TIMWE_SMPP_SOURCE_TON = config('TIMWE_SMPP_SOURCE_TON', default=3, cast=int)
+TIMWE_SMPP_SOURCE_NPI = config('TIMWE_SMPP_SOURCE_NPI', default=0, cast=int)
+TIMWE_SMPP_DEST_TON = config('TIMWE_SMPP_DEST_TON', default=1, cast=int)
+TIMWE_SMPP_DEST_NPI = config('TIMWE_SMPP_DEST_NPI', default=1, cast=int)
+TIMWE_SMPP_SERVICE_TYPE = config('TIMWE_SMPP_SERVICE_TYPE', default='')
+
+# 1 = ask for a delivery receipt. Without it a message can only ever reach
+# 'submitted' -- the gateway accepted it -- and never 'delivered'.
+TIMWE_SMPP_REGISTERED_DELIVERY = config('TIMWE_SMPP_REGISTERED_DELIVERY', default=1, cast=int)
+TIMWE_SMPP_ENQUIRE_LINK_SECONDS = config('TIMWE_SMPP_ENQUIRE_LINK_SECONDS', default=30, cast=int)
+
+# SMPP is one long-lived TCP session, so exactly one process may own it. SMS
+# tasks are routed to their own queue, consumed by a single-replica worker
+# running --pool=solo; the general workers (2 replicas x concurrency 4) never
+# see this queue. See k8s/base/deployment-sms-worker.yaml.
+CELERY_TASK_ROUTES = {
+    'api.tasks.sms.*': {'queue': 'sms'},
+}
+
+# True only in the dedicated SMS worker, which owns the single SMPP session.
+# Set by k8s/base/deployment-sms-worker.yaml; every other process leaves it
+# false and never binds. See api/celery.py.
+SMS_WORKER = config('SMS_WORKER', default=False, cast=bool)

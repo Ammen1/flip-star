@@ -2,7 +2,6 @@ import logging
 import uuid
 from datetime import timedelta
 
-import requests
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -369,40 +368,32 @@ class OnevasWebhookView(APIView):
         )
 
     def send_sms(self, phone_number, text, tier_type=None):
-        """Send SMS using Onevas API with tier-specific application key"""
+        """Queue an SMS for delivery.
+
+        Kept as a method with the same signature and truthy return so every
+        existing caller works unchanged, but the transport underneath is no
+        longer OneVAS HTTP: this now writes an SmsMessage and hands it to the
+        SMS worker, which submits over TIMWE SMPP.
+
+        The return value changed meaning, and that is the honest change. It
+        used to report "OneVAS answered 200"; it now reports "the message is
+        recorded and queued". Delivery is a later, separate fact, tracked on
+        SmsMessage.status -- an HTTP request cannot know it, and pretending
+        otherwise was what made a queued OTP look delivered.
+        """
+        from api.services.sms.dispatch import SmsNotQueued, queue_sms
+
         try:
-            # Get application key for the specific tier, or use default
-            app_key = ONEVAS_APPLICATION_KEY
-            if tier_type and tier_type in ONEVAS_PRODUCTS:
-                tier_key = ONEVAS_PRODUCTS[tier_type]['application_key']
-                if tier_key:
-                    app_key = tier_key
-
-            # Get product number from configuration
-            product_number = ONEVAS_PRODUCT_NUMBER
-            if tier_type and tier_type in ONEVAS_PRODUCTS:
-                tier_pid = ONEVAS_PRODUCTS[tier_type]['product_id']
-                if tier_pid:
-                    product_number = tier_pid
-
-            payload = {
-                'phone_number': phone_number,
-                'application_key': app_key,
-                'text': text,
-                'product_number': product_number,
-            }
-            print(
-                f'[SMS DEBUG] Sending SMS - phone: {phone_number}, tier_type: {tier_type}, app_key: {app_key[:10]}..., product_number: {product_number}'
+            queue_sms(
+                phone_number=phone_number,
+                text=text,
+                purpose='subscription',
+                tier_type=tier_type,
             )
-            print(f'[SMS DEBUG] SMS text length: {len(text)}')
-            response = requests.post(ONEVAS_SMS_URL, json=payload, timeout=10)
-            print(
-                f'[SMS DEBUG] Response status: {response.status_code}, response body: {response.text}'
-            )
-            return response.status_code == 200
-        except Exception as e:
-            print(f'Failed to send SMS: {e}')
+        except SmsNotQueued as exc:
+            logger.warning('SMS not queued for %s: %s', phone_number, exc)
             return False
+        return True
 
     def post(self, request, webhook_type):
         """Handle subscription, unsubscription, renewal, and stop webhooks"""

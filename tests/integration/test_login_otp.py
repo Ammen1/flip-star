@@ -37,13 +37,22 @@ def _clear_cache():
 
 @pytest.fixture(autouse=True)
 def _mock_sms_gateway():
-    """OTPService.send_otp makes a real requests.post() to the Onevas SMS
-    gateway. Unmocked, every call in this file blocks for its full 30s
-    timeout against a host this sandbox can't reach. The OTP is generated
-    and cached before that call, so the tests don't need it to succeed."""
-    fake_response = MagicMock(status_code=200, text='Accepted for Delivery')
-    with patch('api.services.otp.requests.post', return_value=fake_response) as mock_post:
-        yield mock_post
+    """Stop OTP SMS at the queue, not at the transport.
+
+    This used to patch ``api.services.otp.requests.post``, because send_otp
+    POSTed to the OneVAS SMS gateway inline and every test otherwise blocked
+    for the full 30s timeout against a host the sandbox cannot reach.
+
+    That call is gone: OTP SMS is queued and delivered over TIMWE SMPP by the
+    SMS worker. Patching ``queue_sms`` mocks the right seam -- the tests still
+    never touch a network, and they now also prove the OTP path goes through
+    the gateway abstraction rather than any one provider. The OTP itself is
+    generated and cached before this point, so nothing here needs to succeed
+    for the assertions below to hold.
+    """
+    with patch('api.services.sms.dispatch.queue_sms') as mock_queue:
+        mock_queue.return_value = MagicMock(id='test-sms-id')
+        yield mock_queue
 
 
 @pytest.fixture
@@ -113,7 +122,9 @@ def test_login_with_otp_rejects_wrong_code(existing_user):
     send_login_otp(factory.post('/auth/send-login-otp/', {'phone': '0911223344'}, format='json'))
 
     response = login_with_otp(
-        factory.post('/auth/login-with-otp/', {'phone': '0911223344', 'code': '000000'}, format='json'),
+        factory.post(
+            '/auth/login-with-otp/', {'phone': '0911223344', 'code': '000000'}, format='json'
+        ),
     )
 
     assert response.status_code == 400
@@ -139,20 +150,35 @@ def test_login_with_otp_falls_back_to_active_telebirr_subscription(db):
 
     telebirr_user = User.objects.create_user(username='telebirr_only_user', password='x')
     tier = SubscriptionTier.objects.create(
-        name='OTP Login Test Daily', slug='otp-login-test-daily', duration_type='daily', duration_days=1, price_etb=10,
-        onevas_code='T1', spid='sp1', service_id='svc1', product_id='prod1',
+        name='OTP Login Test Daily',
+        slug='otp-login-test-daily',
+        duration_type='daily',
+        duration_days=1,
+        price_etb=10,
+        onevas_code='T1',
+        spid='sp1',
+        service_id='svc1',
+        product_id='prod1',
     )
     plan = SubscriptionPlan.objects.create(
-        user=telebirr_user, tier=tier, status='active', payment_method='telebirr',
-        telebirr_phone_number='251944556677', start_date=timezone.now(),
+        user=telebirr_user,
+        tier=tier,
+        status='active',
+        payment_method='telebirr',
+        telebirr_phone_number='251944556677',
+        start_date=timezone.now(),
         end_date=timezone.now() + timezone.timedelta(days=1),
     )
     try:
-        send_login_otp(factory.post('/auth/send-login-otp/', {'phone': '0944556677'}, format='json'))
+        send_login_otp(
+            factory.post('/auth/send-login-otp/', {'phone': '0944556677'}, format='json')
+        )
         code = _current_otp_code('251944556677')
 
         response = login_with_otp(
-            factory.post('/auth/login-with-otp/', {'phone': '0944556677', 'code': code}, format='json'),
+            factory.post(
+                '/auth/login-with-otp/', {'phone': '0944556677', 'code': code}, format='json'
+            ),
         )
 
         assert response.status_code == 200, response.data
@@ -168,20 +194,35 @@ def test_login_with_otp_does_not_fall_back_to_expired_telebirr_subscription(db):
 
     telebirr_user = User.objects.create_user(username='telebirr_expired_user', password='x')
     tier = SubscriptionTier.objects.create(
-        name='OTP Login Test Daily Expired', slug='otp-login-test-daily-expired', duration_type='daily', duration_days=1, price_etb=10,
-        onevas_code='T2', spid='sp2', service_id='svc2', product_id='prod2',
+        name='OTP Login Test Daily Expired',
+        slug='otp-login-test-daily-expired',
+        duration_type='daily',
+        duration_days=1,
+        price_etb=10,
+        onevas_code='T2',
+        spid='sp2',
+        service_id='svc2',
+        product_id='prod2',
     )
     plan = SubscriptionPlan.objects.create(
-        user=telebirr_user, tier=tier, status='active', payment_method='telebirr',
-        telebirr_phone_number='251955667788', start_date=timezone.now() - timezone.timedelta(days=2),
+        user=telebirr_user,
+        tier=tier,
+        status='active',
+        payment_method='telebirr',
+        telebirr_phone_number='251955667788',
+        start_date=timezone.now() - timezone.timedelta(days=2),
         end_date=timezone.now() - timezone.timedelta(days=1),
     )
     try:
-        send_login_otp(factory.post('/auth/send-login-otp/', {'phone': '0955667788'}, format='json'))
+        send_login_otp(
+            factory.post('/auth/send-login-otp/', {'phone': '0955667788'}, format='json')
+        )
         code = _current_otp_code('251955667788')
 
         response = login_with_otp(
-            factory.post('/auth/login-with-otp/', {'phone': '0955667788', 'code': code}, format='json'),
+            factory.post(
+                '/auth/login-with-otp/', {'phone': '0955667788', 'code': code}, format='json'
+            ),
         )
 
         assert response.status_code == 400

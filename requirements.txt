@@ -49,3 +49,9 @@ hvac==2.3.0
 # X25519 + XSalsa20-Poly1305 authenticated encryption (nacl.box), used for
 # end-to-end encryption of sensitive payloads. See common/security/.
 PyNaCl==1.5.0
+
+# SMPP client for the TIMWE SMS gateway. TIMWE replaced OneVAS as the SMS
+# transport; SMPP is a persistent TCP protocol, so delivery runs in a
+# dedicated single-owner Celery worker rather than in a request. See
+# api/integrations/smpp/ and docs/sms-smpp.md.
+smpplib==2.2.3

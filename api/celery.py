@@ -1,7 +1,7 @@
 import os
 
 from celery import Celery
-from celery.signals import beat_init, worker_init
+from celery.signals import beat_init, worker_init, worker_shutdown
 
 # Set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -41,6 +41,64 @@ def _verify_infrastructure_before_starting(**kwargs):
     from infrastructure.health import verify_redis_and_vault
 
     verify_redis_and_vault()
+
+
+@worker_init.connect
+def _bind_sms_gateway(**kwargs):
+    """Open the SMPP session, but only in the worker that owns it.
+
+    Gated on ``SMS_WORKER``, an explicit environment flag set by the SMS
+    worker deployment alone -- not inferred from the ``-Q`` options, which
+    would mean reading Celery internals that change between versions.
+
+    Binding in every worker would open one session per process: eight, at the
+    general workers' two replicas by concurrency four. Operators cap
+    concurrent binds, so that is not merely wasteful.
+
+    A gateway unreachable at startup is logged and left. The first delivery
+    reconnects, and refusing to start would mean an SMPP outage also stopped
+    messages being queued for later.
+    """
+    import logging
+
+    from django.conf import settings
+
+    logger = logging.getLogger(__name__)
+
+    if not getattr(settings, 'SMS_WORKER', False):
+        return
+
+    provider = getattr(settings, 'SMS_PROVIDER', '')
+    if provider != 'timwe_smpp':
+        logger.info('SMS worker started with SMS_PROVIDER=%s; no SMPP bind needed.', provider)
+        return
+
+    from api.integrations.smpp.client import get_client
+    from api.services.sms.dlr_listener import attach_dlr_handler
+
+    client = get_client()
+    attach_dlr_handler(client)
+    try:
+        client.connect()
+    except Exception as exc:
+        logger.warning(
+            'SMPP_BIND_DEFERRED reason=%s -- will bind on first send', type(exc).__name__
+        )
+
+
+@worker_shutdown.connect
+def _unbind_sms_gateway(**kwargs):
+    """Close the SMPP session cleanly on shutdown.
+
+    Unbinding tells the gateway the session ended rather than leaving it to
+    time the bind out, which matters when an operator caps concurrent binds:
+    a restart would otherwise consume a second slot while the first expires.
+    Queued messages are unaffected -- they live in the database and on the
+    broker, not in this process.
+    """
+    from api.integrations.smpp.client import reset_client
+
+    reset_client()
 
 
 # Celery beat configuration

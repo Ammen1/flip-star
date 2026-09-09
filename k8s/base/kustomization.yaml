@@ -15,6 +15,7 @@ resources:
   - deployment.yaml
   - deployment-celery-worker.yaml
   - deployment-celery-beat.yaml
+  - deployment-sms-worker.yaml
   - service.yaml
   - pdb.yaml
 

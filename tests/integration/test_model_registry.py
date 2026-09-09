@@ -91,6 +91,14 @@ def test_model_count_is_stable():
     to what) and CampaignRewardGrant (the idempotency record that makes a
     retried reward a no-op).
 
+    114 adds SmsMessage (api/models/sms.py), which tracks an outbound SMS from
+    queueing to delivery. SMPP is asynchronous in both directions: submit_sm
+    returns a gateway message id and the delivery receipt for it arrives
+    later, so there has to be somewhere to write the id down. It is also what
+    the idempotency key hangs off, and so what stops a retry sending a second
+    OTP. Deliberately not a field on the subscription models -- SMS delivery
+    is not payment state.
+
     These do not duplicate the three coin concepts that already existed:
     CampaignScoringConfig holds LEADERBOARD weights, WalletConfig.cost_* holds
     what an engagement costs the actor, and WalletConfig.*_reward held what it
@@ -99,7 +107,7 @@ def test_model_count_is_stable():
 
     Update it deliberately when the model set genuinely changes.
     """
-    assert len(list(_api_models())) == 113
+    assert len(list(_api_models())) == 114
 
 
 @pytest.mark.parametrize(

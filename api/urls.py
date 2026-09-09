@@ -450,6 +450,7 @@ from api.views.settings import (
     toggle_api_key,
     update_platform_settings,
 )
+from api.views.sms_health import sms_health
 from api.views.wallet import (
     admin_adjust_balance,
     admin_all_coin_transactions,
@@ -500,6 +501,9 @@ from api.views.setup_admin import setup_admin
 
 urlpatterns = [
     path('health/', health_check, name='health-check'),
+    # SMS gateway state. Staff-only, and deliberately does not send a
+    # test message -- see api/views/sms_health.py.
+    path('admin/sms/health/', sms_health, name='sms-health'),
     path('health/deep/', health_check_deep, name='health-check-deep'),
     path('cleanup-reels/', cleanup_broken_reels, name='cleanup-reels'),
     path('auth/register/', register, name='auth-register'),

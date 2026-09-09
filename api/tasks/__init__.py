@@ -21,8 +21,10 @@ from api.tasks.media import (
     process_reel_media,
     send_push_notification,
 )
+from api.tasks.sms import deliver_sms
 
 __all__ = [
+    'deliver_sms',
     'expire_boost_campaigns',
     'auto_select_campaign_winners',
     'cleanup_typing_indicators',
