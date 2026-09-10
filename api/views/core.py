@@ -53,6 +53,7 @@ from api.serializers.core import (
 )
 from api.services.coin_purchase import insufficient_coins_payload
 from api.services.subscription_access import (
+    SUBSCRIPTION_REQUIRED_CODE,
     has_active_subscription,
     subscription_required_payload,
 )
@@ -1366,86 +1367,91 @@ def forgot_password_confirm(request):
     return Response({'message': 'Password reset successful. You can now log in.'})
 
 
+# ── Phone PIN reset: who may reset ─────────────────────────────────────────
+#
+# A PIN reset is for a subscriber. Anyone else is told why, and how to
+# subscribe -- where this used to answer "if an account exists, you will
+# receive a code" and leave a non-subscriber waiting for an SMS that was never
+# going to come.
+#
+# This tells a caller whether a number has an account. send_login_otp already
+# does (``user_exists``), so nothing new is disclosed, and both endpoints are
+# throttled.
+
+PIN_RESET_USER_NOT_FOUND_CODE = 'USER_NOT_FOUND'
+
+
+def _subscribe_hint():
+    """How to subscribe: the routes the subscription page offers."""
+    from django.conf import settings as _settings
+
+    short_code = getattr(_settings, 'ONEVAS_SHORT_CODE', '') or '9286'
+    return (
+        f'To subscribe, send 1 (Daily), 2 (Weekly) or 3 (Monthly) to {short_code} '
+        'to pay with airtime, or subscribe with telebirr through the SuperApp or USSD.'
+    )
+
+
+def _pin_reset_account(phone):
+    """The account a PIN reset for ``phone`` applies to, or why there is none.
+
+    Returns ``(user, None)`` when the number belongs to an account with an
+    active subscription, and ``(None, response)`` otherwise. "Active" is
+    ``has_active_subscription`` -- the same rule that gates posting.
+    """
+    profile = UserProfile.objects.select_related('user').filter(phone_number=phone).first()
+    if profile is None:
+        return None, Response(
+            {
+                'code': PIN_RESET_USER_NOT_FOUND_CODE,
+                'error': 'No FlipStar account is registered with this phone number.',
+                'subscribe_hint': _subscribe_hint(),
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if not has_active_subscription(profile.user):
+        return None, Response(
+            {
+                'code': SUBSCRIPTION_REQUIRED_CODE,
+                'error': 'This account does not have an active subscription.',
+                'subscribe_hint': _subscribe_hint(),
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return profile.user, None
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([PasswordResetAnonThrottle, PasswordResetUserThrottle])
 @encrypted_endpoint
 def forgot_password_phone_request(request):
-    """Send 6-digit reset code via SMS to the user's phone number."""
+    """Send a 6-digit PIN reset code by SMS to a subscriber's phone."""
     from django.conf import settings as _settings
 
-    from api.models import UserProfile
-    from api.models.subscription import SubscriptionPlan as UserSubscription
     from api.services.otp import OTPService
 
-    phone_raw = request.data.get('phone', '').strip()
-    print(f'[PWD-RESET-PHONE] forgot_password_phone_request called with phone: {phone_raw}')
-
-    # Normalize phone number
-    phone = _normalize_ethiopian_phone(phone_raw)
-    print(f'[PWD-RESET-PHONE] Normalized phone: {phone}')
-
+    phone = _normalize_ethiopian_phone((request.data.get('phone') or '').strip())
     if not phone:
-        print('[PWD-RESET-PHONE] Invalid phone number format')
         return Response(
             {'error': 'Invalid Ethiopian phone number'}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Check if account exists
-    has_account = UserProfile.objects.filter(phone_number=phone).exists()
-    print(f'[PWD-RESET-PHONE] Account exists: {has_account}')
+    _user, refusal = _pin_reset_account(phone)
+    if refusal is not None:
+        return refusal
 
-    # Always return success even if account doesn't exist (security)
-    SAFE = {'message': 'If an account exists with this phone number, you will receive an OTP code.'}
-
-    if not has_account:
-        print(f'[PWD-RESET-PHONE] No account found for phone: {phone}')
-        return Response(SAFE)
-
-    # Get user's active subscription tier for Onevas keys
-    try:
-        profile = UserProfile.objects.get(phone_number=phone)
-        user = profile.user
-        print(f'[PWD-RESET-PHONE] Found user: {user.username}')
-
-        # Check for active subscription
-        active_subscription = UserSubscription.objects.filter(user=user, status='active').first()
-
-        # Defaults resolve via settings (environment -> Vault -> .env). These
-        # previously hardcoded a live Onevas application key and product number.
-        application_key = _settings.ONEVAS_APPLICATION_KEY
-        product_number = _settings.ONEVAS_PRODUCT_NUMBER
-
-        if active_subscription and active_subscription.tier:
-            tier = active_subscription.tier
-            application_key = tier.application_key or application_key
-            product_number = tier.product_id or product_number
-            print(
-                f'[PWD-RESET-PHONE] Using subscription tier keys - Tier: {tier.slug}, Product: {product_number}'
-            )
-        else:
-            print('[PWD-RESET-PHONE] No active subscription, using configured Onevas keys')
-    except Exception as e:
-        print(f'[PWD-RESET-PHONE] Error getting subscription: {e}')
-        application_key = _settings.ONEVAS_APPLICATION_KEY
-        product_number = _settings.ONEVAS_PRODUCT_NUMBER
-        print('[PWD-RESET-PHONE] Using configured Onevas keys')
-
-    print(f'[PWD-RESET-PHONE] Application key: {application_key}')
-    print(f'[PWD-RESET-PHONE] Product number: {product_number}')
-
-    # Send OTP via Onevas SMS with password_reset action
-    print(f'[PWD-RESET-PHONE] Calling OTPService.send_otp for phone: {phone}')
+    # The key and product number are OneVAS leftovers that send_otp no longer
+    # sends anywhere. This used to print the application key to the log.
     success, message = OTPService.send_otp(
-        phone, application_key, product_number, action='password_reset'
+        phone,
+        _settings.ONEVAS_APPLICATION_KEY,
+        _settings.ONEVAS_PRODUCT_NUMBER,
+        action='password_reset',
     )
-    print(f'[PWD-RESET-PHONE] OTPService result - success: {success}, message: {message}')
-
     if success:
-        # Don't return dev_code for password reset (security)
         return Response({'message': message, 'phone': phone})
-    else:
-        return Response({'error': message}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+    return Response({'error': message}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 @api_view(['POST'])
@@ -1453,61 +1459,42 @@ def forgot_password_phone_request(request):
 @throttle_classes([PasswordResetAnonThrottle, PasswordResetUserThrottle])
 @encrypted_endpoint
 def forgot_password_phone_verify(request):
-    """Verify OTP code and set new 6-digit password for phone-based reset."""
-    from api.models import UserProfile
+    """Verify the reset code and set a new 6-digit PIN."""
     from api.services.otp import OTPService
 
-    phone = request.data.get('phone', '').strip()
-    code = request.data.get('code', '').strip()
-    new_password = request.data.get('new_password', '').strip()
-
-    print(f'[PWD-RESET-PHONE] forgot_password_phone_verify called - phone: {phone}, code: {code}')
+    phone = (request.data.get('phone') or '').strip()
+    code = (request.data.get('code') or '').strip()
+    new_password = (request.data.get('new_password') or '').strip()
 
     if not phone or not code or not new_password:
-        print('[PWD-RESET-PHONE] Missing required fields')
         return Response(
             {'error': 'phone, code, and new_password required'}, status=status.HTTP_400_BAD_REQUEST
         )
 
     too_weak, reason = is_pin_too_weak(new_password)
     if too_weak:
-        print(f'[PWD-RESET-PHONE] Weak/invalid password: {reason}')
         return Response({'error': reason}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Normalize phone number
     phone = _normalize_ethiopian_phone(phone)
     if not phone:
-        print('[PWD-RESET-PHONE] Invalid phone format')
         return Response(
             {'error': 'Invalid Ethiopian phone number'}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Verify OTP using OTPService
-    print('[PWD-RESET-PHONE] Calling OTPService.verify_otp')
-    success, message = OTPService.verify_otp(phone, code)
-    print(
-        f'[PWD-RESET-PHONE] OTPService.verify_otp result - success: {success}, message: {message}'
-    )
+    # Checked again here, not just when the code was requested: the OTP cache
+    # is shared with login, and /auth/send-login-otp/ gives a code to any
+    # number. Without this, that code would reset the PIN of an account the
+    # request step turned away.
+    user, refusal = _pin_reset_account(phone)
+    if refusal is not None:
+        return refusal
 
+    success, message = OTPService.verify_otp(phone, code)
     if not success:
         return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Find user by phone number
-    try:
-        profile = UserProfile.objects.get(phone_number=phone)
-        user = profile.user
-        print(f'[PWD-RESET-PHONE] Found user: {user.username}')
-    except UserProfile.DoesNotExist:
-        print(f'[PWD-RESET-PHONE] No profile found for phone: {phone}')
-        return Response(
-            {'error': 'No account found for this phone number'}, status=status.HTTP_404_NOT_FOUND
-        )
-
-    # Set new password
     user.set_password(new_password)
     user.save()
-    print(f'[PWD-RESET-PHONE] Password reset successful for user: {user.username}')
-
     return Response({'message': 'Password reset successful. You can now log in.'})
 
 
