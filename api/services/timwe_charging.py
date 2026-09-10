@@ -35,6 +35,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -50,6 +51,7 @@ from api.integrations.timwe.charge import (
 from api.integrations.timwe.errors import (
     CHARGE_AMOUNT_OUT_OF_RANGE,
     CHARGE_FAILED,
+    TimweConfigurationError,
     TimweError,
 )
 from api.models.timwe import TimweChargeTransaction
@@ -74,6 +76,19 @@ REFERENCE_PREFIX = 'FS'
 
 class ChargeRefused(TimweError):
     """The charge was not attempted: bad input, or a reused idempotency key."""
+
+
+class ChargingDisabled(TimweConfigurationError):
+    """TIMWE_CHARGING_ENABLED is false, so nothing may be sent.
+
+    A configuration error, so callers that already hide configuration details
+    from end users (the coin purchase view answers 503) treat it the same way.
+    """
+
+
+def charging_enabled() -> bool:
+    """The master switch. No chargeAmount leaves the process while it is off."""
+    return bool(getattr(settings, 'TIMWE_CHARGING_ENABLED', False))
 
 
 @dataclass(frozen=True)
@@ -128,15 +143,25 @@ def request_charge(
     coin_package=None,
     subscription_tier=None,
     charge_code='',
+    purpose='',
+    subscription=None,
+    renewal_period_end=None,
+    short_code='',
+    product_id='',
 ):
     """Charge a subscriber once, recording the attempt. Returns a ChargeResult.
 
-    Raises ChargeRefused (or TimweConfigurationError) before anything is
-    recorded or sent, for problems that are ours: missing configuration, an
-    unusable number, an amount the MA cannot represent, a key reused for a
-    different charge. Every MA or network failure is instead an outcome on
-    the returned transaction.
+    Raises ChargeRefused (or TimweConfigurationError, including
+    ChargingDisabled) before anything is recorded or sent, for problems that
+    are ours: the master switch off, missing configuration, an unusable
+    number, an amount the MA cannot represent, a key reused for a different
+    charge. Every MA or network failure is instead an outcome on the returned
+    transaction.
     """
+    if not charging_enabled():
+        raise ChargingDisabled(
+            'TIMWE charging is switched off (TIMWE_CHARGING_ENABLED is false). Nothing was sent.'
+        )
     if not idempotency_key:
         raise ChargeRefused('An idempotency key is required for every charge.')
 
@@ -168,12 +193,34 @@ def request_charge(
                 charge_code=charge_code or '',
                 coin_package=coin_package,
                 subscription_tier=subscription_tier,
+                purpose=purpose or '',
+                subscription=subscription,
+                renewal_period_end=renewal_period_end,
+                short_code=short_code or '',
+                service_id=TimweChargeService.get_service_id(),
+                product_id=product_id or '',
                 status='pending',
             )
     except IntegrityError:
-        # Lost a race with a concurrent request carrying the same key. Theirs
-        # is the charge; this one must not become a second.
-        existing = TimweChargeTransaction.objects.get(idempotency_key=idempotency_key)
+        # Lost a race with a concurrent request for the same charge -- the same
+        # key, or for a renewal the same (subscription, period). Theirs is the
+        # charge; this one must not become a second.
+        try:
+            existing = TimweChargeTransaction.objects.get(idempotency_key=idempotency_key)
+        except TimweChargeTransaction.DoesNotExist:
+            # The key is free, so the collision was the one-renewal-per-period
+            # constraint: another attempt owns this subscription period.
+            existing = (
+                TimweChargeTransaction.objects.filter(
+                    purpose=purpose,
+                    subscription=subscription,
+                    renewal_period_end=renewal_period_end,
+                ).first()
+                if subscription is not None
+                else None
+            )
+            if existing is None:
+                raise
         return _replay(existing, msisdn=normalized, amount=amount, currency=currency)
 
     logger.info(
@@ -363,6 +410,7 @@ def purchase_coins_with_airtime(*, user, package, idempotency_key):
         description=f'FlipStar {package.name}',
         idempotency_key=idempotency_key,
         coin_package=package,
+        purpose=TimweChargeTransaction.PURPOSE_COIN_PURCHASE,
     )
 
     coin_transaction = None

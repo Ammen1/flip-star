@@ -7,64 +7,30 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
-def onevas_product_config(duration_type):
-    """
-    Resolve the OneVAS credentials for a subscription duration.
-
-    Module-level rather than a method so callers outside this service can use
-    it without constructing an SMS client -- api.views.core.send_login_otp
-    needs the same mapping, and duplicating it there would mean two places to
-    fix when a tier is added.
-
-    ``application_key`` is a provisioned secret (ONEVAS_<TIER>_APPLICATION_KEY,
-    resolved through Vault). It must never be returned to a client; callers
-    pass it onward to OneVAS themselves.
-    """
-    products = getattr(settings, 'ONEVAS_PRODUCTS', {})
-    if duration_type and duration_type in products:
-        return products[duration_type]
-    return {
-        'application_key': getattr(settings, 'ONEVAS_APPLICATION_KEY', ''),
-        'product_id': getattr(settings, 'ONEVAS_PRODUCT_NUMBER', ''),
-    }
-
-
 class SuperAppSMSService:
-    """Service to send SMS notifications for SuperApp subscription events"""
+    """Service to send SMS notifications for SuperApp subscription events.
 
-    # Read from settings, which resolve through Vault -> environment -> .env,
-    # rather than hardcoding the endpoint. See config/settings/base.py:445.
-    ONEVAS_SMS_URL = settings.ONEVAS_SMS_URL  # Onevas SMS API endpoint
+    Every message goes over TIMWE SMPP. This used to carry OneVAS product keys
+    and its SMS URL; OneVAS has been removed and none of them are read now.
+    """
 
     def __init__(self):
-        self.timeout = 10
-        self.short_code = (
-            settings.ONEVAS_SHORT_CODE if hasattr(settings, 'ONEVAS_SHORT_CODE') else '9286'
-        )
-        # Use the same ONEVAS_PRODUCTS configuration as Direct Debit
-        self.ONEVAS_PRODUCTS = getattr(settings, 'ONEVAS_PRODUCTS', {})
-        self.ONEVAS_APPLICATION_KEY = getattr(settings, 'ONEVAS_APPLICATION_KEY', '')
-        self.ONEVAS_PRODUCT_NUMBER = getattr(settings, 'ONEVAS_PRODUCT_NUMBER', '')
-
-    def _get_product_config(self, duration_type):
-        """Get Onevas product configuration for a given duration type"""
-        return onevas_product_config(duration_type)
+        # The short code subscribers text -- TIMWE's, formerly OneVAS's.
+        self.short_code = getattr(settings, 'SMS_SHORT_CODE', '') or '9286'
 
     def _send_sms(self, phone_number, text, duration_type='weekly'):
         """
-        Queue an SMS for delivery over the configured gateway.
+        Queue an SMS for delivery over TIMWE SMPP.
 
         Args:
             phone_number: User's phone number (format: 2519...)
             text: SMS message content
-            duration_type: Plan duration type (daily, weekly, monthly)
+            duration_type: Plan duration type. Unused -- it chose a OneVAS
+                product -- and kept so the callers below need not change.
 
         Returns:
-            bool: True if the message was recorded and queued.
-
-        The OneVAS HTTP POST that used to live here is gone -- SMS goes over
-        TIMWE SMPP now, from a worker rather than from this call. True means
-        queued, not delivered; SmsMessage.status carries the latter.
+            bool: True if the message was recorded and queued. Queued, not
+            delivered; SmsMessage.status carries the latter.
         """
         from api.services.sms.dispatch import SmsNotQueued, queue_sms
 

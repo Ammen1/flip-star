@@ -65,6 +65,9 @@ CONFIG = {
     'TIMWE_SERVICE_ID': '3500001000012',
     'TIMWE_CURRENCY': 'ETB',
     'TIMWE_CHARGE_TIMEOUT': 60,
+    # The master switch. Off in every deployment until TIMWE confirms the
+    # charging details; these tests exercise the path behind it.
+    'TIMWE_CHARGING_ENABLED': True,
 }
 
 SUCCESS_BODY = """<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">

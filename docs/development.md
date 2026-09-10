@@ -20,7 +20,7 @@ python manage.py runserver
 | A new endpoint | `api/views/<domain>.py` + a route in `api/urls.py` |
 | Request/response shape | `api/serializers/<domain>.py` |
 | A business workflow | `api/services/<domain>/` |
-| A call to Telebirr/Onevas | `api/integrations/<provider>/` |
+| A call to Telebirr/TIMWE | `api/integrations/<provider>/` |
 | A model | `api/models/<domain>.py`, then export it from `api/models/__init__.py` |
 | A background job | `api/tasks/`, then export from `api/tasks/__init__.py` |
 | An operational script | `api/management/commands/` — **not** an HTTP endpoint |

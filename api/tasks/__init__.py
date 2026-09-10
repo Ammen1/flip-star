@@ -22,9 +22,11 @@ from api.tasks.media import (
     send_push_notification,
 )
 from api.tasks.sms import deliver_sms
+from api.tasks.subscription_renewal import renew_expired_subscription
 
 __all__ = [
     'deliver_sms',
+    'renew_expired_subscription',
     'expire_boost_campaigns',
     'auto_select_campaign_winners',
     'cleanup_typing_indicators',

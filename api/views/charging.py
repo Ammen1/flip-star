@@ -1,4 +1,4 @@
-"""Onevas charging API views for on-demand subscription purchases"""
+"""Airtime charging API views (TIMWE chargeAmount). OneVAS charging has been removed."""
 
 import logging
 from datetime import timedelta

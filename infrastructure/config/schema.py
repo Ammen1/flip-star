@@ -49,7 +49,7 @@ Group = Literal[
     'telebirr_b2c',
     'telebirr_ussd',
     'telebirr_h5',
-    'onevas',
+    'timwe',
     'crm',
     'email',
     'push',
@@ -208,7 +208,8 @@ SCHEMA: tuple[Key, ...] = (
     _k('TELEBIRR_PUBLIC_KEY', group='telebirr_h5', doc="Telebirr's public key, PEM."),
     _k('TELEBIRR_NOTIFY_URL', group='telebirr_h5'),
     _k('TELEBIRR_REDIRECT_URL', group='telebirr_h5'),
-    # -- onevas ---------------------------------------------------------------
+    # -- timwe ----------------------------------------------------------------
+    # OneVAS has been removed; its ONEVAS_* keys went with it.
     _k('TIMWE_INTEGRATION_ENABLED', kind='bool', group='timwe'),
     _k(
         'TIMWE_CHARGE_URL',
@@ -239,6 +240,20 @@ SCHEMA: tuple[Key, ...] = (
         group='timwe',
         doc='Coin purchase via airtime through chargeAmount. Off by default: '
         'enabling it reverses the "SIM cards are for OTP only" policy.',
+    ),
+    _k(
+        'TIMWE_CHARGING_ENABLED',
+        kind='bool',
+        group='timwe',
+        doc='Master switch for chargeAmount. While false nothing is ever sent, '
+        'whatever else is configured. Each flow also needs its own switch.',
+    ),
+    _k(
+        'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED',
+        kind='bool',
+        group='timwe',
+        doc='Charge an expired short-code subscriber once for the next period. Off by '
+        'default; leave off unless TIMWE confirms it does not renew these itself.',
     ),
     _k('TIMWE_ALLOWED_IPS', kind='csv', group='timwe'),
     # -- timwe smpp -----------------------------------------------------------
@@ -323,12 +338,11 @@ SCHEMA: tuple[Key, ...] = (
         group='sms',
         doc='Keepalive interval on an idle bind.',
     ),
-    _k('ONEVAS_APPLICATION_KEY', group='onevas'),
-    _k('ONEVAS_PRODUCT_NUMBER', group='onevas'),
-    _k('ONEVAS_SMS_URL', group='onevas'),
-    _k('ONEVAS_CHARGING_URL', group='onevas'),
-    _k('ONEVAS_SPID', group='onevas'),
-    _k('ONEVAS_SHORT_CODE', group='onevas'),
+    _k(
+        'SMS_SHORT_CODE',
+        group='sms',
+        doc='The short code subscribers text to subscribe and send STOP to. Default 9286.',
+    ),
     # -- crm ------------------------------------------------------------------
     _k('CRM_ENDPOINT', group='crm'),
     _k('CRM_SERVICE_NUMBER_A', group='crm'),
@@ -352,9 +366,6 @@ SCHEMA: tuple[Key, ...] = (
     _k('VAPID_PRIVATE_KEY', group='push'),
     _k('VAPID_SUBJECT', group='push'),
     _k('FIREBASE_SERVER_KEY', group='push'),
-    # -- sms ------------------------------------------------------------------
-    _k('AT_USERNAME', group='sms'),
-    _k('AT_API_KEY', group='sms'),
     # -- admin bootstrap ------------------------------------------------------
     _k(
         'ADMIN_PASSWORD',

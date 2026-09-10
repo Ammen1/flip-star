@@ -660,8 +660,8 @@ Minimum keys, from `config/settings/production.py`'s own validation:
 - `DB_NAME`, `DB_USER`, `DB_PASSWORD` — all validated non-empty.
 - Integration credentials (warn, not fatal, if absent): `TELEBIRR_*`
   (SOAP URL, third-party id/password, SP operator id/credential, fabric app
-  id, app secret, merchant app id, merchant code, private/public key) and
-  `ONEVAS_APPLICATION_KEY`, `ONEVAS_PRODUCT_NUMBER`.
+  id, app secret, merchant app id, merchant code, private/public key). OneVAS
+  has been removed; no `ONEVAS_*` key is read any more.
 
 ### Credential rotation still outstanding
 
@@ -830,7 +830,7 @@ DB_PASSWORD
 **Integration credentials** — absent values produce a startup warning, not a
 failure, so an integration can be deliberately disabled: `TELEBIRR_*` (SOAP
 URL, third-party id/password, SP operator id/credential, fabric app id, app
-secret, merchant app id, merchant code, private/public key), `ONEVAS_*`, plus
+secret, merchant app id, merchant code, private/public key), `TIMWE_*`, plus
 the `TELEBIRR_B2C_*` / `TELEBIRR_USSD_*` / `CRM_*` families, `VAPID_*`,
 `EMAIL_*`, and the object-storage keys.
 

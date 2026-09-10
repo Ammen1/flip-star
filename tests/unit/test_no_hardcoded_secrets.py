@@ -89,7 +89,7 @@ def test_no_module_imports_decouple_directly():
         'These modules read configuration directly from decouple, bypassing Vault:\n  '
         + '\n  '.join(offenders)
         + '\n\nUse `from infrastructure.secrets import secret`, or read the value '
-          'from django.conf.settings.'
+        'from django.conf.settings.'
     )
 
 
@@ -105,9 +105,7 @@ def test_no_credential_has_a_literal_default():
                 continue
             offenders.append(f'{relative(path)}: {name} defaults to a literal')
 
-    assert not offenders, (
-        'Credentials must not have literal defaults:\n  ' + '\n  '.join(offenders)
-    )
+    assert not offenders, 'Credentials must not have literal defaults:\n  ' + '\n  '.join(offenders)
 
 
 def test_no_onevas_application_keys_in_source():
@@ -124,9 +122,7 @@ def test_no_onevas_application_keys_in_source():
             if shape.search(line) and 'default=' not in line:
                 offenders.append(f'{relative(path)}: {line.strip()[:70]}')
 
-    assert not offenders, (
-        'Possible hardcoded provider key(s):\n  ' + '\n  '.join(offenders)
-    )
+    assert not offenders, 'Possible hardcoded provider key(s):\n  ' + '\n  '.join(offenders)
 
 
 def test_admin_password_has_no_insecure_default():
@@ -137,9 +133,7 @@ def test_admin_password_has_no_insecure_default():
         if 'Admin123!' in text:
             offenders.append(str(relative(path)).replace('\\', '/'))
 
-    assert not offenders, (
-        'Insecure default admin password present in:\n  ' + '\n  '.join(offenders)
-    )
+    assert not offenders, 'Insecure default admin password present in:\n  ' + '\n  '.join(offenders)
 
 
 def test_insecure_secret_key_is_blocked_in_production():
@@ -151,22 +145,19 @@ def test_insecure_secret_key_is_blocked_in_production():
     source = (BACKEND / 'config' / 'settings' / 'production.py').read_text(encoding='utf-8')
 
     assert 'FORBIDDEN_VALUES' in source
-    assert 'django-insecure-key' in source, (
-        'production.py no longer rejects the development SECRET_KEY placeholder'
-    )
+    assert (
+        'django-insecure-key' in source
+    ), 'production.py no longer rejects the development SECRET_KEY placeholder'
 
 
 @pytest.mark.parametrize(
     'name',
     [
-        'ONEVAS_APPLICATION_KEY',
-        'ONEVAS_PRODUCT_NUMBER',
-        'ONEVAS_SMS_URL',
-        'ONEVAS_CHARGING_URL',
-        'ONEVAS_PRODUCTS',
         'FIREBASE_SERVER_KEY',
-        'AT_USERNAME',
-        'AT_API_KEY',
+        'SMS_PROVIDER',
+        'SMS_SHORT_CODE',
+        'TIMWE_SMPP_HOST',
+        'TIMWE_SMPP_PASSWORD',
         'TELEBIRR_SOAP_URL',
         'TELEBIRR_THIRD_PARTY_PASSWORD',
         'VAPID_PRIVATE_KEY',
@@ -182,3 +173,66 @@ def test_setting_is_exposed_for_runtime_lookup(settings, name):
     fallback.
     """
     assert hasattr(settings, name), f'settings.{name} is not defined'
+
+
+#: OneVAS has been removed, and Africa's Talking went with it (its only caller
+#: was a dead fallback). None of these may be defined or read again.
+REMOVED_SETTINGS = [
+    'ONEVAS_APPLICATION_KEY',
+    'ONEVAS_PRODUCT_NUMBER',
+    'ONEVAS_SMS_URL',
+    'ONEVAS_CHARGING_URL',
+    'ONEVAS_SPID',
+    'ONEVAS_PRODUCTS',
+    'ONEVAS_SHORT_CODE',
+    'AT_USERNAME',
+    'AT_API_KEY',
+]
+
+
+@pytest.mark.parametrize('name', REMOVED_SETTINGS)
+def test_removed_setting_is_not_defined(settings, name):
+    assert not hasattr(settings, name), f'settings.{name} is back; OneVAS has been removed'
+
+
+def test_no_runtime_code_reads_onevas_configuration():
+    """Nothing outside migrations may reach for OneVAS config, code or its URL.
+
+    Parsed, not grepped, so prose that explains the removal does not count --
+    only code that would actually read something: a ``settings.ONEVAS_*``
+    attribute, a name, an exact key string handed to ``config()``, the OneVAS
+    host, or an import of the deleted modules. ``onevas_phone_number`` and
+    friends are database columns TIMWE subscriptions reuse; they stay.
+    """
+    import ast
+
+    key = re.compile(r'^ONEVAS_[A-Z0-9_]+$')
+    removed_names = {'OnevasWebhookView', 'OnevasHttpGateway', 'OnevasChargingService'}
+    offenders = []
+    for path in source_files():
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        for node in ast.walk(tree):
+            hit = None
+            if isinstance(node, ast.Attribute) and (
+                key.match(node.attr) or node.attr in removed_names
+            ):
+                hit = node.attr
+            elif isinstance(node, ast.Name) and (key.match(node.id) or node.id in removed_names):
+                hit = node.id
+            elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if key.match(node.value) or 'onevas.et' in node.value:
+                    hit = node.value
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and (
+                    'integrations.onevas' in node.module or node.module.endswith('sms.onevas_http')
+                )
+            ):
+                hit = node.module
+            elif isinstance(node, ast.alias) and node.name in removed_names:
+                hit = node.name
+            if hit:
+                offenders.append(f'{relative(path)}:{getattr(node, "lineno", "?")}: {hit}')
+
+    assert not offenders, 'OneVAS is still read:\n  ' + '\n  '.join(offenders)

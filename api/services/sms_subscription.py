@@ -16,16 +16,15 @@ and answered a repeat charge with "already active" instead of renewing. A
 subscriber who texted the short code was billed and then received nothing --
 no link, no OTP, no way in.
 
-This module is that logic in one place, so the two channels cannot drift.
+This module is that logic in one place.
 
 Relationship to the OneVAS webhook
 ----------------------------------
-The semantics here are taken from ``OnevasWebhookView`` in
-``api/views/subscription.py``, deliberately and to the letter -- the free-trial
-rule, the cancel-other-durations rule, the renew-in-place rule, and the message
-text. That view still contains its own inline copy and is not changed here: it
-is live and carries real payments. This is where it should move when it is next
-touched, and until then the two must be changed together.
+The semantics here were taken from ``OnevasWebhookView``, deliberately and to
+the letter -- the free-trial rule, the cancel-other-durations rule, the
+renew-in-place rule, and the message text. OneVAS has since been removed and
+that view with it, so this module is now the only copy: TIMWE is the one
+channel that reaches it.
 """
 
 import logging

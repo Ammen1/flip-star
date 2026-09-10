@@ -17,6 +17,15 @@ as a TimweChargeTransaction and protected by an idempotency key:
         --amount 1 --username some_staff_user --confirm
 
 The number is taken as input, never from source, and is masked in output.
+
+Reconciliation -- never charges anything:
+
+    python manage.py timwe_charge_check --reconcile [--hours 24]
+
+lists every charge still needing a human: PENDING, TIMEOUT or UNKNOWN (the
+subscriber may or may not have paid), and SUCCESS not yet applied (paid, but
+the renewal or coins not yet delivered). Each row carries the reference code to
+quote to TIMWE. It also summarises recent charging by purpose and outcome.
 """
 
 import socket
@@ -28,6 +37,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from api.integrations.timwe.charge import TimweChargeService
 from api.integrations.timwe.errors import TimweConfigurationError, TimweError
+from api.models.timwe import TimweChargeTransaction
 
 
 def _mask(number):
@@ -52,8 +62,25 @@ class Command(BaseCommand):
             action='store_true',
             help='Required with --charge. No confirmation, no charge.',
         )
+        parser.add_argument(
+            '--reconcile',
+            action='store_true',
+            help='List pending, ambiguous and unapplied charges for reconciliation. Charges nothing.',
+        )
+        parser.add_argument(
+            '--hours',
+            type=int,
+            default=24,
+            help='With --reconcile: the window the summary covers. Default 24.',
+        )
 
     def handle(self, *args, **options):
+        if options['reconcile']:
+            if options['charge']:
+                raise CommandError('--reconcile never charges; do not combine it with --charge.')
+            self._reconcile(hours=max(1, options['hours']))
+            return
+
         ok = self._check_configuration()
         if ok:
             ok = self._check_request_builds() and ok
@@ -89,6 +116,17 @@ class Command(BaseCommand):
             # SP ID -- it is half of the digest input.
             mark = self.style.SUCCESS('set') if present else self.style.ERROR('MISSING')
             self.stdout.write(f'  {name:22} {mark}')
+
+        from django.conf import settings
+
+        for flag in (
+            'TIMWE_CHARGING_ENABLED',
+            'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED',
+            'TIMWE_AIRTIME_PURCHASE_ENABLED',
+        ):
+            on = bool(getattr(settings, flag, False))
+            mark = self.style.WARNING('ON') if on else 'off'
+            self.stdout.write(f'  {flag:34} {mark}')
 
         endpoint = TimweChargeService.get_endpoint()
         if endpoint:
@@ -148,6 +186,62 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'  {host}:{port} reachable'))
         return True
 
+    # -- reconciliation ------------------------------------------------------
+
+    def _reconcile(self, *, hours):
+        """Report what needs a human. Reads only; nothing here can charge."""
+        from datetime import timedelta
+
+        from django.db.models import Avg, Count, Q
+        from django.utils import timezone
+
+        needs_attention = (
+            TimweChargeTransaction.objects.filter(
+                Q(status__in=('pending', 'timeout', 'unknown'))
+                | Q(
+                    status='success',
+                    fulfilled_at__isnull=True,
+                    purpose__in=(
+                        TimweChargeTransaction.PURPOSE_SUBSCRIPTION_RENEWAL,
+                        TimweChargeTransaction.PURPOSE_COIN_PURCHASE,
+                    ),
+                )
+            )
+            .select_related('user')
+            .order_by('created_at')
+        )
+
+        self.stdout.write(self.style.MIGRATE_HEADING('Needs reconciliation (nothing is charged)'))
+        rows = list(needs_attention)
+        if not rows:
+            self.stdout.write(self.style.SUCCESS('  nothing pending, ambiguous or unapplied'))
+        for row in rows:
+            state = 'PAID, NOT APPLIED' if row.status == 'success' else row.status.upper()
+            self.stdout.write(
+                f'  {row.id}  {row.purpose or "-":20} user={row.user_id} '
+                f'{int(row.amount)} {row.currency}  ref={row.reference_code}  '
+                f'{row.created_at:%Y-%m-%d %H:%M}  {state}  '
+                f'timwe_error={row.error_code or "-"}  msisdn={row.masked_msisdn}'
+            )
+
+        since = timezone.now() - timedelta(hours=hours)
+        recent = TimweChargeTransaction.objects.filter(created_at__gte=since)
+        self.stdout.write('')
+        self.stdout.write(self.style.MIGRATE_HEADING(f'Last {hours}h by purpose and status'))
+        summary = recent.values('purpose', 'status').annotate(n=Count('id')).order_by('purpose')
+        for line in summary:
+            self.stdout.write(f'  {line["purpose"] or "-":20} {line["status"]:8} {line["n"]}')
+        latency = recent.exclude(duration_ms__isnull=True).aggregate(avg=Avg('duration_ms'))['avg']
+        self.stdout.write(f'  average latency     {int(latency) if latency else "-"} ms')
+        codes = (
+            recent.exclude(error_code='')
+            .values('error_code')
+            .annotate(n=Count('id'))
+            .order_by('-n')[:5]
+        )
+        for code in codes:
+            self.stdout.write(f'  timwe error {code["error_code"]:8} {code["n"]}')
+
     # -- the one real charge -------------------------------------------------
 
     def _charge_once(self, options):
@@ -176,6 +270,7 @@ class Command(BaseCommand):
                 amount=options['amount'],
                 description='FlipStar staging charge check',
                 idempotency_key=key,
+                purpose=TimweChargeTransaction.PURPOSE_MANUAL_CHECK,
             )
         except (ChargeRefused, TimweConfigurationError) as exc:
             raise CommandError(f'Not charged: {exc}') from exc

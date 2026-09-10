@@ -27,7 +27,8 @@ any of the registration endpoints. Tokens expire after `AUTH_TOKEN_TTL_DAYS`
 | `/api/v1/comments/`, `/api/v1/saved/` | `views/extended.py` |
 | `/api/v1/messages/` | `views/messaging.py` |
 | `/api/v1/wallet/`, `/api/v1/coins/` | `views/wallet.py`, `views/contest.py` |
-| `/api/v1/subscriptions/`, `/api/v1/onevas/` | `views/subscription.py` |
+| `/api/v1/subscriptions/`, `/api/v1/subscription/` | `views/subscription.py` |
+| `/api/v1/timwe/` | `views/timwe.py` (OneVAS's `/api/v1/onevas/` webhooks have been removed) |
 | `/api/v1/direct-debit/`, `/api/v1/charging/` | `views/direct_debit.py`, `views/charging.py` |
 | `/api/v1/campaigns/` | `views/campaign*.py` |
 | `/api/v1/boost/` | `views/boost.py` |
@@ -124,7 +125,7 @@ to replace rather than dual-serve both prefixes, made with the tradeoff
 understood -- **any client still calling the old unversioned paths (the
 released mobile app, in particular) breaks until it's updated to call
 `/api/v1/...` instead.** This also affects inbound webhooks: Telebirr and
-Onevas call back to URLs (`TELEBIRR_RESULT_URL`, `TELEBIRR_NOTIFY_URL`, etc.)
+TIMWE call back to URLs (`TELEBIRR_RESULT_URL`, `TELEBIRR_NOTIFY_URL`, etc.)
 that were configured against the old unversioned paths. Those need updating
 to the new `/api/v1/...` paths in both this project's environment
 configuration *and* on the provider's side (their webhook target

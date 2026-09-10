@@ -14,18 +14,15 @@ subscriber texting ``1`` to the short code has said which plan they want, in
 the only vocabulary the SMS channel has, and that intent does not depend on
 whether two systems agree about an id.
 
-This mirrors the order the OneVAS webhook already uses
-(``api/views/subscription.py``, product id then SMS code), so the two channels
-cannot disagree about which tier a subscriber just bought. That view still
-carries its own inline copy of the mapping; this module is where it should
-move when it is next touched.
+This is the order the removed OneVAS webhook used -- product id, then SMS code
+-- and with it gone this module is the only copy of the mapping.
 """
 
 import re
 
 from api.models import SubscriptionTier
 
-#: SMS code to duration type, as the OneVAS webhook defines it.
+#: SMS code to duration type, as the OneVAS webhook defined it.
 #:
 #: These are the digits a subscriber texts to the short code, not an internal
 #: identifier -- ``1`` is "the daily plan" to the person sending it.

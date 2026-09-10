@@ -101,20 +101,23 @@ sign-off. Replacements are in place.
 | Webhook | Verification |
 |---|---|
 | `POST /api/v1/wallet/telebirr-callback/` | **RSA PKCS#1 v1.5 + SHA-256, verified.** Correct. |
-| `POST /api/v1/onevas/subscription/` (and unsubscription, renewal, stop) | **None.** Anyone can POST to grant a paid subscription. |
 | `POST /api/v1/webhooks/telebirr-direct-debit/` | **None.** Correlates on `OriginatorConversationID`, which the backend generates as the guessable `FLP{user_id}{unix_timestamp}`. |
+| `POST /api/v1/timwe/sync-order-relation` | Optional source-IP allowlist (`TIMWE_ALLOWED_IPS`); reached only over the operator tunnel. |
 
-All three webhook URLs changed with the `/api/v1/` cutover (see
-[docs/api.md](api.md#versioning)) -- Telebirr's and Onevas's own callback
-configuration must be updated to match, or these stop receiving callbacks
-entirely, independent of the verification gaps above.
+The OneVAS subscription webhooks (`/api/v1/onevas/…`), which had no
+verification at all and let anyone POST a paid subscription into existence,
+have been removed along with OneVAS.
 
-The Telebirr checkout callback shows the correct pattern. Apply it to the other
-two, use `secrets.token_hex` for correlation IDs, and allowlist provider source
-IPs.
+The webhook URLs changed with the `/api/v1/` cutover (see
+[docs/api.md](api.md#versioning)) -- each provider's callback configuration
+must match, or it stops receiving callbacks entirely, independent of the
+verification gaps above.
 
-No webhook is idempotent. Providers retry by default; a retried Onevas
-subscription webhook extends the subscription twice.
+The Telebirr checkout callback shows the correct pattern. Apply it to the
+direct-debit webhook, use `secrets.token_hex` for correlation IDs, and
+allowlist provider source IPs.
+
+The Telebirr webhooks are not idempotent; providers retry by default.
 
 ---
 
@@ -196,7 +199,8 @@ high CVEs. Pin to a specific patch digest and rebuild on a schedule.
 
 1. Rotate every credential; purge git history.
 2. Delete the four endpoints listed above.
-3. Verify signatures on the Onevas and Telebirr direct-debit webhooks.
+3. Verify signatures on the Telebirr direct-debit webhook. (The unauthenticated
+   OneVAS webhooks are gone — removed with OneVAS.)
 4. Add rate limiting to auth, OTP and payment endpoints (Redis cache is now
    configured, which was the blocker).
 5. Flip the DRF default permission to `IsAuthenticated` and audit all 242 routes.

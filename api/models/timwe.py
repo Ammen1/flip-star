@@ -14,9 +14,8 @@ Two audit tables, one per direction of the integration:
     answers, because "we do not know whether the subscriber was charged" is a
     state that needs resolving by hand.
 
-These replace ``OnevasWebhookLog`` and ``OnevasChargingTransaction``. Both of
-those remain in place until the MA integration is credentialed and cut over --
-see docs/integrations.md.
+These replace ``OnevasWebhookLog`` and ``OnevasChargingTransaction``, which
+now only hold OneVAS's history -- see docs/integrations.md.
 """
 
 import uuid
@@ -93,6 +92,15 @@ class TimweSyncOrderLog(models.Model):
 class TimweChargeTransaction(models.Model):
     """One outbound chargeAmount call."""
 
+    PURPOSE_COIN_PURCHASE = 'coin_purchase'
+    PURPOSE_SUBSCRIPTION_RENEWAL = 'subscription_renewal'
+    PURPOSE_MANUAL_CHECK = 'manual_check'
+    PURPOSE_CHOICES = [
+        (PURPOSE_COIN_PURCHASE, 'Coin purchase'),
+        (PURPOSE_SUBSCRIPTION_RENEWAL, 'Subscription renewal'),
+        (PURPOSE_MANUAL_CHECK, 'Manual check'),
+    ]
+
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('success', 'Success'),
@@ -149,6 +157,30 @@ class TimweChargeTransaction(models.Model):
         help_text='What the charge paid for, when it was a coin purchase',
     )
 
+    #: What the charge was for. Blank only on rows written before it existed.
+    purpose = models.CharField(max_length=32, choices=PURPOSE_CHOICES, blank=True, default='')
+
+    #: For a renewal: the plan being renewed, and the end of the period that
+    #: ran out. Together they name one renewal period, and the constraint below
+    #: allows exactly one charge for it -- the database's half of "an expired
+    #: subscription is charged once, however many requests arrive".
+    subscription = models.ForeignKey(
+        'api.SubscriptionPlan',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='timwe_renewal_charges',
+    )
+    renewal_period_end = models.DateTimeField(
+        null=True, blank=True, help_text='The end_date the renewal charge was for'
+    )
+
+    #: What the charge was made under, as it stood at the time -- for
+    #: reconciling with TIMWE after the configuration has moved on.
+    short_code = models.CharField(max_length=10, blank=True)
+    service_id = models.CharField(max_length=32, blank=True)
+    product_id = models.CharField(max_length=50, blank=True)
+
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='pending')
 
     #: Finer than ``status``, which folds two very different failures into
@@ -182,6 +214,14 @@ class TimweChargeTransaction(models.Model):
         indexes = [
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['msisdn', '-created_at']),
+            models.Index(fields=['purpose', 'status']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['subscription', 'renewal_period_end'],
+                condition=models.Q(purpose='subscription_renewal'),
+                name='timwe_one_renewal_charge_per_period',
+            ),
         ]
 
     def __str__(self):

@@ -139,7 +139,6 @@ from api.views.push import push_public_key, push_subscribe, push_unsubscribe
 from api.views.subscription import (
     AdminSubscriptionViewSet,
     CoinTransactionViewSet,
-    OnevasWebhookView,
     SubscriptionTierViewSet,
     UserSubscriptionStatusView,
     check_superapp_subscription,
@@ -1102,29 +1101,13 @@ urlpatterns = [
     # ============ SUBSCRIPTION SYSTEM ============
     # Subscription Status Check
     path('subscription/status/', UserSubscriptionStatusView.as_view(), name='subscription-status'),
-    # Onevas Webhooks
-    path(
-        'onevas/subscription/',
-        OnevasWebhookView.as_view(),
-        {'webhook_type': 'subscription'},
-        name='onevas-subscription',
-    ),
-    path(
-        'onevas/unsubscription/',
-        OnevasWebhookView.as_view(),
-        {'webhook_type': 'unsubscription'},
-        name='onevas-unsubscription',
-    ),
-    path(
-        'onevas/renewal/',
-        OnevasWebhookView.as_view(),
-        {'webhook_type': 'renewal'},
-        name='onevas-renewal',
-    ),
-    path('onevas/stop/', OnevasWebhookView.as_view(), {'webhook_type': 'stop'}, name='onevas-stop'),
+    # The four OneVAS webhooks (onevas/subscription|unsubscription|renewal|
+    # stop) were here. OneVAS has been removed; TIMWE's datasync below is the
+    # subscription channel.
+    #
     # TIMWE Master Aggregator datasync. One SOAP endpoint for subscribe,
     # unsubscribe and update -- the MA carries the operation in updateType
-    # rather than in the URL, unlike the OneVAS webhooks above.
+    # rather than in the URL.
     path(
         'timwe/sync-order-relation/',
         timwe_sync_order_relation,

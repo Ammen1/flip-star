@@ -55,7 +55,6 @@ ROUTE_CONTRACT = [
     # subscriptions
     ('subscription-status', '/api/v1/subscription/status/', 'UserSubscriptionStatusView'),
     ('subscription-tiers', '/api/v1/subscriptions/tiers/', 'SubscriptionTierViewSet'),
-    ('onevas-subscription', '/api/v1/onevas/subscription/', 'OnevasWebhookView'),
     # gamification
     ('gamification-status', '/api/v1/gamification/status/', 'get_gamification_status'),
     ('claim-login-bonus', '/api/v1/gamification/login-bonus/', 'claim_login_bonus'),
@@ -142,6 +141,21 @@ def test_action_only_viewsets_have_no_collection_route(basename):
     """Documents the asymmetry so a future reader does not "fix" it."""
     with pytest.raises(NoReverseMatch):
         reverse(f'{basename}-list')
+
+
+@pytest.mark.parametrize('kind', ['subscription', 'unsubscription', 'renewal', 'stop'])
+def test_onevas_webhooks_are_gone(kind):
+    """
+    The one deliberate break in this contract: OneVAS has been removed, and
+    its only consumer -- OneVAS itself -- with it. TIMWE's datasync endpoint is
+    the subscription channel. Neither the name nor the path may come back.
+    """
+    from django.urls import Resolver404
+
+    with pytest.raises(NoReverseMatch):
+        reverse(f'onevas-{kind}')
+    with pytest.raises(Resolver404):
+        resolve(f'/api/v1/onevas/{kind}/')
 
 
 def test_total_route_count_is_stable():
@@ -231,11 +245,15 @@ def test_total_route_count_is_stable():
     id is simply not read for them), campaign coin config, usage, reward
     transactions and the audit log.
 
+    -4 for the OneVAS webhooks (onevas/subscription, unsubscription, renewal,
+    stop), removed with OneVAS itself. TIMWE's datasync is the subscription
+    channel; see test_onevas_webhooks_are_gone.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 333, (
+    assert len(urlpatterns) == 329, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )

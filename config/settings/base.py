@@ -448,14 +448,12 @@ TELEBIRR_PUBLIC_KEY = config('TELEBIRR_PUBLIC_KEY', default='')
 TELEBIRR_NOTIFY_URL = config('TELEBIRR_NOTIFY_URL', default='')
 TELEBIRR_REDIRECT_URL = config('TELEBIRR_REDIRECT_URL', default='')
 
-# Onevas SMS / airtime charging
 # ---------------------------------------------------------------------------
 # TIMWE Master Aggregator
 # ---------------------------------------------------------------------------
-# Replaces the OneVAS block below. Both are configured during the migration;
-# OneVAS is removed at cutover. TIMWE_INTEGRATION_ENABLED stays False until
-# TIMWE supplies credentials and the WEB subscription flow, so the datasync
-# endpoint records events without granting subscriptions alongside OneVAS.
+# The subscription and SMS channel. It replaced OneVAS, which has been removed
+# -- no ONEVAS_* setting exists or is read. TIMWE_INTEGRATION_ENABLED decides
+# whether datasync notifications grant subscriptions or are only recorded.
 TIMWE_INTEGRATION_ENABLED = config('TIMWE_INTEGRATION_ENABLED', default=False, cast=bool)
 TIMWE_CHARGE_URL = config('TIMWE_CHARGE_URL', default='')
 TIMWE_SP_ID = config('TIMWE_SP_ID', default='')
@@ -469,6 +467,19 @@ TIMWE_CHARGE_TIMEOUT = config('TIMWE_CHARGE_TIMEOUT', default=60, cast=int)
 # that policy -- a business decision, not a deployment one. It also needs the
 # five TIMWE_CHARGE/SP/SERVICE/CURRENCY values above, which TIMWE supplies.
 TIMWE_AIRTIME_PURCHASE_ENABLED = config('TIMWE_AIRTIME_PURCHASE_ENABLED', default=False, cast=bool)
+# Master switch for TIMWE chargeAmount. While false, no charge request leaves
+# the process whatever else is configured -- deploying the code must never be
+# what starts charging subscribers. Each flow also needs its own switch.
+TIMWE_CHARGING_ENABLED = config('TIMWE_CHARGING_ENABLED', default=False, cast=bool)
+# Automatic renewal of an expired short-code subscription: when a TIMWE SMS
+# subscriber's period runs out, the backend charges their registered number
+# once for the next period (api/services/subscription_renewal.py). OFF by
+# default, and must stay off unless TIMWE confirms it does NOT renew these
+# subscriptions itself -- if it does, a charge from here is a second charge
+# for the same period.
+TIMWE_SUBSCRIPTION_RENEWAL_ENABLED = config(
+    'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED', default=False, cast=bool
+)
 TIMWE_ALLOWED_IPS = [
     ip.strip() for ip in config('TIMWE_ALLOWED_IPS', default='').split(',') if ip.strip()
 ]
@@ -480,26 +491,6 @@ TIMWE_ALLOWED_IPS = [
 # should be turned off once the integration is live and the traffic is real.
 TIMWE_LOG_PAYLOADS = config('TIMWE_LOG_PAYLOADS', default=True, cast=bool)
 
-ONEVAS_APPLICATION_KEY = config('ONEVAS_APPLICATION_KEY', default='')
-ONEVAS_PRODUCT_NUMBER = config('ONEVAS_PRODUCT_NUMBER', default='')
-ONEVAS_SMS_URL = config('ONEVAS_SMS_URL', default='https://onevas.et/api/partnerSms/send')
-ONEVAS_CHARGING_URL = config('ONEVAS_CHARGING_URL', default='https://onevas.et/api/v1/charging')
-ONEVAS_SPID = config('ONEVAS_SPID', default='')
-
-#: Per-tier Onevas provisioning. These were previously a hardcoded dict of four
-#: live application keys in ``api/views/subscription.py``. The authoritative copy
-#: is the ``SubscriptionTier`` row; this mapping is the fallback used when a tier
-#: has no value stored, and every entry now resolves through the secret chain.
-ONEVAS_PRODUCTS = {
-    tier: {
-        'spid': config(f'ONEVAS_{tier.upper()}_SPID', default='') or ONEVAS_SPID,
-        'service_id': config(f'ONEVAS_{tier.upper()}_SERVICE_ID', default=''),
-        'product_id': config(f'ONEVAS_{tier.upper()}_PRODUCT_ID', default=''),
-        'application_key': config(f'ONEVAS_{tier.upper()}_APPLICATION_KEY', default=''),
-    }
-    for tier in ('daily', 'weekly', 'monthly', 'ondemand')
-}
-
 # Firebase Cloud Messaging (mobile push)
 FIREBASE_SERVER_KEY = config('FIREBASE_SERVER_KEY', default='')
 
@@ -508,11 +499,6 @@ FIREBASE_SERVER_KEY = config('FIREBASE_SERVER_KEY', default='')
 # startup -- see infrastructure/keys/ and common/security/e2e_encryption.py.
 # There is deliberately no settings/env entry for it: Redis is the single
 # source of truth, not configuration.
-
-# Africa's Talking SMS. Legacy fallback path in `_send_sms`; Onevas is the
-# primary SMS provider.
-AT_USERNAME = config('AT_USERNAME', default='')
-AT_API_KEY = config('AT_API_KEY', default='')
 
 
 # ---------------------------------------------------------------------------
@@ -524,10 +510,6 @@ from common.constants.logging import build_logging_config  # noqa: E402
 LOGGING = build_logging_config(level=config('LOG_LEVEL', default='INFO'), json_format=False)
 
 # Where the welcome SMS sends a new subscriber to redeem their OTP.
-#
-# Separate from the OneVAS link so the two channels can be pointed at
-# different front ends during the migration; same default, since today they
-# are the same app.
 TIMWE_SUBSCRIPTION_LINK_BASE = config(
     'TIMWE_SUBSCRIPTION_LINK_BASE', default='https://uat.flipstar.et/register'
 )
@@ -535,15 +517,18 @@ TIMWE_SUBSCRIPTION_LINK_BASE = config(
 # ---------------------------------------------------------------------------
 # SMS delivery
 # ---------------------------------------------------------------------------
-# TIMWE SMPP replaced OneVAS HTTP as the transport for every application SMS.
-# There is deliberately no fallback: a silent failover to OneVAS would send
-# subscribers messages over a gateway that is being decommissioned, and would
-# hide an SMPP outage instead of surfacing it.
+# TIMWE SMPP is the transport for every application SMS, OTPs included. OneVAS
+# has been removed and there is deliberately no fallback: failing over to
+# another gateway would hide an SMPP outage instead of surfacing it.
 #
 # 'console' exists for local development, where there is no gateway to reach.
 # Production must set 'timwe_smpp' explicitly -- api/services/sms/__init__.py
 # refuses to start on an unknown value rather than picking one.
 SMS_PROVIDER = config('SMS_PROVIDER', default='timwe_smpp')
+
+# The short code subscribers text to subscribe and send STOP to. TIMWE's now;
+# it was OneVAS's, and this replaces the ONEVAS_SHORT_CODE that went with it.
+SMS_SHORT_CODE = config('SMS_SHORT_CODE', default='9286')
 
 # The SMPP link. Separate from TIMWE_SP_ID/TIMWE_SP_PASSWORD above, which are
 # the HTTP charging API's credentials -- see infrastructure/config/schema.py.

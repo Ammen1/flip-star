@@ -1,16 +1,18 @@
-from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from api.models.subscription import SubscriptionTier
 
-# Onevas provisioning (spid / service_id / product_id / application_key) is
-# resolved from settings, which read environment -> Vault -> .env. These four
-# tiers previously carried live application keys as literals in this file.
-ONEVAS = settings.ONEVAS_PRODUCTS
+# The tiers' provisioning columns (spid / service_id / product_id /
+# application_key) are deliberately not written here. They were seeded from
+# OneVAS settings, which have been removed -- and product_id is what TIMWE's
+# datasync matches a notification to a tier by (api/services/subscription_tiers
+# .py), so re-running this must never blank the value already stored.
+# `onevas_code` stays: despite the name it is the tier's identifier (A-D), used
+# by the telebirr mandate flow.
 
 
 class Command(BaseCommand):
-    help = 'Seed subscription tiers with Onevas configuration'
+    help = 'Seed subscription tiers (plans, prices and privileges)'
 
     def handle(self, *args, **options):
         tiers_data = [
@@ -23,10 +25,6 @@ class Command(BaseCommand):
                 'price_etb': 3.00,
                 'price_coins': None,
                 'onevas_code': 'A',
-                'spid': ONEVAS['daily']['spid'],
-                'service_id': ONEVAS['daily']['service_id'],
-                'product_id': ONEVAS['daily']['product_id'],
-                'application_key': ONEVAS['daily']['application_key'],
                 'short_code': '9286',
                 'features': ['View all content', 'Basic interactions'],
                 'privileges': {
@@ -44,7 +42,7 @@ class Command(BaseCommand):
                     'watermark_free': False,
                     'hd_quality': False,
                     'download_videos': False,
-                    'profile_badge': 'Daily Premium'
+                    'profile_badge': 'Daily Premium',
                 },
                 'max_posts_per_day': 10,
                 'max_reels_per_day': 5,
@@ -72,10 +70,6 @@ class Command(BaseCommand):
                 'price_etb': 20.00,
                 'price_coins': None,
                 'onevas_code': 'B',
-                'spid': ONEVAS['weekly']['spid'],
-                'service_id': ONEVAS['weekly']['service_id'],
-                'product_id': ONEVAS['weekly']['product_id'],
-                'application_key': ONEVAS['weekly']['application_key'],
                 'short_code': '9286',
                 'features': ['View all content', 'Extended interactions', 'HD quality'],
                 'privileges': {
@@ -93,7 +87,7 @@ class Command(BaseCommand):
                     'watermark_free': False,
                     'hd_quality': True,
                     'download_videos': False,
-                    'profile_badge': 'Weekly Premium'
+                    'profile_badge': 'Weekly Premium',
                 },
                 'max_posts_per_day': 15,
                 'max_reels_per_day': 8,
@@ -121,12 +115,15 @@ class Command(BaseCommand):
                 'price_etb': 70.00,
                 'price_coins': None,
                 'onevas_code': 'C',
-                'spid': ONEVAS['monthly']['spid'],
-                'service_id': ONEVAS['monthly']['service_id'],
-                'product_id': ONEVAS['monthly']['product_id'],
-                'application_key': ONEVAS['monthly']['application_key'],
                 'short_code': '9286',
-                'features': ['All features', 'Priority support', 'Custom themes', 'Analytics', 'Ad-free', 'Download videos'],
+                'features': [
+                    'All features',
+                    'Priority support',
+                    'Custom themes',
+                    'Analytics',
+                    'Ad-free',
+                    'Download videos',
+                ],
                 'privileges': {
                     'max_posts_per_day': 30,
                     'max_reels_per_day': 15,
@@ -142,7 +139,7 @@ class Command(BaseCommand):
                     'watermark_free': True,
                     'hd_quality': True,
                     'download_videos': True,
-                    'profile_badge': 'Monthly Premium'
+                    'profile_badge': 'Monthly Premium',
                 },
                 'max_posts_per_day': 30,
                 'max_reels_per_day': 15,
@@ -170,10 +167,6 @@ class Command(BaseCommand):
                 'price_etb': 10.00,
                 'price_coins': 100,
                 'onevas_code': 'D',
-                'spid': ONEVAS['ondemand']['spid'],
-                'service_id': ONEVAS['ondemand']['service_id'],
-                'product_id': ONEVAS['ondemand']['product_id'],
-                'application_key': ONEVAS['ondemand']['application_key'],
                 'short_code': '9286',
                 'features': ['All features', 'API access', 'Lifetime access'],
                 'privileges': {
@@ -191,7 +184,7 @@ class Command(BaseCommand):
                     'watermark_free': True,
                     'hd_quality': True,
                     'download_videos': True,
-                    'profile_badge': 'OnDemand Premium'
+                    'profile_badge': 'OnDemand Premium',
                 },
                 'max_posts_per_day': 50,
                 'max_reels_per_day': 25,
@@ -214,10 +207,9 @@ class Command(BaseCommand):
 
         for tier_data in tiers_data:
             tier, created = SubscriptionTier.objects.get_or_create(
-                slug=tier_data['slug'],
-                defaults=tier_data
+                slug=tier_data['slug'], defaults=tier_data
             )
-            
+
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created tier: {tier.name}'))
             else:

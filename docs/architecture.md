@@ -67,8 +67,6 @@ business logic that belongs in a service — most notably:
 - `api/views/core.py::create_post` — coin charging, ffmpeg probing, thumbnail
   extraction and reel creation, inline in the request path
 - `api/views/wallet.py::request_withdrawal` — balance mutation inline
-- `api/views/subscription.py::OnevasWebhookView` — ~460 lines of subscription
-  lifecycle in a view class
 
 Extracting these is follow-up work. The directory structure now makes the
 target obvious; the moves themselves were deliberately out of scope.

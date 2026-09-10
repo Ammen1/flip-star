@@ -30,7 +30,7 @@ pytestmark = pytest.mark.integration
 factory = APIRequestFactory()
 
 # The OTP goes straight onto the TIMWE SMS queue. It used to go through
-# OnevasWebhookView.send_sms; OneVAS has been removed.
+# OnevasWebhookView.send_sms; OneVAS, and that view, have been removed.
 QUEUE_SMS = 'api.services.sms.dispatch.queue_sms'
 
 
@@ -57,7 +57,7 @@ def active_subscription(db):
     plan = SubscriptionPlan.objects.create(
         tier=tier,
         status='active',
-        payment_method='onevas',
+        payment_method='timwe',
         onevas_phone_number='251911000111',
         start_date=timezone.now(),
         end_date=timezone.now() + timezone.timedelta(days=1),
@@ -87,13 +87,18 @@ def test_resend_subscription_otp_regenerates_otp_and_sends_sms(active_subscripti
     assert active_subscription.setup_otp in mock_send.call_args.kwargs['text']
 
 
-def test_resend_subscription_otp_does_not_touch_onevas(active_subscription):
-    with patch(QUEUE_SMS), patch('api.views.subscription.OnevasWebhookView.send_sms') as onevas:
+def test_resend_subscription_otp_makes_no_http_call(active_subscription, monkeypatch):
+    """The OTP leaves only through the TIMWE SMPP queue -- never an HTTP gateway."""
+    posted = []
+    monkeypatch.setattr('requests.post', lambda *a, **kw: posted.append((a, kw)))
+
+    with patch(QUEUE_SMS) as queued:
         resend_subscription_otp(
             factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json'),
         )
 
-    onevas.assert_not_called()
+    queued.assert_called_once()
+    assert posted == []
 
 
 def test_resend_subscription_otp_sets_cooldown(active_subscription):

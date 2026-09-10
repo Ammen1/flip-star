@@ -190,6 +190,98 @@ WHERE status IN ('timeout', 'unknown')
 ORDER BY created_at;
 ```
 
+## Automatic renewal of short-code subscriptions
+
+`api/services/subscription_renewal.py`
+
+When a TIMWE short-code subscriber's period runs out, the backend charges their
+registered number once for the next period and renews the plan on a confirmed
+charge. The client never asks for it and supplies none of its terms.
+
+> **Before switching this on, ask TIMWE one question:** *does the MA renew and
+> charge these subscriptions itself?* If it does, a charge from here is a
+> **second charge for the same period**. Leave it off unless TIMWE confirms
+> renewals on this service are the SP's to charge.
+
+### Switches — both default off
+
+| Setting | Meaning |
+|---|---|
+| `TIMWE_CHARGING_ENABLED` | Master switch. While false no chargeAmount is ever sent — coin purchases, renewals and `timwe_charge_check --charge` alike. |
+| `TIMWE_SUBSCRIPTION_RENEWAL_ENABLED` | This flow. Renewal needs both. |
+
+### What is renewable
+
+A plan is renewed only when **all** hold:
+
+- `payment_method='timwe'` and `subscription_source='sms'` — OneVAS, telebirr
+  and coin plans never are;
+- its tier is on `SMS_SHORT_CODE`, with a price and a duration (not on-demand);
+- TIMWE recorded it under `TIMWE_SERVICE_ID`, when it recorded a service;
+- status `active`, `expired` or `grace_period` with `end_date` in the past —
+  **never `cancelled`**: that subscriber sent STOP;
+- the account has no other active subscription;
+- the account's registered number is the number TIMWE subscribed.
+
+Amount = the tier's `price_etb`. Number = the profile's phone, normalised
+(`9xxxxxxxx` → `2519xxxxxxxx`). Duration = the tier's `duration_days`, from now
+— the one-off free-trial days are not granted again.
+
+### Once per period
+
+The period is *(plan, the `end_date` that ran out)*. It is charged at most once:
+
+- the idempotency key is `sub-renewal:<plan>:<end_date>`, unique in the database;
+- a partial unique constraint allows one renewal charge per
+  `(subscription, renewal_period_end)`;
+- a concurrent request finds the existing row and gets its state instead.
+
+A **pending or ambiguous** attempt is never followed by another, and neither is
+a **failed** one — the plan stays expired until the subscriber opts in again.
+
+### Where it runs
+
+| Trigger | How |
+|---|---|
+| `GET /subscription/status/` | **Queues** a Celery task (`renew_expired_subscription`) and answers immediately with `status: PAYMENT_PENDING`. It never waits on TIMWE. |
+| Posting a video (`create_post`) | Renews **inline**. On a confirmed charge the post goes through; while one is pending it answers `403` with `code: PAYMENT_PENDING`. |
+
+PIN reset does not trigger a charge.
+
+### `/subscription/status/` additions
+
+The existing fields are unchanged. Two are added:
+
+| `status` | Meaning |
+|---|---|
+| `ACTIVE` | Subscribed. |
+| `PAYMENT_PENDING` | A renewal is queued, in flight, ambiguous or paid-but-unapplied. Not "no subscription". |
+| `EXPIRED` | A lapsed short-code subscriber not being renewed; `renewal.state` says why (`renewal_disabled`, `renewal_failed`, …). |
+| `INACTIVE` | No subscription to renew. |
+
+### After a success
+
+The charge is marked fulfilled and the plan renewed, with a
+`SubscriptionPayment` (`payment_method='timwe'`, the reference in
+`onevas_transaction_id`) and a `renewed` history entry, all in one database
+transaction. If that transaction fails after TIMWE has charged, the charge stays
+success-but-unfulfilled; the next check applies it **without charging again**.
+
+### Reconciliation
+
+```
+kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py timwe_charge_check --reconcile
+```
+
+Lists every PENDING, TIMEOUT or UNKNOWN charge and every one paid but not yet
+applied, with its reference code, and summarises the last 24 hours by purpose
+and status, latency and TIMWE error codes. It never charges.
+
+Log events: `SUBSCRIPTION_RENEWAL_STARTED`, `…_QUEUED`,
+`…_DUPLICATE_PREVENTED`, `…_APPLIED`, `…_FAILED`, `…_AMBIGUOUS`, `…_SKIPPED`,
+`…_APPLY_FAILED`, plus the charge's own `TIMWE_CHARGE_REQUESTED` /
+`TIMWE_CHARGE_COMPLETED` (latency, TIMWE error code). Numbers are masked.
+
 ## The business flow is switched off
 
 Coin purchase via airtime (`purchase_coins_on_demand`) is the flow chargeAmount

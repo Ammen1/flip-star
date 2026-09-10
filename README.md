@@ -2,8 +2,8 @@
 
 Django REST API for FlipStar — a gamified social platform for the Ethiopian
 market, with a dual-currency wallet, campaign contests, an ad/boost
-marketplace, real-time messaging, and payment integrations with Telebirr and
-Onevas.
+marketplace, real-time messaging, and integrations with Telebirr (payments)
+and TIMWE (SMS and airtime subscriptions). OneVAS has been removed.
 
 > **Scope.** This repository is the backend/API server only — `frontend/`
 > and `mobile-app/` have already been extracted into their own repositories.
@@ -24,7 +24,7 @@ Client ──TLS──▶ nginx ──▶ Daphne (Django/DRF + Channels)
                              ├──▶ Redis 7          (cache · channel layer · Celery broker)
                              ├──▶ MinIO / S3       (media)
                              ├──▶ Telebirr         (checkout REST · direct debit SOAP)
-                             └──▶ Onevas           (SMS · airtime charging)
+                             └──▶ TIMWE            (SMS over SMPP · subscriptions · charging)
 
 Celery worker ──▶ ffmpeg transcode · blurhash · image optimise · FCM push
 Celery beat   ──▶ scheduled maintenance
@@ -43,7 +43,7 @@ Django apps requires a pinned `db_table` on each of ~82 models plus paired
 | HTTP | `api/views/` | Request handling, authn/authz, response shaping |
 | Contracts | `api/serializers/` | Field validation and representation |
 | Business logic | `api/services/` | Workflows: scoring, OTP, presence |
-| Providers | `api/integrations/` | Telebirr, Onevas, Web Push clients |
+| Providers | `api/integrations/` | Telebirr, TIMWE, SMPP, Web Push clients |
 | Data | `api/models/` | Models, grouped by domain |
 | Async | `api/tasks/` | Celery tasks |
 | Realtime | `api/websockets/` | Channels consumers |
@@ -64,7 +64,7 @@ Django apps requires a pinned `db_table` on each of ~82 models plus paired
 │   ├── views/                  # one module per domain
 │   ├── serializers/
 │   ├── services/               # otp, presence, scoring/
-│   ├── integrations/           # telebirr/, onevas/, push/
+│   ├── integrations/           # telebirr/, timwe/, smpp/, push/
 │   ├── tasks/                  # Celery tasks
 │   ├── websockets/             # Channels consumers
 │   ├── admin/                  # admin site + registrations
@@ -256,7 +256,8 @@ Health checks:
 |---|---|---|
 | Telebirr (REST) | Coin purchase checkout, RSA-signed | `api/integrations/telebirr/checkout.py` |
 | Telebirr (SOAP) | Direct debit mandates and debits | `api/integrations/telebirr/direct_debit.py` |
-| Onevas | SMS OTP delivery, airtime charging | `api/integrations/onevas/`, `api/services/otp.py` |
+| TIMWE (SMPP) | All SMS, OTPs included | `api/integrations/smpp/`, `api/services/sms/` — [docs/sms-smpp.md](docs/sms-smpp.md) |
+| TIMWE (MA) | SMS subscriptions (datasync), airtime charging | `api/views/timwe.py`, `api/integrations/timwe/` — [docs/timwe-charging.md](docs/timwe-charging.md) |
 | Web Push | Browser notifications (VAPID) | `api/integrations/push/webpush.py` |
 | FCM | Mobile push | `api/tasks/media.py` |
 

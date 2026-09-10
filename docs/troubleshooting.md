@@ -142,15 +142,14 @@ service, the same mechanism phone registration now uses.
 
 ## Registration succeeds but no SMS arrives
 
-`OTPService.send_otp` returns success even when delivery fails:
+`OTPService.send_otp` returns success once the SMS is *queued* — before TIMWE
+has accepted it, let alone delivered it.
 
-```python
-return True, f'OTP generated (SMS delivery failed: {response.text})'
-```
-
-The client shows "code sent" and monitoring stays green. Check the logs for
-`SMS delivery failed` or `SMS error`, and verify `ONEVAS_APPLICATION_KEY` and
-`ONEVAS_PRODUCT_NUMBER`.
+The client shows "code sent" and monitoring stays green. The code is only
+*queued* at that point: follow it in the SMS worker log (`SMS_SUBMITTED`,
+`SMS_SUBMIT_FAILED code=…`) and on `SmsMessage.status`, and check the TIMWE
+SMPP bind (`SMPP_BOUND`). See [sms-smpp.md](sms-smpp.md). OneVAS has been
+removed — there are no `ONEVAS_*` keys to check.
 
 ---
 

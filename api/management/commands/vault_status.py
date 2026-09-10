@@ -41,9 +41,11 @@ INTEGRATION_KEYS = {
         'TELEBIRR_PRIVATE_KEY',
         'TELEBIRR_PUBLIC_KEY',
     ],
-    'Onevas': [
-        'ONEVAS_APPLICATION_KEY',
-        'ONEVAS_PRODUCT_NUMBER',
+    'TIMWE SMS (SMPP)': [
+        'TIMWE_SMPP_HOST',
+        'TIMWE_SMPP_PORT',
+        'TIMWE_SMPP_SYSTEM_ID',
+        'TIMWE_SMPP_PASSWORD',
     ],
     'Object storage': [
         'ACCESS_KEY_ID',
@@ -142,9 +144,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f'  {name:<26} configured'))
             elif resolved:
                 absent = ', '.join(k for k in keys if provider.source_of(k) == 'unset')
-                self.stdout.write(
-                    self.style.WARNING(f'  {name:<26} PARTIAL — missing: {absent}')
-                )
+                self.stdout.write(self.style.WARNING(f'  {name:<26} PARTIAL — missing: {absent}'))
             else:
                 self.stdout.write(f'  {name:<26} not configured')
 

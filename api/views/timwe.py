@@ -16,9 +16,9 @@ Two protections stand in for the authentication the guide does not define
 * a payload size cap and a DOCTYPE rejection in the parser
 
 Until ``TIMWE_INTEGRATION_ENABLED`` is switched on, every request is parsed,
-validated and recorded but no subscription is mutated. That keeps the endpoint
-observable during onboarding without letting it grant subscriptions in
-parallel with the OneVAS webhooks that are still live.
+validated and recorded but no subscription is mutated. That kept the endpoint
+observable during onboarding. OneVAS has since been removed, so this is the
+only subscription channel over SMS.
 """
 
 import logging
@@ -162,10 +162,10 @@ def timwe_sync_order_relation(request):
         extensions=relation.extensions,
     )
 
-    # Product id first, then the subscriber's own SMS keyword -- the same
-    # order the OneVAS webhook uses. TIMWE and OneVAS front the same products
-    # but have not always quoted the same ids for them, and a subscriber who
-    # texted '1' has said which plan they want regardless of that.
+    # Product id first, then the subscriber's own SMS keyword. The ids stored
+    # on the tiers came from OneVAS (since removed), and TIMWE has not always
+    # quoted the same ones; a subscriber who texted '1' has said which plan
+    # they want regardless of that.
     tier = resolve_tier(product_id=relation.product_id, keyword=relation.keyword)
     if tier is None:
         # 2032 is precisely this case: the service the product belongs to does
@@ -232,14 +232,12 @@ def _apply_relation(relation, tier, user):
     duplicate or a no-op is a successful request that changed nothing, and the
     two must stay distinguishable when reconciling against TIMWE's own records.
 
-    The work itself lives in ``api/services/sms_subscription.py``, shared with
-    the OneVAS webhook. This function decides *whether* to act; that module
-    decides *what* acting means, so the two aggregators cannot drift apart on
-    free trials, renewals, payment records or the message the subscriber gets.
+    The work itself lives in ``api/services/sms_subscription.py``. This
+    function decides *whether* to act; that module decides *what* acting means
+    -- free trials, renewals, payment records and the message the subscriber
+    gets -- with the same rules the removed OneVAS webhook applied.
 
-    Reached only when TIMWE_INTEGRATION_ENABLED is true. Until the OneVAS
-    webhooks are removed, that flag is the only thing keeping this from
-    granting subscriptions in parallel with them.
+    Reached only when TIMWE_INTEGRATION_ENABLED is true.
     """
     from api.services import sms_subscription
 

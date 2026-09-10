@@ -8,23 +8,27 @@ API endpoints for direct debit mandate management:
 - List user mandates
 - Webhook for async results
 """
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth.models import User
-from django.db import transaction as db_transaction
-from django.utils import timezone
-from datetime import datetime, timedelta
-from decimal import Decimal
 
 import logging
 import re
+from datetime import datetime, timedelta
+from decimal import Decimal
 
-from api.models.direct_debit import B2CPaymentTransaction, DirectDebitMandate, DirectDebitTransaction
-from api.models.subscription import SubscriptionTier, SubscriptionPlan, SubscriptionPayment
-from api.models.contest import UserCoinBalance
+from django.db import transaction as db_transaction
+from django.utils import timezone
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+
 from api.integrations.telebirr.direct_debit import telebirr_direct_debit_service
+from api.models.contest import UserCoinBalance
+from api.models.direct_debit import (
+    B2CPaymentTransaction,
+    DirectDebitMandate,
+    DirectDebitTransaction,
+)
+from api.models.subscription import SubscriptionPayment, SubscriptionPlan, SubscriptionTier
 from common.permissions.roles import HasAdminPermission
 from common.security import encrypted_endpoint
 
@@ -38,7 +42,7 @@ def _parse_telebirr_soap_result(raw_body):
     envelope. DRF's ``request.data`` cannot parse this so we operate on the
     raw bytes/string with regex (the schema is fixed and small).
     """
-    if isinstance(raw_body, (bytes, bytearray)):
+    if isinstance(raw_body, bytes | bytearray):
         try:
             raw_body = raw_body.decode('utf-8', errors='replace')
         except Exception:
@@ -47,7 +51,7 @@ def _parse_telebirr_soap_result(raw_body):
 
     def _find(tag):
         m = re.search(
-            r'<(?:[a-zA-Z]+:)?{0}>([^<]*)</(?:[a-zA-Z]+:)?{0}>'.format(tag),
+            rf'<(?:[a-zA-Z]+:)?{tag}>([^<]*)</(?:[a-zA-Z]+:)?{tag}>',
             text,
         )
         return m.group(1).strip() if m else None
@@ -69,7 +73,7 @@ def _parse_telebirr_soap_result(raw_body):
 def create_direct_debit_mandate(request):
     """
     Create a direct debit mandate for subscription payment
-    
+
     Request Body:
     {
         "tier_id": "uuid",
@@ -82,23 +86,22 @@ def create_direct_debit_mandate(request):
         tier_id = request.data.get('tier_id')
         payer_msisdn = request.data.get('payer_msisdn')
         frequency = request.data.get('frequency')
-        
+
         # Validate required fields
         if not all([tier_id, payer_msisdn, frequency]):
             return Response(
                 {'error': 'tier_id, payer_msisdn, and frequency are required'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Get subscription tier
         try:
             tier = SubscriptionTier.objects.get(id=tier_id, is_active=True)
         except SubscriptionTier.DoesNotExist:
             return Response(
-                {'error': 'Invalid subscription tier'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'Invalid subscription tier'}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Validate frequency matches tier duration
         frequency_map = {
             'daily': '02',
@@ -107,23 +110,25 @@ def create_direct_debit_mandate(request):
         }
         if tier.duration_type not in frequency_map:
             return Response(
-                {'error': 'This tier does not support direct debit (only tier-based subscriptions)'},
-                status=status.HTTP_400_BAD_REQUEST
+                {
+                    'error': 'This tier does not support direct debit (only tier-based subscriptions)'
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
         expected_frequency = frequency_map[tier.duration_type]
         if frequency != expected_frequency:
             return Response(
                 {'error': f'Frequency must be {expected_frequency} for {tier.duration_type} tier'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
-        
+
         # Generate payer reference number
-        payer_reference_number = f"FLP{user.id}{int(timezone.now().timestamp())}"
-        
+        payer_reference_number = f'FLP{user.id}{int(timezone.now().timestamp())}'
+
         # Calculate dates
         first_payment_date = timezone.now().date()
         expiry_date = first_payment_date + timedelta(days=365)  # 1 year expiry
-        
+
         # Call Telebirr service to create mandate
         result = telebirr_direct_debit_service.create_mandate(
             payer_msisdn=payer_msisdn,
@@ -132,13 +137,13 @@ def create_direct_debit_mandate(request):
             first_payment_date=first_payment_date.strftime('%Y%m%d'),
             expiry_date=expiry_date.strftime('%Y%m%d'),
         )
-        
+
         if not result.get('success'):
             return Response(
                 {'error': result.get('error', 'Mandate creation failed')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
         # Create mandate record. The synchronous Telebirr response is only an
         # acceptance ack; the real result (with the Telebirr-generated
         # MandateID) arrives later on the webhook. Until then, the mandate
@@ -155,22 +160,25 @@ def create_direct_debit_mandate(request):
             agreed_tc=True,
             originator_conversation_id=result.get('originator_conversation_id'),
             conversation_id=result.get('conversation_id'),
-            status='pending_created'
+            status='pending_created',
         )
-        
-        return Response({
-            'success': True,
-            'mandate_id': str(mandate.id),
-            'payer_reference_number': payer_reference_number,
-            'status': mandate.status,
-            'message': 'Mandate created successfully. Please activate it to complete subscription.',
-            'originator_conversation_id': result.get('originator_conversation_id')
-        }, status=status.HTTP_201_CREATED)
-        
+
+        return Response(
+            {
+                'success': True,
+                'mandate_id': str(mandate.id),
+                'payer_reference_number': payer_reference_number,
+                'status': mandate.status,
+                'message': 'Mandate created successfully. Please activate it to complete subscription.',
+                'originator_conversation_id': result.get('originator_conversation_id'),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
     except Exception as e:
         return Response(
             {'error': f'Failed to create mandate: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -180,7 +188,7 @@ def create_direct_debit_mandate(request):
 def activate_direct_debit_mandate(request):
     """
     Activate a direct debit mandate
-    
+
     Request Body:
     {
         "mandate_id": "uuid",
@@ -191,30 +199,26 @@ def activate_direct_debit_mandate(request):
         user = request.user
         mandate_id = request.data.get('mandate_id')
         payer_account_name = request.data.get('payer_account_name', '')
-        
+
         # Validate required fields
         if not mandate_id:
-            return Response(
-                {'error': 'mandate_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({'error': 'mandate_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Get mandate
         try:
             mandate = DirectDebitMandate.objects.get(id=mandate_id, user=user)
         except DirectDebitMandate.DoesNotExist:
-            return Response(
-                {'error': 'Mandate not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
+            return Response({'error': 'Mandate not found'}, status=status.HTTP_404_NOT_FOUND)
+
         # Telebirr requires the real MandateID (max 18 bytes) generated by
         # the Mobile Money system and delivered via the async result webhook.
         # Substituting payer_reference_number here would be rejected.
         if not mandate.mandate_id:
             return Response(
-                {'error': 'Mandate is not yet ready for activation. Telebirr has not returned the MandateID. Please retry shortly.'},
-                status=status.HTTP_409_CONFLICT
+                {
+                    'error': 'Mandate is not yet ready for activation. Telebirr has not returned the MandateID. Please retry shortly.'
+                },
+                status=status.HTTP_409_CONFLICT,
             )
 
         # Atomically claim the mandate for activation: pending_active ->
@@ -224,14 +228,14 @@ def activate_direct_debit_mandate(request):
         # the two UPDATEs at the row level, and only the first one finds
         # status still 'pending_active'. Nothing is held open while we then
         # talk to Telebirr below.
-        claimed = DirectDebitMandate.objects.filter(
-            id=mandate.id, status='pending_active'
-        ).update(status='activating')
+        claimed = DirectDebitMandate.objects.filter(id=mandate.id, status='pending_active').update(
+            status='activating'
+        )
         if claimed == 0:
             mandate.refresh_from_db()
             return Response(
                 {'error': f'Mandate is in {mandate.status} status, cannot activate'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Call Telebirr service to activate mandate. No DB lock is held
@@ -241,7 +245,7 @@ def activate_direct_debit_mandate(request):
                 mandate_id=mandate.mandate_id,
                 payer_msisdn=mandate.payer_msisdn,
                 agreed_tc=True,
-                payer_account_name=payer_account_name
+                payer_account_name=payer_account_name,
             )
         except Exception as exc:
             # Unknown outcome (network error/timeout) -- we cannot tell
@@ -250,10 +254,14 @@ def activate_direct_debit_mandate(request):
             # webhook (telebirr_direct_debit_webhook, which also accepts
             # 'activating' as a valid prior state) is the recovery path
             # once Telebirr's own record of the outcome arrives.
-            logger.exception('Telebirr activate_mandate call failed for mandate %s: %s', mandate.id, exc)
+            logger.exception(
+                'Telebirr activate_mandate call failed for mandate %s: %s', mandate.id, exc
+            )
             return Response(
-                {'error': 'Activation request could not be confirmed. Please check mandate status shortly.'},
-                status=status.HTTP_502_BAD_GATEWAY
+                {
+                    'error': 'Activation request could not be confirmed. Please check mandate status shortly.'
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
         if not result.get('success'):
@@ -264,7 +272,7 @@ def activate_direct_debit_mandate(request):
             )
             return Response(
                 {'error': result.get('error', 'Mandate activation failed')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         # Success: finalize with a short locked transaction (no external
@@ -292,10 +300,14 @@ def activate_direct_debit_mandate(request):
                         status='active',
                         duration_type=tier.duration_type,
                         start_date=timezone.now(),
-                        end_date=timezone.now() + timedelta(days=tier.duration_days) if tier.duration_days else None,
-                        next_renewal_date=timezone.now() + timedelta(days=tier.duration_days) if tier.duration_days else None,
+                        end_date=timezone.now() + timedelta(days=tier.duration_days)
+                        if tier.duration_days
+                        else None,
+                        next_renewal_date=timezone.now() + timedelta(days=tier.duration_days)
+                        if tier.duration_days
+                        else None,
                         auto_renew=True,
-                        payment_method='telebirr_direct_debit'
+                        payment_method='telebirr_direct_debit',
                     )
 
                     # Link mandate to subscription
@@ -312,7 +324,8 @@ def activate_direct_debit_mandate(request):
                         payment_method='telebirr_direct_debit',
                         duration_type=tier.duration_type,
                         period_start=timezone.now(),
-                        period_end=subscription_plan.end_date or timezone.now() + timedelta(days=30)
+                        period_end=subscription_plan.end_date
+                        or timezone.now() + timedelta(days=30),
                     )
             else:
                 # Already finalized by the recovery webhook while we were
@@ -320,18 +333,20 @@ def activate_direct_debit_mandate(request):
                 # current state.
                 subscription_plan = mandate.subscription_plan
 
-        return Response({
-            'success': True,
-            'mandate_id': str(mandate.id),
-            'status': mandate.status,
-            'subscription_id': str(subscription_plan.id) if subscription_plan else None,
-            'message': 'Mandate activated successfully. Subscription created.'
-        })
+        return Response(
+            {
+                'success': True,
+                'mandate_id': str(mandate.id),
+                'status': mandate.status,
+                'subscription_id': str(subscription_plan.id) if subscription_plan else None,
+                'message': 'Mandate activated successfully. Subscription created.',
+            }
+        )
 
     except Exception as e:
         return Response(
             {'error': f'Failed to activate mandate: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -341,7 +356,7 @@ def activate_direct_debit_mandate(request):
 def cancel_direct_debit_mandate(request):
     """
     Cancel a direct debit mandate
-    
+
     Request Body:
     {
         "mandate_id": "uuid"
@@ -350,73 +365,72 @@ def cancel_direct_debit_mandate(request):
     try:
         user = request.user
         mandate_id = request.data.get('mandate_id')
-        
+
         # Validate required fields
         if not mandate_id:
-            return Response(
-                {'error': 'mandate_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({'error': 'mandate_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Get mandate
         try:
             mandate = DirectDebitMandate.objects.get(id=mandate_id, user=user)
         except DirectDebitMandate.DoesNotExist:
-            return Response(
-                {'error': 'Mandate not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
+            return Response({'error': 'Mandate not found'}, status=status.HTTP_404_NOT_FOUND)
+
         # Check if mandate is active
         if not mandate.is_active():
             return Response(
                 {'error': f'Mandate is {mandate.status}, cannot cancel'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not mandate.mandate_id:
             return Response(
                 {'error': 'Mandate has no Telebirr MandateID yet, cannot cancel.'},
-                status=status.HTTP_409_CONFLICT
+                status=status.HTTP_409_CONFLICT,
             )
 
         # Atomically claim the mandate for cancellation: active ->
         # cancelling. Single conditional UPDATE, no lock held across the
         # Telebirr call below -- same pattern as activation above.
-        claimed = DirectDebitMandate.objects.filter(
-            id=mandate.id, status='active'
-        ).update(status='cancelling')
+        claimed = DirectDebitMandate.objects.filter(id=mandate.id, status='active').update(
+            status='cancelling'
+        )
         if claimed == 0:
             mandate.refresh_from_db()
             return Response(
                 {'error': f'Mandate is {mandate.status}, cannot cancel'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Call Telebirr service to cancel mandate. No DB lock held across
         # this call.
         try:
             result = telebirr_direct_debit_service.cancel_mandate(
-                mandate_id=mandate.mandate_id,
-                payer_msisdn=mandate.payer_msisdn
+                mandate_id=mandate.mandate_id, payer_msisdn=mandate.payer_msisdn
             )
         except Exception as exc:
             # Unknown outcome -- leave status as 'cancelling'. The async
             # result webhook (which also handles 'cancelling' as a valid
             # prior state) resolves it once Telebirr's own outcome is known.
-            logger.exception('Telebirr cancel_mandate call failed for mandate %s: %s', mandate.id, exc)
+            logger.exception(
+                'Telebirr cancel_mandate call failed for mandate %s: %s', mandate.id, exc
+            )
             return Response(
-                {'error': 'Cancellation request could not be confirmed. Please check mandate status shortly.'},
-                status=status.HTTP_502_BAD_GATEWAY
+                {
+                    'error': 'Cancellation request could not be confirmed. Please check mandate status shortly.'
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
         if not result.get('success'):
             # Telebirr explicitly rejected the cancellation -- known
             # outcome, safe to revert the claim back to active immediately.
-            DirectDebitMandate.objects.filter(id=mandate.id, status='cancelling').update(status='active')
+            DirectDebitMandate.objects.filter(id=mandate.id, status='cancelling').update(
+                status='active'
+            )
             return Response(
                 {'error': result.get('error', 'Mandate cancellation failed')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         # Success: finalize with a short locked transaction (no external
@@ -433,17 +447,19 @@ def cancel_direct_debit_mandate(request):
                 sp.auto_renew = False
                 sp.save()
 
-        return Response({
-            'success': True,
-            'mandate_id': str(mandate.id),
-            'status': mandate.status,
-            'message': 'Mandate cancelled successfully. Auto-renewal disabled.'
-        })
+        return Response(
+            {
+                'success': True,
+                'mandate_id': str(mandate.id),
+                'status': mandate.status,
+                'message': 'Mandate cancelled successfully. Auto-renewal disabled.',
+            }
+        )
 
     except Exception as e:
         return Response(
             {'error': f'Failed to cancel mandate: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -457,31 +473,32 @@ def list_user_mandates(request):
     try:
         user = request.user
         mandates = DirectDebitMandate.objects.filter(user=user).order_by('-created_at')
-        
+
         mandate_data = []
         for mandate in mandates:
-            mandate_data.append({
-                'id': str(mandate.id),
-                'mandate_id': mandate.mandate_id,
-                'payer_msisdn': mandate.payer_msisdn,
-                'status': mandate.status,
-                'frequency': mandate.frequency,
-                'first_payment_date': mandate.first_payment_date,
-                'expiry_date': mandate.expiry_date,
-                'subscription_plan_id': str(mandate.subscription_plan.id) if mandate.subscription_plan else None,
-                'created_at': mandate.created_at,
-                'is_active': mandate.is_active(),
-            })
-        
-        return Response({
-            'success': True,
-            'mandates': mandate_data
-        })
-        
+            mandate_data.append(
+                {
+                    'id': str(mandate.id),
+                    'mandate_id': mandate.mandate_id,
+                    'payer_msisdn': mandate.payer_msisdn,
+                    'status': mandate.status,
+                    'frequency': mandate.frequency,
+                    'first_payment_date': mandate.first_payment_date,
+                    'expiry_date': mandate.expiry_date,
+                    'subscription_plan_id': str(mandate.subscription_plan.id)
+                    if mandate.subscription_plan
+                    else None,
+                    'created_at': mandate.created_at,
+                    'is_active': mandate.is_active(),
+                }
+            )
+
+        return Response({'success': True, 'mandates': mandate_data})
+
     except Exception as e:
         return Response(
             {'error': f'Failed to list mandates: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -581,20 +598,26 @@ def telebirr_direct_debit_webhook(request):
             return Response({'success': True})
 
         with db_transaction.atomic():
-            mandate = DirectDebitMandate.objects.select_for_update().filter(
-                originator_conversation_id=originator_conversation_id
-            ).first()
+            mandate = (
+                DirectDebitMandate.objects.select_for_update()
+                .filter(originator_conversation_id=originator_conversation_id)
+                .first()
+            )
 
             # The transaction-result callback for a one-off payment arrives
             # with a DIFFERENT OriginatorConversationID -- the debit call's,
             # not the original mandate call's -- so it only correlates via
             # debit_conversation_id.
             if not mandate:
-                mandate = DirectDebitMandate.objects.select_for_update().filter(
-                    debit_conversation_id=originator_conversation_id
-                ).first()
+                mandate = (
+                    DirectDebitMandate.objects.select_for_update()
+                    .filter(debit_conversation_id=originator_conversation_id)
+                    .first()
+                )
                 if mandate:
-                    logger.info('Telebirr webhook: matched mandate %s by debit_conversation_id', mandate.id)
+                    logger.info(
+                        'Telebirr webhook: matched mandate %s by debit_conversation_id', mandate.id
+                    )
 
             if not mandate:
                 logger.warning(
@@ -644,15 +667,23 @@ def telebirr_direct_debit_webhook(request):
                         )
                         if debit_result.get('success'):
                             if debit_result.get('originator_conversation_id'):
-                                mandate.debit_conversation_id = debit_result.get('originator_conversation_id')
+                                mandate.debit_conversation_id = debit_result.get(
+                                    'originator_conversation_id'
+                                )
                                 mandate.save(update_fields=['debit_conversation_id'])
                             logger.info(
                                 'Telebirr webhook: debit initiated for mandate %s, waiting for transaction result',
                                 mandate.id,
                             )
                         else:
-                            logger.error('Telebirr webhook: debit initiation failed for mandate %s: %s', mandate.id, debit_result.get('error'))
-                            mandate.mark_failed(f'Debit initiation failed: {debit_result.get("error")}')
+                            logger.error(
+                                'Telebirr webhook: debit initiation failed for mandate %s: %s',
+                                mandate.id,
+                                debit_result.get('error'),
+                            )
+                            mandate.mark_failed(
+                                f'Debit initiation failed: {debit_result.get("error")}'
+                            )
                 elif mandate.status == 'cancelling':
                     # Recovery path: confirms a cancellation that was
                     # claimed by cancel_direct_debit_mandate but whose
@@ -741,9 +772,17 @@ def _credit_one_off_coins(mandate):
         profile.save(update_fields=['coins'])
         mandate.status = 'active'
         mandate.save(update_fields=['status'])
-        logger.info('Telebirr webhook: credited %s coins to %s for mandate %s', coins_to_add, mandate.user.username, mandate.id)
+        logger.info(
+            'Telebirr webhook: credited %s coins to %s for mandate %s',
+            coins_to_add,
+            mandate.user.username,
+            mandate.id,
+        )
     except UserProfile.DoesNotExist:
-        logger.error('Telebirr webhook: UserProfile not found for %s, cannot add coins', mandate.user.username)
+        logger.error(
+            'Telebirr webhook: UserProfile not found for %s, cannot add coins',
+            mandate.user.username,
+        )
         mandate.mark_failed('UserProfile not found')
 
 
@@ -758,13 +797,22 @@ def _rollback_one_off_coins(mandate):
         if not balance:
             return
         coins_to_deduct = mandate.metadata.get('coins', 100)
-        balance.spend_coins(coins_to_deduct, 'rollback', description=f'Rollback failed payment {mandate.id}')
+        balance.spend_coins(
+            coins_to_deduct, 'rollback', description=f'Rollback failed payment {mandate.id}'
+        )
         profile = mandate.user.profile
         profile.coins = balance.balance
         profile.save(update_fields=['coins'])
-        logger.warning('Telebirr webhook: rolled back %s coins from %s for failed mandate %s', coins_to_deduct, mandate.user.username, mandate.id)
+        logger.warning(
+            'Telebirr webhook: rolled back %s coins from %s for failed mandate %s',
+            coins_to_deduct,
+            mandate.user.username,
+            mandate.id,
+        )
     except Exception as exc:
-        logger.exception('Telebirr webhook: error rolling back coins for mandate %s: %s', mandate.id, exc)
+        logger.exception(
+            'Telebirr webhook: error rolling back coins for mandate %s: %s', mandate.id, exc
+        )
 
 
 def _activate_one_off_subscription(mandate):
@@ -772,8 +820,9 @@ def _activate_one_off_subscription(mandate):
     subscription payment. Resolves or creates the user by phone for
     anonymous purchases. Called only from inside
     telebirr_direct_debit_webhook's locked block."""
-    from api.models import UserProfile
     from django.db.models import Q
+
+    from api.models import UserProfile
 
     try:
         if mandate.subscription_plan_id:
@@ -807,7 +856,9 @@ def _activate_one_off_subscription(mandate):
         end_date = now + timedelta(days=duration_days) if duration_days else None
 
         if target_user:
-            SubscriptionPlan.objects.filter(user=target_user, status='active').update(status='expired')
+            SubscriptionPlan.objects.filter(user=target_user, status='active').update(
+                status='expired'
+            )
 
         subscription_plan = SubscriptionPlan.objects.create(
             user=target_user,
@@ -827,7 +878,7 @@ def _activate_one_off_subscription(mandate):
         if is_new_user:
             try:
                 from api.services.otp import OTPService
-                from api.views.subscription import OnevasWebhookView
+                from api.services.sms.dispatch import queue_sms
 
                 otp_code = OTPService.generate_otp()
                 subscription_plan.setup_otp = otp_code
@@ -835,18 +886,32 @@ def _activate_one_off_subscription(mandate):
                 meta = subscription_plan.metadata or {}
                 meta['is_new_user'] = True
                 subscription_plan.metadata = meta
-                subscription_plan.save(update_fields=['setup_otp', 'setup_otp_expires_at', 'metadata'])
+                subscription_plan.save(
+                    update_fields=['setup_otp', 'setup_otp_expires_at', 'metadata']
+                )
 
-                message = f"You have successfully subscribed. Your OTP is: {otp_code}. Please use this to log in."
-                OnevasWebhookView().send_sms(phone, message, duration_type)
+                message = f'You have successfully subscribed. Your OTP is: {otp_code}. Please use this to log in.'
+                # Over TIMWE SMPP. This went through OnevasWebhookView.send_sms,
+                # which has been removed along with the rest of OneVAS.
+                queue_sms(phone_number=phone, text=message, purpose='otp_subscription_setup')
             except Exception:
-                logger.exception('Telebirr webhook: failed to send setup OTP SMS for mandate %s', mandate.id)
+                logger.exception(
+                    'Telebirr webhook: failed to send setup OTP SMS for mandate %s', mandate.id
+                )
 
         mandate.status = 'active'
         mandate.save(update_fields=['status'])
-        logger.info('Telebirr webhook: activated one-off subscription %s for mandate %s', subscription_plan.id, mandate.id)
+        logger.info(
+            'Telebirr webhook: activated one-off subscription %s for mandate %s',
+            subscription_plan.id,
+            mandate.id,
+        )
     except Exception as exc:
-        logger.exception('Telebirr webhook: error activating one-off subscription for mandate %s: %s', mandate.id, exc)
+        logger.exception(
+            'Telebirr webhook: error activating one-off subscription for mandate %s: %s',
+            mandate.id,
+            exc,
+        )
         mandate.mark_failed(f'Subscription activation failed: {exc}')
 
 
@@ -858,9 +923,15 @@ def _rollback_one_off_subscription(mandate):
         if subscription_plan and subscription_plan.status == 'active':
             subscription_plan.status = 'cancelled'
             subscription_plan.save(update_fields=['status'])
-            logger.warning('Telebirr webhook: cancelled subscription %s for failed mandate %s', subscription_plan.id, mandate.id)
+            logger.warning(
+                'Telebirr webhook: cancelled subscription %s for failed mandate %s',
+                subscription_plan.id,
+                mandate.id,
+            )
     except Exception as exc:
-        logger.exception('Telebirr webhook: error cancelling subscription for mandate %s: %s', mandate.id, exc)
+        logger.exception(
+            'Telebirr webhook: error cancelling subscription for mandate %s: %s', mandate.id, exc
+        )
 
 
 @api_view(['POST'])
@@ -869,7 +940,7 @@ def _rollback_one_off_subscription(mandate):
 def initiate_direct_debit(request):
     """
     Manually initiate a direct debit transaction (for testing or manual renewal)
-    
+
     Request Body:
     {
         "mandate_id": "uuid",
@@ -880,42 +951,35 @@ def initiate_direct_debit(request):
         user = request.user
         mandate_id = request.data.get('mandate_id')
         amount = request.data.get('amount')
-        
+
         # Validate required fields
         if not all([mandate_id, amount]):
             return Response(
-                {'error': 'mandate_id and amount are required'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'mandate_id and amount are required'}, status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Get mandate
         try:
             mandate = DirectDebitMandate.objects.get(id=mandate_id, user=user)
         except DirectDebitMandate.DoesNotExist:
-            return Response(
-                {'error': 'Mandate not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
+            return Response({'error': 'Mandate not found'}, status=status.HTTP_404_NOT_FOUND)
+
         # Check if mandate is active
         if not mandate.is_active():
             return Response(
                 {'error': f'Mandate is {mandate.status}, cannot initiate debit'},
-                status=status.HTTP_400_BAD_REQUEST
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if not mandate.mandate_id:
             return Response(
                 {'error': 'Mandate has no Telebirr MandateID yet, cannot initiate debit.'},
-                status=status.HTTP_409_CONFLICT
+                status=status.HTTP_409_CONFLICT,
             )
 
         # Create transaction record
         transaction = DirectDebitTransaction.objects.create(
-            mandate=mandate,
-            amount=Decimal(str(amount)),
-            currency='ETB',
-            status='pending'
+            mandate=mandate, amount=Decimal(str(amount)), currency='ETB', status='pending'
         )
 
         # Call Telebirr service to initiate debit
@@ -923,33 +987,35 @@ def initiate_direct_debit(request):
             mandate_id=mandate.mandate_id,
             payer_reference_number=mandate.payer_reference_number,
             amount=amount,
-            shortcode=mandate.payee_identifier_value
+            shortcode=mandate.payee_identifier_value,
         )
-        
+
         if not result.get('success'):
             transaction.mark_failed(result.get('error'))
             return Response(
                 {'error': result.get('error', 'Direct debit initiation failed')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
         # Update transaction
         transaction.originator_conversation_id = result.get('originator_conversation_id')
         transaction.conversation_id = result.get('conversation_id')
         transaction.telebirr_transaction_id = result.get('transaction_id')
         transaction.save()
-        
-        return Response({
-            'success': True,
-            'transaction_id': str(transaction.id),
-            'status': transaction.status,
-            'message': 'Direct debit initiated successfully'
-        })
-        
+
+        return Response(
+            {
+                'success': True,
+                'transaction_id': str(transaction.id),
+                'status': transaction.status,
+                'message': 'Direct debit initiated successfully',
+            }
+        )
+
     except Exception as e:
         return Response(
             {'error': f'Failed to initiate direct debit: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -959,13 +1025,13 @@ def initiate_direct_debit(request):
 def create_one_off_coin_purchase(request):
     """
     Create a one-off payment for coin purchasing via Telebirr Direct Debit
-    
+
     Request Body:
     {
         "amount": 10.00,
         "coins": 100
     }
-    
+
     Returns:
     {
         "success": true,
@@ -978,48 +1044,43 @@ def create_one_off_coin_purchase(request):
         user = request.user
         amount = request.data.get('amount')
         coins = request.data.get('coins', 100)
-        
+
         # Validate required fields
         if not amount:
-            return Response(
-                {'error': 'amount is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
+            return Response({'error': 'amount is required'}, status=status.HTTP_400_BAD_REQUEST)
+
         # Get user's phone number from profile
         from api.models import UserProfile
+
         try:
             profile = user.profile
             payer_msisdn = profile.phone_number
             if not payer_msisdn:
                 return Response(
                     {'error': 'Phone number not found in profile'},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         except UserProfile.DoesNotExist:
-            return Response(
-                {'error': 'User profile not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
+            return Response({'error': 'User profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
         # Generate unique payer reference number
         payer_reference_number = f"COIN_{user.id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
+
         # Call Telebirr service to create one-off payment
         result = telebirr_direct_debit_service.create_one_off_payment(
             payer_msisdn=payer_msisdn,
             payer_reference_number=payer_reference_number,
             frequency='01',
             first_payment_date=datetime.now().date(),
-            expiry_date=datetime.now().date()
+            expiry_date=datetime.now().date(),
         )
-        
+
         if not result.get('success'):
             return Response(
                 {'error': result.get('error', 'One-off payment request failed')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-        
+
         # Create mandate record with payment_type='one_off'
         mandate = DirectDebitMandate.objects.create(
             user=user,
@@ -1036,26 +1097,25 @@ def create_one_off_coin_purchase(request):
             agreed_tc=True,
             originator_conversation_id=result.get('originator_conversation_id'),
             conversation_id=result.get('conversation_id'),
-            metadata={
+            metadata={'coins': coins, 'amount': amount},
+        )
+
+        return Response(
+            {
+                'success': True,
+                'mandate_id': str(mandate.id),
+                'originator_conversation_id': result.get('originator_conversation_id'),
+                'conversation_id': result.get('conversation_id'),
+                'message': 'One-off payment request accepted successfully. Wait for payment confirmation.',
                 'coins': coins,
-                'amount': amount
+                'amount': amount,
             }
         )
-        
-        return Response({
-            'success': True,
-            'mandate_id': str(mandate.id),
-            'originator_conversation_id': result.get('originator_conversation_id'),
-            'conversation_id': result.get('conversation_id'),
-            'message': 'One-off payment request accepted successfully. Wait for payment confirmation.',
-            'coins': coins,
-            'amount': amount
-        })
-        
+
     except Exception as e:
         return Response(
             {'error': f'Failed to create one-off payment: {str(e)}'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
 
@@ -1095,7 +1155,10 @@ def create_one_off_subscription(request):
             except UserProfile.DoesNotExist:
                 payer_msisdn = None
         if not payer_msisdn:
-            return Response({'error': 'Phone number not found. Please provide payer_msisdn.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Phone number not found. Please provide payer_msisdn.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Resolve subscription tier -- try UUID first, then fall back to
         # onevas_code / duration_type (mirrors the recurring create-mandate view).
@@ -1106,17 +1169,29 @@ def create_one_off_subscription(request):
                 tier = SubscriptionTier.objects.get(onevas_code=str(tier_id))
             except SubscriptionTier.DoesNotExist:
                 duration_type_map = {1: 'daily', 2: 'weekly', 3: 'monthly'}
-                duration_type = duration_type_map.get(int(tier_id) if str(tier_id).isdigit() else None)
+                duration_type = duration_type_map.get(
+                    int(tier_id) if str(tier_id).isdigit() else None
+                )
                 if duration_type:
-                    tier = SubscriptionTier.objects.filter(duration_type=duration_type, is_active=True).first()
+                    tier = SubscriptionTier.objects.filter(
+                        duration_type=duration_type, is_active=True
+                    ).first()
                     if not tier:
-                        return Response({'error': f'No active subscription tier found for {duration_type}'}, status=status.HTTP_400_BAD_REQUEST)
+                        return Response(
+                            {'error': f'No active subscription tier found for {duration_type}'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
                 else:
-                    return Response({'error': 'Invalid subscription tier'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {'error': 'Invalid subscription tier'}, status=status.HTTP_400_BAD_REQUEST
+                    )
 
         frequency_map = {'daily': '02', 'weekly': '03', 'monthly': '05'}
         if tier.duration_type not in frequency_map:
-            return Response({'error': 'This tier does not support Telebirr subscription'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'This tier does not support Telebirr subscription'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         intended_frequency = frequency_map[tier.duration_type]
 
         user_ref = user.id if user else 'ANON'
@@ -1130,11 +1205,14 @@ def create_one_off_subscription(request):
             payer_reference_number=payer_reference_number,
             frequency='01',
             first_payment_date=datetime.now().date(),
-            expiry_date=datetime.now().date()
+            expiry_date=datetime.now().date(),
         )
 
         if not result.get('success'):
-            return Response({'error': result.get('error', 'Subscription payment request failed')}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'error': result.get('error', 'Subscription payment request failed')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         mandate = DirectDebitMandate.objects.create(
             user=user,
@@ -1159,24 +1237,31 @@ def create_one_off_subscription(request):
                 'duration_days': tier.duration_days,
                 'amount': str(tier.price_etb),
                 'frequency': intended_frequency,
+            },
+        )
+
+        logger.info(
+            '[ONE-OFF SUB] Mandate created: %s (ref=%s)', mandate.id, payer_reference_number
+        )
+
+        return Response(
+            {
+                'success': True,
+                'mandate_id': str(mandate.id),
+                'originator_conversation_id': result.get('originator_conversation_id'),
+                'conversation_id': result.get('conversation_id'),
+                'message': 'One-off subscription payment request accepted. Wait for activation.',
+                'tier': tier.name,
+                'amount': str(tier.price_etb),
             }
         )
 
-        logger.info('[ONE-OFF SUB] Mandate created: %s (ref=%s)', mandate.id, payer_reference_number)
-
-        return Response({
-            'success': True,
-            'mandate_id': str(mandate.id),
-            'originator_conversation_id': result.get('originator_conversation_id'),
-            'conversation_id': result.get('conversation_id'),
-            'message': 'One-off subscription payment request accepted. Wait for activation.',
-            'tier': tier.name,
-            'amount': str(tier.price_etb),
-        })
-
     except Exception as e:
         logger.exception('[ONE-OFF SUB] Failed to create subscription payment')
-        return Response({'error': f'Failed to create subscription payment: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Failed to create subscription payment: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(['GET'])
@@ -1217,19 +1302,24 @@ def check_mandate_status(request):
         if mandate.subscription_plan and mandate.subscription_plan.metadata:
             is_new_user = mandate.subscription_plan.metadata.get('is_new_user', False)
 
-        return Response({
-            'success': True,
-            'status': mandate.status,
-            'coins_added': coins_added,
-            'subscription_active': subscription_active,
-            'completed': is_completed,
-            'purchase_type': purchase_type,
-            'payment_type': mandate.payment_type,
-            'is_new_user': is_new_user,
-        })
+        return Response(
+            {
+                'success': True,
+                'status': mandate.status,
+                'coins_added': coins_added,
+                'subscription_active': subscription_active,
+                'completed': is_completed,
+                'purchase_type': purchase_type,
+                'payment_type': mandate.payment_type,
+                'is_new_user': is_new_user,
+            }
+        )
 
     except Exception as e:
-        return Response({'error': f'Failed to check mandate status: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Failed to check mandate status: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(['POST'])
@@ -1270,7 +1360,9 @@ def initiate_b2c_payment(request):
         try:
             amount_decimal = Decimal(str(amount))
             if amount_decimal <= 0:
-                return Response({'error': 'Amount must be greater than 0'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {'error': 'Amount must be greater than 0'}, status=status.HTTP_400_BAD_REQUEST
+                )
         except (ValueError, TypeError):
             return Response({'error': 'Invalid amount format'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1303,13 +1395,16 @@ def initiate_b2c_payment(request):
             status='pending',
         )
 
-        return Response({
-            'success': True,
-            'transaction_id': str(transaction.id),
-            'originator_conversation_id': result.get('originator_conversation_id'),
-            'conversation_id': result.get('conversation_id'),
-            'message': 'B2C payment initiated successfully',
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                'success': True,
+                'transaction_id': str(transaction.id),
+                'originator_conversation_id': result.get('originator_conversation_id'),
+                'conversation_id': result.get('conversation_id'),
+                'message': 'B2C payment initiated successfully',
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     except Exception as e:
         return Response(
@@ -1331,24 +1426,26 @@ def list_b2c_payments(request):
 
         transactions = transactions.order_by('-created_at')
 
-        return Response({
-            'success': True,
-            'transactions': [
-                {
-                    'id': str(t.id),
-                    'receiver_msisdn': t.receiver_msisdn,
-                    'amount': str(t.amount),
-                    'currency': t.currency,
-                    'reason_type': t.reason_type,
-                    'remark': t.remark,
-                    'status': t.status,
-                    'telebirr_transaction_id': t.telebirr_transaction_id,
-                    'created_at': t.created_at,
-                    'completed_at': t.completed_at,
-                }
-                for t in transactions
-            ],
-        })
+        return Response(
+            {
+                'success': True,
+                'transactions': [
+                    {
+                        'id': str(t.id),
+                        'receiver_msisdn': t.receiver_msisdn,
+                        'amount': str(t.amount),
+                        'currency': t.currency,
+                        'reason_type': t.reason_type,
+                        'remark': t.remark,
+                        'status': t.status,
+                        'telebirr_transaction_id': t.telebirr_transaction_id,
+                        'created_at': t.created_at,
+                        'completed_at': t.completed_at,
+                    }
+                    for t in transactions
+                ],
+            }
+        )
 
     except Exception as e:
         return Response(
@@ -1391,18 +1488,22 @@ def query_mandate_from_telebirr(request):
         )
     except Exception as e:
         logger.error(f'Failed to query mandate from Telebirr: {e}')
-        return Response({'error': f'Failed to query mandate: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(
+            {'error': f'Failed to query mandate: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
     if not result.get('success'):
         return Response({'error': result.get('error')}, status=status.HTTP_400_BAD_REQUEST)
 
-    return Response({
-        'success': True,
-        'message': result.get('message'),
-        'response_code': result.get('response_code'),
-        'conversation_id': result.get('conversation_id'),
-        'response_text': result.get('response_text'),
-    })
+    return Response(
+        {
+            'success': True,
+            'message': result.get('message'),
+            'response_code': result.get('response_code'),
+            'conversation_id': result.get('conversation_id'),
+            'response_text': result.get('response_text'),
+        }
+    )
 
 
 query_mandate_from_telebirr.view_class.required_permission = 'view_payments'
@@ -1458,15 +1559,18 @@ def telebirr_b2c_webhook(request):
         is_success = result_code == '0' and (result_type == '0' or result_type is None)
 
         with db_transaction.atomic():
-            transaction = B2CPaymentTransaction.objects.select_for_update().filter(
-                originator_conversation_id=originator_conversation_id
-            ).first()
+            transaction = (
+                B2CPaymentTransaction.objects.select_for_update()
+                .filter(originator_conversation_id=originator_conversation_id)
+                .first()
+            )
 
             if transaction:
                 if transaction.status != 'pending':
                     logger.info(
                         'Telebirr B2C webhook: transaction %s already %s, ignoring duplicate callback',
-                        transaction.id, transaction.status,
+                        transaction.id,
+                        transaction.status,
                     )
                     return Response({'success': True})
 
@@ -1477,21 +1581,34 @@ def telebirr_b2c_webhook(request):
 
                 withdrawal_id = (transaction.reference_data or {}).get('withdrawal_id')
                 if withdrawal_id:
-                    withdrawal = WithdrawalRequest.objects.select_for_update().filter(pk=withdrawal_id).first()
+                    withdrawal = (
+                        WithdrawalRequest.objects.select_for_update()
+                        .filter(pk=withdrawal_id)
+                        .first()
+                    )
                     if withdrawal and withdrawal.status == 'processing':
                         if is_success:
                             withdrawal.status = 'completed'
                             withdrawal.completed_at = timezone.now()
                             withdrawal.payout_reference = transaction_id or ''
                             withdrawal.telebirr_transaction_id = transaction_id or ''
-                            withdrawal.save(update_fields=[
-                                'status', 'completed_at', 'payout_reference', 'telebirr_transaction_id',
-                            ])
+                            withdrawal.save(
+                                update_fields=[
+                                    'status',
+                                    'completed_at',
+                                    'payout_reference',
+                                    'telebirr_transaction_id',
+                                ]
+                            )
                         else:
                             withdrawal.status = 'failed'
-                            withdrawal.rejection_reason = f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
+                            withdrawal.rejection_reason = (
+                                f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
+                            )
                             withdrawal.save(update_fields=['status', 'rejection_reason'])
-                            user_profile = UserProfile.objects.select_for_update().get(user=withdrawal.user)
+                            user_profile = UserProfile.objects.select_for_update().get(
+                                user=withdrawal.user
+                            )
                             user_profile.add_points(withdrawal.point_amount, total_field=None)
 
                 return Response({'success': True})
@@ -1503,33 +1620,44 @@ def telebirr_b2c_webhook(request):
             # send_b2c_bulk, same story).
             from api.models.gift import WinnerGiftTransaction
 
-            winner_gift = WinnerGiftTransaction.objects.select_for_update().filter(
-                originator_conversation_id=originator_conversation_id
-            ).first()
+            winner_gift = (
+                WinnerGiftTransaction.objects.select_for_update()
+                .filter(originator_conversation_id=originator_conversation_id)
+                .first()
+            )
 
             if winner_gift:
                 if winner_gift.status != 'processing':
                     logger.info(
                         'Telebirr B2C webhook: winner gift %s already %s, ignoring duplicate callback',
-                        winner_gift.id, winner_gift.status,
+                        winner_gift.id,
+                        winner_gift.status,
                     )
                     return Response({'success': True})
 
                 if is_success:
                     winner_gift.mark_success(transaction_id or '')
-                    logger.info('Telebirr B2C webhook: winner gift %s marked success', winner_gift.id)
+                    logger.info(
+                        'Telebirr B2C webhook: winner gift %s marked success', winner_gift.id
+                    )
                 else:
                     winner_gift.mark_failed(result_desc or f'ResultCode={result_code}')
-                    logger.info('Telebirr B2C webhook: winner gift %s failed: %s', winner_gift.id, result_desc)
+                    logger.info(
+                        'Telebirr B2C webhook: winner gift %s failed: %s',
+                        winner_gift.id,
+                        result_desc,
+                    )
 
                 return Response({'success': True})
 
             # Neither of the above -- a withdrawal-initiated payout, which
             # correlates directly via the WithdrawalRequest's own
             # originator_conversation_id instead.
-            withdrawal = WithdrawalRequest.objects.select_for_update().filter(
-                originator_conversation_id=originator_conversation_id
-            ).first()
+            withdrawal = (
+                WithdrawalRequest.objects.select_for_update()
+                .filter(originator_conversation_id=originator_conversation_id)
+                .first()
+            )
 
             if not withdrawal:
                 logger.warning(
@@ -1541,7 +1669,8 @@ def telebirr_b2c_webhook(request):
             if withdrawal.status != 'processing':
                 logger.info(
                     'Telebirr B2C webhook: withdrawal #%s status is %s (not processing), ignoring duplicate callback',
-                    withdrawal.id, withdrawal.status,
+                    withdrawal.id,
+                    withdrawal.status,
                 )
                 return Response({'success': True})
 
@@ -1550,19 +1679,28 @@ def telebirr_b2c_webhook(request):
                 withdrawal.completed_at = timezone.now()
                 withdrawal.payout_reference = transaction_id or ''
                 withdrawal.telebirr_transaction_id = transaction_id or ''
-                withdrawal.save(update_fields=[
-                    'status', 'completed_at', 'payout_reference', 'telebirr_transaction_id',
-                ])
+                withdrawal.save(
+                    update_fields=[
+                        'status',
+                        'completed_at',
+                        'payout_reference',
+                        'telebirr_transaction_id',
+                    ]
+                )
                 logger.info('Telebirr B2C webhook: withdrawal #%s marked completed', withdrawal.id)
             else:
                 withdrawal.status = 'failed'
-                withdrawal.rejection_reason = f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
+                withdrawal.rejection_reason = (
+                    f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
+                )
                 withdrawal.save(update_fields=['status', 'rejection_reason'])
                 user_profile = UserProfile.objects.select_for_update().get(user=withdrawal.user)
                 user_profile.add_points(withdrawal.point_amount, total_field=None)
                 logger.info(
                     'Telebirr B2C webhook: withdrawal #%s failed, %s points refunded to %s',
-                    withdrawal.id, withdrawal.point_amount, withdrawal.user.username,
+                    withdrawal.id,
+                    withdrawal.point_amount,
+                    withdrawal.user.username,
                 )
 
         return Response({'success': True})

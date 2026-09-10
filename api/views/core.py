@@ -55,6 +55,7 @@ from api.services.coin_purchase import insufficient_coins_payload
 from api.services.subscription_access import (
     SUBSCRIPTION_REQUIRED_CODE,
     has_active_subscription,
+    payment_pending_payload,
     subscription_required_payload,
 )
 from common.permissions import IsOwnerOrStaffOrReadOnly
@@ -86,7 +87,7 @@ def _generate_otp():
 
 
 def _normalize_ethiopian_phone(phone):
-    """Normalize to 251XXXXXXXXX (without + for Onevas). Returns None if invalid.
+    """Normalize to 251XXXXXXXXX (no +; the stored and SMPP form). Returns None if invalid.
 
     Delegates to the shared validator so the client and the API enforce one
     rule. The previous implementation checked only length and the first
@@ -1155,7 +1156,7 @@ def resend_subscription_otp(request):
 @permission_classes([AllowAny])
 @encrypted_endpoint
 def dev_create_subscription(request):
-    """DEV ONLY: Create a fake active subscription with OTP for local testing without Onevas."""
+    """DEV ONLY: Create a fake active subscription with OTP for local testing without TIMWE."""
     from django.conf import settings as _s
 
     if not _s.DEBUG:
@@ -1317,7 +1318,7 @@ def _subscribe_hint():
     """How to subscribe: the routes the subscription page offers."""
     from django.conf import settings as _settings
 
-    short_code = getattr(_settings, 'ONEVAS_SHORT_CODE', '') or '9286'
+    short_code = getattr(_settings, 'SMS_SHORT_CODE', '') or '9286'
     return (
         f'To subscribe, send 1 (Daily), 2 (Weekly) or 3 (Monthly) to {short_code} '
         'to pay with airtime, or subscribe with telebirr through the SuperApp or USSD.'
@@ -1458,11 +1459,31 @@ def create_post(request):
         # 403 with a machine-readable `code` rather than a generic error, so
         # the client can tell this apart from a real failure and keep the
         # user's video and caption instead of discarding the draft.
+        #
+        # A short-code subscriber whose period has just run out is renewed here
+        # rather than turned away: the backend charges TIMWE once for the next
+        # period (when renewal is switched on) and the post goes through on a
+        # confirmed charge. See api/services/subscription_renewal.py.
         if is_video and not has_active_subscription(request.user):
-            return Response(
-                subscription_required_payload(),
-                status=status.HTTP_403_FORBIDDEN,
+            from api.services.subscription_renewal import (
+                PAYMENT_PENDING,
+                check_and_renew_subscription,
             )
+
+            renewal = check_and_renew_subscription(request.user)
+            if not renewal.has_subscription:
+                if renewal.state == PAYMENT_PENDING:
+                    return Response(
+                        payment_pending_payload(
+                            'Your subscription renewal payment is being confirmed. '
+                            'Please try again shortly.'
+                        ),
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                return Response(
+                    subscription_required_payload(),
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         # Determine if campaign post
         campaign = None

@@ -51,8 +51,6 @@ INTEGRATION_SETTINGS = (
     'TELEBIRR_MERCHANT_CODE',
     'TELEBIRR_PRIVATE_KEY',
     'TELEBIRR_PUBLIC_KEY',
-    'ONEVAS_APPLICATION_KEY',
-    'ONEVAS_PRODUCT_NUMBER',
 )
 
 #: Values that are acceptable in development but must never reach production.

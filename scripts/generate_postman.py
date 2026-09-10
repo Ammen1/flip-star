@@ -59,10 +59,10 @@ FOLDERS = [
     ('api/v1/coins/', 'Coins & Contest'),
     ('api/v1/subscriptions/', 'Subscriptions'),
     ('api/v1/subscription/', 'Subscriptions'),
-    ('api/v1/onevas/', 'Webhooks (Onevas)'),
+    ('api/v1/timwe/', 'Webhooks (TIMWE)'),
     ('api/v1/webhooks/', 'Webhooks (Telebirr)'),
     ('api/v1/direct-debit/', 'Payments / Direct Debit'),
-    ('api/v1/charging/', 'Payments / Onevas Charging'),
+    ('api/v1/charging/', 'Payments / Airtime Charging'),
     ('api/v1/campaigns/', 'Campaigns'),
     ('api/v1/boost/', 'Boost'),
     ('api/v1/gamification/', 'Gamification'),
@@ -98,7 +98,7 @@ FOLDERS = [
     ('api/v1/settings/', 'Reference Data'),
     ('api/v1/setup-admin/', 'Danger Zone'),
     ('api/v1/cleanup-reels/', 'Danger Zone'),
-    ('api/v1/', 'Reference Data'),          # DRF browsable API root
+    ('api/v1/', 'Reference Data'),  # DRF browsable API root
 ]
 
 # --- Request bodies, keyed by URL name --------------------------------------
@@ -110,36 +110,73 @@ BODIES = {
     'auth-change-password': {'current_password': '123456', 'new_password': '654321'},
     'auth-send-otp': {'phone': '0912345678'},
     'auth-verify-otp': {'phone': '0912345678', 'code': '123456'},
-    'auth-register-phone': {'phone': '0912345678', 'username': 'newuser', 'password': '123456', 'email': ''},
-    'auth-login-subscription-otp': {'phone': '0912345678', 'username': 'newuser', 'otp': '123456', 'password': '123456'},
+    'auth-register-phone': {
+        'phone': '0912345678',
+        'username': 'newuser',
+        'password': '123456',
+        'email': '',
+    },
+    'auth-login-subscription-otp': {
+        'phone': '0912345678',
+        'username': 'newuser',
+        'otp': '123456',
+        'password': '123456',
+    },
     'auth-check-phone-account': {'phone': '0912345678'},
     'auth-dev-create-subscription': {'phone': '0912345678'},
     'auth-forgot-password': {'email': 'user@example.com'},
-    'auth-forgot-password-confirm': {'email': 'user@example.com', 'code': '123456', 'new_password': '654321'},
+    'auth-forgot-password-confirm': {
+        'email': 'user@example.com',
+        'code': '123456',
+        'new_password': '654321',
+    },
     'auth-forgot-password-phone': {'phone': '0912345678'},
-    'auth-forgot-password-phone-verify': {'phone': '0912345678', 'code': '123456', 'new_password': '654321'},
-
-    'wallet-withdraw': {'point_amount': 1000, 'payout_method': 'telebirr', 'payout_account': '0912345678', 'payout_account_name': 'Abebe Bekele'},
+    'auth-forgot-password-phone-verify': {
+        'phone': '0912345678',
+        'code': '123456',
+        'new_password': '654321',
+    },
+    'wallet-withdraw': {
+        'point_amount': 1000,
+        'payout_method': 'telebirr',
+        'payout_account': '0912345678',
+        'payout_account_name': 'Abebe Bekele',
+    },
     'wallet-reinvest': {'points': 100},
     'telebirr-initiate': {'package_id': 1, 'phone_number': '251912345678'},
-    'telebirr-callback': {'outTradeNo': 'TX1700000000000', 'tradeStatus': 'SUCCESS', 'transactionId': 'TB123456', 'totalAmount': '100.00', 'signature': '<rsa-signature>'},
-    'admin-wallet-adjust-balance': {'user_id': 1, 'amount': 100, 'balance_type': 'earned', 'reason': 'Support credit'},
-    'admin-wallet-withdrawal-action': {'action': 'approve', 'admin_notes': 'Verified', 'payout_reference': 'TB-REF-001'},
-
-    'direct-debit-create': {'tier_id': '{{tierId}}', 'payer_msisdn': '251912345678', 'frequency': '05'},
+    'telebirr-callback': {
+        'outTradeNo': 'TX1700000000000',
+        'tradeStatus': 'SUCCESS',
+        'transactionId': 'TB123456',
+        'totalAmount': '100.00',
+        'signature': '<rsa-signature>',
+    },
+    'admin-wallet-adjust-balance': {
+        'user_id': 1,
+        'amount': 100,
+        'balance_type': 'earned',
+        'reason': 'Support credit',
+    },
+    'admin-wallet-withdrawal-action': {
+        'action': 'approve',
+        'admin_notes': 'Verified',
+        'payout_reference': 'TB-REF-001',
+    },
+    'direct-debit-create': {
+        'tier_id': '{{tierId}}',
+        'payer_msisdn': '251912345678',
+        'frequency': '05',
+    },
     'direct-debit-activate': {'mandate_id': '{{mandateId}}'},
     'direct-debit-cancel': {'mandate_id': '{{mandateId}}'},
     'direct-debit-initiate': {'mandate_id': '{{mandateId}}', 'amount': '50.00'},
-    'one-off-coin-purchase': {'payer_msisdn': '251912345678', 'amount': '50.00', 'coin_amount': 500},
-
+    'one-off-coin-purchase': {
+        'payer_msisdn': '251912345678',
+        'amount': '50.00',
+        'coin_amount': 500,
+    },
     'on-demand-charging': {'tier_id': '{{tierId}}', 'phone_number': '251912345678'},
     'coin-purchase-on-demand': {'phone_number': '251912345678', 'coin_amount': 500},
-
-    'onevas-subscription': {'phone_number': '251912345678', 'product_number': '10000302850', 'password': 'A'},
-    'onevas-unsubscription': {'phone_number': '251912345678', 'product_number': '10000302850'},
-    'onevas-renewal': {'phone_number': '251912345678', 'product_number': '10000302850'},
-    'onevas-stop': {'phone_number': '251912345678', 'product_number': '10000302850', 'params': [{'name': 'keyword', 'value': 'STOP1'}]},
-
     'send-coin-gift': {'recipient_username': 'someuser', 'amount': 10, 'message': 'Nice post!'},
     'gift-creator': {'recipient_id': 2, 'coins': 20, 'reel_id': 1, 'message': 'Great work'},
     'send-gift': {'gift_id': 1, 'recipient_id': 2, 'reel_id': 1, 'quantity': 1, 'message': ''},
@@ -147,48 +184,98 @@ BODIES = {
     'boost-post': {'reel_id': 1, 'duration_hours': 2},
     'extra-entry': {'campaign_id': 1},
     'subscription-upgrade': {'tier': 'gold', 'payment_method': 'telebirr'},
-
-    'boost-create': {'reel_id': 1, 'duration_hours': 24, 'target_gender': 'all', 'target_age_min': 18, 'target_age_max': 45, 'target_location': ''},
+    'boost-create': {
+        'reel_id': 1,
+        'duration_hours': 24,
+        'target_gender': 'all',
+        'target_age_min': 18,
+        'target_age_max': 45,
+        'target_location': '',
+    },
     'boost-impression': {'reel_id': 1},
     'boost-engagement': {'reel_id': 1, 'engagement_type': 'like'},
     'boost-calculate-cost': {'duration_hours': 24, 'has_premium_targeting': False},
-
     'create-post': {'caption': 'My first post', 'hashtags': 'flipstar,ethiopia', 'campaign_id': ''},
     'create-campaign-post': {'campaign_id': 1, 'caption': 'Campaign entry', 'hashtags': 'contest'},
     'campaign-enter': {'reel_id': 1},
     'cast-vote': {'finalist_id': 2},
     'grand-vote': {'entry_id': 1, 'coins': 10},
-
-    'create-report': {'target_type': 'reel', 'reported_reel': 1, 'report_type': 'spam', 'description': 'Repeated spam content'},
-    'admin-report-moderate': {'action_taken': 'shadowban', 'reason_details': 'Confirmed spam', 'status': 'resolved'},
-
+    'create-report': {
+        'target_type': 'reel',
+        'reported_reel': 1,
+        'report_type': 'spam',
+        'description': 'Repeated spam content',
+    },
+    'admin-report-moderate': {
+        'action_taken': 'shadowban',
+        'reason_details': 'Confirmed spam',
+        'status': 'resolved',
+    },
     'dm-conversations': {'user_id': 2},
     'dm-conv-messages': {'text': 'Hello!'},
     'dm-message': {'text': 'Edited message'},
-
-    'push-subscribe': {'endpoint': 'https://fcm.googleapis.com/fcm/send/xyz', 'keys': {'p256dh': '<p256dh>', 'auth': '<auth>'}},
+    'push-subscribe': {
+        'endpoint': 'https://fcm.googleapis.com/fcm/send/xyz',
+        'keys': {'p256dh': '<p256dh>', 'auth': '<auth>'},
+    },
     'push-unsubscribe': {'endpoint': 'https://fcm.googleapis.com/fcm/send/xyz'},
-
-    'support-requests': {'category': 'payment', 'subject': 'Withdrawal not received', 'message': 'Requested 3 days ago.'},
+    'support-requests': {
+        'category': 'payment',
+        'subject': 'Withdrawal not received',
+        'message': 'Requested 3 days ago.',
+    },
     'admin-support-request-update': {'status': 'in_progress', 'admin_response': 'Investigating.'},
-
     'legal-accept': {'version': '1.0'},
-    'admin-legal-create': {'document_type': 'terms', 'title': 'Terms of Service', 'content': '<p>...</p>', 'version': '1.0'},
-
-    'update-notification-settings': {'likes': True, 'comments': True, 'follows': True, 'messages': True, 'mentions': True},
-    'update-privacy-settings': {'is_private': False, 'show_activity': True, 'allow_messages': True, 'allow_mentions': True},
+    'admin-legal-create': {
+        'document_type': 'terms',
+        'title': 'Terms of Service',
+        'content': '<p>...</p>',
+        'version': '1.0',
+    },
+    'update-notification-settings': {
+        'likes': True,
+        'comments': True,
+        'follows': True,
+        'messages': True,
+        'mentions': True,
+    },
+    'update-privacy-settings': {
+        'is_private': False,
+        'show_activity': True,
+        'allow_messages': True,
+        'allow_mentions': True,
+    },
     'mark-not-interested': {'reel_id': 1},
     'undo-not-interested': {'reel_id': 1},
     'track-view': {},
     'admin-bulk-action': {'user_ids': [1, 2], 'action': 'deactivate'},
-    'admin-send-notification': {'title': 'Maintenance', 'message': 'Scheduled downtime tonight.', 'priority': 'high'},
+    'admin-send-notification': {
+        'title': 'Maintenance',
+        'message': 'Scheduled downtime tonight.',
+        'priority': 'high',
+    },
     'admin-settings-update': {'platform_name': 'FlipStar', 'maintenance_mode': False},
     'admin-api-key-create': {'name': 'Analytics integration'},
     'admin-user-update': {'is_active': True, 'is_staff': False},
     'admin-subscription-upgrade': {'tier': 'gold', 'duration_days': 30},
-    'admin-campaign-create': {'title': 'Weekly Dance Contest', 'description': 'Show your moves', 'campaign_type': 'weekly', 'prize_title': '10,000 ETB', 'prize_description': 'Cash prize', 'prize_value': 10000, 'winner_count': 3},
+    'admin-campaign-create': {
+        'title': 'Weekly Dance Contest',
+        'description': 'Show your moves',
+        'campaign_type': 'weekly',
+        'prize_title': '10,000 ETB',
+        'prize_description': 'Cash prize',
+        'prize_value': 10000,
+        'winner_count': 3,
+    },
     'admin-generate-sub-campaigns': {'confirm': True},
-    'admin-submit-judge-score': {'user_id': 2, 'creativity_score': 25, 'quality_score': 20, 'theme_score': 18, 'impact_score': 22, 'judge_comments': 'Strong entry'},
+    'admin-submit-judge-score': {
+        'user_id': 2,
+        'creativity_score': 25,
+        'quality_score': 20,
+        'theme_score': 18,
+        'impact_score': 22,
+        'judge_comments': 'Strong entry',
+    },
     'admin-qualify-finalists': {'percentage': 20},
     'judge-post': {'creativity': 25, 'quality': 12, 'theme_relevance': 8},
     'flash-toggle': {'is_active': True, 'multiplier': 1.5},
@@ -201,11 +288,26 @@ GENERIC_BODY = {}
 
 # --- Path parameter example values -------------------------------------------
 PARAM_EXAMPLES = {
-    'user_id': '1', 'reel_id': '1', 'comment_id': '1', 'campaign_id': '1',
-    'notification_id': '1', 'report_id': '1', 'action_id': '1', 'entry_id': '1',
-    'withdrawal_id': '1', 'request_id': '1', 'document_id': '1', 'key_id': '1',
-    'theme_id': '1', 'score_id': '1', 'flag_id': '1', 'conversation_id': '1',
-    'message_id': '1', 'pk': '1', 'id': '1', 'document_type': 'terms',
+    'user_id': '1',
+    'reel_id': '1',
+    'comment_id': '1',
+    'campaign_id': '1',
+    'notification_id': '1',
+    'report_id': '1',
+    'action_id': '1',
+    'entry_id': '1',
+    'withdrawal_id': '1',
+    'request_id': '1',
+    'document_id': '1',
+    'key_id': '1',
+    'theme_id': '1',
+    'score_id': '1',
+    'flag_id': '1',
+    'conversation_id': '1',
+    'message_id': '1',
+    'pk': '1',
+    'id': '1',
+    'document_type': 'terms',
 }
 
 
@@ -233,7 +335,9 @@ def collect(resolver, prefix='', out=None):
 def methods_for(callback):
     """Determine the HTTP methods a view accepts."""
     # ViewSets routed by DefaultRouter carry an actions mapping.
-    actions = getattr(callback, 'actions', None) or getattr(callback, 'initkwargs', {}).get('actions')
+    actions = getattr(callback, 'actions', None) or getattr(callback, 'initkwargs', {}).get(
+        'actions'
+    )
     if actions:
         return sorted({m.upper() for m in actions})
 
@@ -242,14 +346,17 @@ def methods_for(callback):
         allowed = getattr(cls, 'http_method_names', None)
         if allowed:
             concrete = [
-                m.upper() for m in allowed
+                m.upper()
+                for m in allowed
                 if m not in ('options', 'head', 'trace') and hasattr(cls, m)
             ]
             if concrete:
                 return sorted(concrete)
         # @api_view stores the decorated methods on the generated class.
         wrapped = getattr(cls, 'http_method_names', [])
-        return sorted(m.upper() for m in wrapped if m not in ('options', 'head', 'trace')) or ['GET']
+        return sorted(m.upper() for m in wrapped if m not in ('options', 'head', 'trace')) or [
+            'GET'
+        ]
 
     return ['GET']
 
@@ -331,7 +438,11 @@ def build_request(route, name, methods, public=False):
 
         if params:
             request['url']['variable'] = [
-                {'key': p, 'value': PARAM_EXAMPLES.get(p, '1'), 'description': f'{p} path parameter'}
+                {
+                    'key': p,
+                    'value': PARAM_EXAMPLES.get(p, '1'),
+                    'description': f'{p} path parameter',
+                }
                 for p in params
             ]
 
@@ -356,22 +467,29 @@ def build_request(route, name, methods, public=False):
         }
 
         # Capture the auth token automatically after a successful login.
-        if name in ('auth-login', 'auth-login-with-phone', 'auth-register',
-                    'auth-register-phone', 'auth-login-subscription-otp'):
-            item['event'] = [{
-                'listen': 'test',
-                'script': {
-                    'type': 'text/javascript',
-                    'exec': [
-                        'const res = pm.response.json();',
-                        'if (res.token) {',
-                        '    pm.collectionVariables.set("token", res.token);',
-                        '    console.log("Saved token to collection variable");',
-                        '}',
-                        'pm.test("status is 2xx", () => pm.response.to.be.success);',
-                    ],
-                },
-            }]
+        if name in (
+            'auth-login',
+            'auth-login-with-phone',
+            'auth-register',
+            'auth-register-phone',
+            'auth-login-subscription-otp',
+        ):
+            item['event'] = [
+                {
+                    'listen': 'test',
+                    'script': {
+                        'type': 'text/javascript',
+                        'exec': [
+                            'const res = pm.response.json();',
+                            'if (res.token) {',
+                            '    pm.collectionVariables.set("token", res.token);',
+                            '    console.log("Saved token to collection variable");',
+                            '}',
+                            'pm.test("status is 2xx", () => pm.response.to.be.success);',
+                        ],
+                    },
+                }
+            ]
 
         items.append(item)
     return items
@@ -416,7 +534,7 @@ def main():
                 '## Notes\n'
                 '- Auth is DRF Token, not Bearer/JWT.\n'
                 '- Passwords are exactly 6 digits for app users; the seeded admin is an exception.\n'
-                '- Webhook folders are called by Telebirr/Onevas, not by clients. They are '
+                '- Webhook folders are called by Telebirr/TIMWE, not by clients. They are '
                 'included for testing and currently require no authentication.\n'
                 '- Requests under **Danger Zone** are destructive and unauthenticated. '
                 'See docs/security.md.\n'
@@ -437,10 +555,7 @@ def main():
             {'key': 'tierId', 'value': '', 'type': 'string'},
             {'key': 'mandateId', 'value': '', 'type': 'string'},
         ],
-        'item': [
-            {'name': folder, 'item': items}
-            for folder, items in sorted(folders.items())
-        ],
+        'item': [{'name': folder, 'item': items} for folder, items in sorted(folders.items())],
     }
 
     out_dir = os.path.join(BACKEND_ROOT, 'docs', 'postman')

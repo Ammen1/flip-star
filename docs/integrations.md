@@ -69,55 +69,47 @@ The endpoint always returns HTTP 200, deliberately, to avoid retry storms.
 
 ---
 
-## Onevas — SMS
+## TIMWE — SMS (SMPP)
 
-`api/services/otp.py`
+`api/services/otp.py` → `api/services/sms/` → `api/integrations/smpp/`
 
-OTP delivery for registration and password reset. Posts to
-`ONEVAS_SMS_URL` with `application_key`, `phone_number`, `text`, `product_number`.
+Every SMS — OTPs for registration, login and PIN reset, subscription welcome
+messages, notices — is queued as an `SmsMessage` and submitted over TIMWE SMPP
+by a single-replica worker. There is no other gateway and no fallback. Full
+detail: [sms-smpp.md](sms-smpp.md).
 
-**OTP state is in the Django cache**, now backed by Redis (`REDIS_URL/1`).
-Previously no `CACHES` was configured at all, so it used per-process memory —
-OTP verification would have failed roughly half the time behind more than one
-worker, and the rate limiter was bypassable by hitting a different process.
+**OTP state is in the Django cache**, backed by Redis (`REDIS_URL/1`).
 
 Policy: 6 digits, 5-minute expiry, 3 attempts, one send per minute per number.
 
-**Known defect:** `send_otp` returns success when delivery fails —
-`return True, 'OTP generated (SMS error: ...)'` on both the exception path and a
-non-200 response. During an Onevas outage, registration appears to work and no
-user can complete it, with no error surfaced.
-
-**Also:** codes are generated with `random.choice`, which is not
+**Known:** codes are generated with `random.choice`, which is not
 cryptographically secure. Use `secrets.randbelow`.
 
 ---
 
-## Onevas — airtime charging
+## TIMWE — subscriptions and airtime charging
 
-`api/integrations/onevas/charging.py`
+Subscriptions arrive as `syncOrderRelation` notifications from the TIMWE Master
+Aggregator (`api/views/timwe.py`, logged on `TimweSyncOrderLog`). Airtime
+charging is TIMWE `chargeAmount` (`api/integrations/timwe/charge.py`), recorded
+on `TimweChargeTransaction` — see [timwe-charging.md](timwe-charging.md).
 
-On-demand subscription purchases charged to the user's airtime balance. Posts to
-`ONEVAS_CHARGING_URL`; `parse_charging_response` maps the reply to
-`success` / `insufficient_balance` / `failed`.
+Tier resolution falls back through: product id → SMS keyword
+(`1`→daily, `2`→weekly, `3`→monthly, `4`→ondemand).
 
-Results are recorded on `OnevasChargingTransaction`.
+---
 
-### Subscription webhooks
+## OneVAS — removed
 
-`OnevasWebhookView` handles four types at
-`/api/v1/onevas/{subscription,unsubscription,renewal,stop}/`.
+OneVAS has been removed. Its SMS gateway, its airtime charging client, its four
+webhooks at `/api/v1/onevas/…` and every `ONEVAS_*` setting are gone, and
+`SMS_PROVIDER` cannot select it.
 
-**There is no authentication, signature check, or source-IP allowlist.** Anyone
-can POST a phone number and product code to activate a paid subscription. This is
-the single highest-value unfixed issue in the integration layer.
-
-Tier resolution falls back through: `product_number` → SMS keyword
-(`1`→daily, `2`→weekly, `3`→monthly, `4`→ondemand). STOP keywords map
-`STOP1`/`STOP2`/`STOP3`/`STOP` to the corresponding tier.
-
-`OnevasWebhookLog` records every delivery but is written *after* routing and is
-never consulted, so it does not provide deduplication.
+What remains is data: `OnevasWebhookLog` and `OnevasChargingTransaction` keep
+their history (visible in the admin), and past OneVAS subscriptions are
+ordinary `SubscriptionPlan` rows. The `onevas_*` columns on those rows are
+reused by TIMWE subscriptions, and `SubscriptionTier.onevas_code` is still the
+tier identifier the telebirr mandate flow uses.
 
 ---
 
@@ -149,7 +141,7 @@ Apply to every provider above.
 
 | Gap | Consequence |
 |---|---|
-| **No idempotency keys** | A retried webhook reprocesses. A retried Onevas subscription extends the subscription twice and writes a duplicate payment. |
+| **No idempotency keys** | A retried Telebirr webhook reprocesses. (TIMWE datasync and SMS are keyed; see their docs.) |
 | **No reconciliation** | If Telebirr succeeds but the callback never arrives, money is taken and nothing is credited. There is no job to detect this. |
 | **No circuit breakers** | A slow provider ties up Daphne workers for the full 30s timeout. |
 | **No retry policy** | Only `process_reel_media` declares retries. Provider calls do not retry at all. |
