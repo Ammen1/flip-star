@@ -9,8 +9,10 @@ resolved through Vault) was handed to anyone who knew a subscribed phone
 number, and send_login_otp then trusted whatever the caller sent over the
 configured value.
 
-These tests pin both halves of the fix: the key is never serialised, and the
-OTP path ignores a client-supplied one.
+These tests pin both halves: the key is never serialised, and the OTP path
+uses no credential at all. OneVAS has since been removed -- OTPs go over TIMWE
+SMPP, which needs no per-product key -- so send_login_otp no longer resolves a
+key from the tier, and a client-supplied one has nowhere to go.
 """
 
 import pytest
@@ -114,21 +116,39 @@ def test_check_superapp_reports_no_subscription_without_leaking(db, onevas_produ
 # ---------------------------------------------------------------------------
 
 
-def test_send_login_otp_ignores_client_supplied_application_key(
-    active_subscription, onevas_products, monkeypatch
-):
-    """
-    The whole point of the fix: a caller cannot choose which credential the
-    server presents to OneVAS.
-    """
-    seen = {}
+def _record_send_otp(monkeypatch):
+    """Replace send_otp with one that takes exactly the new signature.
 
-    def fake_send_otp(phone_number, application_key, product_number=None, action='verification'):
-        seen['application_key'] = application_key
-        seen['product_number'] = product_number
+    Keyword-only `action` and nothing else: were the view still passing a
+    OneVAS key and product number, the call would fail here, not pass.
+    """
+    calls = []
+
+    def fake_send_otp(phone_number, *, action='verification'):
+        calls.append({'phone_number': phone_number, 'action': action})
         return True, 'sent'
 
     monkeypatch.setattr('api.services.otp.OTPService.send_otp', staticmethod(fake_send_otp))
+    return calls
+
+
+def test_send_login_otp_sends_no_credential(active_subscription, onevas_products, monkeypatch):
+    """A SuperApp subscriber's code goes out with no OneVAS key of any kind."""
+    calls = _record_send_otp(monkeypatch)
+
+    request = factory.post('/auth/send-login-otp/', {'phone': PHONE_LOCAL}, format='json')
+
+    response = send_login_otp(request)
+
+    assert response.status_code == 200
+    assert calls == [{'phone_number': PHONE_E164, 'action': 'login'}]
+
+
+def test_send_login_otp_ignores_client_supplied_application_key(
+    active_subscription, onevas_products, monkeypatch
+):
+    """A caller cannot smuggle a credential in: there is no longer one to set."""
+    calls = _record_send_otp(monkeypatch)
 
     request = factory.post(
         '/auth/send-login-otp/',
@@ -143,47 +163,17 @@ def test_send_login_otp_ignores_client_supplied_application_key(
     response = send_login_otp(request)
 
     assert response.status_code == 200
-    assert seen['application_key'] == TIER_KEY
-    assert seen['application_key'] != ATTACKER_KEY
-    assert seen['product_number'] == 'tier-product-id'
+    assert calls == [{'phone_number': PHONE_E164, 'action': 'login'}]
+    assert ATTACKER_KEY not in str(calls)
 
 
-def test_send_login_otp_resolves_the_tier_key_when_none_is_supplied(
-    active_subscription, onevas_products, monkeypatch
-):
-    seen = {}
-
-    def fake_send_otp(phone_number, application_key, product_number=None, action='verification'):
-        seen['application_key'] = application_key
-        return True, 'sent'
-
-    monkeypatch.setattr('api.services.otp.OTPService.send_otp', staticmethod(fake_send_otp))
-
-    request = factory.post('/auth/send-login-otp/', {'phone': PHONE_LOCAL}, format='json')
-
-    response = send_login_otp(request)
-
-    assert response.status_code == 200
-    assert seen['application_key'] == TIER_KEY
-
-
-def test_send_login_otp_falls_back_to_defaults_without_a_subscription(
-    db, onevas_products, monkeypatch
-):
+def test_send_login_otp_without_a_subscription(db, onevas_products, monkeypatch):
     """An ordinary login, no SuperApp subscription behind the number."""
-    seen = {}
-
-    def fake_send_otp(phone_number, application_key, product_number=None, action='verification'):
-        seen['application_key'] = application_key
-        seen['product_number'] = product_number
-        return True, 'sent'
-
-    monkeypatch.setattr('api.services.otp.OTPService.send_otp', staticmethod(fake_send_otp))
+    calls = _record_send_otp(monkeypatch)
 
     request = factory.post('/auth/send-login-otp/', {'phone': '0900000000'}, format='json')
 
     response = send_login_otp(request)
 
     assert response.status_code == 200
-    assert seen['application_key'] == 'default-key'
-    assert seen['product_number'] == 'default-product'
+    assert calls == [{'phone_number': '251900000000', 'action': 'login'}]

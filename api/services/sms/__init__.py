@@ -3,12 +3,15 @@ Which gateway delivers application SMS.
 
 Selected by ``settings.SMS_PROVIDER``. There is no fallback and no default
 that reaches a real network: an unrecognised value raises rather than quietly
-picking one, because the failure mode being avoided is production silently
-sending over the retired OneVAS gateway after a config typo.
+picking one.
 
-    timwe_smpp   the production transport
+    timwe_smpp   the production transport -- the only one that sends
     console      logs instead of sending; local development only
-    onevas_http  retired, explicit rollback only -- warns on every send
+
+OneVAS has been removed. Its HTTP gateway used to remain here as an explicit
+rollback option; it is gone, so no setting can route an SMS -- an OTP
+included -- through OneVAS again. ``SMS_PROVIDER=onevas_http`` now fails like
+any other unknown value.
 """
 
 from django.core.exceptions import ImproperlyConfigured
@@ -22,7 +25,7 @@ class UnknownSmsProvider(ImproperlyConfigured):
     """SMS_PROVIDER names a gateway that does not exist."""
 
 
-def _build(name, **kwargs) -> SmsGateway:
+def _build(name) -> SmsGateway:
     if name == 'timwe_smpp':
         from api.services.sms.timwe_smpp import TimweSmppGateway
 
@@ -31,18 +34,14 @@ def _build(name, **kwargs) -> SmsGateway:
         from api.services.sms.console import ConsoleGateway
 
         return ConsoleGateway()
-    if name == 'onevas_http':
-        from api.services.sms.onevas_http import OnevasHttpGateway
-
-        return OnevasHttpGateway(tier_type=kwargs.get('tier_type'))
     raise UnknownSmsProvider(
         f'SMS_PROVIDER={name!r} is not a known gateway. '
-        "Expected 'timwe_smpp' (production), 'console' (development), "
-        "or 'onevas_http' (retired)."
+        "Expected 'timwe_smpp' (production) or 'console' (development). "
+        'OneVAS has been removed.'
     )
 
 
-def get_gateway(**kwargs) -> SmsGateway:
+def get_gateway() -> SmsGateway:
     """The configured gateway.
 
     Built per call rather than cached: the object is trivially cheap, and the
@@ -57,7 +56,7 @@ def get_gateway(**kwargs) -> SmsGateway:
             'SMS_PROVIDER is not set. Production must set it to '
             "'timwe_smpp' explicitly -- there is no default gateway."
         )
-    return _build(name, **kwargs)
+    return _build(name)
 
 
 def reset_gateway():

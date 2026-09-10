@@ -388,7 +388,6 @@ class OnevasWebhookView(APIView):
                 phone_number=phone_number,
                 text=text,
                 purpose='subscription',
-                tier_type=tier_type,
             )
         except SmsNotQueued as exc:
             logger.warning('SMS not queued for %s: %s', phone_number, exc)
@@ -2645,12 +2644,7 @@ def telebirr_ussd_subscription_webhook(request):
                 if phone_number:
                     from api.services.otp import OTPService
 
-                    OTPService.send_otp(
-                        phone_number,
-                        settings.ONEVAS_APPLICATION_KEY,
-                        settings.ONEVAS_PRODUCT_NUMBER,
-                        action='subscription_login',
-                    )
+                    OTPService.send_otp(phone_number, action='subscription_login')
             except Exception as otp_error:
                 logger.error('[USSD SUBSCRIPTION WEBHOOK] Error sending login OTP: %s', otp_error)
 

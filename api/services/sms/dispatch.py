@@ -47,7 +47,7 @@ class SmsNotQueued(Exception):
     """The message could not even be recorded -- e.g. an unusable number."""
 
 
-def queue_sms(*, phone_number, text, purpose='', idempotency_key=None, tier_type=None):
+def queue_sms(*, phone_number, text, purpose='', idempotency_key=None):
     """Record an SMS and hand it to the worker. Returns the SmsMessage.
 
     Never raises for gateway problems, because none are consulted here. A
@@ -100,13 +100,13 @@ def queue_sms(*, phone_number, text, purpose='', idempotency_key=None, tier_type
     def _enqueue():
         from api.tasks.sms import deliver_sms
 
-        deliver_sms.delay(str(message.id), tier_type=tier_type)
+        deliver_sms.delay(str(message.id))
 
     transaction.on_commit(_enqueue)
     return message
 
 
-def deliver(message_id, *, tier_type=None):
+def deliver(message_id):
     """Submit one queued message. Called by the worker, not by requests.
 
     Returns the refreshed SmsMessage. Raises only for conditions a Celery
@@ -134,7 +134,7 @@ def deliver(message_id, *, tier_type=None):
         )
         return message
 
-    gateway = get_gateway(tier_type=tier_type)
+    gateway = get_gateway()
     SmsMessage.objects.filter(pk=message.pk).update(attempts=message.attempts + 1)
 
     logger.info(

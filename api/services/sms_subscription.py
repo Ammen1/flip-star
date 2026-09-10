@@ -347,7 +347,6 @@ def send_subscription_sms(phone_number, message, tier, *, idempotency_key=None):
             text=message,
             purpose='subscription_welcome',
             idempotency_key=idempotency_key,
-            tier_type=tier.duration_type,
         )
     except SmsNotQueued:
         logger.warning('Subscription SMS not queued for %s', phone_number)

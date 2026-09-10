@@ -96,35 +96,6 @@ def _normalize_ethiopian_phone(phone):
     return normalize_ethiopian_phone(phone)
 
 
-def _send_sms(phone, message):
-    """Send SMS via Africa's Talking. Falls back to console log if not configured."""
-    try:
-        from django.conf import settings as _settings
-
-        at_username = _settings.AT_USERNAME
-        at_api_key = _settings.AT_API_KEY
-        if not at_username or not at_api_key:
-            print(f'[OTP-SMS] Not configured — code for {phone}: {message}')
-            return False
-        import requests as _req
-
-        resp = _req.post(
-            'https://api.africastalking.com/version1/messaging',
-            headers={
-                'apiKey': at_api_key,
-                'Accept': 'application/json',
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            data={'username': at_username, 'to': phone, 'message': message},
-            timeout=10,
-        )
-        print(f'[OTP-SMS] AT response {resp.status_code}: {resp.text[:120]}')
-        return resp.status_code == 201
-    except Exception as exc:
-        print(f'[OTP-SMS] Error: {exc}')
-        return False
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @encrypted_endpoint
@@ -619,9 +590,7 @@ def login_with_phone(request):
 @throttle_classes([OtpSendAnonThrottle, OtpSendUserThrottle])
 @encrypted_endpoint
 def send_phone_otp(request):
-    """Step 1 of registration: validate Ethiopian phone and send 6-digit OTP via Onevas SMS."""
-    from django.conf import settings as _settings
-
+    """Step 1 of registration: validate Ethiopian phone and send a 6-digit OTP by SMS (TIMWE)."""
     from api.services.otp import OTPService
 
     phone_raw = request.data.get('phone', '').strip()
@@ -647,16 +616,8 @@ def send_phone_otp(request):
             {'error': 'This phone number is already registered'}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Resolved via settings (environment -> Vault -> .env). This previously
-    # carried a live Onevas application key as a hardcoded default.
-    application_key = _settings.ONEVAS_APPLICATION_KEY
-    product_number = _settings.ONEVAS_PRODUCT_NUMBER
-    if not application_key:
-        print('[OTP DEBUG] ONEVAS_APPLICATION_KEY is not configured')
-
-    # Send OTP via Onevas SMS
     print(f'[OTP DEBUG] Calling OTPService.send_otp for phone: {phone}')
-    success, message = OTPService.send_otp(phone, application_key, product_number)
+    success, message = OTPService.send_otp(phone)
     print(f'[OTP DEBUG] OTPService result - success: {success}, message: {message}')
 
     if success:
@@ -746,38 +707,11 @@ def send_login_otp(request):
     # this endpoint is for -- do not reject on UserProfile match.
     user_exists = UserProfile.objects.filter(phone_number=phone).exists()
 
-    # Resolved from the subscriber's own tier, NOT from the request body.
-    #
-    # This used to read request.data['application_key'], and
-    # check_superapp_subscription returned that key so the browser could send
-    # it back -- which meant a provisioned OneVAS credential
-    # (ONEVAS_<TIER>_APPLICATION_KEY, resolved through Vault) was handed to any
-    # unauthenticated caller who knew a subscribed phone number, and whatever
-    # the caller sent was then trusted over the configured value.
-    #
-    # The server already knows the phone number here, so it can look the tier
-    # up itself; the key never has to leave the process.
-    from api.models import SubscriptionPlan
-    from api.services.superapp_sms_service import onevas_product_config
-
-    superapp_sub = (
-        SubscriptionPlan.objects.filter(
-            telebirr_phone_number__in=[phone, phone_raw],
-            payment_method='telebirr',
-            status='active',
-            end_date__gt=timezone.now(),
-        )
-        .select_related('tier')
-        .first()
-    )
-    duration_type = superapp_sub.tier.duration_type if superapp_sub and superapp_sub.tier else None
-    # Falls back to the default ONEVAS_APPLICATION_KEY / ONEVAS_PRODUCT_NUMBER
-    # when the number has no SuperApp subscription -- the ordinary login path.
-    onevas = onevas_product_config(duration_type)
-    application_key = onevas.get('application_key') or _settings.ONEVAS_APPLICATION_KEY
-    product_number = onevas.get('product_id') or _settings.ONEVAS_PRODUCT_NUMBER
-
-    success, message = OTPService.send_otp(phone, application_key, product_number, action='login')
+    # No credential of any kind goes with the code. This used to resolve a
+    # OneVAS application key and product number from the subscriber's tier;
+    # OneVAS has been removed and TIMWE needs neither. Anything the caller
+    # sends in the body besides the phone is ignored, as before.
+    success, message = OTPService.send_otp(phone, action='login')
 
     if not success:
         return Response({'error': message}, status=status.HTTP_429_TOO_MANY_REQUESTS)
@@ -1139,7 +1073,8 @@ def resend_subscription_otp(request):
 
     from api.models.subscription import SubscriptionPlan as UserSubscription
     from api.services.otp import OTPService
-    from api.views.subscription import WEB_APP_LINK, OnevasWebhookView, mask_phone_number
+    from api.services.sms.dispatch import SmsNotQueued, queue_sms
+    from api.views.subscription import WEB_APP_LINK, mask_phone_number
 
     phone_raw = request.data.get('phone', '').strip()
     if not phone_raw:
@@ -1184,10 +1119,6 @@ def resend_subscription_otp(request):
         subscription.onevas_phone_number = phone
     subscription.save()
 
-    sms_phone = phone.replace('+', '').strip()
-    if sms_phone.startswith('251'):
-        sms_phone = '0' + sms_phone[3:]
-
     stop_keywords = {'daily': 'STOP1', 'weekly': 'STOP2', 'monthly': 'STOP3', 'ondemand': 'STOP'}
     stop_keyword = stop_keywords.get(tier.duration_type, 'STOP')
 
@@ -1200,12 +1131,13 @@ def resend_subscription_otp(request):
         f'To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}.'
     )
 
-    # send_sms catches its own exceptions and returns a bool rather than
-    # raising (unlike master's version, which wraps this in a try/except
-    # that send_sms's own error handling makes unreachable) -- check the
-    # return value so a real gateway failure surfaces as a 502 instead of
-    # a false "success" with an OTP the user will never receive.
-    if not OnevasWebhookView().send_sms(sms_phone, message, tier.duration_type):
+    # Straight onto the TIMWE SMS queue. This went through
+    # OnevasWebhookView.send_sms, which already queued the same way -- OneVAS
+    # has been removed, so nothing on the OTP path goes near that class now.
+    # queue_sms normalises the number itself.
+    try:
+        queue_sms(phone_number=phone, text=message, purpose='otp_subscription_resend')
+    except SmsNotQueued:
         return Response(
             {'error': 'Failed to send OTP SMS. Please try again.'},
             status=status.HTTP_502_BAD_GATEWAY,
@@ -1426,9 +1358,7 @@ def _pin_reset_account(phone):
 @throttle_classes([PasswordResetAnonThrottle, PasswordResetUserThrottle])
 @encrypted_endpoint
 def forgot_password_phone_request(request):
-    """Send a 6-digit PIN reset code by SMS to a subscriber's phone."""
-    from django.conf import settings as _settings
-
+    """Send a 6-digit PIN reset code by SMS (TIMWE) to a subscriber's phone."""
     from api.services.otp import OTPService
 
     phone = _normalize_ethiopian_phone((request.data.get('phone') or '').strip())
@@ -1441,14 +1371,7 @@ def forgot_password_phone_request(request):
     if refusal is not None:
         return refusal
 
-    # The key and product number are OneVAS leftovers that send_otp no longer
-    # sends anywhere. This used to print the application key to the log.
-    success, message = OTPService.send_otp(
-        phone,
-        _settings.ONEVAS_APPLICATION_KEY,
-        _settings.ONEVAS_PRODUCT_NUMBER,
-        action='password_reset',
-    )
+    success, message = OTPService.send_otp(phone, action='password_reset')
     if success:
         return Response({'message': message, 'phone': phone})
     return Response({'error': message}, status=status.HTTP_429_TOO_MANY_REQUESTS)

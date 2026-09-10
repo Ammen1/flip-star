@@ -73,7 +73,6 @@ class SuperAppSMSService:
                 phone_number=phone_number,
                 text=text,
                 purpose='superapp',
-                tier_type=duration_type,
             )
         except SmsNotQueued as exc:
             logger.warning('[SuperApp SMS] Not queued for %s: %s', phone_number, exc)

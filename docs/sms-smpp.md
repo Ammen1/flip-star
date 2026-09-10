@@ -1,9 +1,9 @@
 # SMS over TIMWE SMPP
 
-TIMWE SMPP is the only gateway for application SMS. OneVAS HTTP is retired and
-is not reachable from the production path — there is no fallback, deliberately:
-failing over to a decommissioned gateway would hide an SMPP outage while
-sending subscribers messages over a link that is going away.
+TIMWE SMPP is the only gateway for application SMS, OTPs included. OneVAS has
+been removed: its HTTP gateway is gone from the code, and no setting can select
+it. There is no fallback, deliberately — failing over to another gateway would
+hide an SMPP outage.
 
 ## Shape
 
@@ -114,11 +114,12 @@ Structured log events: `SMS_QUEUED`, `SMS_SUBMIT_STARTED`, `SMS_SUBMITTED`,
 `SMPP_BIND_FAILED`, `SMPP_DISCONNECTED`, `SMPP_RECONNECTING`. Recipients are
 masked (`25191****678`); the password and `system_id` never appear.
 
-## Rollback
+## No rollback to OneVAS
 
-Set `SMS_PROVIDER=onevas_http`. It is an explicit, deliberate choice: nothing
-selects it automatically, and it warns on every send. It also cannot report
-delivery, because OneVAS returns no message id.
+OneVAS has been removed. `SMS_PROVIDER=onevas_http` used to select its HTTP
+gateway as an emergency rollback; that gateway is deleted and the value now
+fails at the first send like any other unknown provider. The OTP service no
+longer takes a OneVAS application key or product number either.
 
 ## Not yet verified
 

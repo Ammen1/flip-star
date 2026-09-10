@@ -2,13 +2,16 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
 
 class OTPService:
-    """OTP service with rate limiting and Onevas SMS integration"""
+    """OTP generation, rate limiting and verification.
+
+    Codes are sent by SMS over TIMWE SMPP -- the only gateway there is; OneVAS
+    has been removed.
+    """
 
     OTP_LENGTH = 6
     OTP_EXPIRY_MINUTES = 5
@@ -64,24 +67,21 @@ class OTPService:
         return True, None
 
     @classmethod
-    def send_otp(cls, phone_number, application_key, product_number=None, action='verification'):
-        """Send OTP via Onevas SMS
+    def send_otp(cls, phone_number, *, action='verification'):
+        """Generate an OTP for ``phone_number`` and queue it by SMS over TIMWE.
 
         Args:
-            phone_number: Phone number to send OTP to
-            application_key: Onevas application key
-            product_number: Onevas product number. Falls back to the configured
-                value (environment -> Vault -> .env) when not supplied; it used
-                to default to a hardcoded product id.
-            action: The action this OTP is for (e.g., 'verification', 'password_reset')
-        """
-        if product_number is None:
-            product_number = settings.ONEVAS_PRODUCT_NUMBER
+            phone_number: Phone number to send the OTP to.
+            action: What the OTP is for, e.g. 'verification', 'login',
+                'password_reset'. Chooses the wording and the SmsMessage
+                purpose.
 
-        # Never log the application key.
-        print(
-            f'[OTP SERVICE DEBUG] send_otp called for phone: {phone_number}, product_number: {product_number}, action: {action}'
-        )
+        This used to take a OneVAS application key and product number. They
+        are gone: OneVAS has been removed and the TIMWE gateway needs neither.
+        ``action`` is keyword-only so a caller still passing them positionally
+        fails loudly instead of having the key read as the action.
+        """
+        print(f'[OTP SERVICE DEBUG] send_otp called for phone: {phone_number}, action: {action}')
 
         can_send, error = cls.can_send_otp(phone_number)
         print(f'[OTP SERVICE DEBUG] can_send_otp result: {can_send}, error: {error}')

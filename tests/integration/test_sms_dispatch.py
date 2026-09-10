@@ -330,6 +330,17 @@ def test_an_unknown_provider_fails_loudly():
         get_gateway()
 
 
+@override_settings(SMS_PROVIDER='onevas_http')
+def test_onevas_can_no_longer_be_selected():
+    """
+    OneVAS has been removed. Its gateway was once kept as an explicit rollback
+    option; naming it now fails like any other unknown provider, so no setting
+    can send an SMS -- an OTP included -- over OneVAS again.
+    """
+    with pytest.raises(UnknownSmsProvider, match='OneVAS has been removed'):
+        get_gateway()
+
+
 @override_settings(SMS_PROVIDER='timwe_smpp')
 def test_onevas_http_is_never_called(monkeypatch):
     """
@@ -343,7 +354,7 @@ def test_onevas_http_is_never_called(monkeypatch):
     submitted = []
     monkeypatch.setattr(
         'api.services.sms.dispatch.get_gateway',
-        lambda **kw: RecordingGateway(),
+        lambda: RecordingGateway(),
     )
 
     message = queue_sms(phone_number=MSISDN, text='hi')

@@ -22,11 +22,16 @@ from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
 from api.models.subscription import SubscriptionPlan, SubscriptionTier
+from api.services.sms.dispatch import SmsNotQueued
 from api.views.core import resend_subscription_otp
 
 pytestmark = pytest.mark.integration
 
 factory = APIRequestFactory()
+
+# The OTP goes straight onto the TIMWE SMS queue. It used to go through
+# OnevasWebhookView.send_sms; OneVAS has been removed.
+QUEUE_SMS = 'api.services.sms.dispatch.queue_sms'
 
 
 @pytest.fixture(autouse=True)
@@ -39,13 +44,25 @@ def _clear_cache():
 @pytest.fixture
 def active_subscription(db):
     tier = SubscriptionTier.objects.create(
-        name='Resend OTP Test Daily', slug='resend-otp-test-daily', duration_type='daily', duration_days=1, price_etb=10,
-        onevas_code='R1', spid='rsp1', service_id='rsvc1', product_id='rprod1',
+        name='Resend OTP Test Daily',
+        slug='resend-otp-test-daily',
+        duration_type='daily',
+        duration_days=1,
+        price_etb=10,
+        onevas_code='R1',
+        spid='rsp1',
+        service_id='rsvc1',
+        product_id='rprod1',
     )
     plan = SubscriptionPlan.objects.create(
-        tier=tier, status='active', payment_method='onevas', onevas_phone_number='251911000111',
-        start_date=timezone.now(), end_date=timezone.now() + timezone.timedelta(days=1),
-        setup_otp='111111', setup_otp_expires_at=timezone.now() + timezone.timedelta(minutes=5),
+        tier=tier,
+        status='active',
+        payment_method='onevas',
+        onevas_phone_number='251911000111',
+        start_date=timezone.now(),
+        end_date=timezone.now() + timezone.timedelta(days=1),
+        setup_otp='111111',
+        setup_otp_expires_at=timezone.now() + timezone.timedelta(minutes=5),
     )
     yield plan
     plan.delete()
@@ -53,23 +70,39 @@ def active_subscription(db):
 
 
 def test_resend_subscription_otp_regenerates_otp_and_sends_sms(active_subscription):
-    with patch('api.views.subscription.OnevasWebhookView.send_sms', return_value=True) as mock_send:
-        request = factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json')
+    with patch(QUEUE_SMS) as mock_send:
+        request = factory.post(
+            '/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json'
+        )
 
         response = resend_subscription_otp(request)
 
     assert response.status_code == 200, response.data
-    assert mock_send.called
+    mock_send.assert_called_once()
+    assert mock_send.call_args.kwargs['phone_number'] == '251911000111'
+    assert mock_send.call_args.kwargs['purpose'] == 'otp_subscription_resend'
     active_subscription.refresh_from_db()
     assert active_subscription.setup_otp is not None
     assert active_subscription.setup_otp != '111111'
+    assert active_subscription.setup_otp in mock_send.call_args.kwargs['text']
+
+
+def test_resend_subscription_otp_does_not_touch_onevas(active_subscription):
+    with patch(QUEUE_SMS), patch('api.views.subscription.OnevasWebhookView.send_sms') as onevas:
+        resend_subscription_otp(
+            factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json'),
+        )
+
+    onevas.assert_not_called()
 
 
 def test_resend_subscription_otp_sets_cooldown(active_subscription):
-    with patch('api.views.subscription.OnevasWebhookView.send_sms', return_value=True):
-        resend_subscription_otp(factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json'))
+    with patch(QUEUE_SMS):
+        resend_subscription_otp(
+            factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json')
+        )
 
-    with patch('api.views.subscription.OnevasWebhookView.send_sms', return_value=True) as mock_send:
+    with patch(QUEUE_SMS) as mock_send:
         response = resend_subscription_otp(
             factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json'),
         )
@@ -78,8 +111,8 @@ def test_resend_subscription_otp_sets_cooldown(active_subscription):
     assert not mock_send.called
 
 
-def test_resend_subscription_otp_returns_502_when_sms_gateway_fails(active_subscription):
-    with patch('api.views.subscription.OnevasWebhookView.send_sms', return_value=False):
+def test_resend_subscription_otp_returns_502_when_sms_cannot_be_queued(active_subscription):
+    with patch(QUEUE_SMS, side_effect=SmsNotQueued('unusable number')):
         response = resend_subscription_otp(
             factory.post('/auth/resend-subscription-otp/', {'phone': '0911000111'}, format='json'),
         )
@@ -99,7 +132,9 @@ def test_resend_subscription_otp_returns_generic_success_for_unknown_phone(db):
 
 
 def test_resend_subscription_otp_rejects_invalid_phone(db):
-    request = factory.post('/auth/resend-subscription-otp/', {'phone': 'not-a-phone'}, format='json')
+    request = factory.post(
+        '/auth/resend-subscription-otp/', {'phone': 'not-a-phone'}, format='json'
+    )
 
     response = resend_subscription_otp(request)
 

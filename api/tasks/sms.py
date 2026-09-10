@@ -50,11 +50,16 @@ RETRY_BACKOFF_SECONDS = 10
     reject_on_worker_lost=True,
 )
 def deliver_sms(self, sms_id, tier_type=None):
-    """Submit one queued SmsMessage."""
+    """Submit one queued SmsMessage.
+
+    ``tier_type`` is ignored. It chose the OneVAS product for the removed
+    OneVAS gateway, and stays in the signature only so a task queued before
+    that removal still runs instead of failing on an unexpected argument.
+    """
     from api.services.sms import dispatch
 
     try:
-        message = dispatch.deliver(sms_id, tier_type=tier_type)
+        message = dispatch.deliver(sms_id)
     except SmppConnectionError as exc:
         # Nothing reached the gateway, so repeating is safe.
         countdown = RETRY_BACKOFF_SECONDS * (2**self.request.retries)

@@ -252,8 +252,8 @@ SCHEMA: tuple[Key, ...] = (
         'SMS_PROVIDER',
         group='sms',
         doc="Which SMS gateway delivers application SMS. 'timwe_smpp' in "
-        "production. 'onevas_http' is legacy and unsupported; 'console' logs "
-        'instead of sending, for local development.',
+        "production; 'console' logs instead of sending, for local development. "
+        'OneVAS has been removed and is not an option.',
     ),
     _k('TIMWE_SMPP_HOST', group='sms', doc='SMPP gateway host, e.g. 10.175.206.42.'),
     _k('TIMWE_SMPP_PORT', kind='int', group='sms', doc='SMPP gateway TCP port, e.g. 6986.'),
