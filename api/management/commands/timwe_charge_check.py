@@ -1,0 +1,199 @@
+"""
+Check the TIMWE chargeAmount integration from inside a running pod.
+
+Safe by default. With no flags it charges nothing: it reports which settings
+are present (names, never secret values), builds a request to prove they are
+consistent, and opens a TCP connection to the configured endpoint -- from the
+pod, which is what matters. The host's network is not the pod's, and a
+`telnet` from the node proves nothing about egress from a container.
+
+    python manage.py timwe_charge_check
+
+A real charge needs every one of --charge, --msisdn, --amount, --username and
+--confirm. It goes through the same service as production, so it is recorded
+as a TimweChargeTransaction and protected by an idempotency key:
+
+    python manage.py timwe_charge_check --charge --msisdn 2519XXXXXXXX \\
+        --amount 1 --username some_staff_user --confirm
+
+The number is taken as input, never from source, and is masked in output.
+"""
+
+import socket
+import uuid
+from urllib.parse import urlparse
+
+from django.contrib.auth.models import User
+from django.core.management.base import BaseCommand, CommandError
+
+from api.integrations.timwe.charge import TimweChargeService
+from api.integrations.timwe.errors import TimweConfigurationError, TimweError
+
+
+def _mask(number):
+    digits = ''.join(ch for ch in str(number) if ch.isdigit())
+    return f'{digits[:5]}****{digits[-3:]}' if len(digits) > 6 else digits
+
+
+class Command(BaseCommand):
+    help = 'Verify TIMWE chargeAmount configuration and connectivity; optionally charge once.'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--charge', action='store_true', help='Perform ONE real charge. Costs money.'
+        )
+        parser.add_argument('--msisdn', help='Number to charge. Must be approved for testing.')
+        parser.add_argument('--amount', help='Whole-currency amount. Use the minimum.')
+        parser.add_argument(
+            '--username', help='Account the charge is attributed to (recorded on the row).'
+        )
+        parser.add_argument(
+            '--confirm',
+            action='store_true',
+            help='Required with --charge. No confirmation, no charge.',
+        )
+
+    def handle(self, *args, **options):
+        ok = self._check_configuration()
+        if ok:
+            ok = self._check_request_builds() and ok
+            ok = self._check_connectivity() and ok
+
+        if not options['charge']:
+            self.stdout.write('')
+            self.stdout.write(
+                'No charge made. Re-run with --charge --msisdn --amount --username --confirm '
+                'to charge once.'
+            )
+            if not ok:
+                raise CommandError('Checks failed; fix the items above before charging.')
+            return
+
+        if not ok:
+            raise CommandError('Refusing to charge: the checks above did not pass.')
+        self._charge_once(options)
+
+    # -- checks --------------------------------------------------------------
+
+    def _check_configuration(self):
+        self.stdout.write(self.style.MIGRATE_HEADING('Configuration'))
+        missing = TimweChargeService.missing_configuration()
+        for name, present in (
+            ('TIMWE_CHARGE_URL', bool(TimweChargeService.get_endpoint())),
+            ('TIMWE_SP_ID', bool(TimweChargeService.get_sp_id())),
+            ('TIMWE_SP_PASSWORD', bool(TimweChargeService.get_sp_account_password())),
+            ('TIMWE_SERVICE_ID', bool(TimweChargeService.get_service_id())),
+            ('TIMWE_CURRENCY', bool(TimweChargeService.get_currency())),
+        ):
+            # Presence only. The password is never printed, and neither is the
+            # SP ID -- it is half of the digest input.
+            mark = self.style.SUCCESS('set') if present else self.style.ERROR('MISSING')
+            self.stdout.write(f'  {name:22} {mark}')
+
+        endpoint = TimweChargeService.get_endpoint()
+        if endpoint:
+            self.stdout.write(f'  endpoint               {endpoint}')
+        currency = TimweChargeService.get_currency()
+        if currency:
+            self.stdout.write(f'  currency               {currency}')
+
+        try:
+            timeout = TimweChargeService.get_timeout()
+            self.stdout.write(f'  TIMWE_CHARGE_TIMEOUT   {timeout}s')
+        except TimweConfigurationError as exc:
+            self.stdout.write(self.style.ERROR(f'  {exc}'))
+            return False
+
+        if missing:
+            self.stdout.write(
+                self.style.ERROR(
+                    '  TIMWE_CHARGE_URL and the charging credentials come from TIMWE. '
+                    'They are not the SMPP host or password.'
+                )
+            )
+            return False
+        return True
+
+    def _check_request_builds(self):
+        """Build a request without sending it, to prove the values agree."""
+        self.stdout.write(self.style.MIGRATE_HEADING('Request'))
+        try:
+            TimweChargeService.build_soap_request(
+                msisdn='251900000000',
+                amount=1,
+                description='configuration check',
+                reference_code='CHECK',
+            )
+        except (TimweError, TimweConfigurationError) as exc:
+            self.stdout.write(self.style.ERROR(f'  cannot build a request: {exc}'))
+            return False
+        self.stdout.write(self.style.SUCCESS('  builds cleanly (not sent)'))
+        return True
+
+    def _check_connectivity(self):
+        """Open and close a TCP connection. No HTTP, so nothing is charged."""
+        self.stdout.write(self.style.MIGRATE_HEADING('Connectivity (from this pod)'))
+        parsed = urlparse(TimweChargeService.get_endpoint())
+        host = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+        if not host:
+            self.stdout.write(self.style.ERROR('  TIMWE_CHARGE_URL has no host.'))
+            return False
+        try:
+            with socket.create_connection((host, port), timeout=10):
+                pass
+        except OSError as exc:
+            self.stdout.write(self.style.ERROR(f'  {host}:{port} unreachable: {exc}'))
+            return False
+        self.stdout.write(self.style.SUCCESS(f'  {host}:{port} reachable'))
+        return True
+
+    # -- the one real charge -------------------------------------------------
+
+    def _charge_once(self, options):
+        from api.services.timwe_charging import ChargeRefused, request_charge, user_message
+
+        for flag in ('msisdn', 'amount', 'username'):
+            if not options[flag]:
+                raise CommandError(f'--{flag} is required with --charge.')
+        if not options['confirm']:
+            raise CommandError('Refusing to charge without --confirm. This costs real money.')
+
+        user = User.objects.filter(username=options['username']).first()
+        if user is None:
+            raise CommandError(f'No user named {options["username"]!r}.')
+
+        key = f'staging-check-{uuid.uuid4().hex}'
+        self.stdout.write(self.style.MIGRATE_HEADING('Charging once'))
+        self.stdout.write(f'  msisdn          {_mask(options["msisdn"])}')
+        self.stdout.write(f'  amount          {options["amount"]}')
+        self.stdout.write(f'  idempotency key {key}')
+
+        try:
+            result = request_charge(
+                user=user,
+                msisdn=options['msisdn'],
+                amount=options['amount'],
+                description='FlipStar staging charge check',
+                idempotency_key=key,
+            )
+        except (ChargeRefused, TimweConfigurationError) as exc:
+            raise CommandError(f'Not charged: {exc}') from exc
+
+        row = result.transaction
+        style = self.style.SUCCESS if result.succeeded else self.style.WARNING
+        self.stdout.write(style(f'  status          {row.status}'))
+        self.stdout.write(f'  outcome         {row.outcome}')
+        self.stdout.write(f'  reference_code  {row.reference_code}')
+        self.stdout.write(f'  http_status     {row.http_status}')
+        self.stdout.write(f'  timwe error     {row.error_code or "-"}')
+        self.stdout.write(f'  duration        {row.duration_ms} ms')
+        self.stdout.write(f'  message         {row.error_message or "-"}')
+        self.stdout.write('')
+        self.stdout.write(f'  user would see: {user_message(result)}')
+        if result.is_ambiguous:
+            self.stdout.write(
+                self.style.WARNING(
+                    '  AMBIGUOUS -- do not charge again. Reconcile reference_code with TIMWE.'
+                )
+            )

@@ -463,6 +463,12 @@ TIMWE_SP_PASSWORD = config('TIMWE_SP_PASSWORD', default='')
 TIMWE_SERVICE_ID = config('TIMWE_SERVICE_ID', default='')
 TIMWE_CURRENCY = config('TIMWE_CURRENCY', default='')
 TIMWE_CHARGE_TIMEOUT = config('TIMWE_CHARGE_TIMEOUT', default=60, cast=int)
+# Coin purchase via airtime, charged through TIMWE chargeAmount. OFF by default
+# and deliberately so: the flow was disabled by policy ("Ethio Telecom SIM
+# cards are only accessible for SMS OTP verification"). Turning it on reverses
+# that policy -- a business decision, not a deployment one. It also needs the
+# five TIMWE_CHARGE/SP/SERVICE/CURRENCY values above, which TIMWE supplies.
+TIMWE_AIRTIME_PURCHASE_ENABLED = config('TIMWE_AIRTIME_PURCHASE_ENABLED', default=False, cast=bool)
 TIMWE_ALLOWED_IPS = [
     ip.strip() for ip in config('TIMWE_ALLOWED_IPS', default='').split(',') if ip.strip()
 ]

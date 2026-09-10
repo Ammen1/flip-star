@@ -114,6 +114,19 @@ class SmppClient:
         self._stopping = threading.Event()
         self._dlr_handler = None
 
+        # submit_sm responses, keyed by the request's sequence number.
+        #
+        # smpplib's send_message() returns the REQUEST pdu, not the response --
+        # the submit_sm_resp carrying the gateway's message_id arrives later on
+        # the reader thread. Without capturing it there is no id to store, and
+        # so no way to match a delivery receipt back to a message.
+        #
+        # Guarded by its own lock, deliberately not self._lock: the reader
+        # thread must be able to record a response while a submitting thread
+        # is waiting, and sharing one lock would deadlock the pair.
+        self._pending = {}
+        self._pending_lock = threading.Lock()
+
         # Health, for the operational check. Deliberately plain attributes:
         # this is read by a status endpoint, not a metrics pipeline.
         self.bound = False
@@ -174,6 +187,8 @@ class SmppClient:
                 raise SmppConnectionError(f'Bind rejected: {type(exc).__name__}') from exc
 
             client.set_message_received_handler(self._on_pdu_received)
+            client.set_message_sent_handler(self._on_message_sent)
+            client.set_error_pdu_handler(self._on_error_pdu)
             self._client = client
             self.bound = True
             self.last_bound_at = time.time()
@@ -230,6 +245,45 @@ class SmppClient:
                 self.last_error = f'enquire_link failed: {exc}'
                 logger.warning('SMPP_DISCONNECTED reason=enquire_link_failed')
 
+    def _waiter_for(self, sequence):
+        """Get or create the slot for one sequence number.
+
+        Get-or-create on both sides, because the response can arrive before
+        the submitting thread has registered interest in it -- a fast gateway
+        and a slow scheduler are enough.
+        """
+        with self._pending_lock:
+            entry = self._pending.get(sequence)
+            if entry is None:
+                entry = {'event': threading.Event(), 'message_id': '', 'error': None}
+                self._pending[sequence] = entry
+            return entry
+
+    def _on_message_sent(self, pdu):
+        """Record a submit_sm_resp against the request that produced it."""
+        sequence = getattr(pdu, 'sequence', None)
+        if sequence is None:
+            return
+        message_id = getattr(pdu, 'message_id', '') or ''
+        if isinstance(message_id, bytes):
+            message_id = message_id.decode('ascii', 'replace')
+        entry = self._waiter_for(sequence)
+        entry['message_id'] = message_id
+        entry['event'].set()
+
+    def _on_error_pdu(self, pdu):
+        """A non-zero command_status on a response we are waiting for."""
+        sequence = getattr(pdu, 'sequence', None)
+        if sequence is None:
+            return
+        entry = self._waiter_for(sequence)
+        # Always truthy. Reaching this handler *is* the error; a status we
+        # cannot read must not leave the entry looking like a success, which
+        # is what storing a bare None did.
+        status = getattr(pdu, 'status', None)
+        entry['error'] = status if status is not None else 'unknown'
+        entry['event'].set()
+
     def _on_pdu_received(self, pdu):
         """Route an inbound PDU. Only delivery receipts are acted on."""
         try:
@@ -282,21 +336,27 @@ class SmppClient:
         """Submit one message. Returns the gateway's message id.
 
         Long messages are split into concatenated parts by ``smpplib.gsm``,
-        which also chooses the encoding and builds the UDH. Every part is sent
-        on the same bind; the id of the first is returned, because that is the
-        one a delivery receipt for the message quotes.
+        which also chooses the encoding and builds the UDH. Every part goes on
+        the same bind; the id of the first is returned, because that is the one
+        a delivery receipt for the message quotes.
+
+        The id comes from the ``submit_sm_resp``, which arrives asynchronously
+        on the reader thread -- ``send_message`` hands back the request, not
+        the response. So this sends, then waits for the reader to record the
+        answer. Timing out is not the same as failing: the gateway may hold the
+        message already, which is why it raises SmppSubmitUncertain.
         """
         self.config.validate()
         self.ensure_bound()
 
         parts, encoding_flag, msg_type_flag = smpplib.gsm.make_parts(text)
 
+        first_sequence = None
         with self._lock:
             client = self._client
             if client is None or not self.bound:
                 raise SmppConnectionError('Not bound.')
 
-            first_message_id = ''
             for index, part in enumerate(parts):
                 try:
                     pdu = client.send_message(
@@ -319,9 +379,9 @@ class SmppClient:
                     self.last_error = f'submit rejected: {exc}'
                     raise SmppSubmitRejected(str(exc), status_code=code) from exc
                 except (OSError, smpplib.exceptions.ConnectionError) as exc:
-                    # The socket broke. If this was the first part nothing was
-                    # accepted; if it was a later part the message is already
-                    # partly delivered, which is not something a resend fixes.
+                    # The socket broke. On the first part nothing was accepted;
+                    # on a later one the message is already partly delivered,
+                    # which resending does not fix.
                     self.bound = False
                     if index == 0:
                         raise SmppConnectionError(f'Submit failed: {exc}') from exc
@@ -333,12 +393,32 @@ class SmppClient:
                     raise SmppSubmitUncertain(f'Submit outcome unknown: {exc}') from exc
 
                 if index == 0:
-                    first_message_id = getattr(pdu, 'message_id', '') or ''
-                    if isinstance(first_message_id, bytes):
-                        first_message_id = first_message_id.decode('ascii', 'replace')
+                    first_sequence = getattr(pdu, 'sequence', None)
 
             self.last_submit_at = time.time()
-            return first_message_id
+
+        # Deliberately outside self._lock. The response is delivered by the
+        # reader thread, which needs the lock for its keepalive -- waiting here
+        # while holding it would deadlock the pair and time out every send.
+        if first_sequence is None:
+            return ''
+
+        entry = self._waiter_for(first_sequence)
+        try:
+            if not entry['event'].wait(timeout=SUBMIT_TIMEOUT_SECONDS):
+                raise SmppSubmitUncertain(
+                    f'No submit_sm_resp within {SUBMIT_TIMEOUT_SECONDS}s; '
+                    'the gateway may still have accepted the message.'
+                )
+            if entry['error'] is not None:
+                raise SmppSubmitRejected(
+                    f'Gateway rejected submit_sm (status {entry["error"]}).',
+                    status_code=entry['error'],
+                )
+            return entry['message_id']
+        finally:
+            with self._pending_lock:
+                self._pending.pop(first_sequence, None)
 
     # -- health ------------------------------------------------------------
 

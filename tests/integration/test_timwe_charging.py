@@ -1,0 +1,1303 @@
+"""
+chargeAmount: the client, the transaction lifecycle, and the purchase flow.
+
+What these tests prove, and what they do not
+--------------------------------------------
+They prove the request we build matches the integration guide (pp.17-24), that
+every kind of reply and network failure is classified correctly, that each
+charge is recorded and fulfilled exactly once, and that nothing retries an
+ambiguous charge.
+
+They do NOT prove TIMWE accepts any of it. The MA is mocked at
+``requests.post`` throughout; nothing here reaches a real gateway, and a green
+run is not evidence that the integration works against TIMWE. That needs the
+real endpoint, which has not been supplied.
+
+No real subscriber numbers appear here. MSISDNs are the reserved-looking test
+values the rest of the suite already uses.
+"""
+
+import hashlib
+import json
+import re
+from datetime import UTC, datetime, timedelta, timezone
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import fakeredis
+import pytest
+import requests
+import urllib3.exceptions as U
+from django.contrib.auth.models import User
+from django.test import override_settings
+from rest_framework.test import APIRequestFactory, force_authenticate
+
+from api.integrations.timwe import errors
+from api.integrations.timwe.charge import (
+    OUTCOME_REJECTED,
+    OUTCOME_SUCCESS,
+    OUTCOME_TIMEOUT,
+    OUTCOME_UNKNOWN,
+    OUTCOME_UNREACHABLE,
+    TimweChargeService,
+)
+from api.integrations.timwe.errors import TimweAmountError, TimweConfigurationError, TimweError
+from api.models.timwe import TimweChargeTransaction
+from api.services.timwe_charging import (
+    AirtimePurchaseRefused,
+    ChargeRefused,
+    fulfil_coin_purchase,
+    new_reference_code,
+    purchase_coins_with_airtime,
+    request_charge,
+    user_message,
+)
+
+pytestmark = pytest.mark.django_db
+
+MSISDN = '251912345678'
+POST = 'api.integrations.timwe.charge.requests.post'
+
+CONFIG = {
+    'TIMWE_CHARGE_URL': 'http://ma.test:8080/AmountChargingService/services/AmountCharging',
+    'TIMWE_SP_ID': '000201',
+    'TIMWE_SP_PASSWORD': 'account-password-for-tests',
+    'TIMWE_SERVICE_ID': '3500001000012',
+    'TIMWE_CURRENCY': 'ETB',
+    'TIMWE_CHARGE_TIMEOUT': 60,
+}
+
+SUCCESS_BODY = """<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <ns1:chargeAmountResponse
+      xmlns:ns1="http://www.csapi.org/schema/parlayx/payment/amount_charging/v2_1/local"/>
+  </soapenv:Body>
+</soapenv:Envelope>"""
+
+
+def fault_body(code, text='The MA rejected it', faultcode='soapenv:Server'):
+    """A Parlay X fault: SOAP's classification in faultcode, the MA's in messageId."""
+    return f"""<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <soapenv:Fault>
+      <faultcode>{faultcode}</faultcode>
+      <faultstring>{text}</faultstring>
+      <detail>
+        <ns2:ServiceException xmlns:ns2="http://www.csapi.org/schema/parlayx/common/v2_1">
+          <messageId>{code}</messageId>
+          <text>{text}</text>
+        </ns2:ServiceException>
+      </detail>
+    </soapenv:Fault>
+  </soapenv:Body>
+</soapenv:Envelope>"""
+
+
+def reply(body, status=200):
+    response = MagicMock()
+    response.text = body
+    response.status_code = status
+    return response
+
+
+def refused():
+    return requests.exceptions.ConnectionError(
+        U.MaxRetryError(None, '/x', reason=U.NewConnectionError(None, 'refused'))
+    )
+
+
+def dns_failure():
+    return requests.exceptions.ConnectionError(
+        U.MaxRetryError(None, '/x', reason=U.NameResolutionError('ma.test', None, OSError('no')))
+    )
+
+
+def reset_after_send():
+    return requests.exceptions.ConnectionError(
+        U.ProtocolError('Connection aborted.', ConnectionResetError())
+    )
+
+
+@pytest.fixture(autouse=True)
+def configured(settings):
+    for key, value in CONFIG.items():
+        setattr(settings, key, value)
+    return settings
+
+
+@pytest.fixture
+def user():
+    u = User.objects.create_user(username='payer', password='x')
+    u.profile.phone_number = MSISDN
+    u.profile.save(update_fields=['phone_number'])
+    return u
+
+
+@pytest.fixture
+def airtime_package():
+    """The 10 ETB package -- the only price airtime is permitted at."""
+    from api.models.contest import CoinPackage
+
+    package, _ = CoinPackage.objects.get_or_create(
+        price_etb=Decimal('10'),
+        defaults={'name': 'Starter', 'coin_amount': 100, 'bonus_coins': 0, 'is_active': True},
+    )
+    CoinPackage.objects.filter(pk=package.pk).update(is_active=True)
+    package.refresh_from_db()
+    return package
+
+
+def charge(user, key='purchase-1', amount=10, msisdn=MSISDN):
+    return request_charge(
+        user=user, msisdn=msisdn, amount=amount, description='FlipStar test', idempotency_key=key
+    )
+
+
+# ===========================================================================
+# Configuration
+# ===========================================================================
+
+
+def test_fully_configured():
+    assert TimweChargeService.is_configured() is True
+    assert TimweChargeService.missing_configuration() == []
+
+
+@pytest.mark.parametrize(
+    'key',
+    ['TIMWE_CHARGE_URL', 'TIMWE_SP_ID', 'TIMWE_SP_PASSWORD', 'TIMWE_SERVICE_ID', 'TIMWE_CURRENCY'],
+)
+def test_each_missing_value_is_named(settings, key):
+    setattr(settings, key, '')
+
+    assert TimweChargeService.is_configured() is False
+    assert TimweChargeService.missing_configuration() == [key]
+    with pytest.raises(TimweConfigurationError, match=key):
+        TimweChargeService.ensure_configured()
+
+
+def test_the_error_names_the_setting_never_its_value(settings):
+    settings.TIMWE_CHARGE_URL = ''
+
+    with pytest.raises(TimweConfigurationError) as info:
+        TimweChargeService.ensure_configured()
+
+    assert 'account-password-for-tests' not in str(info.value)
+    assert '000201' not in str(info.value)
+
+
+def test_the_error_says_the_smpp_host_is_not_the_charge_url(settings):
+    """The confusion this integration is most at risk of."""
+    settings.TIMWE_CHARGE_URL = ''
+
+    with pytest.raises(TimweConfigurationError, match='SMPP'):
+        TimweChargeService.ensure_configured()
+
+
+@pytest.mark.parametrize('bad', ['abc', 0, -5, ''])
+def test_an_invalid_timeout_is_refused(settings, bad):
+    settings.TIMWE_CHARGE_TIMEOUT = bad
+
+    with pytest.raises(TimweConfigurationError, match='TIMWE_CHARGE_TIMEOUT'):
+        TimweChargeService.get_timeout()
+
+
+def test_the_timeout_defaults_to_the_guides_sixty_seconds(settings):
+    del settings.TIMWE_CHARGE_TIMEOUT
+
+    assert TimweChargeService.get_timeout() == 60
+
+
+def test_nothing_is_recorded_when_unconfigured(settings, user):
+    settings.TIMWE_SERVICE_ID = ''
+
+    with pytest.raises(TimweConfigurationError), patch(POST) as post:
+        charge(user)
+
+    post.assert_not_called()
+    assert TimweChargeTransaction.objects.count() == 0
+
+
+# ===========================================================================
+# Authentication
+# ===========================================================================
+
+
+def test_the_digest_matches_the_documented_formula():
+    """spPassword = MD5(spId + Password + timeStamp), guide p.20."""
+    expected = hashlib.md5(  # noqa: S324 - the MA's authenticator, not ours
+        b'000201account-password-for-tests20100731064245'
+    ).hexdigest()
+
+    assert TimweChargeService.build_sp_password('20100731064245') == expected
+
+
+def test_the_password_is_hashed_exactly_once():
+    """Hashing an already-hashed password is a classic way to fail SVC0901."""
+    once = hashlib.md5(b'000201account-password-for-tests20100731064245').hexdigest()  # noqa: S324
+    twice = hashlib.md5(once.encode()).hexdigest()  # noqa: S324
+
+    digest = TimweChargeService.build_sp_password('20100731064245')
+    assert digest == once
+    assert digest != twice
+
+
+def test_the_timestamp_is_fourteen_digits():
+    assert re.fullmatch(r'\d{14}', TimweChargeService.build_timestamp())
+
+
+def test_the_timestamp_is_utc_whatever_the_local_zone():
+    """A +03:00 wall clock must still produce the UTC time (guide p.20)."""
+    addis = timezone(timedelta(hours=3))
+    moment = datetime(2026, 9, 10, 15, 30, 45, tzinfo=addis)
+
+    with patch('api.integrations.timwe.charge.timezone.now', return_value=moment):
+        stamp = TimweChargeService.build_timestamp()
+
+    assert stamp == '20260910123045'
+
+
+def test_the_digest_changes_with_the_timestamp():
+    assert TimweChargeService.build_sp_password('20260910000000') != (
+        TimweChargeService.build_sp_password('20260910000001')
+    )
+
+
+def test_the_header_timestamp_is_the_one_that_was_hashed():
+    """
+    One clock read, used twice.
+
+    Two separate reads can straddle a second boundary, and the MA then
+    recomputes a different digest and refuses the charge as SVC0901.
+    """
+    xml = TimweChargeService.build_soap_request(
+        msisdn=MSISDN, amount=10, description='d', reference_code='R1'
+    )
+    stamp = re.search(r'<v2:timeStamp>(\d{14})</v2:timeStamp>', xml).group(1)
+    digest = re.search(r'<v2:spPassword>([0-9a-f]{32})</v2:spPassword>', xml).group(1)
+
+    assert digest == TimweChargeService.build_sp_password(stamp)
+
+
+def test_the_account_password_never_reaches_the_wire():
+    xml = TimweChargeService.build_soap_request(
+        msisdn=MSISDN, amount=10, description='d', reference_code='R1'
+    )
+
+    assert 'account-password-for-tests' not in xml
+
+
+# ===========================================================================
+# SOAP request
+# ===========================================================================
+
+
+def build(**overrides):
+    kwargs = {
+        'msisdn': MSISDN,
+        'amount': 10,
+        'description': 'FlipStar Starter',
+        'reference_code': 'FSREF0001',
+        'timestamp': '20260910123045',
+    }
+    kwargs.update(overrides)
+    return TimweChargeService.build_soap_request(**kwargs)
+
+
+def test_the_namespaces_are_the_guides():
+    """Exactly those of the guide's request example, p.19."""
+    xml = build()
+
+    assert 'xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"' in xml
+    assert 'xmlns:v2="http://www.huawei.com.cn/schema/common/v2_1"' in xml
+    assert (
+        'xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/local"'
+    ) in xml
+
+
+def test_every_header_field_is_present():
+    xml = build()
+
+    for field in ('spId', 'spPassword', 'serviceId', 'timeStamp', 'OA', 'FA'):
+        assert re.search(rf'<v2:{field}>[^<]+</v2:{field}>', xml), field
+    assert '<v2:token/>' in xml
+    assert '<v2:spId>000201</v2:spId>' in xml
+    assert '<v2:serviceId>3500001000012</v2:serviceId>' in xml
+
+
+def test_every_body_field_is_present():
+    xml = build()
+
+    assert f'<loc:endUserIdentifier>tel:{MSISDN}</loc:endUserIdentifier>' in xml
+    assert '<description>FlipStar Starter</description>' in xml
+    assert '<currency>ETB</currency>' in xml
+    assert '<amount>10</amount>' in xml
+    assert '<loc:referenceCode>FSREF0001</loc:referenceCode>' in xml
+
+
+def test_the_charge_code_appears_only_when_given():
+    assert '<code>' not in build()
+    assert '<code>4523</code>' in build(charge_code='4523')
+
+
+def test_oa_equals_fa():
+    """Guide p.21: 'The value must be the same as the OA value.'"""
+    xml = build()
+    oa = re.search(r'<v2:OA>([^<]+)</v2:OA>', xml).group(1)
+    fa = re.search(r'<v2:FA>([^<]+)</v2:FA>', xml).group(1)
+
+    assert oa == fa == MSISDN
+
+
+def test_the_request_parses_as_xml():
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(build())  # noqa: S314 - our own output
+
+
+def test_the_description_is_escaped():
+    xml = build(description='Coins & <more>')
+
+    assert '<description>Coins &amp; &lt;more&gt;</description>' in xml
+
+
+def test_an_empty_description_is_refused():
+    with pytest.raises(TimweError, match='description'):
+        build(description='   ')
+
+
+def test_an_overlong_description_is_refused():
+    with pytest.raises(TimweError, match='255'):
+        build(description='x' * 256)
+
+
+@pytest.mark.parametrize('bad', ['', 'R' * 31])
+def test_a_reference_code_outside_one_to_thirty_is_refused(bad):
+    with pytest.raises(TimweError, match='referenceCode'):
+        build(reference_code=bad)
+
+
+def test_a_non_iso_currency_is_refused(settings):
+    settings.TIMWE_CURRENCY = 'BIRR'
+
+    with pytest.raises(TimweConfigurationError, match='ISO 4217'):
+        build()
+
+
+def test_generated_references_fill_the_thirty_character_limit():
+    ref = new_reference_code()
+
+    assert len(ref) == 30
+    assert ref.startswith('FS')
+    assert new_reference_code() != ref
+
+
+# ===========================================================================
+# MSISDN
+# ===========================================================================
+
+
+@pytest.mark.parametrize('given', ['0912345678', '+251912345678', '251912345678', '912345678'])
+def test_every_ethiopian_format_reaches_the_ma_with_its_country_code(given):
+    """
+    The guide requires the country code in OA, FA and endUserIdentifier.
+
+    Previously the client just stripped non-digits, so a local 0912... number
+    went out as OA=0912... -- missing the country code the MA needs.
+    """
+    xml = build(msisdn=given)
+
+    assert f'<v2:OA>{MSISDN}</v2:OA>' in xml
+    assert f'<loc:endUserIdentifier>tel:{MSISDN}</loc:endUserIdentifier>' in xml
+
+
+@pytest.mark.parametrize('bad', ['', 'not-a-number', '12345', '+1 555 010 0000'])
+def test_an_unusable_number_is_refused(bad):
+    with pytest.raises(TimweError):
+        build(msisdn=bad)
+
+
+def test_the_transaction_stores_the_normalised_number(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user, msisdn='0912345678')
+
+    assert result.transaction.msisdn == MSISDN
+
+
+# ===========================================================================
+# Amount
+# ===========================================================================
+
+
+@pytest.mark.parametrize('amount', [1, 10, '10', Decimal('10'), Decimal('10.00'), 9999])
+def test_a_valid_whole_amount_is_accepted(amount):
+    assert TimweChargeService.format_amount(amount) == str(int(Decimal(str(amount))))
+
+
+@pytest.mark.parametrize(
+    'amount',
+    [
+        0,  # a charge of nothing is a caller bug (SVC0002 treats it as blank)
+        -1,
+        Decimal('10.50'),  # the MA has no decimal point (p.21)
+        '9.99',
+        10000,  # five characters; the field holds four
+        'abc',
+        '',
+        1.0,  # floats cannot hold money exactly and are refused outright
+        True,  # bool is an int subclass
+        Decimal('NaN'),
+        Decimal('Infinity'),
+    ],
+)
+def test_an_invalid_amount_is_refused(amount):
+    with pytest.raises(TimweAmountError):
+        TimweChargeService.format_amount(amount)
+
+
+def test_a_fractional_amount_is_never_rounded():
+    """3.50 sent as 3 under-bills; sent as 4 over-bills. Neither is acceptable."""
+    with pytest.raises(TimweAmountError, match='fractional'):
+        TimweChargeService.format_amount(Decimal('3.50'))
+
+
+def test_an_invalid_amount_records_nothing(user):
+    with pytest.raises(ChargeRefused), patch(POST) as post:
+        charge(user, amount=Decimal('2.5'))
+
+    post.assert_not_called()
+    assert TimweChargeTransaction.objects.count() == 0
+
+
+# ===========================================================================
+# Response parsing
+# ===========================================================================
+
+
+def test_an_empty_charge_amount_response_is_success():
+    """Guide p.22: success is an empty chargeAmountResponse element."""
+    assert TimweChargeService._interpret(SUCCESS_BODY)[0] == OUTCOME_SUCCESS
+
+
+def test_the_ma_code_is_read_from_message_id_not_faultcode():
+    """
+    Parlay X puts the MA's code in <detail><messageId>.
+
+    faultcode is SOAP's own classification -- soapenv:Server -- and the old
+    parser stored "Server" as the error code, losing the SVC/POL code entirely.
+    """
+    outcome, code, _ = TimweChargeService._interpret(fault_body('SVC0270'))
+
+    assert outcome == OUTCOME_REJECTED
+    assert code == 'SVC0270'
+
+
+def test_an_ma_code_in_faultcode_is_still_read():
+    """Some MAs put the code there directly; the existing tests assume so."""
+    body = fault_body('ignored', faultcode='SVC0901').replace('<messageId>ignored</messageId>', '')
+
+    assert TimweChargeService._interpret(body)[1] == 'SVC0901'
+
+
+def test_a_soap_classification_is_never_stored_as_the_code():
+    body = fault_body('x', faultcode='soapenv:Server').replace('<messageId>x</messageId>', '')
+
+    outcome, code, _ = TimweChargeService._interpret(body)
+    assert outcome == OUTCOME_REJECTED
+    assert code is None
+
+
+@pytest.mark.parametrize(
+    'code',
+    ['SVC0001', 'SVC0002', 'SVC0901', 'SVC0270', 'POL0910'],
+)
+def test_every_documented_code_is_recognised(code):
+    assert TimweChargeService._interpret(fault_body(code))[1] == code
+
+
+def test_xml_without_a_charge_response_is_not_a_success():
+    """
+    A proxy's XML error page is well-formed and has no Fault.
+
+    The old rule -- no Fault means success -- would have credited coins for it.
+    """
+    body = '<html><body><h1>Gateway maintenance</h1></body></html>'
+
+    assert TimweChargeService._interpret(body)[0] == OUTCOME_UNKNOWN
+
+
+@pytest.mark.parametrize('body', ['', '   ', 'not xml <', '<unclosed>'])
+def test_an_unreadable_reply_is_unknown_not_rejected(body):
+    """We cannot tell what happened, so this must not claim nothing was charged."""
+    assert TimweChargeService._interpret(body)[0] == OUTCOME_UNKNOWN
+
+
+# ===========================================================================
+# Transport classification
+# ===========================================================================
+
+
+def run(**post_kwargs):
+    with patch(POST, **post_kwargs):
+        return TimweChargeService.execute(
+            msisdn=MSISDN, amount=10, description='d', reference_code='R1'
+        )
+
+
+def test_success():
+    outcome = run(return_value=reply(SUCCESS_BODY))
+
+    assert outcome.outcome == OUTCOME_SUCCESS
+    assert outcome.http_status == 200
+    assert outcome.duration_ms is not None
+
+
+def test_a_fault_is_a_definite_rejection():
+    outcome = run(return_value=reply(fault_body('SVC0270'), status=500))
+
+    assert outcome.outcome == OUTCOME_REJECTED
+    assert outcome.definitely_not_charged
+
+
+@pytest.mark.parametrize('failure', [refused, dns_failure])
+def test_a_connection_that_never_opened_is_unreachable(failure):
+    outcome = run(side_effect=failure())
+
+    assert outcome.outcome == OUTCOME_UNREACHABLE
+    assert outcome.definitely_not_charged
+
+
+def test_a_connect_timeout_is_unreachable_not_ambiguous():
+    """ConnectTimeout subclasses Timeout too; it must not be read as a read timeout."""
+    outcome = run(side_effect=requests.exceptions.ConnectTimeout())
+
+    assert outcome.outcome == OUTCOME_UNREACHABLE
+
+
+def test_a_read_timeout_is_ambiguous():
+    """Sent, no answer: the MA may have charged. Never 'failed'."""
+    outcome = run(side_effect=requests.exceptions.ReadTimeout())
+
+    assert outcome.outcome == OUTCOME_TIMEOUT
+    assert outcome.is_ambiguous
+    assert not outcome.definitely_not_charged
+
+
+def test_our_timeout_is_not_reported_as_the_mas_svc0001():
+    """
+    The old client mapped our read timeout to SVC0001.
+
+    SVC0001 is the MA's own code for its internal timeout, a definite fault.
+    Ours is ambiguous. Conflating them loses exactly the distinction that
+    decides whether a retry is safe.
+    """
+    outcome = run(side_effect=requests.exceptions.ReadTimeout())
+
+    assert outcome.error_code is None
+
+
+def test_a_reset_after_sending_is_ambiguous():
+    outcome = run(side_effect=reset_after_send())
+
+    assert outcome.outcome == OUTCOME_UNKNOWN
+    assert outcome.is_ambiguous
+
+
+def test_a_4xx_without_soap_is_a_definite_non_charge():
+    """A wrong path never reached the charge handler."""
+    outcome = run(return_value=reply('Not Found', status=404))
+
+    assert outcome.outcome == OUTCOME_REJECTED
+    assert outcome.http_status == 404
+
+
+def test_a_5xx_without_a_fault_is_ambiguous():
+    """The server may have got partway into the charge."""
+    outcome = run(return_value=reply('Internal Server Error', status=502))
+
+    assert outcome.outcome == OUTCOME_UNKNOWN
+
+
+def test_a_success_body_under_an_error_status_is_not_trusted():
+    outcome = run(return_value=reply(SUCCESS_BODY, status=500))
+
+    assert outcome.outcome == OUTCOME_UNKNOWN
+
+
+def test_the_request_carries_connect_and_read_timeouts():
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        TimweChargeService.execute(msisdn=MSISDN, amount=10, description='d', reference_code='R1')
+
+    connect, read = post.call_args.kwargs['timeout']
+    assert read == 60
+    assert connect < read
+
+
+def test_it_posts_soap_to_the_configured_endpoint():
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        TimweChargeService.execute(msisdn=MSISDN, amount=10, description='d', reference_code='R1')
+
+    assert post.call_args.args[0] == CONFIG['TIMWE_CHARGE_URL']
+    assert post.call_args.kwargs['headers']['Content-Type'].startswith('text/xml')
+
+
+# ===========================================================================
+# The transaction lifecycle
+# ===========================================================================
+
+
+def test_a_success_is_recorded(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user)
+
+    row = result.transaction
+    assert result.succeeded and result.created
+    assert row.status == 'success'
+    assert row.outcome == OUTCOME_SUCCESS
+    assert row.http_status == 200
+    assert row.completed_at is not None
+    assert row.amount == 10
+    assert row.currency == 'ETB'
+    assert len(row.reference_code) == 30
+
+
+def test_the_row_is_pending_while_the_ma_is_thinking(user):
+    """Committed before the call, so a crash mid-charge leaves evidence."""
+    seen = {}
+
+    def slow_ma(*args, **kwargs):
+        seen['status'] = TimweChargeTransaction.objects.get().status
+        return reply(SUCCESS_BODY)
+
+    with patch(POST, side_effect=slow_ma):
+        charge(user)
+
+    assert seen['status'] == 'pending'
+
+
+def test_a_rejection_is_recorded_with_its_code(user):
+    with patch(POST, return_value=reply(fault_body('SVC0270', 'MDSP charge failed'))):
+        result = charge(user)
+
+    row = result.transaction
+    assert row.status == 'failed'
+    assert row.outcome == OUTCOME_REJECTED
+    assert row.error_code == 'SVC0270'
+    assert row.retryable is True  # MA-side fault; a new attempt may succeed
+
+
+def test_a_permanent_rejection_is_not_retryable(user):
+    with patch(POST, return_value=reply(fault_body('SVC0901'))):
+        result = charge(user)
+
+    assert result.transaction.retryable is False
+    assert result.can_retry_with_new_key is False
+
+
+def test_unreachable_is_recorded_as_a_safe_retry(user):
+    with patch(POST, side_effect=refused()):
+        result = charge(user)
+
+    row = result.transaction
+    assert row.status == 'failed'
+    assert row.outcome == OUTCOME_UNREACHABLE
+    assert result.can_retry_with_new_key is True
+
+
+def test_a_timeout_is_recorded_as_timeout_not_failure(user):
+    with patch(POST, side_effect=requests.exceptions.ReadTimeout()):
+        result = charge(user)
+
+    row = result.transaction
+    assert row.status == 'timeout'
+    assert row.status != 'failed'
+    assert result.is_ambiguous
+    assert result.can_retry_with_new_key is False
+
+
+def test_a_crash_inside_the_client_is_ambiguous_not_failed(user):
+    """Something of ours broke after the row was committed. Unknown, not failed."""
+    with patch(POST, side_effect=RuntimeError('boom')):
+        result = charge(user)
+
+    assert result.transaction.status == 'unknown'
+    assert result.is_ambiguous
+
+
+def test_no_secrets_are_stored(user):
+    with patch(POST, return_value=reply(fault_body('SVC0901'))):
+        row = charge(user).transaction
+
+    stored = json.dumps({f.name: str(getattr(row, f.name)) for f in row._meta.concrete_fields})
+    assert 'account-password-for-tests' not in stored
+    assert TimweChargeService.build_sp_password('20260910123045') not in stored
+
+
+# ===========================================================================
+# Idempotency
+# ===========================================================================
+
+
+def test_the_same_key_charges_once(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        first = charge(user, key='tap')
+        second = charge(user, key='tap')
+
+    assert post.call_count == 1
+    assert first.transaction.pk == second.transaction.pk
+    assert second.created is False
+    assert TimweChargeTransaction.objects.count() == 1
+
+
+def test_a_repeat_after_a_timeout_does_not_charge_again(user):
+    """The case that costs real money: the client retries an ambiguous charge."""
+    with patch(POST, side_effect=requests.exceptions.ReadTimeout()) as post:
+        charge(user, key='tap')
+        again = charge(user, key='tap')
+
+    assert post.call_count == 1
+    assert again.transaction.status == 'timeout'
+
+
+def test_a_repeat_after_a_failure_does_not_charge_again(user):
+    """One row is at most one MA call. A retry takes a new key."""
+    with patch(POST, side_effect=refused()) as post:
+        charge(user, key='tap')
+        charge(user, key='tap')
+
+    assert post.call_count == 1
+
+
+def test_a_key_reused_for_a_different_charge_is_refused(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        charge(user, key='tap', amount=10)
+
+        with pytest.raises(ChargeRefused, match='different charge'):
+            charge(user, key='tap', amount=20)
+
+
+def test_a_race_on_the_same_key_yields_one_charge(user, monkeypatch):
+    """Two requests pass the existence check together; the unique key decides."""
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        winner = charge(user, key='race')
+
+    real_filter = TimweChargeTransaction.objects.filter
+
+    def blind_filter(*args, **kwargs):
+        # Simulate losing the race: the existence check sees nothing.
+        if kwargs.keys() == {'idempotency_key'}:
+            return real_filter(pk=None)
+        return real_filter(*args, **kwargs)
+
+    monkeypatch.setattr(TimweChargeTransaction.objects, 'filter', blind_filter)
+
+    with patch(POST) as post:
+        loser = charge(user, key='race')
+
+    post.assert_not_called()
+    assert loser.transaction.pk == winner.transaction.pk
+    assert loser.created is False
+
+
+def test_a_key_is_required(user):
+    with pytest.raises(ChargeRefused, match='idempotency'):
+        request_charge(user=user, msisdn=MSISDN, amount=10, description='d', idempotency_key='')
+
+
+def test_reference_codes_are_unique_per_charge(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        a = charge(user, key='one').transaction
+        b = charge(user, key='two').transaction
+
+    assert a.reference_code != b.reference_code
+
+
+# ===========================================================================
+# What the user is told
+# ===========================================================================
+
+
+@pytest.mark.parametrize(
+    ('side_effect', 'value', 'needle'),
+    [
+        (None, reply(SUCCESS_BODY), 'successful'),
+        (requests.exceptions.ReadTimeout(), None, 'not be charged twice'),
+        (refused(), None, 'not been charged'),
+    ],
+)
+def test_the_user_message(user, side_effect, value, needle):
+    with patch(POST, side_effect=side_effect, return_value=value):
+        result = charge(user)
+
+    assert needle in user_message(result)
+
+
+def test_the_mas_own_text_never_reaches_the_user(user):
+    leaky = 'Sp password is not accepted! internal-host-10.1.2.3'
+    with patch(POST, return_value=reply(fault_body('SVC0901', leaky))):
+        result = charge(user)
+
+    assert leaky not in user_message(result)
+    assert '10.1.2.3' not in user_message(result)
+
+
+# ===========================================================================
+# The purchase flow
+# ===========================================================================
+
+
+def test_a_successful_purchase_credits_the_package(user, airtime_package):
+    from api.models.contest import UserCoinBalance
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result, coin_tx = purchase_coins_with_airtime(
+            user=user, package=airtime_package, idempotency_key='buy-1'
+        )
+
+    assert result.succeeded
+    assert coin_tx.coins == airtime_package.get_total_coins()
+    assert coin_tx.payment_method == 'airtime'
+    # Traceable back to the exact charge TIMWE records.
+    assert coin_tx.payment_reference == result.transaction.reference_code
+    balance = UserCoinBalance.objects.get(user=user)
+    assert balance.airtime_purchased_balance == airtime_package.get_total_coins()
+
+
+def test_the_price_comes_from_the_package(user, airtime_package):
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='buy-1')
+
+    assert '<amount>10</amount>' in post.call_args.kwargs['data'].decode()
+
+
+def test_the_accounts_own_number_is_charged(user, airtime_package):
+    """Never a client-supplied number -- that would let anyone bill anyone."""
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='buy-1')
+
+    assert f'<v2:OA>{MSISDN}</v2:OA>' in post.call_args.kwargs['data'].decode()
+
+
+def test_a_user_without_a_phone_is_refused_before_charging(airtime_package):
+    nobody = User.objects.create_user(username='nophone', password='x')
+
+    with pytest.raises(AirtimePurchaseRefused), patch(POST) as post:
+        purchase_coins_with_airtime(user=nobody, package=airtime_package, idempotency_key='k')
+
+    post.assert_not_called()
+
+
+def test_a_package_at_the_wrong_price_is_refused_before_charging(user):
+    """Airtime is permitted only at 10 ETB (common/validators/payment.py)."""
+    from django.core.exceptions import ValidationError
+
+    from api.models.contest import CoinPackage
+
+    big, _ = CoinPackage.objects.get_or_create(
+        price_etb=Decimal('50'),
+        defaults={'name': 'Big', 'coin_amount': 500, 'bonus_coins': 0, 'is_active': True},
+    )
+
+    with pytest.raises((ValidationError, Exception)), patch(POST) as post:
+        purchase_coins_with_airtime(user=user, package=big, idempotency_key='k')
+
+    post.assert_not_called()
+    assert TimweChargeTransaction.objects.count() == 0
+
+
+def test_an_inactive_package_is_refused(user, airtime_package):
+    type(airtime_package).objects.filter(pk=airtime_package.pk).update(is_active=False)
+    airtime_package.refresh_from_db()
+
+    with pytest.raises(AirtimePurchaseRefused), patch(POST) as post:
+        purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='k')
+
+    post.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'side_effect',
+    [requests.exceptions.ReadTimeout(), reset_after_send(), refused()],
+)
+def test_no_coins_without_a_confirmed_charge(user, airtime_package, side_effect):
+    from api.models.contest import CoinTransaction
+
+    with patch(POST, side_effect=side_effect):
+        result, coin_tx = purchase_coins_with_airtime(
+            user=user, package=airtime_package, idempotency_key='buy-1'
+        )
+
+    assert coin_tx is None
+    assert not CoinTransaction.objects.filter(user=user, payment_method='airtime').exists()
+    assert result.transaction.fulfilled_at is None
+
+
+def test_a_rejected_charge_credits_nothing(user, airtime_package):
+    from api.models.contest import CoinTransaction
+
+    with patch(POST, return_value=reply(fault_body('SVC0270'))):
+        _, coin_tx = purchase_coins_with_airtime(
+            user=user, package=airtime_package, idempotency_key='buy-1'
+        )
+
+    assert coin_tx is None
+    assert not CoinTransaction.objects.filter(user=user, payment_method='airtime').exists()
+
+
+def test_fulfilment_happens_exactly_once(user, airtime_package):
+    from api.models.contest import CoinTransaction
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result, _ = purchase_coins_with_airtime(
+            user=user, package=airtime_package, idempotency_key='buy-1'
+        )
+
+    assert fulfil_coin_purchase(result.transaction) is None
+    assert fulfil_coin_purchase(result.transaction) is None
+    assert CoinTransaction.objects.filter(user=user, payment_method='airtime').count() == 1
+
+
+def test_a_repeated_purchase_credits_once(user, airtime_package):
+    from api.models.contest import CoinTransaction
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='buy-1')
+        purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='buy-1')
+
+    assert post.call_count == 1
+    assert CoinTransaction.objects.filter(user=user, payment_method='airtime').count() == 1
+
+
+def test_a_failed_credit_does_not_mark_the_charge_fulfilled(user, airtime_package):
+    """The claim and the credit commit together, or not at all."""
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user, key='buy-1')
+    TimweChargeTransaction.objects.filter(pk=result.transaction.pk).update(
+        coin_package=airtime_package
+    )
+    row = TimweChargeTransaction.objects.get(pk=result.transaction.pk)
+
+    with (
+        patch(
+            'api.models.contest.UserCoinBalance.add_purchased',
+            side_effect=RuntimeError('db down'),
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        fulfil_coin_purchase(row)
+
+    assert TimweChargeTransaction.objects.get(pk=row.pk).fulfilled_at is None
+
+
+# ===========================================================================
+# The view
+# ===========================================================================
+
+
+@pytest.fixture
+def server_keys():
+    from infrastructure.keys import key_manager, redis_store
+
+    redis_store.set_client(fakeredis.FakeRedis(decode_responses=True))
+    key_manager.reset()
+    key_manager.initialize()
+    yield key_manager.get_public_key()
+    key_manager.reset()
+    redis_store.reset_client()
+
+
+@pytest.fixture
+def buy(server_keys):
+    """POST to the real view over its encrypted transport."""
+    from api.views.charging import purchase_coins_on_demand
+    from common.security.e2e_encryption import decrypt_payload, encrypt_payload, generate_keypair
+
+    client_public, client_private = generate_keypair()
+
+    def _buy(user, body, headers=None):
+        envelope = encrypt_payload(
+            body, receiver_public_key_b64=server_keys, sender_private_key_b64=client_private
+        ).to_dict()
+        request = APIRequestFactory().post(
+            '/charging/coin-purchase/',
+            data=json.dumps(envelope),
+            content_type='application/json',
+            HTTP_X_CLIENT_PUBLIC_KEY=client_public,
+            **(headers or {}),
+        )
+        force_authenticate(request, user=user)
+        response = purchase_coins_on_demand(request)
+        response.render()
+        payload = json.loads(response.content)
+        if 'encrypted' in payload:
+            payload = json.loads(
+                decrypt_payload(
+                    payload['encrypted'],
+                    payload['nonce'],
+                    server_keys,
+                    payload['checksum'],
+                    client_private,
+                )
+            )
+        return response.status_code, payload
+
+    return _buy
+
+
+def test_with_the_flag_off_the_legacy_refusal_is_unchanged(user, airtime_package, buy):
+    with patch(POST) as post:
+        status_code, body = buy(user, {'package_id': airtime_package.pk})
+
+    assert status_code == 403
+    assert body['error'] == (
+        'Coin purchase via airtime charging is disabled. '
+        'Ethio Telecom SIM cards are only accessible for SMS OTP verification.'
+    )
+    post.assert_not_called()
+
+
+def test_with_the_flag_off_the_price_rule_still_applies(user, buy):
+    """Enforced before the flag on purpose, so it holds either way."""
+    status_code, _ = buy(user, {'price_etb': '50'})
+
+    assert status_code == 400
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True)
+def test_a_purchase_succeeds(user, airtime_package, buy):
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        status_code, body = buy(
+            user, {'package_id': airtime_package.pk}, {'HTTP_IDEMPOTENCY_KEY': 'buy-1'}
+        )
+
+    assert status_code == 200
+    assert body['success'] is True
+    assert body['coins_credited'] == airtime_package.get_total_coins()
+    assert len(body['reference_code']) == 30
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True)
+def test_the_idempotency_key_is_required(user, airtime_package, buy):
+    with patch(POST) as post:
+        status_code, body = buy(user, {'package_id': airtime_package.pk})
+
+    assert status_code == 400
+    assert body['code'] == 'IDEMPOTENCY_KEY_REQUIRED'
+    post.assert_not_called()
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True)
+def test_an_ambiguous_charge_is_202_not_an_error(user, airtime_package, buy):
+    """A client that sees an error retries; one that sees 202 waits."""
+    with patch(POST, side_effect=requests.exceptions.ReadTimeout()):
+        status_code, body = buy(
+            user, {'package_id': airtime_package.pk}, {'HTTP_IDEMPOTENCY_KEY': 'buy-1'}
+        )
+
+    assert status_code == 202
+    assert body['code'] == 'PAYMENT_CONFIRMING'
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True)
+def test_an_unreachable_ma_is_503_and_retryable(user, airtime_package, buy):
+    with patch(POST, side_effect=refused()):
+        status_code, body = buy(
+            user, {'package_id': airtime_package.pk}, {'HTTP_IDEMPOTENCY_KEY': 'buy-1'}
+        )
+
+    assert status_code == 503
+    assert body['can_retry'] is True
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True)
+def test_a_declined_charge_is_402(user, airtime_package, buy):
+    with patch(POST, return_value=reply(fault_body('SVC0270'))):
+        status_code, _ = buy(
+            user, {'package_id': airtime_package.pk}, {'HTTP_IDEMPOTENCY_KEY': 'buy-1'}
+        )
+
+    assert status_code == 402
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True, TIMWE_CHARGE_URL='')
+def test_missing_configuration_is_503_without_naming_settings(user, airtime_package, buy):
+    status_code, body = buy(
+        user, {'package_id': airtime_package.pk}, {'HTTP_IDEMPOTENCY_KEY': 'buy-1'}
+    )
+
+    assert status_code == 503
+    assert 'TIMWE_CHARGE_URL' not in json.dumps(body)
+
+
+@override_settings(TIMWE_AIRTIME_PURCHASE_ENABLED=True)
+def test_a_client_supplied_price_and_number_are_ignored(user, airtime_package, buy):
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        buy(
+            user,
+            {'package_id': airtime_package.pk, 'msisdn': '251900000000', 'coins': 99999},
+            {'HTTP_IDEMPOTENCY_KEY': 'buy-1'},
+        )
+
+    sent = post.call_args.kwargs['data'].decode()
+    assert '251900000000' not in sent
+    assert f'<v2:OA>{MSISDN}</v2:OA>' in sent
+
+
+def test_the_view_accepts_only_post(user):
+    """Charging is never reachable from a read."""
+    from api.views.charging import purchase_coins_on_demand
+
+    request = APIRequestFactory().get('/charging/coin-purchase/')
+    force_authenticate(request, user=user)
+
+    assert purchase_coins_on_demand(request).status_code == 405
+
+
+# ===========================================================================
+# Logging
+# ===========================================================================
+
+
+def test_no_credential_or_full_number_is_logged(user, caplog):
+    with caplog.at_level('DEBUG'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        charge(user)
+
+    everything = caplog.text + ' '.join(str(r.__dict__) for r in caplog.records)
+    assert 'account-password-for-tests' not in everything
+    assert not re.search(r'[0-9a-f]{32}', everything), 'an MD5 digest was logged'
+    assert MSISDN not in everything
+    assert '25191****678' in everything
+
+
+def test_the_lifecycle_is_logged_with_safe_identifiers(user, caplog):
+    with caplog.at_level('INFO'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        charge(user)
+
+    completed = next(r for r in caplog.records if r.getMessage() == 'TIMWE_CHARGE_COMPLETED')
+    assert completed.operation == 'timwe_charge'
+    assert completed.result == OUTCOME_SUCCESS
+    assert completed.amount == 10
+    assert completed.currency == 'ETB'
+    assert completed.duration_ms is not None
+
+
+# Keep the module's reference to UTC honest -- it documents the guide's zone.
+assert UTC is not None
+assert errors.CHARGE_FAILED == 'SVC0270'
+
+
+# ===========================================================================
+# The staging check command
+# ===========================================================================
+
+
+def run_command(*args):
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    out = StringIO()
+    call_command('timwe_charge_check', *args, stdout=out)
+    return out.getvalue()
+
+
+def test_the_check_never_prints_the_password():
+    with patch('socket.create_connection'):
+        output = run_command()
+
+    assert 'account-password-for-tests' not in output
+    assert '000201' not in output  # half of the digest input
+    assert 'No charge made' in output
+
+
+def test_the_check_charges_nothing_by_default(user):
+    with patch('socket.create_connection'), patch(POST) as post:
+        run_command()
+
+    post.assert_not_called()
+    assert TimweChargeTransaction.objects.count() == 0
+
+
+def test_the_check_fails_when_unconfigured(settings):
+    from django.core.management import CommandError
+
+    settings.TIMWE_CHARGE_URL = ''
+
+    with pytest.raises(CommandError, match='Checks failed'):
+        run_command()
+
+
+def test_the_check_reports_an_unreachable_endpoint():
+    from django.core.management import CommandError
+
+    with (
+        patch('socket.create_connection', side_effect=OSError('refused')),
+        pytest.raises(CommandError),
+    ):
+        run_command()
+
+
+def test_a_real_charge_requires_confirm(user):
+    from django.core.management import CommandError
+
+    with (
+        patch('socket.create_connection'),
+        patch(POST) as post,
+        pytest.raises(CommandError, match='--confirm'),
+    ):
+        run_command('--charge', '--msisdn', MSISDN, '--amount', '1', '--username', user.username)
+
+    post.assert_not_called()
+
+
+@pytest.mark.parametrize('missing', ['--msisdn', '--amount', '--username'])
+def test_a_real_charge_requires_every_flag(user, missing):
+    from django.core.management import CommandError
+
+    flags = {'--msisdn': MSISDN, '--amount': '1', '--username': user.username}
+    del flags[missing]
+    args = ['--charge', '--confirm'] + [x for pair in flags.items() for x in pair]
+
+    with patch('socket.create_connection'), patch(POST) as post, pytest.raises(CommandError):
+        run_command(*args)
+
+    post.assert_not_called()
+
+
+def test_a_confirmed_charge_is_recorded_and_masked(user):
+    with patch('socket.create_connection'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        output = run_command(
+            '--charge',
+            '--msisdn',
+            MSISDN,
+            '--amount',
+            '1',
+            '--username',
+            user.username,
+            '--confirm',
+        )
+
+    row = TimweChargeTransaction.objects.get()
+    assert row.status == 'success'
+    assert row.idempotency_key.startswith('staging-check-')
+    assert MSISDN not in output
+    assert '25191****678' in output
+
+
+def test_an_ambiguous_staging_charge_warns_not_to_retry(user):
+    with (
+        patch('socket.create_connection'),
+        patch(POST, side_effect=requests.exceptions.ReadTimeout()),
+    ):
+        output = run_command(
+            '--charge',
+            '--msisdn',
+            MSISDN,
+            '--amount',
+            '1',
+            '--username',
+            user.username,
+            '--confirm',
+        )
+
+    assert 'do not charge again' in output

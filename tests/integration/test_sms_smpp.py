@@ -37,9 +37,10 @@ SMPP_SETTINGS = {
 
 
 class FakePdu:
-    def __init__(self, message_id=b'MSG-1', command='submit_sm_resp'):
+    def __init__(self, message_id=b'MSG-1', command='submit_sm_resp', sequence=1):
         self.message_id = message_id
         self.command = command
+        self.sequence = sequence
 
 
 class FakeSmppClient:
@@ -57,6 +58,12 @@ class FakeSmppClient:
         self.sent = []
         self.pdus_sent = []
         self.handler = None
+        self.sent_handler = None
+        self.error_handler = None
+        self.sequence = 0
+        # A real gateway answers submit_sm with a submit_sm_resp carrying the
+        # message id. Set False to simulate one that never replies.
+        self.respond = True
         # Failure switches.
         self.fail_connect = False
         self.fail_bind = False
@@ -77,11 +84,29 @@ class FakeSmppClient:
     def set_message_received_handler(self, handler):
         self.handler = handler
 
+    def set_message_sent_handler(self, handler):
+        self.sent_handler = handler
+
+    def set_error_pdu_handler(self, handler):
+        self.error_handler = handler
+
     def send_message(self, **kwargs):
         if self.submit_error is not None:
             raise self.submit_error
         self.sent.append(kwargs)
-        return FakePdu(message_id=f'MSG-{len(self.sent)}'.encode())
+        self.sequence += 1
+        request = FakePdu(message_id=b'', command='submit_sm', sequence=self.sequence)
+        if self.respond and self.sent_handler is not None:
+            # The response arrives asynchronously in reality; firing it inline
+            # is enough to exercise the correlation, and keeps tests fast.
+            self.sent_handler(
+                FakePdu(
+                    message_id=f'MSG-{self.sequence}'.encode(),
+                    command='submit_sm_resp',
+                    sequence=self.sequence,
+                )
+            )
+        return request
 
     def send_pdu(self, pdu):
         self.pdus_sent.append(pdu)
@@ -387,3 +412,98 @@ def test_an_unrecognised_stat_yields_no_status():
 
     assert receipt.stat == 'WEIRDNESS'
     assert receipt.status is None
+
+
+# ---------------------------------------------------------------------------
+# The submit_sm_resp correlation
+# ---------------------------------------------------------------------------
+
+
+def test_the_message_id_comes_from_the_response_not_the_request():
+    """
+    The bug this covers shipped and reached staging.
+
+    smpplib's send_message() returns the REQUEST pdu, whose message_id is
+    always empty -- the gateway's id arrives later on a submit_sm_resp. Reading
+    it off the return value silently produced '' for every message, which meant
+    no delivery receipt could ever be matched and nothing could reach
+    'delivered'. Real submissions logged `message_id=` before this was fixed.
+    """
+    client = make_client()
+
+    message_id = client.submit(destination='251912345678', text='hi')
+
+    request = FakeSmppClient.instances[0].sent
+    assert len(request) == 1
+    # The id is the one the response carried, not the request's empty field.
+    assert message_id == 'MSG-1'
+    assert message_id != ''
+    client.close()
+
+
+def test_a_gateway_that_never_responds_is_uncertain(monkeypatch):
+    """
+    No submit_sm_resp is the ambiguous case, not a failure.
+
+    The gateway may have taken the message and lost the reply, so this must
+    not be reported as something a retry can safely repeat.
+    """
+    import api.integrations.smpp.client as client_module
+
+    monkeypatch.setattr(client_module, 'SUBMIT_TIMEOUT_SECONDS', 0.2)
+
+    client = make_client()
+    client.connect()
+    FakeSmppClient.instances[0].respond = False
+
+    with pytest.raises(SmppSubmitUncertain):
+        client.submit(destination='251912345678', text='hi')
+
+
+def test_an_error_response_is_a_rejection():
+    """A non-zero command_status is definite -- the gateway said no."""
+    client = make_client()
+    client.connect()
+    fake = FakeSmppClient.instances[0]
+    fake.respond = False
+
+    original = fake.send_message
+
+    def send_then_error(**kwargs):
+        pdu = original(**kwargs)
+        fake.error_handler(FakePdu(command='submit_sm_resp', sequence=pdu.sequence))
+        return pdu
+
+    fake.send_message = send_then_error
+
+    with pytest.raises(SmppSubmitRejected):
+        client.submit(destination='251912345678', text='hi')
+
+
+def test_waiting_for_a_response_does_not_deadlock_the_reader():
+    """
+    The wait happens outside the connection lock, deliberately.
+
+    The reader thread needs that lock for its keepalive; holding it while
+    waiting for a response the reader itself must deliver would hang every
+    send until the timeout.
+    """
+    client = make_client()
+    client.connect()
+
+    # The reader thread is running; a submit must still complete promptly.
+    message_id = client.submit(destination='251912345678', text='hi')
+
+    assert message_id == 'MSG-1'
+    client.close()
+
+
+def test_pending_responses_do_not_leak():
+    """Each sequence is cleaned up, or a long-lived worker grows for ever."""
+    client = make_client()
+
+    for _ in range(5):
+        client.submit(destination='251912345678', text='hi')
+
+    assert client._pending == {}
+    client.close()

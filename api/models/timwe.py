@@ -132,15 +132,48 @@ class TimweChargeTransaction(models.Model):
         related_name='timwe_charge_transactions',
     )
 
+    #: The caller's name for this purchase. Unique, so a double tap, a client
+    #: retry or a duplicated request finds the existing charge instead of
+    #: starting a second one -- the difference between a subscriber being
+    #: billed once and twice. Nullable only so rows written before this field
+    #: existed remain valid; every charge made through
+    #: api/services/timwe_charging.py sets it.
+    idempotency_key = models.CharField(max_length=255, unique=True, null=True, blank=True)
+
+    coin_package = models.ForeignKey(
+        'api.CoinPackage',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='timwe_charge_transactions',
+        help_text='What the charge paid for, when it was a coin purchase',
+    )
+
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='pending')
+
+    #: Finer than ``status``, which folds two very different failures into
+    #: 'failed'. ``rejected`` means the MA answered with a Fault; ``unreachable``
+    #: means nothing was ever sent. Both are definite non-charges, but they are
+    #: diagnosed completely differently -- one is a TIMWE conversation, the
+    #: other a network one.
+    outcome = models.CharField(max_length=16, blank=True)
+
     error_code = models.CharField(
         max_length=16, blank=True, help_text='SVC/POL code returned by the MA'
     )
     error_message = models.TextField(blank=True)
     retryable = models.BooleanField(default=False)
+    http_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    #: When whatever the charge paid for was delivered -- coins credited, for a
+    #: coin purchase. Set in the same database transaction as the credit, and
+    #: claimed with a conditional UPDATE, so a successful charge is fulfilled
+    #: exactly once however many times fulfilment is attempted.
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -153,3 +186,23 @@ class TimweChargeTransaction(models.Model):
 
     def __str__(self):
         return f'{self.reference_code} {self.amount} {self.currency} ({self.status})'
+
+    @property
+    def masked_msisdn(self) -> str:
+        """The number with its middle hidden, for logs and admin screens.
+
+        The full MSISDN is stored because reconciling with TIMWE needs it --
+        they key their records by subscriber. It just does not belong in a log
+        line that outlives the reason it was written.
+        """
+        number = self.msisdn or ''
+        if len(number) <= 6:
+            return number
+        return f'{number[:5]}****{number[-3:]}'
+
+    @property
+    def is_ambiguous(self) -> bool:
+        """The subscriber may have been charged, but the MA never confirmed."""
+        return self.status in ('timeout', 'unknown') or (
+            self.status == 'pending' and self.completed_at is None
+        )

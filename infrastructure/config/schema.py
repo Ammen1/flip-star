@@ -210,12 +210,36 @@ SCHEMA: tuple[Key, ...] = (
     _k('TELEBIRR_REDIRECT_URL', group='telebirr_h5'),
     # -- onevas ---------------------------------------------------------------
     _k('TIMWE_INTEGRATION_ENABLED', kind='bool', group='timwe'),
-    _k('TIMWE_CHARGE_URL', group='timwe'),
+    _k(
+        'TIMWE_CHARGE_URL',
+        group='timwe',
+        doc='chargeAmount endpoint, '
+        'http://IP:Port/AmountChargingService/services/AmountCharging. Supplied by '
+        'TIMWE. NOT the SMPP host -- do not reuse TIMWE_SMPP_HOST/PORT.',
+    ),
     _k('TIMWE_SP_ID', group='timwe'),
-    _k('TIMWE_SP_PASSWORD', group='timwe'),
+    _k(
+        'TIMWE_SP_PASSWORD',
+        group='timwe',
+        doc='chargeAmount account password, hashed into MD5(spId+Password+timeStamp) '
+        'per request. Secret. Confirm with TIMWE -- it need not equal the SMPP password.',
+    ),
     _k('TIMWE_SERVICE_ID', group='timwe'),
     _k('TIMWE_CURRENCY', group='timwe'),
-    _k('TIMWE_CHARGE_TIMEOUT', kind='int', group='timwe'),
+    _k(
+        'TIMWE_CHARGE_TIMEOUT',
+        kind='int',
+        group='timwe',
+        doc='chargeAmount read timeout in seconds. The guide says the MA answers '
+        'within 60s; giving up sooner turns a slow success into an ambiguous charge.',
+    ),
+    _k(
+        'TIMWE_AIRTIME_PURCHASE_ENABLED',
+        kind='bool',
+        group='timwe',
+        doc='Coin purchase via airtime through chargeAmount. Off by default: '
+        'enabling it reverses the "SIM cards are for OTP only" policy.',
+    ),
     _k('TIMWE_ALLOWED_IPS', kind='csv', group='timwe'),
     # -- timwe smpp -----------------------------------------------------------
     # Deliberately separate from TIMWE_SP_ID / TIMWE_SP_PASSWORD above. Those
