@@ -129,6 +129,14 @@ SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
 SECURE_REDIRECT_EXEMPT = [
     r'^api/webhooks/',
     r'^api/v1/webhooks/',
+    # TIMWE's Master Aggregator, for the same reason as Telebirr above. It
+    # POSTs syncOrderRelation in plain HTTP over the IPsec tunnel, and a 301
+    # to HTTPS would lose the body exactly as Telebirr's callbacks were lost:
+    # a subscriber charged by TIMWE whose subscription never activates here.
+    # The tunnel encrypts the transport, and the path is scoped to the one
+    # endpoint TIMWE calls. config/urls.py serves the API at both prefixes.
+    r'^api/timwe/',
+    r'^api/v1/timwe/',
 ]
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
