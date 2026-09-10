@@ -102,11 +102,6 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 15
             failureThreshold: 3
-          # SIGTERM reaches celery, which stops consuming and lets the current
-          # task finish; api/celery.py's worker_shutdown handler then unbinds
-          # the SMPP session so the gateway frees the slot immediately rather
-          # than waiting for it to time out.
-          terminationGracePeriodSeconds: 60
           resources:
             requests:
               cpu: 50m
@@ -119,3 +114,9 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+      # SIGTERM reaches celery, which stops consuming and lets the current
+      # task finish; api/celery.py's worker_shutdown handler then unbinds the
+      # SMPP session so the gateway frees the slot immediately rather than
+      # waiting for it to time out. A pod-level field: nested under the
+      # container it was silently dropped, and the worker got the default 30s.
+      terminationGracePeriodSeconds: 60

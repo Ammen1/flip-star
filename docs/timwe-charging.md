@@ -323,17 +323,54 @@ Every flag is required. The charge goes through the production service, so it
 is recorded, idempotent and masked in output. If it reports **AMBIGUOUS**, do
 not run it again — reconcile the printed `reference_code` with TIMWE.
 
-## Before going live
+## Deploying is not activating
 
-1. TIMWE confirms `TIMWE_CHARGE_URL`.
-2. TIMWE confirms the chargeAmount credentials — especially whether the
-   password is the SMPP one.
-3. `TIMWE_SERVICE_ID` confirmed.
-4. `TIMWE_CURRENCY` confirmed (and whether amounts are whole birr).
-5. `timwe_charge_check` passes from the backend pod.
-6. One confirmed 1-ETB charge to an approved test number, with the balance
-   observed to drop.
-7. The authentication mode TIMWE registered: the guide allows SP ID +
-   Password, SP ID + IP + Password, or SP ID + IP. If IP is part of it, the
-   egress address the MA sees must be registered with them.
-8. A product decision to set `TIMWE_AIRTIME_PURCHASE_ENABLED=true`.
+The code ships with every switch off, and nothing in the deployment turns one
+on (a test fails the build if a manifest or env file ever does). Deploying runs
+migration 0117 through the Argo CD Sync hook and changes no charging behaviour.
+
+What holds charging off, in code rather than by convention:
+
+| Guard | Where |
+|---|---|
+| `TIMWE_CHARGING_ENABLED` false → nothing is sent | `TimweChargeService.execute()` — the only function that sends a chargeAmount — and again in `request_charge`, before a row is written |
+| Renewal needs `TIMWE_SUBSCRIPTION_RENEWAL_ENABLED` as well | `subscription_renewal.renewal_enabled()` |
+| The guide's `http://IP:Port/...` template is refused | `TimweChargeService.endpoint_problem()`, checked by `ensure_configured()` |
+| The SMPP gateway (`TIMWE_SMPP_HOST:TIMWE_SMPP_PORT`) is refused as the charge URL | the same |
+| A charging password equal to the SMPP one is flagged for confirmation | `timwe_charge_check` |
+
+### Verify a deployment — sends nothing
+
+```
+kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py showmigrations api | tail -2
+kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py timwe_charge_check
+kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py timwe_charge_check --reconcile
+```
+
+Expect `[X] 0117_timwe_subscription_renewal` and all three switches `off`. The
+first check opens a TCP connection to `TIMWE_CHARGE_URL` if it is fully
+configured — no HTTP, no charge; `--reconcile` only reads.
+
+## Activation sequence
+
+In this order, and not because a deploy succeeded:
+
+1. Deploy; migration 0117 applied; switches verified **off**.
+2. TIMWE supplies the real `AmountChargingService` address → `TIMWE_CHARGE_URL`.
+3. TIMWE confirms the **charging** credentials — not assumed to be the SMPP ones.
+4. TIMWE confirms the authentication mode: SP ID + Password, SP ID + IP +
+   Password, or SP ID + IP. If IP is part of it, the egress address the MA sees
+   must be registered with them.
+5. `TIMWE_SERVICE_ID` and `TIMWE_CURRENCY` confirmed (and whether amounts are
+   whole birr). Every value into Vault with `vault kv patch`.
+6. `timwe_charge_check` passes from the backend pod.
+7. `TIMWE_CHARGING_ENABLED=true`, then one confirmed 1-ETB charge to an
+   approved test number (never a customer's), balance observed to drop, the
+   reference found in TIMWE's records.
+8. **Ask TIMWE: "Does the MA already renew and charge short-code
+   subscriptions?"** — and get the answer in writing.
+   * **Yes** → `TIMWE_SUBSCRIPTION_RENEWAL_ENABLED` stays **false**, for good.
+     Renewal is theirs; ours would be a second charge for the same period.
+   * **No, renewal is the SP's** → only then consider turning it on.
+9. Separately, a product decision on `TIMWE_AIRTIME_PURCHASE_ENABLED` (it
+   reverses the "SIM cards are for OTP only" policy).

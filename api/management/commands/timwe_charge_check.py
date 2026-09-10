@@ -142,6 +142,25 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f'  {exc}'))
             return False
 
+        ok = True
+        # Reported whatever else is missing: a placeholder or SMPP address is
+        # the mistake to catch before anyone sets the remaining values.
+        problem = TimweChargeService.endpoint_problem()
+        if problem:
+            self.stdout.write(self.style.ERROR(f'  {problem}'))
+            ok = False
+
+        # A warning, not a refusal: TIMWE may confirm the two are the same. The
+        # point is that nobody assumes it. Compared, never printed.
+        smpp_password = getattr(settings, 'TIMWE_SMPP_PASSWORD', '') or ''
+        if smpp_password and TimweChargeService.get_sp_account_password() == smpp_password:
+            self.stdout.write(
+                self.style.WARNING(
+                    '  TIMWE_SP_PASSWORD is the same as the SMPP password. Confirm with TIMWE '
+                    'that AmountCharging uses it -- they are separate credentials.'
+                )
+            )
+
         if missing:
             self.stdout.write(
                 self.style.ERROR(
@@ -149,8 +168,8 @@ class Command(BaseCommand):
                     'They are not the SMPP host or password.'
                 )
             )
-            return False
-        return True
+            ok = False
+        return ok
 
     def _check_request_builds(self):
         """Build a request without sending it, to prove the values agree."""
@@ -252,6 +271,12 @@ class Command(BaseCommand):
                 raise CommandError(f'--{flag} is required with --charge.')
         if not options['confirm']:
             raise CommandError('Refusing to charge without --confirm. This costs real money.')
+        if not TimweChargeService.charging_enabled():
+            raise CommandError(
+                'Not charged: TIMWE_CHARGING_ENABLED is off. Switch it on only once TIMWE has '
+                'confirmed the AmountCharging endpoint, the charging credentials and the '
+                'authentication mode.'
+            )
 
         user = User.objects.filter(username=options['username']).first()
         if user is None:

@@ -69,6 +69,10 @@ class TimweConfigurationError(TimweError):
     """Required TIMWE credentials or endpoints are absent."""
 
 
+class TimweChargingDisabled(TimweConfigurationError):
+    """TIMWE_CHARGING_ENABLED is false: no chargeAmount may be sent, whoever asks."""
+
+
 class TimweAmountError(TimweError):
     """
     An amount cannot be represented on the wire without losing money.

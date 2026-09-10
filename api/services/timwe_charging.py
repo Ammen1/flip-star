@@ -35,7 +35,6 @@ import logging
 import uuid
 from dataclasses import dataclass
 
-from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
@@ -51,7 +50,7 @@ from api.integrations.timwe.charge import (
 from api.integrations.timwe.errors import (
     CHARGE_AMOUNT_OUT_OF_RANGE,
     CHARGE_FAILED,
-    TimweConfigurationError,
+    TimweChargingDisabled,
     TimweError,
 )
 from api.models.timwe import TimweChargeTransaction
@@ -78,17 +77,16 @@ class ChargeRefused(TimweError):
     """The charge was not attempted: bad input, or a reused idempotency key."""
 
 
-class ChargingDisabled(TimweConfigurationError):
-    """TIMWE_CHARGING_ENABLED is false, so nothing may be sent.
-
-    A configuration error, so callers that already hide configuration details
-    from end users (the coin purchase view answers 503) treat it the same way.
-    """
+#: TIMWE_CHARGING_ENABLED is false, so nothing may be sent. A configuration
+#: error, so callers that already hide configuration details from end users
+#: (the coin purchase view answers 503) treat it the same way. Defined beside
+#: the client, which enforces the switch too; re-exported here for callers.
+ChargingDisabled = TimweChargingDisabled
 
 
 def charging_enabled() -> bool:
     """The master switch. No chargeAmount leaves the process while it is off."""
-    return bool(getattr(settings, 'TIMWE_CHARGING_ENABLED', False))
+    return TimweChargeService.charging_enabled()
 
 
 @dataclass(frozen=True)
@@ -245,6 +243,12 @@ def request_charge(
             description=text,
             reference_code=charge.reference_code,
             charge_code=charge_code or '',
+        )
+    except TimweChargingDisabled:
+        # The client refused before building a request -- the switch went off
+        # between the check above and here. Nothing was sent.
+        outcome = ChargeOutcome(
+            OUTCOME_UNREACHABLE, message='Charging was switched off; nothing was sent.'
         )
     except Exception:
         # Something of ours failed after the row was committed. What happened

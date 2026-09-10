@@ -22,8 +22,15 @@ Not the SMPP link
 -----------------
 This is a separate API on a separate endpoint with its own credentials. The
 SMPP gateway (TIMWE_SMPP_HOST/PORT) carries SMS; it is not where chargeAmount
-is sent, and nothing here reads the SMPP settings. TIMWE_CHARGE_URL must be
-supplied by TIMWE explicitly.
+is sent. The only SMPP settings read here are that host and port, and only to
+refuse a TIMWE_CHARGE_URL pointed at them. TIMWE_CHARGE_URL must be supplied
+by TIMWE explicitly -- the guide's ``http://IP:Port/...`` template is refused.
+
+The master switch
+-----------------
+While TIMWE_CHARGING_ENABLED is false, :meth:`TimweChargeService.execute`
+refuses before building a request. Every charge in the application goes through
+it, so the switch holds whoever the caller is.
 
 What this module is, and is not
 -------------------------------
@@ -47,6 +54,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import UTC
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 from xml.sax.saxutils import escape
 
 import requests
@@ -59,12 +67,18 @@ from api.integrations.timwe.errors import (
     CHARGE_PERMANENT,
     CHARGE_RETRYABLE,
     TimweAmountError,
+    TimweChargingDisabled,
     TimweConfigurationError,
     TimweError,
 )
 from common.validators.phone import normalize_ethiopian_phone
 
 logger = logging.getLogger(__name__)
+
+#: Pieces of the guide's ``http://IP:Port/AmountChargingService/...`` template.
+#: A TIMWE_CHARGE_URL containing one was copied from the documentation, not
+#: supplied by TIMWE.
+PLACEHOLDER_MARKERS = ('ip:port', '<ip>', '{ip}', '<port>', '{port}')
 
 #: Guide p.17: "The MA sends a response within 60 seconds by default." Our
 #: read deadline defaults to that, because giving up earlier would turn a slow
@@ -215,6 +229,50 @@ class TimweChargeService:
         return not cls.missing_configuration()
 
     @classmethod
+    def charging_enabled(cls) -> bool:
+        """The master switch. While it is off nothing is sent, whoever asks."""
+        return bool(getattr(settings, 'TIMWE_CHARGING_ENABLED', False))
+
+    @classmethod
+    def endpoint_problem(cls) -> str:
+        """Why TIMWE_CHARGE_URL cannot be the AmountCharging endpoint, or ''.
+
+        Refuses the two mistakes this integration has already come close to:
+        the guide's ``http://IP:Port/...`` template configured literally, and
+        the SMPP gateway's host and port reused for charging. The same host on
+        a different port is allowed -- TIMWE may well serve both from one box.
+        An unset URL is not a problem here; missing_configuration reports it.
+        """
+        url = cls.get_endpoint().strip()
+        if not url:
+            return ''
+        if any(marker in url.lower() for marker in PLACEHOLDER_MARKERS):
+            return (
+                'TIMWE_CHARGE_URL is still the documentation placeholder '
+                '(http://IP:Port/...). TIMWE must supply the real address.'
+            )
+        try:
+            parts = urlsplit(url)
+            port = parts.port
+        except ValueError:
+            return 'TIMWE_CHARGE_URL is not a valid URL.'
+        if parts.scheme not in ('http', 'https') or not parts.hostname:
+            return 'TIMWE_CHARGE_URL must be an http(s) URL with a host.'
+
+        effective_port = port or (443 if parts.scheme == 'https' else 80)
+        smpp_host = (getattr(settings, 'TIMWE_SMPP_HOST', '') or '').strip().lower()
+        try:
+            smpp_port = int(getattr(settings, 'TIMWE_SMPP_PORT', 0) or 0)
+        except (TypeError, ValueError):
+            smpp_port = 0
+        if smpp_host and parts.hostname.lower() == smpp_host and effective_port == smpp_port:
+            return (
+                'TIMWE_CHARGE_URL points at the SMPP gateway (TIMWE_SMPP_HOST:TIMWE_SMPP_PORT). '
+                'chargeAmount is a separate endpoint that TIMWE must supply.'
+            )
+        return ''
+
+    @classmethod
     def ensure_configured(cls) -> None:
         missing = cls.missing_configuration()
         if missing:
@@ -223,6 +281,9 @@ class TimweChargeService:
                 'TIMWE_CHARGE_URL and the charging credentials must be supplied by '
                 'TIMWE -- they are not the SMPP settings.'
             )
+        problem = cls.endpoint_problem()
+        if problem:
+            raise TimweConfigurationError(problem)
         # Also validates the timeout, so a bad value fails here rather than
         # on the first real charge.
         cls.get_timeout()
@@ -522,7 +583,16 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
         Does not retry. Whether a charge may be attempted again depends on
         whether the last attempt was ambiguous, and that is a decision for the
         caller that owns the transaction record.
+
+        Refuses with TimweChargingDisabled while TIMWE_CHARGING_ENABLED is
+        off. This is the last line of the master switch: every chargeAmount in
+        the application is sent from here.
         """
+        if not cls.charging_enabled():
+            raise TimweChargingDisabled(
+                'TIMWE charging is switched off (TIMWE_CHARGING_ENABLED is false). '
+                'Nothing was sent.'
+            )
         envelope = cls.build_soap_request(
             msisdn=msisdn,
             amount=amount,
@@ -610,30 +680,9 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
             duration_ms=elapsed(),
         )
 
-    @classmethod
-    def charge(
-        cls,
-        *,
-        msisdn: str,
-        amount: Decimal | int | str,
-        description: str,
-        reference_code: str,
-        charge_code: str = '',
-    ) -> tuple[bool, str | None, str]:
-        """``execute()`` reduced to ``(success, error_code, message)``.
-
-        Kept for compatibility. It records nothing and protects against
-        nothing, so application code should go through
-        api/services/timwe_charging.py instead.
-        """
-        outcome = cls.execute(
-            msisdn=msisdn,
-            amount=amount,
-            description=description,
-            reference_code=reference_code,
-            charge_code=charge_code,
-        )
-        return outcome.success, outcome.error_code, outcome.message
+    # There used to be a ``charge()`` here: execute() reduced to a tuple, with
+    # no record and no idempotency. Nothing called it, and a way to charge that
+    # skips the transaction ledger is not one to leave lying around.
 
     @classmethod
     def is_retryable(cls, error_code: str | None) -> bool:
