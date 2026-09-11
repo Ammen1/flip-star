@@ -3674,137 +3674,67 @@ def admin_reports_stats(request):
     )
 
 
+# Deepest page the explorer feed serves; see get_trending_reels.
+TRENDING_MAX_OFFSET = 1000
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @encrypted_endpoint
 def get_trending_reels(request):
-    """Trending reels with category filtering, cheap enough for the Explore
-    page to hit on every category/time-range change.
+    """Trending posts for the Explore page, filtered by category and time.
 
-    Performance notes:
-    - Removed two debug `.count()` calls that were issuing a full extra
-      query each (3 round-trips per Explore load just for logging).
-    - Single annotated SELECT with `select_related('user__profile')` and
-      Exists()-based is_liked / is_saved / comment_count / votes_count so
-      the serializer never falls into per-row fallbacks.
-    - Cap `limit` to 50 so a misbehaving client can't ask for thousands.
+    Query parameters, all optional:
+      category    all | trending | <category id> | <category slug>
+      time_range  24h | 7d (default) | 30d
+      limit       page size, 1-50 (default 20)
+      offset      rows to skip, for infinite scroll (default 0)
+
+    Two defects here both looked like "the category filter does nothing":
+      - an unknown slug skipped the filter and returned every post;
+      - offset was never read, so every scroll request returned page one
+        again, and the client -- de-duplicating by id -- appended nothing.
+    An unknown category is now a 400 (api/services/feed_filters.py), and pages
+    are slices of one deterministic order, so page two continues page one
+    within the same category and window.
+
+    A failure is a 500, not an empty 200: an empty list rendered as "nothing
+    here yet", indistinguishable from a category that has no posts.
+
+    Performance: one annotated SELECT -- select_related plus Exists-based
+    is_liked / is_saved and DB-side counts -- so the serializer never falls into
+    per-row queries; Reel's (category, -created_at) index serves the filter.
     """
+    import logging
+
+    from api.models.boost import BoostCampaign
+    from api.serializers.core import build_feed_context
+    from api.services.feed_filters import (
+        InvalidCategory,
+        bounded_int,
+        invalid_category_response,
+        resolve_category,
+        window_start,
+    )
+
     try:
-        from datetime import timedelta
+        category = resolve_category(request.GET.get('category'))
+    except InvalidCategory as exc:
+        return invalid_category_response(exc.value)
 
-        from django.db.models import Count, Q
+    limit = bounded_int(request.GET.get('limit'), default=20, low=1, high=50)
+    offset = bounded_int(request.GET.get('offset'), default=0, low=0, high=TRENDING_MAX_OFFSET + 1)
+    if offset > TRENDING_MAX_OFFSET:
+        # A deep offset makes the database walk every earlier row. Nobody
+        # scrolls a thousand trending posts, so the feed ends there.
+        return Response([])
 
-        category = request.GET.get('category', 'all')
-        time_range = request.GET.get('time_range', '7d')
-        try:
-            limit = int(request.GET.get('limit', 20))
-        except (TypeError, ValueError):
-            limit = 20
-        limit = max(1, min(limit, 50))
-
-        now = timezone.now()
-        if time_range == '24h':
-            time_threshold = now - timedelta(hours=24)
-        elif time_range == '30d':
-            time_threshold = now - timedelta(days=30)
-        elif time_range == '7d':
-            time_threshold = now - timedelta(days=7)
-        else:
-            time_threshold = now - timedelta(days=365)
-
-        queryset = Reel.objects.filter(created_at__gte=time_threshold)
-
-        if category != 'all':
-            # Use category field instead of keyword matching for better performance and accuracy
-            from api.models import Category
-
-            try:
-                category_obj = Category.objects.filter(slug=category, is_active=True).first()
-                if category_obj:
-                    queryset = queryset.filter(category=category_obj)
-            except Exception as e:
-                print(f'[TRENDING] Error filtering by category: {e}')
-                # Fallback to keyword matching if category field fails
-                category_hashtags = {
-                    'dance': ['dance', 'dancing', 'dancer', 'choreography', 'ballet', 'hiphop'],
-                    'comedy': ['funny', 'comedy', 'humor', 'laugh', 'meme', 'joke', 'hilarious'],
-                    'beauty': ['beauty', 'makeup', 'skincare', 'glow', 'cosmetics'],
-                    'sports': [
-                        'sports',
-                        'fitness',
-                        'workout',
-                        'gym',
-                        'athlete',
-                        'football',
-                        'basketball',
-                        'soccer',
-                    ],
-                    'food': [
-                        'food',
-                        'cooking',
-                        'recipe',
-                        'foodie',
-                        'chef',
-                        'delicious',
-                        'yummy',
-                        'eat',
-                    ],
-                    'travel': [
-                        'travel',
-                        'adventure',
-                        'explore',
-                        'wanderlust',
-                        'vacation',
-                        'trip',
-                        'tourist',
-                    ],
-                    'music': ['music', 'singing', 'song', 'cover', 'musician', 'singer', 'band'],
-                    'art': [
-                        'art',
-                        'artist',
-                        'drawing',
-                        'painting',
-                        'creative',
-                        'artwork',
-                        'sketch',
-                    ],
-                    'gaming': [
-                        'gaming',
-                        'gamer',
-                        'game',
-                        'videogame',
-                        'esports',
-                        'playstation',
-                        'xbox',
-                        'pc',
-                    ],
-                    'fashion': [
-                        'fashion',
-                        'style',
-                        'outfit',
-                        'ootd',
-                        'clothes',
-                        'dress',
-                        'streetwear',
-                    ],
-                    'education': [
-                        'education',
-                        'learn',
-                        'learning',
-                        'tutorial',
-                        'howto',
-                        'tips',
-                        'knowledge',
-                        'study',
-                    ],
-                }
-                tags = category_hashtags.get(category)
-                if tags:
-                    hashtag_filter = Q()
-                    for tag in tags:
-                        hashtag_filter |= Q(hashtags__icontains=tag)
-                        hashtag_filter |= Q(caption__icontains=f'#{tag}')
-                    queryset = queryset.filter(hashtag_filter)
+    try:
+        queryset = Reel.objects.filter(
+            created_at__gte=window_start(request.GET.get('time_range', '7d'), timezone.now())
+        )
+        if category is not None:
+            queryset = queryset.filter(category=category)
 
         # An active boost lifts a post in Trending.
         #
@@ -3817,8 +3747,6 @@ def get_trending_reels(request):
         # restating it -- status, an end time in the future, and budget left --
         # so "boosted" cannot come to mean two different things depending on
         # which code path asks.
-        from api.models.boost import BoostCampaign
-
         active_boost = BoostCampaign.objects.filter(
             reel=OuterRef('pk'),
             status='active',
@@ -3840,21 +3768,21 @@ def get_trending_reels(request):
             )
         # Boosted first, then the existing order untouched. Ranking within each
         # group is unchanged, so an unboosted feed looks exactly as it did.
-        queryset = queryset.order_by('-has_active_boost', '-votes', '-created_at')[:limit]
-
-        from api.serializers.core import build_feed_context
+        # `-id` comes last so rows that tie on everything else still have one
+        # fixed order; without it, offset pages can repeat or skip posts that
+        # share a vote count and a timestamp.
+        queryset = queryset.order_by('-has_active_boost', '-votes', '-created_at', '-id')[
+            offset : offset + limit
+        ]
 
         serializer = ReelSerializer(queryset, many=True, context=build_feed_context(request))
         return Response(serializer.data)
-
-    except Exception as e:
-        print(f'[TRENDING] Error: {str(e)}')
-        import traceback
-
-        traceback.print_exc()
-
-        # Return empty result as fallback
-        return Response([], status=status.HTTP_200_OK)
+    except Exception:
+        logging.getLogger(__name__).exception('[TRENDING] explorer trending failed')
+        return Response(
+            {'error': 'Could not load trending posts.', 'code': 'trending_failed'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 @api_view(['GET'])

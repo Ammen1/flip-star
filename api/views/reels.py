@@ -1,5 +1,4 @@
 from django.db.models import Count, Exists, OuterRef, Prefetch
-from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -110,24 +109,23 @@ def reels_trending(request):
         .order_by('-has_active_boost', '-engagement', '-created_at')
     )
 
-    # Optional ?category=<slug>. Absent or "all" leaves the feed untouched, so
-    # existing callers keep their current behaviour. An unknown slug returns
-    # 400 rather than silently serving an unfiltered feed, which would look
-    # like the filter was applied and simply matched everything.
-    category_slug = (request.GET.get('category') or '').strip()
-    if category_slug and category_slug != 'all':
-        from api.models import Category
+    # Optional ?category=<id or slug>. Absent or "all" leaves the feed
+    # untouched, so existing callers keep their current behaviour. An unknown
+    # category returns 400 rather than silently serving an unfiltered feed,
+    # which would look like the filter was applied and simply matched
+    # everything. Resolved by the same helper as /explorer/trending/, so the
+    # two endpoints cannot disagree about what a category value means.
+    from api.services.feed_filters import (
+        InvalidCategory,
+        invalid_category_response,
+        resolve_category,
+    )
 
-        category = Category.objects.filter(slug=category_slug, is_active=True).first()
-        if category is None:
-            return Response(
-                {
-                    'error': 'Unknown or inactive category.',
-                    'code': 'invalid_category',
-                    'category': category_slug,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    try:
+        category = resolve_category(request.GET.get('category'))
+    except InvalidCategory as exc:
+        return invalid_category_response(exc.value)
+    if category is not None:
         reels = reels.filter(category=category)
 
     if request.user.is_authenticated:
