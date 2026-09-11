@@ -311,6 +311,42 @@ class Draft(models.Model):
         return f'Draft by {self.user.username} - {self.created_at}'
 
 
+class MediaStatus(models.TextChoices):
+    """Where a post's media is in the pipeline.
+
+    UPLOADING   reserved for direct-to-storage uploads, where the row exists
+                before the bytes do. The multipart endpoints store the file
+                before creating the row, so they never persist it.
+    PROCESSING  the original is stored; the worker has not finished.
+    READY       processed media exists and is what the API serves.
+    FAILED      processing gave up; `processing_error` says why, as a code.
+
+    READY is the default because every row that predates this field was
+    published as-is, and must keep being served exactly as it was.
+    """
+
+    UPLOADING = 'UPLOADING', 'Uploading'
+    PROCESSING = 'PROCESSING', 'Processing'
+    READY = 'READY', 'Ready'
+    FAILED = 'FAILED', 'Failed'
+
+
+class ReelQuerySet(models.QuerySet):
+    def ready(self):
+        """Posts whose media has finished processing -- all anyone else may see."""
+        return self.filter(processing_status=MediaStatus.READY)
+
+    def visible_to(self, user):
+        """Ready posts, plus the viewer's own posts in any state.
+
+        A post that is still processing, or failed, has no media to serve yet;
+        it belongs in its author's profile with a status, not in anyone's feed.
+        """
+        if user is not None and getattr(user, 'is_authenticated', False):
+            return self.filter(models.Q(processing_status=MediaStatus.READY) | models.Q(user=user))
+        return self.ready()
+
+
 class Reel(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reels')
     image = models.ImageField(upload_to='reels/', null=True, blank=True)
@@ -381,6 +417,45 @@ class Reel(models.Model):
     # distinguishable from one still in the queue -- both have processed=False.
     processing_failed = models.BooleanField(default=False)
 
+    # Pipeline state. `processed` and `processing_failed` above are kept in
+    # step for clients that read them; this is the one field that says
+    # whether the media may be served. See MediaStatus.
+    processing_status = models.CharField(
+        max_length=12, choices=MediaStatus.choices, default=MediaStatus.READY
+    )
+    # A short code, never an exception message: it reaches the API.
+    processing_error = models.CharField(max_length=40, blank=True, default='')
+    # The task that currently holds the post. A retry of the same task keeps
+    # its hold; a second task for the same post finds it taken and stops.
+    processing_task_id = models.CharField(max_length=64, blank=True, default='')
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    # Bumped by every successful processing run and part of every output key,
+    # so re-processing writes new objects instead of overwriting ones that
+    # clients and caches already hold under a year-long Cache-Control.
+    media_version = models.PositiveIntegerField(default=0)
+    source_size = models.PositiveBigIntegerField(null=True, blank=True)
+    processed_size = models.PositiveBigIntegerField(null=True, blank=True)
+    # When the original was removed under MEDIA_SOURCE_RETENTION_DAYS. After
+    # this the post cannot be re-processed.
+    source_deleted_at = models.DateTimeField(null=True, blank=True)
+
+    # WebP renditions of the image and its width variants. The JPEG fields
+    # stay: they are the fallback for clients that cannot decode WebP.
+    image_webp = models.CharField(max_length=500, blank=True, default='')
+    image_small_webp = models.CharField(max_length=500, blank=True, default='')
+    image_medium_webp = models.CharField(max_length=500, blank=True, default='')
+
+    # Coins charged for a video over 60 seconds. Charged by the worker once
+    # the real duration is known, and recorded here so a retry cannot charge
+    # twice.
+    long_video_charged = models.PositiveIntegerField(default=0)
+
+    # The client's id for this submission (Idempotency-Key header). A retry
+    # after a timeout, or a second tap on Post, sends the same id and gets the
+    # same post back instead of a duplicate. Unique per user when set.
+    client_upload_id = models.CharField(max_length=64, blank=True, default='')
+
     # Boost functionality
     is_boosted = models.BooleanField(
         default=False, help_text='Whether this post is currently boosted'
@@ -407,6 +482,8 @@ class Reel(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = ReelQuerySet.as_manager()
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
@@ -418,6 +495,16 @@ class Reel(models.Model):
             # Explore filters by category and orders by recency, so the pair
             # has to be one index -- category alone still leaves a sort.
             models.Index(fields=['category', '-created_at']),
+            # Feeds serve READY posts newest first; the worker's re-drive and
+            # the retention sweep look up the other states.
+            models.Index(fields=['processing_status', '-created_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'client_upload_id'],
+                condition=~models.Q(client_upload_id=''),
+                name='reel_one_post_per_client_upload',
+            ),
         ]
 
     def __str__(self):

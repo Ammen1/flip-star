@@ -132,6 +132,19 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.expire_boost_campaigns',
         'schedule': 300.0,
     },
+    # A post is queued for processing after its transaction commits. If the
+    # broker was unreachable at that moment, or a worker died holding the
+    # post, nothing else would ever pick it up; this finds and re-queues both.
+    'redrive-stuck-media': {
+        'task': 'api.tasks.redrive_stuck_media',
+        'schedule': 600.0,
+    },
+    # Originals past MEDIA_SOURCE_RETENTION_DAYS. A no-op while that is 0,
+    # which is the default: originals are kept until someone decides otherwise.
+    'purge-processed-sources': {
+        'task': 'api.tasks.purge_processed_sources',
+        'schedule': 86400.0,
+    },
 }
 
 # Auto-discover tasks in all registered apps

@@ -391,6 +391,36 @@ SCHEMA: tuple[Key, ...] = (
         'deployment uses S3-compatible credentials above).',
     ),
     _k('MINIO_ROOT_PASSWORD', group='storage'),
+    # -- media pipeline (api/services/media_pipeline.py, api/tasks/media.py) --
+    _k(
+        'MEDIA_MAX_UPLOAD_BYTES',
+        kind='int',
+        group='storage',
+        doc='Largest photo or video a post may upload. Default 52428800 (50 MB), '
+        'matching DATA_UPLOAD_MAX_MEMORY_SIZE and the web client.',
+    ),
+    _k(
+        'MEDIA_MAX_VIDEO_SECONDS',
+        kind='int',
+        group='storage',
+        doc='Longest video the worker accepts. Default 92: the recorder stops '
+        'at 90 and a recording runs a little over.',
+    ),
+    _k(
+        'MEDIA_MAX_IMAGE_PIXELS',
+        kind='int',
+        group='storage',
+        doc='Largest photo, in pixels (width x height), accepted at upload. '
+        'Default 40000000. Guards the workers against decompression bombs.',
+    ),
+    _k(
+        'MEDIA_SOURCE_RETENTION_DAYS',
+        kind='int',
+        group='storage',
+        doc='Days an original upload is kept after its post is processed. '
+        '0 (default) keeps originals indefinitely. Originals are needed to '
+        're-process a post; nothing is deleted before processing succeeds.',
+    ),
 )
 
 BY_NAME: dict[str, Key] = {k.name: k for k in SCHEMA}

@@ -259,11 +259,23 @@ AWS_S3_OBJECT_PARAMETERS = _storage['object_parameters']
 mimetypes.add_type('video/mp4', '.mp4', True)
 mimetypes.add_type('video/webm', '.webm', True)
 mimetypes.add_type('video/ogg', '.ogv', True)
+# Processed stills are also written as WebP; older mimetypes tables lack it,
+# and an object stored without its type is served as application/octet-stream.
+mimetypes.add_type('image/webp', '.webp', True)
 
 STREAMING_CONTENT_LENGTH = 4096
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
+
+# Media pipeline: api/services/media_pipeline.py (upload intake) and
+# api/tasks/media.py (processing). Documented in infrastructure/config/schema.py.
+MEDIA_MAX_UPLOAD_BYTES = config('MEDIA_MAX_UPLOAD_BYTES', default=50 * 1024 * 1024, cast=int)
+MEDIA_MAX_VIDEO_SECONDS = config('MEDIA_MAX_VIDEO_SECONDS', default=92, cast=int)
+MEDIA_MAX_IMAGE_PIXELS = config('MEDIA_MAX_IMAGE_PIXELS', default=40_000_000, cast=int)
+# 0 keeps originals indefinitely -- the current behaviour, and the safe default
+# until someone decides re-processing from source is no longer needed.
+MEDIA_SOURCE_RETENTION_DAYS = config('MEDIA_SOURCE_RETENTION_DAYS', default=0, cast=int)
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +345,9 @@ CORS_ALLOW_HEADERS = [
     'x-forwarded-host',
     'x-forwarded-proto',
     'x-client-public-key',
+    # Lets a retried upload find the post it already created (see
+    # api/services/media_pipeline.py:read_client_upload_id).
+    'idempotency-key',
 ]
 CORS_EXPOSE_HEADERS = ['content-type', 'x-csrftoken']
 

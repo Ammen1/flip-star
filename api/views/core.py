@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, Value
 from django.db.models.functions import Greatest
+from django.http import Http404
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
@@ -1425,229 +1426,292 @@ def forgot_password_phone_verify(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_post(request):
-    import traceback as _tb
+    """Publish a photo or video post: the endpoint web and mobile upload to.
+
+    The request stores the original and records the post; it does not process
+    it. No FFmpeg runs here any more -- no duration probe, no frame grab --
+    so the answer comes as soon as the bytes are safely in object storage.
+    The post is returned as PROCESSING, the worker produces the video ladder
+    or optimised images, and the post becomes READY (and appears in feeds)
+    when that is done. See api/services/media_pipeline.py.
+
+    Retry-safe: send an Idempotency-Key header (or a client_upload_id field)
+    and a repeated submission -- a timeout followed by a retry, a double tap
+    on Post -- returns the post it already created, 200 instead of 201, with
+    no second charge.
+    """
+    return _create_post_from_upload(request, request.FILES.get('file'))
+
+
+class _PostNeedsCoins(Exception):
+    def __init__(self, message, available):
+        super().__init__(message)
+        self.available = available
+
+
+def _post_payload(reel, request):
+    return ReelSerializer(reel, context={'request': request, 'followed_user_ids': set()}).data
+
+
+def _reset_media(reel, source, intake):
+    """Point a post at a new original and forget everything derived from the
+    old one, so nothing of the replaced media is served. Not saved here."""
+    from api.models import MediaStatus
+    from api.services.media_pipeline import VIDEO
+
+    is_video = intake.kind == VIDEO
+    reel.media = source if is_video else None
+    reel.image = None if is_video else source
+    reel.original_media = source if is_video else ''
+    reel.original_image = '' if is_video else source
+    for field in (
+        'media_360',
+        'media_480',
+        'image_small',
+        'image_medium',
+        'image_webp',
+        'image_small_webp',
+        'image_medium_webp',
+        'blurhash',
+    ):
+        setattr(reel, field, '')
+    reel.thumbnail = None
+    reel.duration = None
+    reel.source_size = intake.size
+    reel.processed_size = None
+    reel.source_deleted_at = None
+    reel.processing_status = MediaStatus.PROCESSING
+    reel.processing_error = ''
+    reel.processing_failed = False
+    reel.processed = False
+    reel.processed_at = None
+    reel.processing_task_id = ''
+    reel.processing_started_at = None
+    # Skip a version: a run of the old media still in flight (a forced
+    # re-process) writes where the new media never will, and is discarded.
+    reel.media_version += 1
+
+
+def _remove_replaced_media(reel_id, source_keys):
+    """After the replacement commits, remove the replaced original: nothing
+    refers to it and nothing will ever process it again. The replaced media's
+    processed files stay until the new media is READY -- the worker removes
+    every earlier version then -- so they are never gone before their
+    replacement exists."""
+    from django.db import transaction
+
+    if not source_keys:
+        return
+
+    def _send():
+        from api.tasks.media import delete_post_media
+
+        delete_post_media.delay(reel_id, source_keys, [])
+
+    transaction.on_commit(_send, robust=True)
+
+
+def _video_subscription_refusal(user):
+    """The 403 for a video from someone without a subscription, or None.
+
+    Posting a video is subscriber-only. The client checks too, but that check
+    is a courtesy: the status can lapse between opening the page and pressing
+    Publish, and the endpoint is reachable directly.
+
+    403 with a machine-readable `code` rather than a generic error, so the
+    client can tell this apart from a real failure and keep the user's video
+    and caption instead of discarding the draft.
+
+    A short-code subscriber whose period has just run out is renewed here
+    rather than turned away: the backend charges TIMWE once for the next
+    period (when renewal is switched on) and the post goes through on a
+    confirmed charge. See api/services/subscription_renewal.py.
+    """
+    if has_active_subscription(user):
+        return None
+    from api.services.subscription_renewal import (
+        PAYMENT_PENDING,
+        check_and_renew_subscription,
+    )
+
+    renewal = check_and_renew_subscription(user)
+    if renewal.has_subscription:
+        return None
+    if renewal.state == PAYMENT_PENDING:
+        return Response(
+            payment_pending_payload(
+                'Your subscription renewal payment is being confirmed. Please try again shortly.'
+            ),
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return Response(subscription_required_payload(), status=status.HTTP_403_FORBIDDEN)
+
+
+def _create_post_from_upload(request, upload_file, overlay_text=None):
+    """Everything /posts/create/ and POST /reels/ share, so the rules for
+    publishing -- subscription, price, category, validation -- cannot depend
+    on which endpoint a client happens to call."""
+    import logging
+
+    from django.db import IntegrityError, transaction
+
+    from api.models import MediaStatus
+    from api.models.contest import UserCoinBalance
+    from api.models.wallet import WalletConfig
+    from api.services.feed_filters import (
+        InvalidCategory,
+        invalid_category_response,
+        resolve_category,
+    )
+    from api.services.media_pipeline import (
+        VIDEO,
+        MediaRejected,
+        StorageUnavailable,
+        discard_source,
+        existing_post,
+        queue_processing,
+        read_client_upload_id,
+        store_source,
+        validate_upload,
+    )
+
+    log = logging.getLogger(__name__)
+    user = request.user
 
     try:
-        caption = request.data.get('caption', '')
-        hashtags = request.data.get('hashtags', '')
-        file = request.FILES.get('file')
-        campaign_id = request.data.get('campaign_id')
+        client_upload_id = read_client_upload_id(request)
+        already = existing_post(user, client_upload_id)
+        if already is not None:
+            return Response(_post_payload(already, request), status=status.HTTP_200_OK)
+        intake = validate_upload(upload_file)
+    except MediaRejected as exc:
+        return exc.response()
 
-        if not file:
-            return Response({'error': 'File is required'}, status=status.HTTP_400_BAD_REQUEST)
+    is_video = intake.kind == VIDEO
+    caption = request.data.get('caption', '')
+    hashtags = request.data.get('hashtags', '')
 
-        print(
-            f'[CREATE_POST] user={request.user.username} file={file.name} size={file.size} type={file.content_type}'
-        )
+    # The category the person picked. It used to be dropped here, so every
+    # post from web and mobile was uncategorised and never appeared under an
+    # Explore category. Resolved exactly as Explore filters (an id, or a slug
+    # for older clients); unknown or inactive is a 400, never silently none.
+    raw_category = request.data.get('category')
+    if str(raw_category or '').strip().lower() in ('null', 'undefined', 'none'):
+        raw_category = None
+    try:
+        category = resolve_category(raw_category)
+    except InvalidCategory as exc:
+        return invalid_category_response(exc.value)
 
-        if file.size == 0:
-            return Response(
-                {
-                    'error': 'Uploaded file is empty (0 bytes). The recording may have failed — please try again.'
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+    if is_video:
+        refusal = _video_subscription_refusal(user)
+        if refusal is not None:
+            return refusal
 
-        is_video = file.content_type.startswith('video/') or file.name.lower().endswith(
-            ('.mp4', '.webm', '.mov', '.avi', '.mkv')
-        )
+    campaign = None
+    is_campaign_post = False
+    campaign_id = request.data.get('campaign_id')
+    if campaign_id:
+        from api.models.campaign import Campaign
 
-        # Posting a video is subscriber-only. The client checks too, but that
-        # check is a courtesy: the status can lapse between opening the page
-        # and pressing Publish, and the endpoint is reachable directly.
-        #
-        # 403 with a machine-readable `code` rather than a generic error, so
-        # the client can tell this apart from a real failure and keep the
-        # user's video and caption instead of discarding the draft.
-        #
-        # A short-code subscriber whose period has just run out is renewed here
-        # rather than turned away: the backend charges TIMWE once for the next
-        # period (when renewal is switched on) and the post goes through on a
-        # confirmed charge. See api/services/subscription_renewal.py.
-        if is_video and not has_active_subscription(request.user):
-            from api.services.subscription_renewal import (
-                PAYMENT_PENDING,
-                check_and_renew_subscription,
-            )
+        campaign = Campaign.objects.filter(id=campaign_id).first()
+        is_campaign_post = campaign is not None
 
-            renewal = check_and_renew_subscription(request.user)
-            if not renewal.has_subscription:
-                if renewal.state == PAYMENT_PENDING:
-                    return Response(
-                        payment_pending_payload(
-                            'Your subscription renewal payment is being confirmed. '
-                            'Please try again shortly.'
-                        ),
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-                return Response(
-                    subscription_required_payload(),
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+    # The price of posting. The long-video surcharge is charged by the worker
+    # once it has measured the video (api/tasks/media.py _charge_long_video):
+    # deciding it here meant running ffprobe inside the request.
+    config = WalletConfig.get_config()
+    cost = config.cost_post_create if is_campaign_post else config.cost_post_create_non_campaign
 
-        # Determine if campaign post
-        campaign = None
-        is_campaign_post = False
-        if campaign_id:
-            from api.models.campaign import Campaign
-
-            try:
-                campaign = Campaign.objects.get(id=campaign_id)
-                is_campaign_post = True
-                print(f'[CREATE_POST] Campaign found: {campaign.id} - {campaign.title}')
-            except Campaign.DoesNotExist:
-                print(f'[CREATE_POST] Campaign not found for ID: {campaign_id}')
-
-        # Charge coin cost based on post type
-        from api.models.contest import UserCoinBalance
-        from api.models.wallet import WalletConfig
-
-        config = WalletConfig.get_config()
-        if is_campaign_post:
-            cost = config.cost_post_create
-        else:
-            cost = config.cost_post_create_non_campaign
-
-        # Check video duration for long video surcharge
-        video_duration = None
-        if is_video:
-            # Get video duration using ffmpeg
-            import os
-            import tempfile
-
-            try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-                    for chunk in file.chunks():
-                        temp_video.write(chunk)
-                    temp_video_path = temp_video.name
-
-                import ffmpeg
-
-                probe = ffmpeg.probe(temp_video_path)
-                video_duration = float(probe['streams'][0]['duration'])
-                print(f'[CREATE_POST] Video duration: {video_duration} seconds')
-
-                os.unlink(temp_video_path)
-            except Exception as e:
-                print(f'[CREATE_POST] Failed to get video duration: {e}')
-
-        # Add long video surcharge if duration > 60 seconds
-        if video_duration and video_duration > 60:
-            if is_campaign_post:
-                long_video_cost = config.cost_post_create_long_video
-            else:
-                long_video_cost = config.cost_post_create_long_video_non_campaign
-            if long_video_cost and long_video_cost > 0:
-                cost += long_video_cost
-                print(
-                    f'[CREATE_POST] Long video surcharge added: {long_video_cost}, total cost: {cost}'
-                )
-
-        if cost and cost > 0:
-            balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-            try:
-                balance.spend_coins(
-                    cost,
-                    'post_create' if not is_campaign_post else 'campaign_post_create',
-                    description=f'Create {"campaign" if is_campaign_post else "non-campaign"} post',
-                )
-            except ValueError as e:
-                print(f'[CREATE_POST] Insufficient coins error: {str(e)}, required: {cost}')
-                return Response(
-                    insufficient_coins_payload(cost, balance.balance, message=str(e)),
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        # Create reel with file - Django S3Boto3Storage handles upload automatically
-        if is_video:
-            # Generate thumbnail from video
-            import os
-            import tempfile
-
-            from django.core.files.uploadedfile import SimpleUploadedFile
-
-            thumbnail_file = None
-            try:
-                # Save uploaded video to temp file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-                    for chunk in file.chunks():
-                        temp_video.write(chunk)
-                    temp_video_path = temp_video.name
-
-                # Generate thumbnail using ffmpeg
-                thumbnail_path = temp_video_path.replace('.mp4', '_thumb.jpg')
-                import ffmpeg
-
-                (
-                    ffmpeg.input(temp_video_path, ss='00:00:01')  # Capture frame at 1 second
-                    .output(thumbnail_path, vframes=1, format='image2', vcodec='mjpeg')
-                    .overwrite_output()
-                    .run(quiet=True)
-                )
-
-                # Read thumbnail and create Django file
-                with open(thumbnail_path, 'rb') as thumb_file:
-                    thumbnail_file = SimpleUploadedFile(
-                        name=f"{file.name.rsplit('.', 1)[0]}_thumb.jpg",
-                        content=thumb_file.read(),
-                        content_type='image/jpeg',
-                    )
-
-                # Clean up temp files
-                os.unlink(temp_video_path)
-                if os.path.exists(thumbnail_path):
-                    os.unlink(thumbnail_path)
-            except Exception as e:
-                print(f'[CREATE_POST] Thumbnail generation failed: {e}')
-                # Continue without thumbnail if generation fails
-
-            # Create reel with video and optional thumbnail
-            reel = Reel.objects.create(
-                user=request.user,
-                caption=caption,
-                hashtags=hashtags,
-                media=file,
-                image=thumbnail_file if thumbnail_file else None,
-                campaign=campaign,
-                is_campaign_post=is_campaign_post,
-            )
-        else:
-            # Create reel with image
-            reel = Reel.objects.create(
-                user=request.user,
-                caption=caption,
-                hashtags=hashtags,
-                image=file,
-                campaign=campaign,
-                is_campaign_post=is_campaign_post,
-            )
-        print(f'[CREATE_POST] Reel created with S3 storage: {reel.id}')
-
-        # Refresh only the field we just mutated via raw SQL — avoids a full
-        # re-SELECT with joins and annotations.  Counts on a brand-new reel
-        # are 0/False so the serializer's fallbacks give the correct shape.
-        reel.refresh_from_db(fields=['media', 'image'])
-        # Zero out counts/flags explicitly so the serializer skips any
-        # lingering N+1 fallbacks.
-        reel.comment_count_db = 0
-        reel.votes_count_db = 0
-        reel.is_liked_db = False
-        reel.is_saved_db = False
-
-        # ── Step 4: award XP ──────────────────────────────────────────────
-        UserProfile.objects.filter(user=request.user).update(xp=F('xp') + 25)
-
-        serializer = ReelSerializer(reel, context={'request': request, 'followed_user_ids': set()})
-        print(f'[CREATE_POST] success reel.id={reel.pk}')
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    except Exception as e:
-        tb = _tb.format_exc()
-        print(f'[CREATE_POST] ERROR {type(e).__name__}: {tb}')
+    try:
+        source = store_source(user, upload_file, intake)
+    except StorageUnavailable:
         return Response(
-            {'error': str(e), 'type': type(e).__name__, 'traceback': tb},
+            {
+                'error': 'We could not save your upload. Please try again.',
+                'code': 'storage_unavailable',
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    try:
+        with transaction.atomic():
+            if cost and cost > 0:
+                balance, _ = UserCoinBalance.objects.get_or_create(user=user)
+                try:
+                    balance.spend_coins(
+                        cost,
+                        'post_create' if not is_campaign_post else 'campaign_post_create',
+                        description=f'Create {"campaign" if is_campaign_post else "non-campaign"} post',
+                    )
+                except ValueError as exc:
+                    raise _PostNeedsCoins(str(exc), balance.balance) from exc
+
+            reel = Reel.objects.create(
+                user=user,
+                caption=caption,
+                hashtags=hashtags,
+                overlay_text=overlay_text or '',
+                category=category,
+                campaign=campaign,
+                is_campaign_post=is_campaign_post,
+                # The original is recorded twice on purpose: media/image mark
+                # the post's type for code that asks, original_* is what the
+                # worker reads. Neither is served -- the key is private and the
+                # serializer does not resolve source/ keys.
+                media=source if is_video else None,
+                image=None if is_video else source,
+                original_media=source if is_video else '',
+                original_image='' if is_video else source,
+                source_size=intake.size,
+                processing_status=MediaStatus.PROCESSING,
+                processed=False,
+                client_upload_id=client_upload_id,
+            )
+            UserProfile.objects.filter(user=user).update(xp=F('xp') + 25)
+            queue_processing(reel.pk)
+    except _PostNeedsCoins as exc:
+        discard_source(source)
+        return Response(
+            insufficient_coins_payload(cost, exc.available, message=str(exc)),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except IntegrityError:
+        # The same submission id arrived twice at once and the other request
+        # won: this upload is surplus, and its post is the other one.
+        discard_source(source)
+        already = existing_post(user, client_upload_id)
+        if already is not None:
+            return Response(_post_payload(already, request), status=status.HTTP_200_OK)
+        log.exception('[CREATE_POST] integrity error user=%s', user.pk)
+        return Response(
+            {'error': 'We could not create your post. Please try again.', 'code': 'post_failed'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    except Exception:
+        discard_source(source)
+        # The detail is for the logs. A traceback in the response told anyone
+        # who asked about the code, the paths and the database.
+        log.exception('[CREATE_POST] failed user=%s', user.pk)
+        return Response(
+            {'error': 'We could not create your post. Please try again.', 'code': 'post_failed'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    # A brand-new post: no comments, votes, likes or saves to count.
+    reel.comment_count_db = 0
+    reel.votes_count_db = 0
+    reel.is_liked_db = False
+    reel.is_saved_db = False
+    log.info(
+        '[CREATE_POST] reel=%s user=%s kind=%s bytes=%s category=%s',
+        reel.pk,
+        user.pk,
+        intake.kind,
+        intake.size,
+        category.pk if category else None,
+    )
+    return Response(_post_payload(reel, request), status=status.HTTP_201_CREATED)
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):
@@ -1847,6 +1911,11 @@ class ReelViewSet(viewsets.ModelViewSet):
                 )
             except Exception:  # noqa: S110 – annotation failure must not crash the retrieve
                 pass
+        # A post whose media is still processing (or failed) exists only for
+        # its author until it is READY; anyone else gets the same 404 as for a
+        # post that does not exist.
+        if not self.request.user.is_staff:
+            queryset = queryset.visible_to(self.request.user)
         obj = get_object_or_404(queryset, pk=pk)
         self.check_object_permissions(self.request, obj)
         return obj
@@ -1995,6 +2064,16 @@ class ReelViewSet(viewsets.ModelViewSet):
             if user_id:
                 queryset = queryset.filter(user_id=user_id)
 
+            # Media still processing, or failed, has nothing to serve. Its
+            # author sees it on their own profile (?user=<self>) with its
+            # status; every feed lists READY posts alone.
+            own_profile = (
+                self.request.user.is_authenticated
+                and user_id
+                and str(user_id) == str(self.request.user.pk)
+            )
+            queryset = queryset.visible_to(self.request.user) if own_profile else queryset.ready()
+
             # Filter saved posts (requires authentication)
             saved = self.request.query_params.get('saved', None)
             if saved == 'true' and self.request.user.is_authenticated:
@@ -2035,11 +2114,14 @@ class ReelViewSet(viewsets.ModelViewSet):
 
         try:
             return super().retrieve(request, *args, **kwargs)
+        except Http404:
+            raise
         except Exception as e:
             tb = _tb.format_exc()
             print(f'[REELS RETRIEVE] ERROR pk={kwargs.get("pk")}: {type(e).__name__}: {e}\n{tb}')
+            # The traceback stays in the log; it used to be returned too.
             return Response(
-                {'error': str(e), 'type': type(e).__name__, 'traceback': tb},
+                {'error': 'This post could not be loaded.', 'code': 'post_unavailable'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -2070,160 +2152,22 @@ class ReelViewSet(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
-        """Override create to handle file uploads via S3 storage."""
-        import traceback as _tb
+        """POST /reels/ -- the same publishing path as /posts/create/.
 
-        print(f'[REEL CREATE] user={request.user} files={list(request.FILES.keys())}')
-        try:
-            upload_file = (
-                request.FILES.get('file')
-                or request.FILES.get('media')
-                or request.FILES.get('image')
-            )
-            caption = request.data.get('caption', '')
-            hashtags = request.data.get('hashtags', '')
-            overlay_text = request.data.get('overlay_text', '')
-            category_id = request.data.get('category')
-
-            is_video = False
-            if upload_file:
-                ct = getattr(upload_file, 'content_type', '')
-                fn = upload_file.name.lower()
-                is_video = ct.startswith('video/') or fn.endswith(
-                    ('.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v')
-                )
-                print(
-                    f'[REEL CREATE] file={upload_file.name} size={upload_file.size} video={is_video}'
-                )
-                if upload_file.size == 0:
-                    return Response(
-                        {'error': 'Uploaded file is empty.'}, status=status.HTTP_400_BAD_REQUEST
-                    )
-
-                # Strip EXIF/GPS (images) or container metadata (video)
-                # before the file ever touches storage -- see
-                # api/services/media_sanitization.py.
-                try:
-                    from api.services.media_sanitization import sanitize_uploaded_media
-
-                    upload_file = sanitize_uploaded_media(upload_file, is_video=is_video)
-                except Exception as exc:
-                    print(f'[REEL CREATE] Upload sanitization failed: {exc}')
-                    return Response(
-                        {
-                            'error': 'We could not safely process that upload. Please try a different file.'
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # Resolve the category, rejecting anything that does not exist.
-            #
-            # This used to swallow a bad id and create the post uncategorised,
-            # so a client sending a stale or mistyped category got a 201 and
-            # silently lost it -- the post then never appeared under any
-            # Explore filter, with nothing to explain why.
-            category = None
-            if category_id not in (None, '', 'null'):
-                from api.models import Category
-
-                category = Category.objects.filter(id=category_id, is_active=True).first()
-                if category is None:
-                    return Response(
-                        {
-                            'error': 'Unknown or inactive category.',
-                            'code': 'invalid_category',
-                            'category': str(category_id),
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-
-            # Create reel with file - Django S3Boto3Storage handles upload automatically
-            if is_video:
-                # Generate thumbnail from video
-                import os
-                import tempfile
-
-                from django.core.files.uploadedfile import SimpleUploadedFile
-
-                thumbnail_file = None
-                try:
-                    # Save uploaded video to temp file
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-                        for chunk in upload_file.chunks():
-                            temp_video.write(chunk)
-                        temp_video_path = temp_video.name
-
-                    # Generate thumbnail using ffmpeg
-                    thumbnail_path = temp_video_path.replace('.mp4', '_thumb.jpg')
-                    import ffmpeg
-
-                    (
-                        ffmpeg.input(temp_video_path, ss='00:00:01')  # Capture frame at 1 second
-                        .output(thumbnail_path, vframes=1, format='image2', vcodec='mjpeg')
-                        .overwrite_output()
-                        .run(quiet=True)
-                    )
-
-                    # Read thumbnail and create Django file
-                    with open(thumbnail_path, 'rb') as thumb_file:
-                        thumbnail_file = SimpleUploadedFile(
-                            name=f"{upload_file.name.rsplit('.', 1)[0]}_thumb.jpg",
-                            content=thumb_file.read(),
-                            content_type='image/jpeg',
-                        )
-
-                    # Clean up temp files
-                    os.unlink(temp_video_path)
-                    if os.path.exists(thumbnail_path):
-                        os.unlink(thumbnail_path)
-                except Exception as e:
-                    print(f'[REEL CREATE] Thumbnail generation failed: {e}')
-                    # Continue without thumbnail if generation fails
-
-                reel = Reel.objects.create(
-                    user=request.user,
-                    caption=caption,
-                    hashtags=hashtags,
-                    overlay_text=overlay_text,
-                    media=upload_file,
-                    image=thumbnail_file,
-                    category=category,
-                )
-            else:
-                reel = Reel.objects.create(
-                    user=request.user,
-                    caption=caption,
-                    hashtags=hashtags,
-                    overlay_text=overlay_text,
-                    image=upload_file,
-                    category=category,
-                )
-            print(f'[REEL CREATE] Reel created with S3 storage: {reel.id}')
-
-            # Re-fetch with annotations the serializer needs
-            from django.db.models import Count
-
-            reel = (
-                Reel.objects.select_related('user', 'user__profile')
-                .annotate(comment_count_db=Count('comments', distinct=True))
-                .get(pk=reel.pk)
-            )
-
-            # Dispatch async media processing (FFmpeg + blurhash)
-            from api.tasks import process_reel_media
-
-            process_reel_media.delay(reel.pk)
-            print(f'[REEL CREATE] queued process_reel_media for reel {reel.pk}')
-
-            serializer = self.get_serializer(reel)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            tb = _tb.format_exc()
-            print(f'[REEL CREATE] ERROR {type(e).__name__}: {tb}')
-            return Response(
-                {'error': str(e), 'traceback': tb}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        This used to be a second implementation: it ran FFmpeg in the request,
+        stored the upload publicly, charged nothing and skipped the subscriber
+        check that /posts/create/ enforces, so the price and the rules of
+        posting depended on which endpoint a client called. It now hands off
+        to the shared implementation, and keeps only what was particular to
+        it: the file may arrive as `file`, `media` or `image`, and
+        `overlay_text` is stored.
+        """
+        upload_file = (
+            request.FILES.get('file') or request.FILES.get('media') or request.FILES.get('image')
+        )
+        return _create_post_from_upload(
+            request, upload_file, overlay_text=request.data.get('overlay_text', '')
+        )
 
     @action(detail=True, methods=['post'])
     def vote(self, request, pk=None):
@@ -2519,6 +2463,21 @@ class ReelViewSet(viewsets.ModelViewSet):
                 )
 
             reel_id = reel.id
+            # The private original and the processed versions are not in the
+            # media/image columns the deletes below touch; they are removed by
+            # a task once the delete has committed.
+            source_keys = [
+                key
+                for key in (reel.original_media, reel.original_image)
+                if key and key.startswith('source/')
+            ]
+
+            def _remove_files_after_commit():
+                from api.tasks.media import delete_post_media
+
+                transaction.on_commit(
+                    lambda: delete_post_media.delay(reel_id, source_keys), robust=True
+                )
 
             # Try Django ORM delete first (uses model CASCADE rules) - safest path
             try:
@@ -2535,6 +2494,7 @@ class ReelViewSet(viewsets.ModelViewSet):
                     except Exception as _e:
                         print(f'[REEL DELETE] image file delete skipped: {_e}')
                     reel.delete()
+                    _remove_files_after_commit()
                 print(f'[REEL DELETE] Successfully deleted reel {reel_id} via ORM')
                 return Response(status=status.HTTP_204_NO_CONTENT)
             except Exception as orm_err:
@@ -2610,79 +2570,141 @@ class ReelViewSet(viewsets.ModelViewSet):
                         critical=True,
                     )
                     _safe('DELETE FROM api_reel WHERE id=%s', [reel_id], critical=True)
+                    _remove_files_after_commit()
 
             print(f'[REEL DELETE] Successfully deleted reel {reel_id}')
             return Response(status=status.HTTP_204_NO_CONTENT)
 
+        except Http404:
+            raise
         except Exception as e:
             tb = _tb.format_exc()
             print(f'[REEL DELETE] Error: {type(e).__name__}: {e}\n{tb}')
+            # The exception stays in the log. Its text -- a database error, a
+            # storage path -- used to be returned to the client too.
             return Response(
-                {'error': str(e), 'type': type(e).__name__},
+                {
+                    'error': 'We could not delete this post. Please try again.',
+                    'code': 'delete_failed',
+                },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
     def partial_update(self, request, *args, **kwargs):
-        """Update a reel (caption, hashtags, and/or media) - only owner can update"""
-        try:
-            print(
-                f'[REEL UPDATE] Request from user: {request.user}, authenticated: {request.user.is_authenticated}'
+        """Edit a post: caption, hashtags and/or its media. Owner only.
+
+        Replacement media goes through the same pipeline as a new post: the
+        file's real type is checked, the original is stored privately, video
+        is subscriber-only, and the post is PROCESSING until the new media is
+        encoded. It used to publish the raw upload as-is -- metadata and all --
+        and left the previous video's smaller renditions and thumbnail in
+        place, so feeds went on serving the old video to anyone on a slow
+        connection.
+        """
+        import logging
+
+        from django.db import transaction
+
+        from api.models import MediaStatus
+        from api.services.media_pipeline import (
+            SOURCE_PREFIX,
+            VIDEO,
+            MediaRejected,
+            StorageUnavailable,
+            discard_source,
+            queue_processing,
+            read_client_upload_id,
+            store_source,
+            validate_upload,
+        )
+
+        log = logging.getLogger(__name__)
+        reel = self.get_object()
+        if reel.user != request.user:
+            return Response(
+                {'error': 'You can only edit your own posts'}, status=status.HTTP_403_FORBIDDEN
             )
-            print(f"[REEL UPDATE] PK: {kwargs.get('pk')}")
-            print(f'[REEL UPDATE] Data: {request.data}')
-            print(f'[REEL UPDATE] Files: {list(request.FILES.keys())}')
 
-            reel = self.get_object()
-            print(f'[REEL UPDATE] Reel found: ID={reel.id}, owner={reel.user.username}')
-
-            # Check ownership
-            if reel.user != request.user:
+        new_file = (
+            request.FILES.get('file') or request.FILES.get('media') or request.FILES.get('image')
+        )
+        intake = None
+        client_upload_id = ''
+        if new_file:
+            try:
+                client_upload_id = read_client_upload_id(request)
+            except MediaRejected as exc:
+                return exc.response()
+            # The same replacement again -- a retry after the answer was lost.
+            # It has been applied; answering 409 "still processing" to it
+            # would tell the person their edit failed when it did not.
+            if client_upload_id and reel.client_upload_id == client_upload_id:
+                return Response(self.get_serializer(reel).data)
+            # A worker is encoding this post's current media; swapping the
+            # original under it would race its result.
+            if reel.processing_status == MediaStatus.PROCESSING:
                 return Response(
-                    {'error': 'You can only edit your own posts'}, status=status.HTTP_403_FORBIDDEN
+                    {
+                        'error': 'This post is still being processed. '
+                        'You can change its media once it is ready.',
+                        'code': 'post_processing',
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            try:
+                intake = validate_upload(new_file)
+            except MediaRejected as exc:
+                return exc.response()
+            if intake.kind == VIDEO:
+                refusal = _video_subscription_refusal(request.user)
+                if refusal is not None:
+                    return refusal
+
+        source = None
+        if intake is not None:
+            try:
+                source = store_source(request.user, new_file, intake)
+            except StorageUnavailable:
+                return Response(
+                    {
+                        'error': 'We could not save your upload. Please try again.',
+                        'code': 'storage_unavailable',
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
 
-            # Update text fields
-            if 'caption' in request.data:
-                reel.caption = request.data['caption']
-            if 'hashtags' in request.data:
-                reel.hashtags = request.data['hashtags']
-
-            # Handle media file replacement
-            new_file = (
-                request.FILES.get('file')
-                or request.FILES.get('media')
-                or request.FILES.get('image')
+        replaced_sources = [
+            key
+            for key in (reel.original_media, reel.original_image)
+            if key and key.startswith(SOURCE_PREFIX)
+        ]
+        try:
+            with transaction.atomic():
+                if 'caption' in request.data:
+                    reel.caption = request.data['caption']
+                if 'hashtags' in request.data:
+                    reel.hashtags = request.data['hashtags']
+                if source:
+                    _reset_media(reel, source, intake)
+                    if client_upload_id:
+                        # Remembered so a retry of this edit is recognised.
+                        reel.client_upload_id = client_upload_id
+                reel.save()
+                if source:
+                    queue_processing(reel.pk)
+                    _remove_replaced_media(reel.pk, replaced_sources)
+        except Exception:
+            discard_source(source)
+            log.exception('[REEL UPDATE] failed reel=%s', reel.pk)
+            return Response(
+                {
+                    'error': 'We could not update your post. Please try again.',
+                    'code': 'update_failed',
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            if new_file:
-                print(
-                    f'[REEL UPDATE] New media file: {new_file.name}, type: {new_file.content_type}'
-                )
 
-                content_type = getattr(new_file, 'content_type', '')
-                filename = new_file.name.lower()
-                is_video = content_type.startswith('video/') or filename.endswith(
-                    ('.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v')
-                )
-
-                # Update reel with file - Django S3Boto3Storage handles upload automatically
-                if is_video:
-                    reel.image = None
-                    reel.media = new_file
-                else:
-                    reel.media = None
-                    reel.image = new_file
-                print('[REEL UPDATE] Media updated with S3 storage')
-
-            reel.save()
-            print(f'[REEL UPDATE] Reel {reel.id} updated successfully')
-
-            serializer = self.get_serializer(reel)
-            return Response(serializer.data)
-
-        except Exception as e:
-            print(f'[REEL UPDATE] Error: {type(e).__name__}: {e}')
-            traceback.print_exc()
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(self.get_serializer(reel).data)
 
 
 class QuestViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
@@ -3042,14 +3064,14 @@ def search(request):
     users = User.objects.filter(username__icontains=query)[:10]
 
     # Search posts by caption or hashtags
-    posts = Reel.objects.filter(caption__icontains=query) | Reel.objects.filter(
+    posts = Reel.objects.ready().filter(caption__icontains=query) | Reel.objects.ready().filter(
         hashtags__icontains=query
     )
     posts = posts.distinct()[:20]
 
     # Extract unique hashtags - only scan reels that match, not ALL reels
     hashtags = set()
-    for post in Reel.objects.filter(hashtags__icontains=query).only('hashtags')[:100]:
+    for post in Reel.objects.ready().filter(hashtags__icontains=query).only('hashtags')[:100]:
         for tag in post.get_hashtags_list():
             if query.lower() in tag.lower():
                 hashtags.add(tag)
@@ -3110,18 +3132,9 @@ def get_user_notifications(request):
             reel_data = None
             if notif.reel:
                 try:
-
-                    def _safe_url(field):
-                        if not field or not field.name:
-                            return None
-                        name = field.name
-                        if name.startswith('http://') or name.startswith('https://'):
-                            return name
-                        try:
-                            u = field.url
-                            return u if u else None
-                        except Exception:
-                            return None
+                    # Never a private original under source/ (a post
+                    # that is still processing has no served media yet).
+                    from api.services.media_pipeline import served_url as _safe_url
 
                     reel_data = {
                         'id': notif.reel.id,
@@ -3730,7 +3743,8 @@ def get_trending_reels(request):
         return Response([])
 
     try:
-        queryset = Reel.objects.filter(
+        # READY only: a post still processing has no media to show yet.
+        queryset = Reel.objects.ready().filter(
             created_at__gte=window_start(request.GET.get('time_range', '7d'), timezone.now())
         )
         if category is not None:
@@ -3825,7 +3839,8 @@ def get_trending_hashtags(request):
         threshold = now - timedelta(days=7)
 
     rows = (
-        Reel.objects.filter(
+        Reel.objects.ready()
+        .filter(
             created_at__gte=threshold,
             hashtags__isnull=False,
         )
@@ -3871,7 +3886,8 @@ def get_reels_by_hashtag(request):
     # Search in both hashtags field and caption — annotate the same way
     # ReelViewSet does so the serializer never falls into N+1 fallbacks.
     queryset = (
-        Reel.objects.filter(
+        Reel.objects.ready()
+        .filter(
             Q(hashtags__icontains=f'#{hashtag}')
             | Q(hashtags__icontains=hashtag)
             | Q(caption__icontains=f'#{hashtag}')

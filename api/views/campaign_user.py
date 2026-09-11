@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from django.db import transaction
@@ -15,9 +16,12 @@ from api.models.campaign_extended import (
     PostScore,
     UserCampaignStats,
 )
+from api.serializers.core import reel_media_payload
 from api.services.campaign_charges import InsufficientCoins, charge_engagement
 from api.services.coin_purchase import insufficient_coins_payload
 from common.security import encrypted_endpoint
+
+logger = logging.getLogger(__name__)
 
 # ==================== CAMPAIGN DISCOVERY ====================
 
@@ -208,52 +212,60 @@ def create_campaign_post(request):
     if not media_file and not image_file:
         return Response({'error': 'No media file provided'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Generate thumbnail if video is uploaded without image
-    thumbnail_file = image_file
-    if media_file and not image_file:
-        import os
-        import tempfile
+    # The same intake as /posts/create/: the file's real type is checked, the
+    # original is stored privately and the worker produces what is served.
+    # This used to run FFmpeg in the request for a thumbnail and publish the
+    # upload untouched -- no transcode, no variants, metadata included.
+    from django.db import IntegrityError
 
-        from django.core.files.uploadedfile import SimpleUploadedFile
+    from api.models import MediaStatus
+    from api.services.media_pipeline import (
+        VIDEO,
+        MediaRejected,
+        StorageUnavailable,
+        discard_source,
+        existing_post,
+        queue_processing,
+        read_client_upload_id,
+        store_source,
+        validate_upload,
+    )
 
-        is_video = media_file.content_type.startswith('video/') or media_file.name.lower().endswith(
-            ('.mp4', '.webm', '.mov', '.avi', '.mkv')
+    def entry_response(reel, code):
+        score = PostScore.objects.filter(reel=reel).first()
+        return Response(
+            {
+                'message': 'Campaign post created and submitted for moderation',
+                'reel_id': reel.id,
+                'post_score_id': score.id if score else None,
+                'moderation_status': score.moderation_status if score else 'pending',
+                'processing_status': reel.processing_status,
+            },
+            status=code,
         )
 
-        if is_video:
-            try:
-                # Save uploaded video to temp file
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-                    for chunk in media_file.chunks():
-                        temp_video.write(chunk)
-                    temp_video_path = temp_video.name
-
-                # Generate thumbnail using ffmpeg
-                thumbnail_path = temp_video_path.replace('.mp4', '_thumb.jpg')
-                import ffmpeg
-
-                (
-                    ffmpeg.input(temp_video_path, ss='00:00:01')  # Capture frame at 1 second
-                    .output(thumbnail_path, vframes=1, format='image2', vcodec='mjpeg')
-                    .overwrite_output()
-                    .run(quiet=True)
-                )
-
-                # Read thumbnail and create Django file
-                with open(thumbnail_path, 'rb') as thumb_file:
-                    thumbnail_file = SimpleUploadedFile(
-                        name=f"{media_file.name.rsplit('.', 1)[0]}_thumb.jpg",
-                        content=thumb_file.read(),
-                        content_type='image/jpeg',
-                    )
-
-                # Clean up temp files
-                os.unlink(temp_video_path)
-                if os.path.exists(thumbnail_path):
-                    os.unlink(thumbnail_path)
-            except Exception as e:
-                print(f'[CAMPAIGN_POST] Thumbnail generation failed: {e}')
-                # Continue without thumbnail if generation fails
+    upload = media_file or image_file
+    try:
+        # A retried upload (a dropped connection, a double tap) returns the
+        # entry it already made instead of a second, second-charged one.
+        client_upload_id = read_client_upload_id(request)
+        already = existing_post(request.user, client_upload_id)
+        if already is not None:
+            return entry_response(already, status.HTTP_200_OK)
+        intake = validate_upload(upload)
+    except MediaRejected as exc:
+        return exc.response()
+    is_video = intake.kind == VIDEO
+    try:
+        source = store_source(request.user, upload, intake)
+    except StorageUnavailable:
+        return Response(
+            {
+                'error': 'We could not save your upload. Please try again.',
+                'code': 'storage_unavailable',
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
     # This endpoint charged nothing at all. api/views/core.py:create_post has
     # always deducted cost_post_create, but that is a different view on a
@@ -270,11 +282,17 @@ def create_campaign_post(request):
                 user=request.user,
                 caption=caption,
                 hashtags=hashtags,
-                media=media_file,
-                image=thumbnail_file,
+                media=source if is_video else None,
+                image=None if is_video else source,
+                original_media=source if is_video else '',
+                original_image='' if is_video else source,
+                source_size=intake.size,
+                processing_status=MediaStatus.PROCESSING,
+                processed=False,
                 campaign=campaign,
                 theme=theme,
                 is_campaign_post=True,
+                client_upload_id=client_upload_id,
             )
 
             # Create post score entry for moderation
@@ -292,10 +310,31 @@ def create_campaign_post(request):
                 'post',
                 description=f'Campaign entry for {campaign.title}'[:255],
             )
+            queue_processing(reel.pk)
     except InsufficientCoins as exc:
+        discard_source(source)
         return Response(
             insufficient_coins_payload(exc.required, exc.available, message=exc.message),
             status=status.HTTP_400_BAD_REQUEST,
+        )
+    except IntegrityError:
+        # The same submission arrived twice at once; the other request won.
+        discard_source(source)
+        already = existing_post(request.user, client_upload_id)
+        if already is not None:
+            return entry_response(already, status.HTTP_200_OK)
+        logger.exception('[CAMPAIGN POST] integrity error user=%s', request.user.pk)
+        return Response(
+            {'error': 'We could not create your entry. Please try again.', 'code': 'post_failed'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    except Exception:
+        discard_source(source)
+        # Detail for the logs only; the client gets a sentence it can act on.
+        logger.exception('[CAMPAIGN POST] failed user=%s', request.user.pk)
+        return Response(
+            {'error': 'We could not create your entry. Please try again.', 'code': 'post_failed'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
     # Update or create user stats
@@ -334,6 +373,7 @@ def create_campaign_post(request):
             'reel_id': reel.id,
             'post_score_id': post_score.id,
             'moderation_status': 'pending',
+            'processing_status': reel.processing_status,
         },
         status=status.HTTP_201_CREATED,
     )
@@ -360,9 +400,9 @@ def get_campaign_feed(request, campaign_id):
     theme_id = request.query_params.get('theme')
     print(f'[CAMPAIGN FEED] Filter: {filter_param}, Theme: {theme_id}')
 
-    # Base query - approved posts only
+    # Base query - approved posts whose media has finished processing
     posts = PostScore.objects.filter(
-        campaign=campaign, moderation_status='approved'
+        campaign=campaign, moderation_status='approved', reel__processing_status='READY'
     ).select_related('user', 'reel', 'theme')
 
     print(f'[CAMPAIGN FEED] Total approved posts: {posts.count()}')
@@ -398,26 +438,11 @@ def get_campaign_feed(request, campaign_id):
             else False
         )
 
-        def _abs_url(field):
-            if not field or not field.name:
-                return None
-            try:
-                url = field.url
-                if not url:
-                    return None
-                if url.startswith('http'):
-                    return url
-                return request.build_absolute_uri(url)
-            except Exception:
-                return None
-
-        image_url = _abs_url(post.reel.image)
-        media_url = _abs_url(post.reel.media)
-        thumbnail_url = _abs_url(post.reel.thumbnail)
-
-        print(
-            f'[CAMPAIGN FEED] Post {post.id}: image={image_url}, media={media_url}, thumbnail={thumbnail_url}, user={post.user.username}'
-        )
+        # The same media fields as the main feed -- the smaller renditions,
+        # WebP, status -- so the campaign page can pick what suits the
+        # connection instead of always loading the 720p primary.
+        media = reel_media_payload(post.reel, request)
+        media['thumbnail'] = media['thumbnail'] or media['image']
 
         data.append(
             {
@@ -426,10 +451,7 @@ def get_campaign_feed(request, campaign_id):
                     'id': post.reel.id,
                     'caption': post.reel.caption,
                     'hashtags': post.reel.hashtags,
-                    'image': image_url,
-                    'media': media_url,
-                    'thumbnail': thumbnail_url
-                    or image_url,  # Use thumbnail if available, fallback to image
+                    **media,
                     'created_at': post.reel.created_at,
                 },
                 'user': {

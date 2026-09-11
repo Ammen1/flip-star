@@ -1,10 +1,20 @@
+import logging
+import mimetypes
 import os
+import shutil
 import tempfile
+import time
+import uuid
+from datetime import timedelta
 
 import redis
 import requests as http_requests
 from celery import shared_task
 from django.conf import settings
+from django.db.models import Q
+from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 # Credentials come from Django settings, which resolve through
 # environment -> Vault -> .env. This module previously read ACCESS_KEY_ID,
@@ -71,12 +81,44 @@ def _local_path(value):
     return os.path.join(settings.MEDIA_ROOT, value)
 
 
+def _fetch_source(value, workdir, suffix):
+    """A local copy of the original upload, wherever it lives.
+
+    New uploads are keys under ``source/`` in private storage, so they are
+    read through the storage API with the worker's credentials -- there is no
+    public URL to download them from, by design. Older posts hold a public URL
+    or a MEDIA_ROOT path, and are read the way they always were.
+    """
+    if not value:
+        return None
+    if value.startswith(('http://', 'https://')):
+        path = os.path.join(workdir, f'source{suffix}')
+        tmp = _fetch_to_temp(value, suffix)
+        shutil.move(tmp, path)
+        return path
+    if value.startswith(SOURCE_PREFIX):
+        from api.services.media_pipeline import source_storage
+
+        path = os.path.join(workdir, f'source{suffix}')
+        with source_storage().open(value, 'rb') as src, open(path, 'wb') as dst:
+            shutil.copyfileobj(src, dst, 1024 * 1024)
+        return path
+    return _local_path(value)
+
+
 def _upload_to_s3(local_path, s3_key):
-    """Upload processed file to S3/MinIO and return public URL.
+    """Upload a file to S3/MinIO/OBS and return its public URL, or None.
 
     Credentials come from Django settings (resolved via environment -> Vault ->
     .env), so the worker uses exactly the same values as the web process.
+
+    Content-Type is always sent: without it the object is stored as
+    binary/octet-stream, which some players refuse to stream. Keys under
+    processed/ also get the year-long immutable Cache-Control: they carry a
+    version and are never rewritten. Other keys -- a profile photo, which is
+    overwritten in place -- must stay revalidatable, so they do not.
     """
+    immutable = s3_key.startswith(PROCESSED_PREFIX)
     bucket = settings.S3_BUCKET_NAME
     endpoint_url = settings.S3_ENDPOINT_URL
     region = settings.S3_REGION_NAME
@@ -93,16 +135,99 @@ def _upload_to_s3(local_path, s3_key):
         if endpoint_url:
             s3_kwargs['endpoint_url'] = endpoint_url
 
+        extra = {'ContentType': mimetypes.guess_type(s3_key)[0] or 'application/octet-stream'}
+        # The same ACL the web process writes with; a bucket that rejects ACL
+        # headers is configured with S3_DEFAULT_ACL= (empty) and gets none.
+        acl = getattr(settings, 'AWS_DEFAULT_ACL', 'public-read')
+        if acl:
+            extra['ACL'] = acl
+        if immutable:
+            extra['CacheControl'] = getattr(settings, 'AWS_S3_OBJECT_PARAMETERS', {}).get(
+                'CacheControl', 'public, max-age=31536000, immutable'
+            )
+
         s3 = boto3.client('s3', **s3_kwargs)
-        s3.upload_file(local_path, bucket, s3_key, ExtraArgs={'ACL': 'public-read'})
+        s3.upload_file(local_path, bucket, s3_key, ExtraArgs=extra)
 
         if endpoint_url:
             return f'{endpoint_url}/{bucket}/{s3_key}'
         else:
             return f'https://{bucket}.s3.{region}.amazonaws.com/{s3_key}'
     except Exception as e:
-        print(f'[TASKS] S3/MinIO upload failed: {e}')
+        logger.warning('[TASKS] S3/OBS upload failed for %s: %s', s3_key, e)
         return None
+
+
+def _publish(local_path, s3_key, discard=None):
+    """Store a processed artefact under ``s3_key``; return what to record.
+
+    With object storage configured that is the object's URL. ``discard`` gets
+    the local path only once the upload has succeeded -- deleting a file that
+    never reached storage would leave the post pointing at nothing -- and
+    ``discard=None`` protects a path that must survive regardless. (The task
+    itself works in a temporary directory that it removes wholesale.)
+
+    Without object storage (a development box) the file is placed at
+    MEDIA_ROOT/<key> and the relative key is recorded, which the serializer
+    resolves through default_storage. Returns None when storage is configured
+    but refused the upload: the caller treats that rendition as absent rather
+    than recording a path on this worker's disk that no client can reach.
+    """
+    url = _upload_to_s3(local_path, s3_key)
+    if url:
+        if discard is not None:
+            discard.append(local_path)
+        return url
+    if settings.S3_BUCKET_NAME:
+        return None
+    target = os.path.join(settings.MEDIA_ROOT, s3_key)
+    if os.path.abspath(local_path) != os.path.abspath(target):
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.move(local_path, target)
+    return s3_key
+
+
+def _delete_version(reel_id, version=None, keep=None):
+    """Remove a post's processed outputs: one run's (``version``), every run
+    but the one in use (``keep``), or all of them (neither: the post itself
+    was deleted). Best effort; logged, never raised."""
+    run = f'v{version}/' if version is not None else ''
+    kept = f'v{keep}/' if keep is not None else None
+    prefixes = [
+        f'{PROCESSED_PREFIX}{kind}/{reel_id}/{run}' for kind in ('videos', 'images', 'thumbnails')
+    ]
+    try:
+        if settings.S3_BUCKET_NAME:
+            import boto3
+
+            s3_kwargs = {
+                'aws_access_key_id': settings.S3_ACCESS_KEY_ID,
+                'aws_secret_access_key': settings.S3_SECRET_ACCESS_KEY,
+                'region_name': settings.S3_REGION_NAME,
+            }
+            if settings.S3_ENDPOINT_URL:
+                s3_kwargs['endpoint_url'] = settings.S3_ENDPOINT_URL
+            s3 = boto3.client('s3', **s3_kwargs)
+            for prefix in prefixes:
+                listed = s3.list_objects_v2(Bucket=settings.S3_BUCKET_NAME, Prefix=prefix)
+                keys = [
+                    {'Key': o['Key']}
+                    for o in listed.get('Contents', [])
+                    if not (kept and o['Key'][len(prefix) :].startswith(kept))
+                ]
+                if keys:
+                    s3.delete_objects(Bucket=settings.S3_BUCKET_NAME, Delete={'Objects': keys})
+        else:
+            for prefix in prefixes:
+                base = os.path.join(settings.MEDIA_ROOT, prefix)
+                if kept is None:
+                    shutil.rmtree(base, ignore_errors=True)
+                elif os.path.isdir(base):
+                    for entry in os.listdir(base):
+                        if f'{entry}/' != kept:
+                            shutil.rmtree(os.path.join(base, entry), ignore_errors=True)
+    except Exception as exc:  # pragma: no cover - best effort
+        logger.warning('[TASKS] could not remove %s outputs of reel %s: %s', run, reel_id, exc)
 
 
 # -- Thumbnail generation ----------------------------------------------------
@@ -152,24 +277,39 @@ def _render_thumbnail(source_path, out_path):
             thumb.save(out_path, 'JPEG', quality=88, optimize=True, progressive=True)
         return out_path
     except Exception as e:
-        print(f'[TASKS] Thumbnail render failed for {source_path}: {e}')
+        logger.warning('[TASKS] Thumbnail render failed for %s: %s', source_path, e)
         return None
 
 
 # ── Video processing ─────────────────────────────────────────────────────────
 
 
-#: The transcode ladder, smallest first.
+#: The transcode ladder, smallest first: (field, rung, CRF).
+#:
+#: The rung is the SHORT side of the frame. "720p" is 720x1280 for the
+#: vertical video this feed is made of, and 1280x720 for landscape; scaling by
+#: height alone made a portrait 720p rung 405x720, a quarter of the pixels of
+#: what the name promises.
 #:
 #: 360p and 480p exist for the audience this app actually has: Ethiopian
 #: mobile data, where a 720p file is frequently the difference between a video
-#: that plays and one that buffers to a stop. The CRF rises as height falls --
-#: a small frame tolerates more compression before artefacts show, and the
-#: point of the rung is bytes, not fidelity.
+#: that plays and one that buffers to a stop. The CRF rises as the frame
+#: shrinks -- a small frame tolerates more compression before artefacts show,
+#: and the point of the rung is bytes, not fidelity.
 #:
 #: 1080p is deliberately absent. The source is phone video, the feed renders
 #: at most a phone-width column, and a 1080p rung would cost storage and
 #: encode time to serve pixels nobody sees.
+VIDEO_LADDER = (
+    ('media_360', 360, 30),
+    ('media_480', 480, 28),
+    ('media_720', 720, 23),
+)
+
+#: Peak bitrate per rung (VBV). CRF alone lets a busy scene spike far above
+#: what a 3G link sustains; the cap keeps every second streamable.
+VIDEO_MAXRATE = {360: '800k', 480: '1200k', 720: '2500k'}
+
 #: Image widths, smallest first. Same reasoning as the video ladder: the
 #: full-size still is often over a megabyte, and a feed column is at most a
 #: phone wide. `thumbnail` is a 320x720 CROP for posters and cards; these keep
@@ -179,15 +319,122 @@ IMAGE_LADDER = (
     ('image_medium', 720),
 )
 
-VIDEO_LADDER = (
-    ('media_360', 360, 30),
-    ('media_480', 480, 28),
-    ('media_720', 720, 23),
-)
+#: WebP quality. Around 80 WebP matches the JPEG q82-85 used above at roughly
+#: two thirds of the bytes; below that, faces and skin tones start to band.
+WEBP_QUALITY = 80
 
 
-def _transcode(input_path, out_path, height, crf):
+def _rotation(stream):
+    """Display rotation of a video stream in degrees (phones record rotated)."""
+    for side in stream.get('side_data_list') or []:
+        if 'rotation' in side:
+            try:
+                return int(float(side['rotation']))
+            except (TypeError, ValueError):
+                pass
+    try:
+        return int((stream.get('tags') or {}).get('rotate', 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _probe(path):
+    """Display size, duration and audio presence of a video, via ffprobe."""
+    import ffmpeg
+
+    info = ffmpeg.probe(path)
+    streams = info.get('streams', [])
+    video = next((s for s in streams if s.get('codec_type') == 'video'), None)
+    if not video:
+        raise _Permanent('invalid_media')
+    width, height = int(video.get('width') or 0), int(video.get('height') or 0)
+    # ffmpeg applies the rotation when it decodes, so the frame the scaler
+    # sees is the displayed one. Decide orientation on the same basis.
+    rotation = _rotation(video)
+    if abs(rotation) % 180 == 90:
+        width, height = height, width
+    try:
+        duration = float(info.get('format', {}).get('duration') or video.get('duration') or 0)
+    except (TypeError, ValueError):
+        duration = 0.0
+    audio = next((s for s in streams if s.get('codec_type') == 'audio'), None)
+    try:
+        num, den = (video.get('avg_frame_rate') or '0/1').split('/')
+        fps = float(num) / float(den) if float(den) else 0.0
+    except (TypeError, ValueError):
+        fps = 0.0
+    return {
+        'width': width,
+        'height': height,
+        'duration': duration,
+        'has_audio': audio is not None,
+        # What _can_serve_as_is needs to know about the upload's own streams.
+        'vcodec': video.get('codec_name'),
+        'pix_fmt': video.get('pix_fmt'),
+        'acodec': audio.get('codec_name') if audio else None,
+        'fps': fps,
+        'rotation': rotation,
+        'format_name': info.get('format', {}).get('format_name') or '',
+    }
+
+
+def _can_serve_as_is(info):
+    """Whether the upload's own streams are what every browser plays: H.264,
+    8-bit 4:2:0, AAC or silent, upright, at most 30 fps, in an MP4/MOV."""
+    return (
+        info.get('vcodec') == 'h264'
+        and info.get('pix_fmt') in ('yuv420p', 'yuvj420p')
+        and info.get('acodec') in (None, 'aac')
+        and not info.get('rotation')
+        and 0 < (info.get('fps') or 0) <= 30.5
+        and 'mp4' in (info.get('format_name') or '')
+    )
+
+
+def _remux(input_path, out_path, has_audio):
+    """The upload's streams, untouched, re-wrapped for streaming: index first
+    (faststart), metadata and chapters dropped (GPS included). Returns the
+    path, or None if it could not be written."""
+    import ffmpeg
+
+    try:
+        source = ffmpeg.input(input_path)
+        streams = [source['v:0']] + ([source['a:0']] if has_audio else [])
+        (
+            ffmpeg.output(
+                *streams,
+                out_path,
+                c='copy',
+                movflags='+faststart',
+                map_metadata='-1',
+                map_chapters='-1',
+            )
+            .overwrite_output()
+            .run(quiet=True)
+        )
+        return out_path
+    except Exception as exc:
+        logger.warning('[TASKS] remux failed: %s', exc)
+        return None
+
+
+def _scale_filter(width, height, rung):
+    """Scale so the frame's short side is ``rung``, keeping its aspect ratio.
+
+    -2 rounds the other side to an even number, which H.264 requires; the
+    picture is never stretched or cropped.
+    """
+    if width <= height:
+        return f'scale={rung}:-2'
+    return f'scale=-2:{rung}'
+
+
+def _transcode(input_path, out_path, height, crf, width=None, source_height=None):
     """One rung of the ladder. Returns the path, or None if encoding failed.
+
+    ``height`` is the rung (short side). With the source's display size it
+    scales portrait and landscape correctly; without it, it falls back to the
+    old height-only scale.
 
     A failed rung is not fatal: the caller keeps whichever rungs succeeded, and
     the API simply does not advertise the missing one. Losing 360p is worth far
@@ -195,6 +442,11 @@ def _transcode(input_path, out_path, height, crf):
     """
     import ffmpeg
 
+    if width and source_height:
+        vf = _scale_filter(width, source_height, height)
+    else:
+        vf = f'scale=-2:{height}'
+    maxrate = VIDEO_MAXRATE.get(height, '2500k')
     try:
         (
             ffmpeg.input(input_path)
@@ -202,15 +454,26 @@ def _transcode(input_path, out_path, height, crf):
                 out_path,
                 vcodec='libx264',
                 acodec='aac',
-                # -2 keeps the source aspect and rounds width to an even number,
-                # which H.264 requires; a fixed width would letterbox portrait.
-                vf=f'scale=-2:{height}',
+                vf=vf,
                 crf=crf,
                 preset='fast',
+                maxrate=maxrate,
+                bufsize=f'{int(maxrate[:-1]) * 2}k',
+                # 4:2:0 High profile plays on every phone of the last decade;
+                # a 4:4:4 or 10-bit source passed through untouched would not.
+                pix_fmt='yuv420p',
+                **{'profile:v': 'high', 'level:v': '4.0'},
+                # 60fps phone footage gains little in a feed and costs bits.
+                fpsmax=30,
+                ac=2,
                 # Moves the index to the front so a player can start on the
                 # first bytes instead of seeking to the end first -- the single
                 # most important flag for progressive playback.
-                movflags='faststart',
+                movflags='+faststart',
+                # Container metadata carries GPS and device details. The
+                # original is private; the served copy must not leak them.
+                map_metadata='-1',
+                map_chapters='-1',
                 # Caps the audio too; 128k stereo on a 360p rung is a waste.
                 audio_bitrate='96k' if height <= 480 else '128k',
             )
@@ -219,12 +482,16 @@ def _transcode(input_path, out_path, height, crf):
         )
         return out_path
     except Exception as exc:
-        print(f'[TASKS] {height}p transcode failed: {exc}')
+        logger.warning('[TASKS] %sp transcode failed: %s', height, exc)
         return None
 
 
-def _resize_image(input_path, out_path, width):
-    """Width-constrained copy that never upscales. Returns the path or None."""
+def _resize_image(input_path, out_path, width, fmt='JPEG'):
+    """Width-constrained copy that never upscales. Returns the path or None.
+
+    ``fmt`` is 'JPEG' (progressive, the fallback every client decodes) or
+    'WEBP' (the smaller rendition for clients that can use it).
+    """
     from PIL import Image, ImageOps
 
     try:
@@ -241,77 +508,117 @@ def _resize_image(input_path, out_path, width):
 
             height = round(img.height * (width / img.width))
             img = img.resize((width, height), Image.LANCZOS)
-            img.save(out_path, 'JPEG', quality=82, optimize=True, progressive=True)
+            if fmt == 'WEBP':
+                img.save(out_path, 'WEBP', quality=WEBP_QUALITY - 2, method=4)
+            else:
+                img.save(out_path, 'JPEG', quality=82, optimize=True, progressive=True)
         return out_path
     except Exception as exc:
-        print(f'[TASKS] {width}px image variant failed: {exc}')
+        logger.warning('[TASKS] %spx image variant failed: %s', width, exc)
         return None
 
 
-def _process_video(input_path, reel_id):
-    """Compress to 720p H.264/AAC, extract thumbnail, return (video_path, thumb_path, duration)."""
+def _process_video(input_path, reel_id, workdir=None, info=None):
+    """Transcode the ladder and extract a thumbnail.
+
+    Returns (primary_path, thumb_path, duration, variants) where ``variants``
+    maps ladder fields to local paths.
+    """
     import ffmpeg
 
-    processed_dir = os.path.join(settings.MEDIA_ROOT, 'reels', 'processed')
-    thumb_dir = os.path.join(settings.MEDIA_ROOT, 'thumbnails')
-    os.makedirs(processed_dir, exist_ok=True)
-    os.makedirs(thumb_dir, exist_ok=True)
+    workdir = workdir or tempfile.mkdtemp(prefix=f'reel{reel_id}-')
+    info = info or _probe(input_path)
+    width, height = info['width'], info['height']
+    short_side = min(width, height) if width and height else 0
 
-    out_video = os.path.join(processed_dir, f'reel_{reel_id}_720p.mp4')
-    out_thumb = os.path.join(thumb_dir, f'reel_{reel_id}_thumb.jpg')
+    source_size = os.path.getsize(input_path)
 
-    probe = ffmpeg.probe(input_path)
-    duration = float(probe['format'].get('duration', 0))
+    def keep_smaller(path, rung):
+        # A rung at the upload's own size that came out no smaller than the
+        # upload: re-encoding cost quality and saved nothing (an efficient
+        # 720p H.264 file does this). When the upload is already what
+        # browsers play, serve its own streams re-wrapped instead -- same
+        # picture, no larger. Anything else (VP8/VP9, HEVC, 10-bit, rotated)
+        # keeps the encode: playing everywhere outweighs the bytes.
+        if rung != short_side or os.path.getsize(path) < source_size:
+            return
+        if not _can_serve_as_is(info):
+            return
+        copied = _remux(input_path, f'{path}.copy.mp4', info.get('has_audio', True))
+        if copied and os.path.getsize(copied) < os.path.getsize(path):
+            os.replace(copied, path)
+            logger.info('media.passthrough rung=%sp source_bytes=%s', rung, source_size)
 
     # Never upscale. A 480p source re-encoded to 720p is larger, slower and
     # no sharper -- the rung is skipped rather than manufactured.
-    source_height = 0
-    for stream in probe.get('streams', []):
-        if stream.get('codec_type') == 'video':
-            source_height = int(stream.get('height') or 0)
-            break
-
     variants = {}
-    for field, height, crf in VIDEO_LADDER:
-        if source_height and height > source_height:
+    for field, rung, crf in VIDEO_LADDER:
+        if short_side and rung > short_side:
             continue
-        path = os.path.join(processed_dir, f'reel_{reel_id}_{height}p.mp4')
-        if _transcode(input_path, path, height, crf):
+        path = os.path.join(workdir, f'{rung}p.mp4')
+        if _transcode(input_path, path, rung, crf, width=width, source_height=height):
+            keep_smaller(path, rung)
             variants[field] = path
+
+    # A source smaller than the lowest rung still has to play: one encode at
+    # its own size (rounded to even), with the same codec settings.
+    if not variants and short_side:
+        native = short_side - (short_side % 2)
+        path = os.path.join(workdir, f'{native}p.mp4')
+        if _transcode(
+            input_path, path, native, VIDEO_LADDER[0][2], width=width, source_height=height
+        ):
+            keep_smaller(path, native)
+            variants['media_native'] = path
 
     # 720p is what `media` has always pointed at and what every existing client
     # requests, so it stays the primary. If the ladder produced nothing above
     # 360p -- a very small source, or failed encodes -- the largest that did
     # succeed takes its place rather than leaving the post unplayable.
-    out_video = variants.get('media_720') or variants.get('media_480') or variants.get('media_360')
+    out_video = (
+        variants.get('media_720')
+        or variants.get('media_480')
+        or variants.get('media_360')
+        or variants.get('media_native')
+    )
     if not out_video:
         raise RuntimeError(f'no video rung encoded for reel {reel_id}')
 
+    # Duration from the encoded file: MediaRecorder WebM often carries none.
+    duration = info['duration']
+    try:
+        encoded = float(ffmpeg.probe(out_video).get('format', {}).get('duration') or 0)
+        if encoded > 0:
+            duration = encoded
+    except Exception as exc:  # pragma: no cover - the probe of our own output
+        logger.debug('[TASKS] could not probe the encode for reel %s: %s', reel_id, exc)
+
     # Seek 10% in (capped at 1s) rather than frame 0: the opening frame of a
-    # phone recording is often black or mid-autofocus.
+    # phone recording is often black or mid-autofocus. Taken from the encoded
+    # primary: already the right way up, and far quicker to seek.
     seek = min(1.0, duration * 0.1) if duration > 0 else 0
-    raw_frame = os.path.join(thumb_dir, f'reel_{reel_id}_frame.jpg')
-    (
-        ffmpeg.input(input_path, ss=seek)
-        .output(raw_frame, vframes=1, format='image2', vcodec='mjpeg')
-        .overwrite_output()
-        .run(quiet=True)
-    )
+    raw_frame = os.path.join(workdir, 'frame.jpg')
+    out_thumb = os.path.join(workdir, 'thumb.jpg')
+    try:
+        (
+            ffmpeg.input(out_video, ss=seek)
+            .output(raw_frame, vframes=1, format='image2', vcodec='mjpeg')
+            .overwrite_output()
+            .run(quiet=True)
+        )
+    except Exception as exc:
+        logger.warning('[TASKS] frame grab failed for reel %s: %s', reel_id, exc)
 
     # Crop the extracted frame to the thumbnail target. Done in Pillow rather
     # than as an ffmpeg scale filter so video and image uploads share one
     # implementation of the aspect/crop rules.
-    if _render_thumbnail(raw_frame, out_thumb) is None:
+    if not os.path.exists(raw_frame) or _render_thumbnail(raw_frame, out_thumb) is None:
         out_thumb = None
-    if os.path.exists(raw_frame):
-        os.unlink(raw_frame)
 
-    # variants keeps the smaller rungs so the caller can upload and record
-    # them; out_video remains the primary for backward compatibility.
     return out_video, out_thumb, duration, variants
 
 
-def _process_image(input_path, out_path, max_px=1080):
+def _process_image(input_path, out_path, max_px=1080, fmt='JPEG'):
     """
     Write an optimised copy of the image to out_path.
 
@@ -319,37 +626,51 @@ def _process_image(input_path, out_path, max_px=1080):
     the original was destroyed the first time the task ran and a re-run
     re-compressed already-compressed output. Downscaling only happens when the
     source exceeds max_px -- a smaller image is copied at quality 85 rather
-    than enlarged.
+    than enlarged. EXIF (GPS included) is not carried over: Pillow writes none
+    unless asked to.
     """
     from PIL import Image, ImageOps
 
     try:
         with Image.open(input_path) as img:
-            img = ImageOps.exif_transpose(img).convert('RGB')
+            img = ImageOps.exif_transpose(img)
+            if fmt == 'WEBP' and img.mode in ('RGBA', 'LA'):
+                img = img.convert('RGBA')  # WebP keeps transparency
+            else:
+                img = img.convert('RGB')
             if img.width > max_px or img.height > max_px:
                 img.thumbnail((max_px, max_px), Image.LANCZOS)
-            img.save(out_path, 'JPEG', quality=85, optimize=True, progressive=True)
+            if fmt == 'WEBP':
+                img.save(out_path, 'WEBP', quality=WEBP_QUALITY, method=4)
+            else:
+                img.save(out_path, 'JPEG', quality=85, optimize=True, progressive=True)
         return out_path
     except Exception as e:
-        print(f'[TASKS] Image optimize error: {e}')
+        logger.warning('[TASKS] Image optimize error: %s', e)
         return None
 
 
-def _publish(local_path, s3_key, discard=None):
-    """Upload a generated artifact and return the URL to store for it.
+#: A WebP is kept only when it is at least this much smaller than its JPEG.
+#: A few percent does not pay for a second object in storage and a second
+#: file for browsers to choose between.
+WEBP_MIN_SAVING = 0.10
 
-    Appends to ``discard`` only when the upload actually succeeded. A file that
-    never reached S3 is the one being served -- the caller falls back to its
-    relative path -- so deleting it would leave the reel pointing at nothing.
-    Pass ``discard=None`` for a path that must survive regardless, such as the
-    source image reused when optimisation fails.
+
+def _keep_webp(webp_path, jpg_path):
+    """The WebP rendition, if it is worth serving; otherwise None.
+
+    WebP is the smaller format for photographs but not for everything -- fine
+    grain, flat graphics -- and a client told to prefer it would then download
+    more, not less. Kept only when it saves at least WEBP_MIN_SAVING against
+    the JPEG of the same size.
     """
-    url = _upload_to_s3(local_path, s3_key)
-    if url:
-        if discard is not None:
-            discard.append(local_path)
-        return url
-    return os.path.relpath(local_path, settings.MEDIA_ROOT)
+    if not webp_path or not os.path.exists(webp_path):
+        return None
+    if jpg_path and os.path.exists(jpg_path):
+        limit = os.path.getsize(jpg_path) * (1 - WEBP_MIN_SAVING)
+        if os.path.getsize(webp_path) > limit:
+            return None
+    return webp_path
 
 
 def _write_reel_fields(reel_pk, **fields):
@@ -368,162 +689,439 @@ def _write_reel_fields(reel_pk, **fields):
 
 # ── Main reel processing task ────────────────────────────────────────────────
 
+SOURCE_PREFIX = 'source/'
+PROCESSED_PREFIX = 'processed/'
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def process_reel_media(self, reel_id):
-    """Process a reel's media after upload: compress video or optimise image, generate thumbnail."""
-    from api.models import Reel
+#: A hold older than this belongs to a worker that died mid-run.
+STALE_CLAIM = timedelta(minutes=30)
+
+
+class _Permanent(Exception):
+    """A failure no retry can fix: bad input, or a rule the post breaks."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def _claim(reel_id, task_id, force):
+    """Take the post for this task, or say why not.
+
+    One post is processed by one task at a time. A Celery retry keeps the same
+    task id and so keeps its hold; a second task for the same post -- a double
+    enqueue, a re-drive racing a slow worker -- finds it held and stops. A
+    hold older than STALE_CLAIM is abandoned and may be taken over.
+    """
+    from api.models import MediaStatus, Reel
 
     try:
         reel = Reel.objects.get(pk=reel_id)
     except Reel.DoesNotExist:
-        return f'Reel {reel_id} not found'
+        return None, 'not found'
 
-    media_val = str(reel.media or '').strip()
-    image_val = str(reel.image or '').strip()
-    tmp_file = None
-    # Local copies of artifacts that reached S3. Kept until the end so a failure
-    # mid-flow still cleans up whatever was already uploaded.
-    discard = []
+    status = reel.processing_status
+    if status == MediaStatus.READY and reel.processed_at and not force:
+        return None, 'already processed'
+    if status == MediaStatus.FAILED and not force:
+        return None, 'failed; re-queue with force to try again'
+
+    now = timezone.now()
+    free = (
+        Q(processing_task_id='')
+        | Q(processing_task_id=task_id)
+        | Q(processing_started_at__lt=now - STALE_CLAIM)
+        | Q(processing_started_at__isnull=True)
+    )
+    claim = {'processing_task_id': task_id, 'processing_started_at': now}
+    if status == MediaStatus.FAILED:
+        claim['processing_status'] = MediaStatus.PROCESSING
+    if not Reel.objects.filter(pk=reel_id).filter(free).update(**claim):
+        return None, 'held by another task'
+    reel.refresh_from_db()
+    return reel, None
+
+
+def _charge_long_video(reel, duration):
+    """Charge the over-60-seconds surcharge once, now that the length is known.
+
+    The upload request used to run ffprobe to decide this before answering;
+    the worker is where the real duration is measured, so the charge moved
+    here. `long_video_charged` records it in the same transaction as the
+    debit, so a retry of this task cannot charge twice. A user who cannot pay
+    gets a failed post rather than a free long video.
+    """
+    from django.db import transaction
+
+    from api.models import Reel
+    from api.models.contest import UserCoinBalance
+    from api.models.wallet import WalletConfig
+
+    if duration <= 60 or reel.long_video_charged:
+        return
+    config = WalletConfig.get_config()
+    cost = (
+        config.cost_post_create_long_video
+        if reel.is_campaign_post
+        else config.cost_post_create_long_video_non_campaign
+    )
+    if not cost:
+        return
+    with transaction.atomic():
+        if not Reel.objects.filter(pk=reel.pk, long_video_charged=0).update(
+            long_video_charged=cost
+        ):
+            return
+        balance, _ = UserCoinBalance.objects.get_or_create(user=reel.user)
+        try:
+            balance.spend_coins(
+                cost,
+                'post_long_video',
+                description=f'Video over 60 seconds (post {reel.pk})',
+            )
+        except ValueError as exc:
+            raise _Permanent('long_video_unpaid') from exc
+
+
+def _run_video(reel, version, workdir, live):
+    source_value = reel.original_media or str(reel.media or '')
+    ext = os.path.splitext(source_value.split('?', 1)[0])[1] or '.mp4'
+    input_path = _fetch_source(source_value, workdir, ext)
+    if not input_path or not os.path.exists(input_path):
+        raise _Permanent('source_missing')
 
     try:
-        if media_val:
-            # ── Video flow ──
-            if media_val.startswith('http'):
-                tmp_file = _fetch_to_temp(media_val, '.mp4')
-                input_path = tmp_file
-            else:
-                input_path = _local_path(media_val)
+        info = _probe(input_path)
+    except _Permanent:
+        raise
+    except Exception as exc:
+        raise _Permanent('invalid_media') from exc
 
-            if not input_path or not os.path.exists(input_path):
-                return f'Reel {reel_id}: video file not accessible'
+    # Rules that apply to a new upload, never to a post already published
+    # (a backfill of old posts must not re-charge or reject them).
+    limit = settings.MEDIA_MAX_VIDEO_SECONDS
+    if not live and info['duration'] and info['duration'] > limit:
+        raise _Permanent('video_too_long')
 
-            out_video, out_thumb, duration, variants = _process_video(input_path, reel_id)
+    out_video, out_thumb, duration, variants = _process_video(input_path, reel.pk, workdir, info)
 
-            # Try S3 upload first; fall back to relative local path
-            video_url = _publish(out_video, f'reels/processed/reel_{reel_id}_720p.mp4', discard)
-            thumb_url = (
-                _publish(out_thumb, f'thumbnails/reel_{reel_id}_thumb.jpg', discard)
-                if out_thumb
-                else ''
-            )
+    if not live:
+        if duration > limit:
+            raise _Permanent('video_too_long')
+        _charge_long_video(reel, duration)
 
-            # The smaller rungs. Uploaded individually so one failure costs
-            # that rung alone -- the post still publishes with whatever else
-            # made it, and the API advertises only what exists.
-            variant_urls = {}
-            for field, height, _crf in VIDEO_LADDER:
-                if field == 'media_720' or field not in variants:
-                    continue
-                url = _publish(
-                    variants[field], f'reels/processed/reel_{reel_id}_{height}p.mp4', discard
-                )
-                if url:
-                    variant_urls[field] = url
+    base = f'{PROCESSED_PREFIX}videos/{reel.pk}/v{version}'
+    # Measured before publishing: without object storage, publishing moves
+    # the file out of the work directory.
+    primary_size = os.path.getsize(out_video)
+    primary_url = _publish(out_video, f'{base}/{os.path.basename(out_video)}')
+    if not primary_url:
+        raise RuntimeError('primary rendition could not be stored')
+    fields = {
+        'media': primary_url,
+        'duration': duration,
+        'processed_size': primary_size,
+        'media_360': '',
+        'media_480': '',
+    }
+    if out_thumb:
+        fields['thumbnail'] = (
+            _publish(out_thumb, f'{PROCESSED_PREFIX}thumbnails/{reel.pk}/v{version}/thumb.jpg')
+            or ''
+        )
+    for field, rung, _crf in VIDEO_LADDER:
+        if field in ('media_720',) or field not in variants:
+            continue
+        # The primary may itself be the 480p or 360p rung on a small source.
+        if variants[field] == out_video:
+            fields[field] = primary_url
+            continue
+        url = _publish(variants[field], f'{base}/{rung}p.mp4')
+        if url:
+            fields[field] = url
+    if not reel.original_media:
+        fields['original_media'] = source_value
+    return fields
 
-            # original_media records where the untouched upload lives before
-            # `media` is repointed at the transcode, so processing can be re-run
-            # from source rather than from its own output.
-            _write_reel_fields(
-                reel_id,
-                original_media=reel.original_media or media_val,
-                media=video_url,
-                thumbnail=thumb_url,
-                duration=duration,
-                processed=True,
-                processing_failed=False,
-                **variant_urls,
-            )
 
-        elif image_val:
-            # ── Image flow ──
-            if image_val.startswith('http'):
-                tmp_file = _fetch_to_temp(image_val, '.jpg')
-                input_path = tmp_file
-            else:
-                input_path = _local_path(image_val)
+def _run_image(reel, version, workdir, live):
+    source_value = reel.original_image or str(reel.image or '')
+    ext = os.path.splitext(source_value.split('?', 1)[0])[1] or '.jpg'
+    input_path = _fetch_source(source_value, workdir, ext)
+    if not input_path or not os.path.exists(input_path):
+        raise _Permanent('source_missing')
 
-            if not input_path or not os.path.exists(input_path):
-                return f'Reel {reel_id}: image file not accessible'
+    full_jpg = _process_image(input_path, os.path.join(workdir, 'full.jpg'))
+    if full_jpg is None:
+        raise _Permanent('invalid_media')
+    full_webp = _keep_webp(
+        _process_image(input_path, os.path.join(workdir, 'full.webp'), fmt='WEBP'), full_jpg
+    )
+    thumb = _render_thumbnail(input_path, os.path.join(workdir, 'thumb.jpg'))
 
-            processed_dir = os.path.join(settings.MEDIA_ROOT, 'reels', 'processed')
-            thumb_dir = os.path.join(settings.MEDIA_ROOT, 'thumbnails')
-            os.makedirs(processed_dir, exist_ok=True)
-            os.makedirs(thumb_dir, exist_ok=True)
+    base = f'{PROCESSED_PREFIX}images/{reel.pk}/v{version}'
+    # Measured before publishing, which may move the files. The WebP is what
+    # a modern client downloads, so it is the size that counts.
+    jpg_size = os.path.getsize(full_jpg)
+    webp_size = os.path.getsize(full_webp) if full_webp else None
+    image_url = _publish(full_jpg, f'{base}/full.jpg')
+    if not image_url:
+        raise RuntimeError('primary image could not be stored')
+    fields = {
+        'image': image_url,
+        'image_webp': '',
+        'image_small': '',
+        'image_medium': '',
+        'image_small_webp': '',
+        'image_medium_webp': '',
+        'processed_size': webp_size or jpg_size,
+    }
+    if full_webp:
+        fields['image_webp'] = _publish(full_webp, f'{base}/full.webp') or ''
+    fields['thumbnail'] = (
+        _publish(thumb, f'{PROCESSED_PREFIX}thumbnails/{reel.pk}/v{version}/thumb.jpg')
+        if thumb
+        else None
+    ) or image_url
 
-            out_image = os.path.join(processed_dir, f'reel_{reel_id}.jpg')
-            out_thumb = os.path.join(thumb_dir, f'reel_{reel_id}_thumb.jpg')
+    # Width variants, generated from the SOURCE rather than from full.jpg --
+    # resizing an already-recompressed JPEG stacks artefacts, and the source
+    # is right here.
+    for field, width in IMAGE_LADDER:
+        jpg = _resize_image(input_path, os.path.join(workdir, f'{width}w.jpg'), width)
+        # Compared before publishing, which may move the JPEG.
+        webp = _keep_webp(
+            _resize_image(input_path, os.path.join(workdir, f'{width}w.webp'), width, fmt='WEBP'),
+            jpg,
+        )
+        if jpg:
+            fields[field] = _publish(jpg, f'{base}/{width}w.jpg') or ''
+        if webp:
+            fields[f'{field}_webp'] = _publish(webp, f'{base}/{width}w.webp') or ''
+    if not reel.original_image:
+        fields['original_image'] = source_value
+    return fields
 
-            if _process_image(input_path, out_image) is None:
-                out_image = input_path  # optimisation failed; ship the source
 
-            # A separately cropped thumbnail, not the full image reused. Serving
-            # a 1080px still as a list thumbnail wastes bandwidth on every card.
-            thumb_path = _render_thumbnail(input_path, out_thumb)
+def _is_video(reel):
+    value = reel.original_media or str(reel.media or '')
+    return bool(value)
 
-            # discard=None when optimisation fell back to the source: that path
-            # is the untouched upload, not an artifact this task created.
-            img_url = _publish(
-                out_image,
-                f'reels/reel_{reel_id}.jpg',
-                discard if out_image != input_path else None,
-            )
-            thumb_url = (
-                _publish(thumb_path, f'thumbnails/reel_{reel_id}_thumb.jpg', discard)
-                if thumb_path
-                else img_url
-            )
 
-            # Width variants, generated from the SOURCE rather than from
-            # out_image -- resizing an already-recompressed JPEG stacks
-            # artefacts, and the source is right here.
-            variant_urls = {}
-            for field, width in IMAGE_LADDER:
-                variant_path = os.path.join(processed_dir, f'reel_{reel_id}_{width}w.jpg')
-                if _resize_image(input_path, variant_path, width):
-                    url = _publish(
-                        variant_path, f'reels/variants/reel_{reel_id}_{width}w.jpg', discard
-                    )
-                    if url:
-                        variant_urls[field] = url
+def _finish(reel_id, task_id, **fields):
+    """Write a run's outcome if the run still holds the post; False if not.
 
-            _write_reel_fields(
-                reel_id,
-                original_image=reel.original_image or image_val,
-                image=img_url,
-                thumbnail=thumb_url,
-                processed=True,
-                processing_failed=False,
-                **variant_urls,
-            )
+    A run can lose its hold while it works: it outlived STALE_CLAIM and a
+    re-drive took over, or the post's media was replaced under it. Its outcome
+    then describes media the post no longer has and must not overwrite the
+    newer state.
+    """
+    from api.models import Reel
 
+    return bool(Reel.objects.filter(pk=reel_id, processing_task_id=task_id).update(**fields))
+
+
+def _give_up(reel_id, task_id, code, live):
+    """Record a final failure. A post that was already being served keeps
+    serving what it had -- only a new upload becomes FAILED."""
+    from api.models import MediaStatus
+
+    if live:
+        written = _finish(reel_id, task_id, processing_failed=True, processing_task_id='')
+    else:
+        written = _finish(
+            reel_id,
+            task_id,
+            processing_status=MediaStatus.FAILED,
+            processing_error=code,
+            processing_failed=True,
+            processed=False,
+            processing_task_id='',
+        )
+    logger.warning(
+        'media.failed reel=%s code=%s live=%s%s',
+        reel_id,
+        code,
+        live,
+        '' if written else ' (superseded; not recorded)',
+    )
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60, acks_late=True)
+def process_reel_media(self, reel_id, force=False):
+    """Turn a post's original upload into what the feed serves.
+
+    Videos: an H.264/AAC ladder (360p/480p/720p by short side, never upscaled,
+    aspect kept) and a thumbnail. Images: an optimised JPEG and WebP, 360/720px
+    width variants in both, a thumbnail; the blur placeholder follows.
+
+    Idempotent: a post already processed by this pipeline is skipped unless
+    ``force``; a second task for a post that is being processed stops; every
+    run writes versioned keys, so a retry overwrites its own partial output
+    and a re-process never rewrites objects clients have cached.
+
+    Older posts that were published without processing (READY, never
+    processed) are brought up to date in place when queued -- that is how the
+    generate_missing_media backfill works -- and stay visible throughout.
+    """
+    from api.models import MediaStatus
+
+    task_id = self.request.id or f'direct-{uuid.uuid4().hex}'
+    reel, why = _claim(reel_id, task_id, force)
+    if reel is None:
+        return f'Reel {reel_id}: {why}'
+
+    # A post that is already being served (an older post being backfilled, or
+    # a forced re-process) stays READY on its current media until the new
+    # media is in place.
+    live = reel.processing_status == MediaStatus.READY
+    version = reel.media_version + 1
+    workdir = tempfile.mkdtemp(prefix=f'reel{reel_id}-')
+    started = time.monotonic()
+    try:
+        if _is_video(reel):
+            kind, fields = 'video', _run_video(reel, version, workdir, live)
+        elif reel.original_image or str(reel.image or ''):
+            kind, fields = 'image', _run_image(reel, version, workdir, live)
         else:
-            return f'Reel {reel_id} has no media'
+            raise _Permanent('source_missing')
+
+        finished = _finish(
+            reel_id,
+            task_id,
+            **fields,
+            processing_status=MediaStatus.READY,
+            processing_error='',
+            processed=True,
+            processing_failed=False,
+            processed_at=timezone.now(),
+            media_version=version,
+            processing_task_id='',
+        )
+        if not finished:
+            logger.warning('media.superseded reel=%s version=%s', reel_id, version)
+            return f'Reel {reel_id}: superseded'
+        if reel.media_version:
+            # Every earlier run's outputs, now that this one is in place: the
+            # version it replaces, a replaced upload's media (kept until now,
+            # so a post never loses its old files before the new ones exist),
+            # and anything an abandoned run left. Keys are versioned, so
+            # nothing a client is using is overwritten; this only removes
+            # copies the post no longer refers to.
+            _delete_version(reel_id, keep=version)
 
         # Always generate blurhash after processing
         generate_reel_blurhash.delay(reel_id)
+        logger.info(
+            'media.processed reel=%s kind=%s version=%s seconds=%.1f source_bytes=%s output_bytes=%s',
+            reel_id,
+            kind,
+            version,
+            time.monotonic() - started,
+            reel.source_size,
+            fields.get('processed_size'),
+        )
         return f'Reel {reel_id} processed OK'
 
+    except _Permanent as exc:
+        _give_up(reel_id, task_id, exc.code, live)
+        return f'Reel {reel_id} rejected: {exc.code}'
     except Exception as exc:
-        print(f'[TASKS] process_reel_media error reel={reel_id}: {exc}')
+        logger.exception('[TASKS] process_reel_media error reel=%s', reel_id)
         # On the final attempt, record the failure. Without this a reel that
-        # exhausted its retries is indistinguishable from one still queued --
-        # both are processed=False -- so nothing can report or re-drive it.
+        # exhausted its retries is indistinguishable from one still queued.
         if self.request.retries >= self.max_retries:
-            _write_reel_fields(reel_id, processing_failed=True)
+            _give_up(reel_id, task_id, 'processing_failed', live)
+            return f'Reel {reel_id} failed after retries'
         raise self.retry(exc=exc) from exc
     finally:
-        if tmp_file and os.path.exists(tmp_file):
-            os.unlink(tmp_file)
-        # Transcodes and thumbnails are written under MEDIA_ROOT before being
-        # uploaded. Leaving them there filled the worker's disk: a 720p encode
-        # per reel, never read again once the object store has it.
-        for path in discard:
-            try:
-                if os.path.exists(path):
-                    os.unlink(path)
-            except OSError as exc:  # pragma: no cover - best effort
-                print(f'[TASKS] could not remove artifact {path}: {exc}')
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+@shared_task
+def redrive_stuck_media():
+    """Re-queue posts whose processing never started or stopped mid-way.
+
+    A post is created and its task queued after the transaction commits; if the
+    broker was unreachable at that moment, or the worker died holding the
+    post, nothing would ever pick it up. This finds both and queues them again
+    -- the claim in process_reel_media makes a duplicate harmless.
+    """
+    from api.models import MediaStatus, Reel
+
+    now = timezone.now()
+    stuck = Reel.objects.filter(processing_status=MediaStatus.PROCESSING).filter(
+        Q(processing_started_at__isnull=True, created_at__lt=now - timedelta(minutes=10))
+        | Q(processing_started_at__lt=now - STALE_CLAIM)
+    )
+    ids = list(stuck.values_list('id', flat=True)[:200])
+    for reel_id in ids:
+        process_reel_media.delay(reel_id)
+    return f'Re-queued {len(ids)} post(s)'
+
+
+@shared_task(ignore_result=True)
+def delete_post_media(reel_id, source_keys=(), versions=None):
+    """Remove media a post no longer uses: private originals, and processed
+    versions -- the listed ones, or every one when ``versions`` is None (the
+    post was deleted). Queued once the change has committed; without it these
+    stayed in the bucket forever, since nothing refers to them any more.
+    """
+    from api.services.media_pipeline import discard_source
+
+    for key in source_keys or ():
+        if key and key.startswith(SOURCE_PREFIX):
+            discard_source(key)
+    if versions is None:
+        _delete_version(reel_id)
+    else:
+        for version in versions:
+            _delete_version(reel_id, version)
+    return f'Removed unused media of post {reel_id}'
+
+
+@shared_task
+def purge_processed_sources():
+    """Delete originals of processed posts older than MEDIA_SOURCE_RETENTION_DAYS.
+
+    Off by default (0 keeps everything). Only originals under source/ are ever
+    touched -- older posts' media is not an original in that sense -- and only
+    once the post is READY and its processed media is confirmed to exist.
+    """
+    from api.models import MediaStatus, Reel
+
+    days = settings.MEDIA_SOURCE_RETENTION_DAYS
+    if not days or days <= 0:
+        return 'Retention disabled; originals are kept.'
+
+    from api.services.media_pipeline import processed_media_exists, source_storage
+
+    cutoff = timezone.now() - timedelta(days=days)
+    candidates = Reel.objects.filter(
+        processing_status=MediaStatus.READY,
+        processed_at__lt=cutoff,
+        source_deleted_at__isnull=True,
+    ).filter(
+        Q(original_media__startswith=SOURCE_PREFIX) | Q(original_image__startswith=SOURCE_PREFIX)
+    )
+
+    removed = 0
+    for reel in candidates[:500]:
+        key = (
+            reel.original_media
+            if reel.original_media.startswith(SOURCE_PREFIX)
+            else reel.original_image
+        )
+        if not processed_media_exists(reel):
+            logger.warning('media.retention skipped reel=%s: processed media not found', reel.pk)
+            continue
+        try:
+            source_storage().delete(key)
+        except Exception as exc:
+            logger.warning('media.retention could not delete %s: %s', key, exc)
+            continue
+        _write_reel_fields(reel.pk, source_deleted_at=timezone.now())
+        removed += 1
+    return f'Removed {removed} original(s)'
 
 
 # ── Blurhash ─────────────────────────────────────────────────────────────────

@@ -292,9 +292,22 @@ class ReelSerializer(serializers.ModelSerializer):
     # and a post processed before they existed simply advertises fewer.
     media_variants = serializers.SerializerMethodField()
     image_variants = serializers.SerializerMethodField()
+    # WebP renditions, same keys as image_variants plus "full". Separate so a
+    # client that iterates image_variants keeps getting JPEGs it can decode,
+    # and one that can use WebP asks for it explicitly.
+    image_webp_variants = serializers.SerializerMethodField()
     blurhash = serializers.CharField(read_only=True)
     duration = serializers.FloatField(read_only=True)
     processed = serializers.BooleanField(read_only=True)
+    # UPLOADING | PROCESSING | READY | FAILED. Media URLs are null until READY:
+    # the original is private and never served, so a client shows the
+    # thumbnail or a placeholder until then.
+    processing_status = serializers.CharField(read_only=True)
+    # A short code when FAILED (e.g. "video_too_long"), never an exception.
+    processing_error = serializers.SerializerMethodField()
+    # "video" or "image", known from the moment of upload -- while a video is
+    # processing its `media` is null, so that field cannot say what it is.
+    media_type = serializers.SerializerMethodField()
 
     class Meta:
         model = Reel
@@ -328,7 +341,16 @@ class ReelSerializer(serializers.ModelSerializer):
             'category_slug',
             'media_variants',
             'image_variants',
+            'image_webp_variants',
+            'processing_status',
+            'processing_error',
+            'media_type',
         ]
+
+    # Relative keys this app writes and may serve: `reels/` for uploads saved
+    # before the pipeline, `processed/` for the pipeline's output when object
+    # storage is not configured. Originals under `source/` are never served.
+    _SERVABLE_PREFIXES = ('reels/', 'processed/')
 
     def _build_url(self, field, request):
         """Build absolute URL for a file field, handling both local and Cloudinary storage."""
@@ -356,7 +378,8 @@ class ReelSerializer(serializers.ModelSerializer):
             # are valid (e.g. reels/fallback_5.webm from our local fallback code).
             # Legacy entries like "media/rec_*.webm" or any other relative path would
             # make the Cloudinary storage backend generate a phantom URL → 404.
-            if not name.startswith('reels/'):
+            # source/ keys (private originals) fall through to None here too.
+            if not name.startswith(self._SERVABLE_PREFIXES):
                 return None
 
             # Known-good relative path — let Django storage resolve it
@@ -408,7 +431,7 @@ class ReelSerializer(serializers.ModelSerializer):
 
         # Same guard as _build_url: only paths we intentionally write are
         # resolvable. Anything else would have storage invent a phantom URL.
-        if not name.startswith('reels/'):
+        if not name.startswith(self._SERVABLE_PREFIXES):
             return None
 
         try:
@@ -460,6 +483,40 @@ class ReelSerializer(serializers.ModelSerializer):
             if url:
                 out[key] = url
         return out or None
+
+    def get_image_webp_variants(self, obj):
+        """WebP stills: "360", "720" (widths) and "full". Omitted when absent,
+        so a post processed before WebP existed simply has no such key."""
+        request = self.context.get('request')
+        out = {}
+        for key, field in (
+            ('360', 'image_small_webp'),
+            ('720', 'image_medium_webp'),
+            ('full', 'image_webp'),
+        ):
+            url = self._build_stored_url(getattr(obj, field, ''), request)
+            if url:
+                out[key] = url
+        return out or None
+
+    def get_processing_error(self, obj):
+        return getattr(obj, 'processing_error', '') or None
+
+    _STILL_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif')
+
+    def get_media_type(self, obj):
+        """'video' or 'image' -- known even while `media`/`image` are still
+        empty because the post is PROCESSING."""
+        if getattr(obj, 'original_media', ''):
+            return 'video'
+        media = str(getattr(obj, 'media', '') or '')
+        if media:
+            # Some older posts kept a still in `media`.
+            path = media.split('?', 1)[0].lower()
+            return 'image' if path.endswith(self._STILL_EXTENSIONS) else 'video'
+        if getattr(obj, 'original_image', '') or str(getattr(obj, 'image', '') or ''):
+            return 'image'
+        return None
 
     def get_comment_count(self, obj):
         # Always use actual count to ensure accuracy
@@ -528,6 +585,27 @@ class ReelSerializer(serializers.ModelSerializer):
             Comment.objects.filter(reel=obj).select_related('user').order_by('-created_at')[:3]
         )
         return CommentSerializer(recent_comments, many=True).data
+
+
+def reel_media_payload(reel, request=None):
+    """ReelSerializer's media fields alone, for views that build their own
+    post dicts (campaign feed and entries). The same renditions, the same
+    status, and the same rule that an original is never handed out -- without
+    the full serializer's per-post counting queries."""
+    s = ReelSerializer(context={'request': request})
+    return {
+        'image': s.get_image(reel),
+        'media': s.get_media(reel),
+        'thumbnail': s.get_thumbnail(reel),
+        'blurhash': reel.blurhash or '',
+        'duration': reel.duration,
+        'media_variants': s.get_media_variants(reel),
+        'image_variants': s.get_image_variants(reel),
+        'image_webp_variants': s.get_image_webp_variants(reel),
+        'media_type': s.get_media_type(reel),
+        'processing_status': reel.processing_status,
+        'processing_error': s.get_processing_error(reel),
+    }
 
 
 class CommentSerializer(serializers.ModelSerializer):

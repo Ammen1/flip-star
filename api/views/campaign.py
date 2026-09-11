@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -7,7 +7,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
-from api.models import Follow, Reel
+from api.models import Follow, MediaStatus, Reel
 from api.models.campaign import (
     Campaign,
     CampaignEntry,
@@ -678,6 +678,14 @@ def user_campaign_vote(request, entry_id):
         return Response({'error': 'Entry not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
+def _entry_reel(reel, request):
+    from api.serializers.core import reel_media_payload
+
+    media = reel_media_payload(reel, request)
+    media['thumbnail'] = media['thumbnail'] or media['image']
+    return {'id': reel.id, 'caption': reel.caption, **media}
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @encrypted_endpoint
@@ -685,8 +693,17 @@ def user_campaign_detail(request, campaign_id):
     """Get campaign details with entries"""
     try:
         campaign = Campaign.objects.get(id=campaign_id)
+        is_authenticated = request.user.is_authenticated
+        user = request.user if is_authenticated else None
+
+        # An entry whose media is still being encoded (or failed) has nothing
+        # to show anyone but its author, who sees its state instead.
+        visible = Q(reel__processing_status=MediaStatus.READY)
+        if user is not None:
+            visible |= Q(user=user)
         entries = list(
             CampaignEntry.objects.filter(campaign=campaign, approved=True, disqualified=False)
+            .filter(visible)
             .select_related('user', 'reel')
             .only(
                 'id',
@@ -700,12 +717,22 @@ def user_campaign_detail(request, campaign_id):
                 'reel__image',
                 'reel__media',
                 'reel__thumbnail',
+                'reel__original_media',
+                'reel__original_image',
+                'reel__media_360',
+                'reel__media_480',
+                'reel__image_small',
+                'reel__image_medium',
+                'reel__image_webp',
+                'reel__image_small_webp',
+                'reel__image_medium_webp',
+                'reel__blurhash',
+                'reel__duration',
+                'reel__processing_status',
+                'reel__processing_error',
             )
             .order_by('-vote_count')
         )
-
-        is_authenticated = request.user.is_authenticated
-        user = request.user if is_authenticated else None
 
         # Bulk-fetch voted entries in one query instead of N+1
         voted_entry_ids = set()
@@ -723,15 +750,9 @@ def user_campaign_detail(request, campaign_id):
                     'id': entry.user.id,
                     'username': entry.user.username,
                 },
-                'reel': {
-                    'id': entry.reel.id,
-                    'caption': entry.reel.caption,
-                    'image': get_image_url(entry.reel.image, request) if entry.reel.image else None,
-                    'media': get_image_url(entry.reel.media, request) if entry.reel.media else None,
-                    'thumbnail': get_image_url(entry.reel.thumbnail, request)
-                    if entry.reel.thumbnail
-                    else (get_image_url(entry.reel.image, request) if entry.reel.image else None),
-                },
+                # The main feed's media fields: renditions to choose from, and
+                # never an unprocessed original (get_image_url resolved those).
+                'reel': _entry_reel(entry.reel, request),
                 'vote_count': entry.vote_count,
                 'rank': entry.rank,
                 'is_winner': entry.is_winner,

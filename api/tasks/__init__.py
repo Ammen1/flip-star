@@ -16,9 +16,12 @@ from api.tasks.leaderboards import (
 )
 from api.tasks.media import (
     cleanup_typing_indicators,
+    delete_post_media,
     generate_reel_blurhash,
     optimize_profile_image,
     process_reel_media,
+    purge_processed_sources,
+    redrive_stuck_media,
     send_push_notification,
 )
 from api.tasks.sms import deliver_sms
@@ -30,11 +33,14 @@ __all__ = [
     'expire_boost_campaigns',
     'auto_select_campaign_winners',
     'cleanup_typing_indicators',
+    'delete_post_media',
     'generate_daily_leaderboards',
     'generate_monthly_leaderboards',
     'generate_reel_blurhash',
     'generate_weekly_leaderboards',
     'optimize_profile_image',
     'process_reel_media',
+    'purge_processed_sources',
+    'redrive_stuck_media',
     'send_push_notification',
 ]

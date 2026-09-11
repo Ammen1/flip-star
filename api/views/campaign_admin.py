@@ -18,6 +18,7 @@ from api.models.campaign_extended import (
     UserCampaignStats,
     WinnerSelection,
 )
+from api.services.media_pipeline import served_url
 
 
 def get_image_url(image_field, request=None):
@@ -182,8 +183,12 @@ def admin_campaign_posts_pending(request, campaign_id):
             'reel': {
                 'caption': score.reel.caption,
                 'hashtags': score.reel.hashtags,
-                'image': score.reel.image.url if score.reel.image else None,
-                'media': score.reel.media.url if score.reel.media else None,
+                # Processed media is stored as a full URL, which .url would
+                # mangle; an entry still processing has none to show yet.
+                'image': served_url(score.reel.image),
+                'media': served_url(score.reel.media),
+                'thumbnail': served_url(score.reel.thumbnail),
+                'processing_status': score.reel.processing_status,
                 'created_at': score.reel.created_at,
             },
             'created_at': score.created_at,

@@ -32,7 +32,7 @@ import time
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
-from api.models import Reel
+from api.models import MediaStatus, Reel
 
 
 class Command(BaseCommand):
@@ -64,8 +64,12 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--only',
-            choices=['thumbnails', 'video', 'images'],
-            help='Restrict to one kind of gap instead of all of them.',
+            choices=['thumbnails', 'video', 'images', 'webp'],
+            help=(
+                'Restrict to one kind of gap instead of all of them. "webp" targets '
+                'older photos that have JPEG variants but no WebP; it is never part '
+                'of the default, since it re-encodes every such photo.'
+            ),
         )
 
     def handle(self, *args, **options):
@@ -85,6 +89,7 @@ class Command(BaseCommand):
 
         missing_video_rungs = has_video & (Q(media_360='') | Q(media_480=''))
         missing_image_widths = has_image & (Q(image_small='') | Q(image_medium=''))
+        missing_webp = has_image & Q(image_webp='')
 
         if only == 'thumbnails':
             gaps = missing_thumbnail
@@ -92,12 +97,28 @@ class Command(BaseCommand):
             gaps = missing_video_rungs
         elif only == 'images':
             gaps = missing_image_widths
+        elif only == 'webp':
+            gaps = missing_webp
         else:
             gaps = missing_thumbnail | missing_video_rungs | missing_image_widths
 
+        # Only posts that are live and that the current pipeline has never
+        # finished (processed_at is set when it does). Without this, a post it
+        # has processed but that legitimately lacks a rung -- a 360p source
+        # has no 480p, a narrow photo no 720px width -- matched on every run
+        # for ever. PROCESSING posts are the re-drive's job and FAILED ones
+        # reprocess_media's.
+        not_yet_processed = Q(processing_status=MediaStatus.READY, processed_at__isnull=True)
+
         # A reel with neither media nor image has nothing to generate from, so
         # queueing it would only burn a task to discover that.
-        queryset = Reel.objects.filter(gaps).filter(has_video | has_image).order_by('id').only('id')
+        queryset = (
+            Reel.objects.filter(not_yet_processed)
+            .filter(gaps)
+            .filter(has_video | has_image)
+            .order_by('id')
+            .only('id')
+        )
 
         total = queryset.count()
         if limit:
@@ -148,5 +169,6 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f'Queued {queued} reel(s) for processing.'))
         self.stdout.write(
             'Work runs on the Celery workers; watch their logs for progress. '
-            'Re-running is safe -- reels that finish stop matching the filter.'
+            'Re-running is safe -- reels that finish stop matching the filter, and '
+            'a post stays visible on its current media while it is re-encoded.'
         )

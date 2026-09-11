@@ -19,8 +19,11 @@ def _annotated_reels(user):
         queryset=Comment.objects.select_related('user').order_by('-created_at')[:10],
         to_attr='prefetched_comments',
     )
+    # READY only: following, saved and trending are feeds, and a post still
+    # processing has no media to serve yet.
     qs = (
-        Reel.objects.select_related('user', 'user__profile')
+        Reel.objects.ready()
+        .select_related('user', 'user__profile')
         .prefetch_related(recent_comments_prefetch)
         .annotate(
             comment_count_db=Count('comments', distinct=True),

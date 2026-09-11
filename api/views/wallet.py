@@ -36,6 +36,7 @@ from api.services.coin_packages import (
     pending_coin_purchase,
     purchase_pending_payload,
 )
+from api.services.media_pipeline import served_url
 from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
     classify_initiation_failure,
@@ -89,7 +90,7 @@ def _serialize_transaction(tx):
                     'id': reel.id,
                     'title': reel.title or '',
                     'description': reel.description or '',
-                    'media_url': reel.media.url if reel.media else None,
+                    'media_url': served_url(reel.media),
                 }
         except Exception:
             # Best-effort enrichment: a transaction still serialises without

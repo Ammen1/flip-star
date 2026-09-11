@@ -311,6 +311,12 @@ jobs:
         with:
           dev-requirements: "true"
 
+      # The Celery image ships FFmpeg; without it here the media pipeline's
+      # video tests (tests/integration/test_media_pipeline.py) skip instead
+      # of encoding real clips.
+      - name: Install FFmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg
+
       - name: Migrate CI database
         env:
           DJANGO_SETTINGS_MODULE: config.settings.development
