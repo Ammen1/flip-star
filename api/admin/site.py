@@ -400,10 +400,15 @@ class ReelAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
 
     def get_thumbnail(self, obj):
-        if obj.image:
+        # A video's picture is its thumbnail; processed files are stored as
+        # full URLs, which served_url returns as they are (signed if private).
+        from api.services.media_pipeline import served_url
+
+        url = served_url(obj.thumbnail) or served_url(obj.image)
+        if url:
             return format_html(
                 '<img src="{}" width="100" height="100" style="object-fit: cover; border-radius: 8px;" />',
-                obj.image.url,
+                url,
             )
         return 'No image'
 

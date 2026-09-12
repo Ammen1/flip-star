@@ -696,6 +696,120 @@ def test_hand_built_urls_never_hand_out_an_original(author):
     assert served_url(pending.media) is None
 
 
+# ---------------------------------------------------------------------------
+# Admin panel
+# ---------------------------------------------------------------------------
+#
+# The admin views build their post dicts by hand. They asked storage for
+# `reel.image.url`, which turns a processed file's full URL into a key, and
+# the cards showed only `image` -- which the old upload view filled with a
+# frame grabbed from a video. The pipeline keeps that frame in `thumbnail`,
+# so after it every video card in Content Moderation was an empty clapper.
+
+
+def processed_photo(user, **extra):
+    """A photo as the worker leaves it."""
+    n = Reel.objects.count() + 1
+    return Reel.objects.create(
+        user=user,
+        image=f'{OBS}/processed/images/{n}/v1/full.jpg',
+        thumbnail=f'{OBS}/processed/thumbnails/{n}/v1/thumb.jpg',
+        original_image=f'source/images/{user.pk}/orig{n}.jpg',
+        processed_at=timezone.now(),
+        **extra,
+    )
+
+
+@pytest.fixture
+def moderator():
+    return User.objects.create_user(
+        username='pipeline_moderator', password='x', is_staff=True, is_superuser=True
+    )
+
+
+def admin_get(view, user, path, **kwargs):
+    request = factory.get(path)
+    force_authenticate(request, user=user)
+    return view(request, **kwargs)
+
+
+def test_the_admin_content_list_shows_processed_videos_and_photos(author, stranger, moderator):
+    import json
+
+    from api.views.admin import admin_reels_list
+
+    video = processed_video(author)
+    photo = processed_photo(author)
+    pending = unprocessed_video(stranger)
+
+    response = admin_get(admin_reels_list, moderator, '/admin/reels/')
+
+    assert response.status_code == 200, response.data
+    rows = {row['id']: row for row in response.data['reels']}
+    # The stored URLs, not storage's reading of them as keys.
+    assert rows[video.pk]['media'] == str(video.media)
+    assert rows[video.pk]['thumbnail'] == str(video.thumbnail), 'a video card has no picture'
+    assert rows[video.pk]['media_type'] == 'video'
+    assert rows[photo.pk]['image'] == str(photo.image)
+    assert rows[photo.pk]['media_type'] == 'image'
+    assert rows[pending.pk]['processing_status'] == 'PROCESSING'
+    assert rows[pending.pk]['media'] is None
+    assert 'source/' not in json.dumps(response.data, default=str), 'an original was handed out'
+
+
+def test_the_admin_content_detail_plays_the_processed_video(author, moderator):
+    from api.views.admin import admin_reel_detail
+
+    video = processed_video(author)
+
+    response = admin_get(
+        admin_reel_detail, moderator, f'/admin/reels/{video.pk}/', reel_id=video.pk
+    )
+
+    assert response.status_code == 200, response.data
+    assert response.data['media'] == str(video.media)
+    assert response.data['thumbnail'] == str(video.thumbnail)
+    assert response.data['media_variants'] == {'360': video.media_360, '480': video.media_480}
+    assert response.data['processing_status'] == 'READY'
+
+
+def test_admin_campaign_entries_and_judging_show_the_video_thumbnail(author, moderator, campaign):
+    from api.models.campaign import CampaignEntry
+    from api.models.contest import ContestPostScore
+    from api.views.campaign import admin_campaign_entries
+    from api.views.contest import admin_judging_portal
+
+    video = processed_video(author, campaign=campaign)
+    CampaignEntry.objects.create(campaign=campaign, user=author, reel=video)
+    ContestPostScore.objects.create(reel=video, user=author)
+
+    entries = admin_get(
+        admin_campaign_entries,
+        moderator,
+        f'/admin/campaigns/{campaign.id}/entries/',
+        campaign_id=campaign.id,
+    )
+    judging = admin_get(admin_judging_portal, moderator, '/admin/contest/judging/')
+
+    assert entries.status_code == 200, entries.data
+    assert entries.data[0]['reel']['thumbnail'] == str(video.thumbnail)
+    assert entries.data[0]['reel']['media'] == str(video.media)
+    assert judging.status_code == 200, judging.data
+    assert judging.data['posts'][0]['thumbnail'] == str(video.thumbnail)
+    assert judging.data['posts'][0]['media_type'] == 'video'
+
+
+def test_the_django_admin_preview_shows_a_video_thumbnail(author):
+    from api.admin.site import admin_site
+
+    video = processed_video(author)
+    photo = processed_photo(author)
+    model_admin = admin_site._registry[Reel]
+
+    assert str(video.thumbnail) in model_admin.get_thumbnail(video)
+    assert str(photo.thumbnail) in model_admin.get_thumbnail(photo)
+
+
 def test_the_backfill_only_takes_posts_the_pipeline_has_not_finished(author, monkeypatch):
     """generate_missing_media re-encodes older posts that went out as their
     raw upload. It must not keep re-queueing ones already done."""

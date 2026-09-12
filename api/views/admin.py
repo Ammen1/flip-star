@@ -6,7 +6,7 @@ from django.db.models import Count, Sum, Q, Avg
 from django.utils import timezone
 from datetime import timedelta
 from api.models import UserProfile, Reel, Quest, Competition, Subscription, Vote, Comment, Follow, SavedPost
-from api.serializers.core import UserSerializer, ReelSerializer, QuestSerializer, CompetitionSerializer
+from api.serializers.core import UserSerializer, ReelSerializer, QuestSerializer, CompetitionSerializer, reel_media_payload
 from api.views.subscription import mask_phone_number
 from common.permissions import HasAdminPermission
 
@@ -307,7 +307,11 @@ def admin_reels_list(request):
     
     total = reels.count()
     reels_page = reels[start:end]
-    
+
+    # Media as every other client gets it (reel_media_payload): processed
+    # files are stored as their full OBS URL, which FieldFile.url would mangle
+    # into a key, and a video's picture is its `thumbnail` -- `image` is only
+    # ever a photo's.
     data = [{
         'id': reel.id,
         'user': {
@@ -319,8 +323,8 @@ def admin_reels_list(request):
         'votes': reel.votes,
         'comment_count': reel.comment_count,
         'save_count': reel.save_count,
-        'image': reel.image.url if reel.image else None,
-        'media': reel.media.url if reel.media else None,
+        **reel_media_payload(reel, request),
+        'is_hidden': reel.is_hidden,
         'created_at': reel.created_at
     } for reel in reels_page]
     
@@ -403,23 +407,6 @@ def admin_reel_detail(request, reel_id):
         except Exception:
             pass
 
-    image_url = media_url = thumbnail_url = None
-    if reel.image:
-        try:
-            image_url = reel.image.url
-        except Exception:
-            pass
-    if reel.media:
-        try:
-            media_url = reel.media.url
-        except Exception:
-            pass
-    if reel.thumbnail:
-        try:
-            thumbnail_url = reel.thumbnail.url
-        except Exception:
-            pass
-
     recent_comments = Comment.objects.filter(reel=reel).select_related('user').order_by('-created_at')[:10]
     comments_data = [{
         'id': c.id, 'user': c.user.username, 'text': c.text, 'created_at': c.created_at.isoformat(),
@@ -461,10 +448,9 @@ def admin_reel_detail(request, reel_id):
         'comment_count': reel.comment_count,
         'save_count': reel.save_count,
         'report_count': reel.report_count,
-        'image': image_url,
-        'media': media_url,
-        'thumbnail': thumbnail_url,
-        'duration': reel.duration,
+        # image, media, thumbnail, duration, renditions, media_type and
+        # processing state, resolved the way the feed resolves them.
+        **reel_media_payload(reel, request),
         'is_hidden': reel.is_hidden,
         'is_boosted': reel.is_boosted,
         'campaign': {'id': reel.campaign.id, 'title': reel.campaign.title} if reel.campaign else None,

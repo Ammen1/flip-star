@@ -746,6 +746,8 @@ def toggle_flash_challenge(request):
 @permission_classes([IsAdminUser])
 def admin_judging_portal(request):
     """Get posts pending judgment"""
+    from api.serializers.core import reel_media_payload
+
     status_filter = request.GET.get('status', 'pending')  # pending, judged, all
 
     if status_filter == 'pending':
@@ -768,9 +770,10 @@ def admin_judging_portal(request):
                         'username': score.user.username,
                     },
                     'caption': score.reel.caption if hasattr(score.reel, 'caption') else '',
-                    'image': score.reel.image.url
-                    if hasattr(score.reel, 'image') and score.reel.image
-                    else None,
+                    # image / media / thumbnail as the feed serves them: a
+                    # processed file is stored as its full URL, and a video's
+                    # picture is its thumbnail.
+                    **reel_media_payload(score.reel, request),
                     'current_scores': {
                         'creativity': score.creativity,
                         'quality': score.quality,

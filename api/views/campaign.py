@@ -286,6 +286,8 @@ def admin_campaign_delete(request, campaign_id):
 @permission_classes([IsAdminUser])
 def admin_campaign_entries(request, campaign_id):
     """Get all entries for a campaign"""
+    from api.serializers.core import reel_media_payload
+
     try:
         campaign = Campaign.objects.get(id=campaign_id)
         entries = CampaignEntry.objects.filter(campaign=campaign).select_related('user', 'reel')
@@ -300,9 +302,9 @@ def admin_campaign_entries(request, campaign_id):
                 'reel': {
                     'id': entry.reel.id,
                     'caption': entry.reel.caption,
-                    'image': request.build_absolute_uri(entry.reel.image.url)
-                    if entry.reel.image
-                    else None,
+                    # As the campaign feed serves it (full OBS URLs, and
+                    # the video's thumbnail).
+                    **reel_media_payload(entry.reel, request),
                 },
                 'vote_count': entry.vote_count,
                 'rank': entry.rank,
