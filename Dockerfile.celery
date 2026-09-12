@@ -31,8 +31,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DJANGO_SETTINGS_MODULE=config.settings.production
 
+# Debian security fixes first, keyed by date in CI -- see ./Dockerfile.
+ARG SECURITY_UPDATES=local
 # ffmpeg is the worker's main job (transcoding); libpq5 for the DB driver.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN echo "security updates as of ${SECURITY_UPDATES}" \
+    && apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         ffmpeg \
         libpq5 \
     && rm -rf /var/lib/apt/lists/*

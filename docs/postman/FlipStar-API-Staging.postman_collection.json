@@ -10305,7 +10305,7 @@
       ]
     },
     {
-      "name": "Payments / Onevas Charging",
+      "name": "Payments / Airtime Charging",
       "item": [
         {
           "name": "POST coin purchase on demand",
@@ -11799,6 +11799,32 @@
                   "language": "json"
                 }
               }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET posts processing",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/posts/processing/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "posts",
+                "processing",
+                ""
+              ]
             }
           },
           "response": []
@@ -13857,179 +13883,6 @@
                   "language": "json"
                 }
               }
-            }
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Webhooks (Onevas)",
-      "item": [
-        {
-          "name": "POST onevas renewal",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/onevas/renewal/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "onevas",
-                "renewal",
-                ""
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone_number\": \"251912345678\",\n  \"product_number\": \"10000302850\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST onevas stop",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/onevas/stop/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "onevas",
-                "stop",
-                ""
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone_number\": \"251912345678\",\n  \"product_number\": \"10000302850\",\n  \"params\": [\n    {\n      \"name\": \"keyword\",\n      \"value\": \"STOP1\"\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST onevas subscription",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/onevas/subscription/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "onevas",
-                "subscription",
-                ""
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone_number\": \"251912345678\",\n  \"product_number\": \"10000302850\",\n  \"password\": \"A\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "POST onevas unsubscription",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/onevas/unsubscription/",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "onevas",
-                "unsubscription",
-                ""
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"phone_number\": \"251912345678\",\n  \"product_number\": \"10000302850\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "noauth"
             }
           },
           "response": []

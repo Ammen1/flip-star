@@ -40,11 +40,24 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DJANGO_SETTINGS_MODULE=config.settings.production
 
+# Debian security fixes first. python:3.11-slim is rebuilt only now and then,
+# so it can ship packages Debian has already patched -- perl-base 5.40.1-6
+# did, with three CRITICAL CVEs fixed in 5.40.1-6+deb13u1, and the Trivy gate
+# rightly refused the image. `apt-get upgrade` takes whatever trixie-security
+# has published by build time.
+#
+# SECURITY_UPDATES is the cache key for this layer: CI passes the date, so a
+# cached layer from an earlier day is never reused and fixes arrive within a
+# day instead of whenever the base image is next rebuilt.
+ARG SECURITY_UPDATES=local
 # Runtime-only libraries:
 #   ffmpeg     — video transcoding and thumbnail extraction
 #   libpq5     — PostgreSQL client library (not the -dev headers)
 #   curl       — container health check
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN echo "security updates as of ${SECURITY_UPDATES}" \
+    && apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         ffmpeg \
         libpq5 \
         curl \
