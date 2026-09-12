@@ -42,8 +42,11 @@ pipeline are `READY` and are served exactly as they were.
 Failure codes: `invalid_media`, `video_too_long`, `source_missing`,
 `long_video_unpaid`, `storage_write_failed` (the encode worked but OBS refused
 the output -- a configuration problem; the reason is in the worker's
-`[TASKS] S3/OBS upload failed` warning), `processing_failed` (other transient
-errors outlasted the retries). The web app shows the author a plain sentence
+`[TASKS] S3/OBS upload failed` warning), `record_failed` (the result could not
+be written to the post's row -- deterministic, so not retried; this is what a
+100-character `thumbnail` column did with OBS URLs before migration 0119
+widened `media`, `image` and `thumbnail` to 500), `processing_failed` (other
+transient errors outlasted the retries). The web app shows the author a plain sentence
 for each, never the code.
 
 ## What is produced

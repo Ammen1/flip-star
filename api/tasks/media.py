@@ -11,6 +11,7 @@ import redis
 import requests as http_requests
 from celery import shared_task
 from django.conf import settings
+from django.db import DataError
 from django.db.models import Q
 from django.utils import timezone
 
@@ -1036,6 +1037,13 @@ def process_reel_media(self, reel_id, force=False):
     except _Permanent as exc:
         _give_up(reel_id, task_id, exc.code, live)
         return f'Reel {reel_id} rejected: {exc.code}'
+    except DataError:
+        # The result does not fit the row (a value too long for its column).
+        # Deterministic: every retry would re-encode the whole upload only to
+        # fail on the same write, so it fails now, with its own code.
+        logger.exception('[TASKS] process_reel_media could not record reel=%s', reel_id)
+        _give_up(reel_id, task_id, 'record_failed', live)
+        return f'Reel {reel_id} rejected: record_failed'
     except Exception as exc:
         logger.exception('[TASKS] process_reel_media error reel=%s', reel_id)
         # On the final attempt, record the failure. Without this a reel that

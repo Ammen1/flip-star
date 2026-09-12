@@ -349,8 +349,12 @@ class ReelQuerySet(models.QuerySet):
 
 class Reel(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reels')
-    image = models.ImageField(upload_to='reels/', null=True, blank=True)
-    media = models.FileField(upload_to='reels/', null=True, blank=True)
+    # max_length 500, like the variant columns: processed media is recorded as
+    # its full object-storage URL, and Django's default of 100 is shorter than
+    # that on Ethio Telecom OBS -- a thumbnail URL there is 102 characters, so
+    # every processed post failed at its final write.
+    image = models.ImageField(upload_to='reels/', null=True, blank=True, max_length=500)
+    media = models.FileField(upload_to='reels/', null=True, blank=True, max_length=500)
     caption = models.TextField(blank=True)
     hashtags = models.TextField(blank=True)
     overlay_text = models.TextField(blank=True, default='')
@@ -391,7 +395,7 @@ class Reel(models.Model):
     original_media = models.CharField(max_length=500, blank=True, default='')
     original_image = models.CharField(max_length=500, blank=True, default='')
 
-    thumbnail = models.ImageField(upload_to='thumbnails/', null=True, blank=True)
+    thumbnail = models.ImageField(upload_to='thumbnails/', null=True, blank=True, max_length=500)
 
     # Quality variants, all optional.
     #

@@ -855,6 +855,55 @@ def test_output_storage_refusing_the_files_fails_with_its_own_code(
     assert reel.processing_error == 'storage_write_failed'
 
 
+STAGING_OBS = 'https://flipstar.obsv3.et-global-3.ethiotelecom.et'
+
+
+def test_processed_urls_fit_their_columns_on_the_real_obs_host(
+    image_post, obs, settings, monkeypatch
+):
+    """On staging every post failed at its final write: the thumbnail URL on
+    this OBS host is 102 characters and the column held 100. SQLite does not
+    enforce varchar lengths, so this compares against the declared limits."""
+    settings.S3_ENDPOINT_URL = STAGING_OBS
+    monkeypatch.setattr(media_tasks.generate_reel_blurhash, 'delay', lambda *a: None)
+    reel = image_post(jpeg_bytes(800, 600))
+
+    assert process(reel) == f'Reel {reel.pk} processed OK'
+    reel.refresh_from_db()
+    for field in ('image', 'thumbnail', 'image_webp', 'image_small', 'image_medium'):
+        value = str(getattr(reel, field) or '')
+        limit = Reel._meta.get_field(field).max_length
+        assert value.startswith(f'{STAGING_OBS}/flipstar-media/processed/'), (field, value)
+        assert (
+            len(value) <= limit
+        ), f'{field}: {len(value)} characters into a {limit}-character column'
+
+    # The longest shape a video writes, for a post id far above today's.
+    longest = f'{STAGING_OBS}/flipstar-media/processed/thumbnails/{10**9}/v99/thumb.jpg'
+    for field in ('media', 'image', 'thumbnail'):
+        assert len(longest) <= Reel._meta.get_field(field).max_length, field
+
+
+def test_a_result_that_cannot_be_recorded_fails_at_once(image_post, monkeypatch):
+    """What staging hit: the final write refused (value too long). Retrying
+    re-encodes everything to fail the same way, so it is not retried."""
+    from django.db import DataError
+
+    reel = image_post(jpeg_bytes(800, 600))
+    real_finish = media_tasks._finish
+
+    def finish(reel_id, task_id, **fields):
+        if fields.get('processing_status') == MediaStatus.READY:
+            raise DataError('value too long for type character varying(100)')
+        return real_finish(reel_id, task_id, **fields)
+
+    monkeypatch.setattr(media_tasks, '_finish', finish)
+    assert attempt(reel, 0).get() == f'Reel {reel.pk} rejected: record_failed'
+    reel.refresh_from_db()
+    assert reel.processing_status == MediaStatus.FAILED
+    assert reel.processing_error == 'record_failed'
+
+
 def test_the_s3_client_is_not_logged_at_debug():
     """At DEBUG it logs every URL signature -- ten lines each, the signature
     included -- which is what flooded the staging logs."""
