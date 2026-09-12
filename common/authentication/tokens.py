@@ -28,7 +28,7 @@ from rest_framework.exceptions import AuthenticationFailed
 
 
 class ExpiringTokenAuthentication(TokenAuthentication):
-    """``TokenAuthentication`` that rejects tokens older than ``AUTH_TOKEN_TTL_DAYS``."""
+    """``TokenAuthentication`` that rejects tokens older than ``AUTH_TOKEN_TTL_DAYS``. """
 
     def authenticate_credentials(self, key):
         user, token = super().authenticate_credentials(key)
