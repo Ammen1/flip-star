@@ -624,7 +624,7 @@ jobs:
       # GHCR login only after security gates pass -- the build and scan are
       # both complete before any credential is used.
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.5.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.5.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
