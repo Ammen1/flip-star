@@ -38,8 +38,6 @@ class ExpiringTokenAuthentication(TokenAuthentication):
             age = timezone.now() - token.created
             if age > timedelta(days=ttl_days):
                 token.delete()
-                raise AuthenticationFailed(
-                    'Authentication token has expired. Please log in again.'
-                )
+                raise AuthenticationFailed('Authentication token has expired. Please log in again.')
 
         return user, token
