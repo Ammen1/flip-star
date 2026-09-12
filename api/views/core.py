@@ -1443,6 +1443,74 @@ def create_post(request):
     return _create_post_from_upload(request, request.FILES.get('file'))
 
 
+#: How many posts one status request may ask about.
+PROCESSING_STATUS_MAX_IDS = 20
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def processing_posts(request):
+    """Where the requesting user's uploads are in processing -- all of them in
+    one request, for the web app's upload indicator.
+
+      ?ids=12,13   those posts (any status), so the client sees each one reach
+                   READY or FAILED. Posts that are not the user's, or no longer
+                   exist, are simply absent.
+      (no ids)     the user's posts still PROCESSING from the last day, so an
+                   indicator can be rebuilt on a device that lost its list.
+
+    Each row: id, processing_status, processing_progress (0-100, the worker's
+    real progress; 100 once READY), processing_error (a code, never an
+    exception), media_type, queued -- true while no worker has started -- and
+    created_at. One small query; nothing is signed or serialised beyond these.
+    """
+    from api.models import MediaStatus
+    from api.serializers.core import ReelSerializer
+
+    posts = Reel.objects.filter(user=request.user)
+    raw = (request.query_params.get('ids') or '').strip()
+    if raw:
+        ids = []
+        for part in raw.split(',')[:PROCESSING_STATUS_MAX_IDS]:
+            part = part.strip()
+            if part.isascii() and part.isdigit() and len(part) <= 10:
+                ids.append(int(part))
+        posts = posts.filter(pk__in=ids)
+    else:
+        posts = posts.filter(
+            processing_status=MediaStatus.PROCESSING,
+            created_at__gte=timezone.now() - timedelta(days=1),
+        )
+    posts = posts.only(
+        'id',
+        'media',
+        'image',
+        'original_media',
+        'original_image',
+        'processing_status',
+        'processing_progress',
+        'processing_error',
+        'processing_started_at',
+        'created_at',
+    ).order_by('-created_at')[:PROCESSING_STATUS_MAX_IDS]
+
+    describe = ReelSerializer()
+    rows = [
+        {
+            'id': post.pk,
+            'processing_status': post.processing_status,
+            'processing_progress': describe.get_processing_progress(post),
+            'processing_error': post.processing_error or None,
+            'media_type': describe.get_media_type(post),
+            'queued': post.processing_status == MediaStatus.PROCESSING
+            and post.processing_started_at is None,
+            'created_at': post.created_at,
+        }
+        for post in posts
+    ]
+    return Response({'posts': rows})
+
+
 class _PostNeedsCoins(Exception):
     def __init__(self, message, available):
         super().__init__(message)
@@ -1487,6 +1555,7 @@ def _reset_media(reel, source, intake):
     reel.processed_at = None
     reel.processing_task_id = ''
     reel.processing_started_at = None
+    reel.processing_progress = 0
     # Skip a version: a run of the old media still in flight (a forced
     # re-process) writes where the new media never will, and is discarded.
     reel.media_version += 1

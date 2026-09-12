@@ -249,11 +249,15 @@ def test_total_route_count_is_stable():
     stop), removed with OneVAS itself. TIMWE's datasync is the subscription
     channel; see test_onevas_webhooks_are_gone.
 
+    +1 for posts/processing/ (api/views/core.py: processing_posts), the
+    batched status the web upload indicator polls -- one request per tick for
+    every upload still processing, the caller's own posts only.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 329, (
+    assert len(urlpatterns) == 330, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )

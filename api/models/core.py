@@ -433,6 +433,11 @@ class Reel(models.Model):
     # its hold; a second task for the same post finds it taken and stops.
     processing_task_id = models.CharField(max_length=64, blank=True, default='')
     processing_started_at = models.DateTimeField(null=True, blank=True)
+    # How far the worker is, 0-100, from work actually done -- bytes of the
+    # original fetched, seconds FFmpeg reports encoded, outputs stored --
+    # never estimated from elapsed time. Meaningful while PROCESSING; the API
+    # reports 100 for READY regardless (older rows were never processed here).
+    processing_progress = models.PositiveSmallIntegerField(default=0)
     processed_at = models.DateTimeField(null=True, blank=True)
     # Bumped by every successful processing run and part of every output key,
     # so re-processing writes new objects instead of overwriting ones that

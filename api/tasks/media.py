@@ -82,13 +82,71 @@ def _local_path(value):
     return os.path.join(settings.MEDIA_ROOT, value)
 
 
-def _fetch_source(value, workdir, suffix):
+class _Progress:
+    """How far the worker is with a post, written to ``processing_progress``
+    as the work actually completes -- bytes of the original fetched, seconds
+    FFmpeg reports encoded, outputs stored -- never estimated from time.
+
+    Written only upwards within a run, at most about once a second (or on a
+    jump of MIN_STEP points), and only while this run still holds the post.
+    Capped at 99: 100 is written together with READY. A post that is already
+    being served (a backfill) reports nothing -- nobody is waiting on it.
+    """
+
+    MIN_INTERVAL = 1.0
+    MIN_STEP = 5
+
+    def __init__(self, reel_id=None, task_id=None, enabled=True):
+        self.reel_id = reel_id
+        self.task_id = task_id
+        self.enabled = enabled and reel_id is not None
+        self.written = 0
+        self.written_at = 0.0
+
+    def to(self, percent, force=False):
+        if not self.enabled:
+            return
+        value = max(0, min(99, int(percent)))
+        if value <= self.written:
+            return
+        now = time.monotonic()
+        if not force and value - self.written < self.MIN_STEP:
+            if now - self.written_at < self.MIN_INTERVAL:
+                return
+        self._write(value)
+        self.written = value
+        self.written_at = now
+
+    def _write(self, value):
+        from api.models import Reel
+
+        Reel.objects.filter(pk=self.reel_id, processing_task_id=self.task_id).update(
+            processing_progress=value
+        )
+
+    def span(self, start, end):
+        """A callback for one stage: the fraction (0-1) of that stage done,
+        mapped into start..end of the whole."""
+
+        def report(fraction, force=False):
+            share = max(0.0, min(1.0, float(fraction or 0)))
+            self.to(start + (end - start) * share, force=force)
+
+        return report
+
+
+_NO_PROGRESS = _Progress(enabled=False)
+
+
+def _fetch_source(value, workdir, suffix, on_progress=None, total=None):
     """A local copy of the original upload, wherever it lives.
 
     New uploads are keys under ``source/`` in private storage, so they are
     read through the storage API with the worker's credentials -- there is no
     public URL to download them from, by design. Older posts hold a public URL
     or a MEDIA_ROOT path, and are read the way they always were.
+
+    ``on_progress`` gets the share of ``total`` bytes copied so far.
     """
     if not value:
         return None
@@ -101,8 +159,16 @@ def _fetch_source(value, workdir, suffix):
         from api.services.media_pipeline import source_storage
 
         path = os.path.join(workdir, f'source{suffix}')
+        copied = 0
         with source_storage().open(value, 'rb') as src, open(path, 'wb') as dst:
-            shutil.copyfileobj(src, dst, 1024 * 1024)
+            while True:
+                chunk = src.read(1024 * 1024)
+                if not chunk:
+                    break
+                dst.write(chunk)
+                copied += len(chunk)
+                if on_progress and total:
+                    on_progress(copied / total)
         return path
     return _local_path(value)
 
@@ -433,12 +499,55 @@ def _scale_filter(width, height, rung):
     return f'scale=-2:{rung}'
 
 
-def _transcode(input_path, out_path, height, crf, width=None, source_height=None):
+def _run_ffmpeg(stream, on_progress=None, duration=0.0):
+    """Run an ffmpeg-python stream to completion.
+
+    With ``on_progress`` and a known ``duration`` it reports the fraction
+    encoded as FFmpeg itself counts it (``-progress``: the timestamp written so
+    far over the clip's length). Without either it runs as before. Raises on
+    a non-zero exit, with the tail of FFmpeg's error output.
+    """
+    import subprocess  # noqa: S404 - FFmpeg is the worker's job
+
+    if not on_progress or not duration or duration <= 0:
+        stream.run(quiet=True)
+        return
+    # A report every quarter second (FFmpeg's default is half): enough for a
+    # short clip's bar to move visibly, trivial next to the encode itself.
+    args = stream.global_args('-progress', 'pipe:1', '-nostats', '-stats_period', '0.25').compile()
+    total_us = duration * 1_000_000
+    with tempfile.TemporaryFile() as errors:
+        # Arguments are built by ffmpeg-python from fixed options and paths in
+        # the worker's own temporary directory.
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=errors)  # noqa: S603
+        for raw in proc.stdout:
+            key, _, value = raw.decode('ascii', 'replace').strip().partition('=')
+            # out_time_ms is microseconds too, despite its name (FFmpeg keeps
+            # it for compatibility); out_time_us is the newer spelling.
+            if key in ('out_time_us', 'out_time_ms') and value.isdigit():
+                on_progress(int(value) / total_us)
+        proc.wait()
+        if proc.returncode:
+            errors.seek(0)
+            raise RuntimeError(errors.read()[-800:].decode('utf-8', 'replace'))
+
+
+def _transcode(
+    input_path,
+    out_path,
+    height,
+    crf,
+    width=None,
+    source_height=None,
+    on_progress=None,
+    duration=0.0,
+):
     """One rung of the ladder. Returns the path, or None if encoding failed.
 
     ``height`` is the rung (short side). With the source's display size it
     scales portrait and landscape correctly; without it, it falls back to the
-    old height-only scale.
+    old height-only scale. ``on_progress`` gets the fraction of this rung
+    encoded, from FFmpeg's own progress output (see _run_ffmpeg).
 
     A failed rung is not fatal: the caller keeps whichever rungs succeeded, and
     the API simply does not advertise the missing one. Losing 360p is worth far
@@ -452,7 +561,7 @@ def _transcode(input_path, out_path, height, crf, width=None, source_height=None
         vf = f'scale=-2:{height}'
     maxrate = VIDEO_MAXRATE.get(height, '2500k')
     try:
-        (
+        stream = (
             ffmpeg.input(input_path)
             .output(
                 out_path,
@@ -482,8 +591,8 @@ def _transcode(input_path, out_path, height, crf, width=None, source_height=None
                 audio_bitrate='96k' if height <= 480 else '128k',
             )
             .overwrite_output()
-            .run(quiet=True)
         )
+        _run_ffmpeg(stream, on_progress, duration)
         return out_path
     except Exception as exc:
         logger.warning('[TASKS] %sp transcode failed: %s', height, exc)
@@ -522,11 +631,14 @@ def _resize_image(input_path, out_path, width, fmt='JPEG'):
         return None
 
 
-def _process_video(input_path, reel_id, workdir=None, info=None):
+def _process_video(input_path, reel_id, workdir=None, info=None, on_progress=None):
     """Transcode the ladder and extract a thumbnail.
 
     Returns (primary_path, thumb_path, duration, variants) where ``variants``
-    maps ladder fields to local paths.
+    maps ladder fields to local paths. ``on_progress`` gets the fraction of
+    the whole ladder encoded: each rung's share is its pixel count (a 720p
+    frame is four times the work of a 360p one), filled in as FFmpeg reports
+    that rung's progress.
     """
     import ffmpeg
 
@@ -534,6 +646,40 @@ def _process_video(input_path, reel_id, workdir=None, info=None):
     info = info or _probe(input_path)
     width, height = info['width'], info['height']
     short_side = min(width, height) if width and height else 0
+    clip_seconds = info.get('duration') or 0.0
+
+    planned = [
+        rung for _field, rung, _crf in VIDEO_LADDER if not (short_side and rung > short_side)
+    ]
+    if not planned and short_side:
+        planned = [short_side - (short_side % 2)]
+    total_weight = sum(rung * rung for rung in planned) or 1
+    encoded_weight = 0
+
+    def encode(path, rung, crf):
+        nonlocal encoded_weight
+        share = rung * rung / total_weight
+        done_before = encoded_weight / total_weight
+        report = None
+        if on_progress:
+
+            def report(fraction):
+                on_progress(done_before + share * max(0.0, min(1.0, fraction)))
+
+        result = _transcode(
+            input_path,
+            path,
+            rung,
+            crf,
+            width=width,
+            source_height=height,
+            on_progress=report,
+            duration=clip_seconds,
+        )
+        encoded_weight += rung * rung
+        if on_progress:
+            on_progress(encoded_weight / total_weight, force=True)
+        return result
 
     source_size = os.path.getsize(input_path)
 
@@ -560,7 +706,7 @@ def _process_video(input_path, reel_id, workdir=None, info=None):
         if short_side and rung > short_side:
             continue
         path = os.path.join(workdir, f'{rung}p.mp4')
-        if _transcode(input_path, path, rung, crf, width=width, source_height=height):
+        if encode(path, rung, crf):
             keep_smaller(path, rung)
             variants[field] = path
 
@@ -569,9 +715,7 @@ def _process_video(input_path, reel_id, workdir=None, info=None):
     if not variants and short_side:
         native = short_side - (short_side % 2)
         path = os.path.join(workdir, f'{native}p.mp4')
-        if _transcode(
-            input_path, path, native, VIDEO_LADDER[0][2], width=width, source_height=height
-        ):
+        if encode(path, native, VIDEO_LADDER[0][2]):
             keep_smaller(path, native)
             variants['media_native'] = path
 
@@ -745,6 +889,10 @@ def _claim(reel_id, task_id, force):
         | Q(processing_started_at__isnull=True)
     )
     claim = {'processing_task_id': task_id, 'processing_started_at': now}
+    if status != MediaStatus.READY:
+        # Each run reports its own progress from the start: a retry re-does
+        # the work, and saying so is the honest number.
+        claim['processing_progress'] = 0
     if status == MediaStatus.FAILED:
         claim['processing_status'] = MediaStatus.PROCESSING
     if not Reel.objects.filter(pk=reel_id).filter(free).update(**claim):
@@ -794,10 +942,40 @@ def _charge_long_video(reel, duration):
             raise _Permanent('long_video_unpaid') from exc
 
 
-def _run_video(reel, version, workdir, live):
+def _publisher(paths, on_progress):
+    """``publish(path, key)`` -- _publish, reporting the share of these files'
+    bytes stored so far. Sizes are taken up front: without object storage,
+    publishing moves each file out of the work directory."""
+    sizes = {path: os.path.getsize(path) for path in paths if path and os.path.exists(path)}
+    total = sum(sizes.values()) or 1
+    stored = 0
+
+    def publish(path, key):
+        nonlocal stored
+        url = _publish(path, key)
+        stored += sizes.get(path, 0)
+        on_progress(stored / total)
+        return url
+
+    return publish
+
+
+# Where each stage of a run sits in the 0-100 the author sees. Encoding is
+# nearly all of a video's time; a photo's is mostly the upload of its outputs.
+VIDEO_STAGES = {'fetch': (0, 5), 'probe': 6, 'encode': (6, 92), 'store': (92, 99)}
+IMAGE_STAGES = {'fetch': (0, 10), 'render': (10, 50), 'store': (50, 99)}
+
+
+def _run_video(reel, version, workdir, live, progress=_NO_PROGRESS):
     source_value = reel.original_media or str(reel.media or '')
     ext = os.path.splitext(source_value.split('?', 1)[0])[1] or '.mp4'
-    input_path = _fetch_source(source_value, workdir, ext)
+    input_path = _fetch_source(
+        source_value,
+        workdir,
+        ext,
+        on_progress=progress.span(*VIDEO_STAGES['fetch']),
+        total=reel.source_size,
+    )
     if not input_path or not os.path.exists(input_path):
         raise _Permanent('source_missing')
 
@@ -807,6 +985,7 @@ def _run_video(reel, version, workdir, live):
         raise
     except Exception as exc:
         raise _Permanent('invalid_media') from exc
+    progress.to(VIDEO_STAGES['probe'], force=True)
 
     # Rules that apply to a new upload, never to a post already published
     # (a backfill of old posts must not re-charge or reject them).
@@ -814,7 +993,9 @@ def _run_video(reel, version, workdir, live):
     if not live and info['duration'] and info['duration'] > limit:
         raise _Permanent('video_too_long')
 
-    out_video, out_thumb, duration, variants = _process_video(input_path, reel.pk, workdir, info)
+    out_video, out_thumb, duration, variants = _process_video(
+        input_path, reel.pk, workdir, info, on_progress=progress.span(*VIDEO_STAGES['encode'])
+    )
 
     if not live:
         if duration > limit:
@@ -825,7 +1006,15 @@ def _run_video(reel, version, workdir, live):
     # Measured before publishing: without object storage, publishing moves
     # the file out of the work directory.
     primary_size = os.path.getsize(out_video)
-    primary_url = _publish(out_video, f'{base}/{os.path.basename(out_video)}')
+    extra_rungs = [
+        variants[field]
+        for field, _rung, _crf in VIDEO_LADDER
+        if field != 'media_720' and field in variants and variants[field] != out_video
+    ]
+    publish = _publisher(
+        [out_video, out_thumb, *extra_rungs], progress.span(*VIDEO_STAGES['store'])
+    )
+    primary_url = publish(out_video, f'{base}/{os.path.basename(out_video)}')
     if not primary_url:
         raise _StorageWriteFailed('primary rendition could not be stored')
     fields = {
@@ -837,8 +1026,7 @@ def _run_video(reel, version, workdir, live):
     }
     if out_thumb:
         fields['thumbnail'] = (
-            _publish(out_thumb, f'{PROCESSED_PREFIX}thumbnails/{reel.pk}/v{version}/thumb.jpg')
-            or ''
+            publish(out_thumb, f'{PROCESSED_PREFIX}thumbnails/{reel.pk}/v{version}/thumb.jpg') or ''
         )
     for field, rung, _crf in VIDEO_LADDER:
         if field in ('media_720',) or field not in variants:
@@ -847,7 +1035,7 @@ def _run_video(reel, version, workdir, live):
         if variants[field] == out_video:
             fields[field] = primary_url
             continue
-        url = _publish(variants[field], f'{base}/{rung}p.mp4')
+        url = publish(variants[field], f'{base}/{rung}p.mp4')
         if url:
             fields[field] = url
     if not reel.original_media:
@@ -855,13 +1043,22 @@ def _run_video(reel, version, workdir, live):
     return fields
 
 
-def _run_image(reel, version, workdir, live):
+def _run_image(reel, version, workdir, live, progress=_NO_PROGRESS):
     source_value = reel.original_image or str(reel.image or '')
     ext = os.path.splitext(source_value.split('?', 1)[0])[1] or '.jpg'
-    input_path = _fetch_source(source_value, workdir, ext)
+    input_path = _fetch_source(
+        source_value,
+        workdir,
+        ext,
+        on_progress=progress.span(*IMAGE_STAGES['fetch']),
+        total=reel.source_size,
+    )
     if not input_path or not os.path.exists(input_path):
         raise _Permanent('source_missing')
 
+    # Every output first, then every upload: the uploads can then report the
+    # share of all their bytes stored.
+    rendered = progress.span(*IMAGE_STAGES['render'])
     full_jpg = _process_image(input_path, os.path.join(workdir, 'full.jpg'))
     if full_jpg is None:
         raise _Permanent('invalid_media')
@@ -869,13 +1066,32 @@ def _run_image(reel, version, workdir, live):
         _process_image(input_path, os.path.join(workdir, 'full.webp'), fmt='WEBP'), full_jpg
     )
     thumb = _render_thumbnail(input_path, os.path.join(workdir, 'thumb.jpg'))
+    rendered(0.5)
+
+    # Width variants, generated from the SOURCE rather than from full.jpg --
+    # resizing an already-recompressed JPEG stacks artefacts, and the source
+    # is right here. Each WebP is compared with its JPEG before anything is
+    # published, which may move the JPEG.
+    widths = []
+    for field, width in IMAGE_LADDER:
+        jpg = _resize_image(input_path, os.path.join(workdir, f'{width}w.jpg'), width)
+        webp = _keep_webp(
+            _resize_image(input_path, os.path.join(workdir, f'{width}w.webp'), width, fmt='WEBP'),
+            jpg,
+        )
+        widths.append((field, width, jpg, webp))
+    rendered(1.0, force=True)
 
     base = f'{PROCESSED_PREFIX}images/{reel.pk}/v{version}'
     # Measured before publishing, which may move the files. The WebP is what
     # a modern client downloads, so it is the size that counts.
     jpg_size = os.path.getsize(full_jpg)
     webp_size = os.path.getsize(full_webp) if full_webp else None
-    image_url = _publish(full_jpg, f'{base}/full.jpg')
+    publish = _publisher(
+        [full_jpg, full_webp, thumb, *(p for _f, _w, jpg, webp in widths for p in (jpg, webp))],
+        progress.span(*IMAGE_STAGES['store']),
+    )
+    image_url = publish(full_jpg, f'{base}/full.jpg')
     if not image_url:
         raise _StorageWriteFailed('primary image could not be stored')
     fields = {
@@ -888,27 +1104,18 @@ def _run_image(reel, version, workdir, live):
         'processed_size': webp_size or jpg_size,
     }
     if full_webp:
-        fields['image_webp'] = _publish(full_webp, f'{base}/full.webp') or ''
+        fields['image_webp'] = publish(full_webp, f'{base}/full.webp') or ''
     fields['thumbnail'] = (
-        _publish(thumb, f'{PROCESSED_PREFIX}thumbnails/{reel.pk}/v{version}/thumb.jpg')
+        publish(thumb, f'{PROCESSED_PREFIX}thumbnails/{reel.pk}/v{version}/thumb.jpg')
         if thumb
         else None
     ) or image_url
 
-    # Width variants, generated from the SOURCE rather than from full.jpg --
-    # resizing an already-recompressed JPEG stacks artefacts, and the source
-    # is right here.
-    for field, width in IMAGE_LADDER:
-        jpg = _resize_image(input_path, os.path.join(workdir, f'{width}w.jpg'), width)
-        # Compared before publishing, which may move the JPEG.
-        webp = _keep_webp(
-            _resize_image(input_path, os.path.join(workdir, f'{width}w.webp'), width, fmt='WEBP'),
-            jpg,
-        )
+    for field, width, jpg, webp in widths:
         if jpg:
-            fields[field] = _publish(jpg, f'{base}/{width}w.jpg') or ''
+            fields[field] = publish(jpg, f'{base}/{width}w.jpg') or ''
         if webp:
-            fields[f'{field}_webp'] = _publish(webp, f'{base}/{width}w.webp') or ''
+            fields[f'{field}_webp'] = publish(webp, f'{base}/{width}w.webp') or ''
     if not reel.original_image:
         fields['original_image'] = source_value
     return fields
@@ -989,11 +1196,13 @@ def process_reel_media(self, reel_id, force=False):
     version = reel.media_version + 1
     workdir = tempfile.mkdtemp(prefix=f'reel{reel_id}-')
     started = time.monotonic()
+    # What the author's upload indicator shows (GET /posts/processing/).
+    progress = _Progress(reel_id, task_id, enabled=not live)
     try:
         if _is_video(reel):
-            kind, fields = 'video', _run_video(reel, version, workdir, live)
+            kind, fields = 'video', _run_video(reel, version, workdir, live, progress)
         elif reel.original_image or str(reel.image or ''):
-            kind, fields = 'image', _run_image(reel, version, workdir, live)
+            kind, fields = 'image', _run_image(reel, version, workdir, live, progress)
         else:
             raise _Permanent('source_missing')
 
@@ -1002,6 +1211,7 @@ def process_reel_media(self, reel_id, force=False):
             task_id,
             **fields,
             processing_status=MediaStatus.READY,
+            processing_progress=100,
             processing_error='',
             processed=True,
             processing_failed=False,

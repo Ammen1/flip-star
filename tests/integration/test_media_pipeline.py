@@ -735,6 +735,180 @@ def test_the_backfill_only_takes_posts_the_pipeline_has_not_finished(author, mon
 
 
 # ---------------------------------------------------------------------------
+# Progress: what the upload indicator shows
+# ---------------------------------------------------------------------------
+
+
+def processing_status(user, ids=None):
+    from api.views.core import processing_posts
+
+    params = {'ids': ','.join(str(i) for i in ids)} if ids is not None else {}
+    request = factory.get('/posts/processing/', params)
+    force_authenticate(request, user=user)
+    response = processing_posts(request)
+    assert response.status_code == 200, response.data
+    return {row['id']: row for row in response.data['posts']}
+
+
+def test_the_status_endpoint_answers_for_all_uploads_in_one_request(author, stranger, queued):
+    mine = [create(author, upload('p.jpg', jpeg_bytes())).data['id'] for _ in range(2)]
+    theirs = create(stranger, upload('p.jpg', jpeg_bytes())).data['id']
+    Reel.objects.filter(pk=mine[0]).update(
+        processing_progress=40, processing_started_at=timezone.now()
+    )
+
+    rows = processing_status(author, [*mine, theirs, 987654])
+    assert set(rows) == set(mine), "another user's post, or a missing one, was answered"
+    assert rows[mine[0]]['processing_progress'] == 40 and rows[mine[0]]['queued'] is False
+    assert rows[mine[1]]['processing_progress'] == 0 and rows[mine[1]]['queued'] is True
+    assert rows[mine[0]]['media_type'] == 'image'
+
+
+def test_the_status_endpoint_reports_ready_and_failed(author, queued):
+    ready, failed = (create(author, upload('p.jpg', jpeg_bytes())).data['id'] for _ in range(2))
+    Reel.objects.filter(pk=ready).update(processing_status=MediaStatus.READY, processing_progress=0)
+    Reel.objects.filter(pk=failed).update(
+        processing_status=MediaStatus.FAILED,
+        processing_error='video_too_long',
+        processing_progress=35,
+    )
+    rows = processing_status(author, [ready, failed])
+    assert rows[ready]['processing_status'] == 'READY' and rows[ready]['processing_progress'] == 100
+    assert rows[failed]['processing_status'] == 'FAILED'
+    assert rows[failed]['processing_error'] == 'video_too_long'
+
+
+def test_without_ids_it_lists_what_is_still_processing(author, queued):
+    """How an indicator is rebuilt on a device that lost its list."""
+    pending = create(author, upload('p.jpg', jpeg_bytes())).data['id']
+    done = create(author, upload('p.jpg', jpeg_bytes())).data['id']
+    old = create(author, upload('p.jpg', jpeg_bytes())).data['id']
+    Reel.objects.filter(pk=done).update(processing_status=MediaStatus.READY)
+    Reel.objects.filter(pk=old).update(created_at=timezone.now() - timedelta(days=2))
+    assert set(processing_status(author)) == {pending}
+
+
+def test_garbage_ids_are_ignored(author, queued):
+    pk = create(author, upload('p.jpg', jpeg_bytes())).data['id']
+    assert set(processing_status(author, [f'{pk}', 'x', '-3', '9' * 40])) == {pk}
+
+
+def test_progress_is_written_upwards_throttled_and_only_while_held(image_post, monkeypatch):
+    reel = image_post(jpeg_bytes())
+    Reel.objects.filter(pk=reel.pk).update(processing_task_id='t-1')
+    clock = [100.0]
+    monkeypatch.setattr(media_tasks.time, 'monotonic', lambda: clock[0])
+    progress = media_tasks._Progress(reel.pk, 't-1')
+
+    def stored():
+        return Reel.objects.get(pk=reel.pk).processing_progress
+
+    progress.to(3)
+    assert stored() == 3, 'the first report should show at once'
+    progress.to(4)
+    assert stored() == 3, 'a small step within the second was written'
+    clock[0] += 1.5
+    progress.to(5)
+    assert stored() == 5
+    progress.to(20)
+    assert stored() == 20, 'a big jump waited'
+    progress.to(12, force=True)
+    assert stored() == 20, 'progress went backwards'
+    progress.to(250, force=True)
+    assert stored() == 99, '100 is only for READY'
+
+    Reel.objects.filter(pk=reel.pk).update(processing_task_id='someone-else', processing_progress=5)
+    progress.to(99, force=True)
+    assert stored() == 5, 'a run that lost its hold wrote progress'
+
+
+def test_an_image_run_reports_real_progress_and_ready_is_100(image_post, monkeypatch):
+    reel = image_post(photo_bytes(1600, 1200))
+    written = []
+    real_write = media_tasks._Progress._write
+    monkeypatch.setattr(
+        media_tasks._Progress, '_write', lambda self, v: (written.append(v), real_write(self, v))
+    )
+    monkeypatch.setattr(media_tasks._Progress, 'MIN_INTERVAL', 0)
+
+    assert process(reel) == f'Reel {reel.pk} processed OK'
+    reel.refresh_from_db()
+    assert written == sorted(written) and len(set(written)) == len(written), written
+    assert written[0] <= 10 and 50 in written and written[-1] == 99, written
+    assert reel.processing_progress == 100
+    assert processing_status(reel.user, [reel.pk])[reel.pk]['processing_progress'] == 100
+
+
+def test_a_failed_post_being_retried_starts_its_progress_again(image_post):
+    reel = image_post(jpeg_bytes(800, 600))
+    Reel.objects.filter(pk=reel.pk).update(
+        processing_status=MediaStatus.FAILED, processing_progress=73
+    )
+    held, _ = media_tasks._claim(reel.pk, 'retry-task', force=True)
+    assert held.processing_progress == 0
+
+
+def test_ffmpeg_progress_lines_become_fractions(monkeypatch):
+    """What _run_ffmpeg reads from FFmpeg's -progress output."""
+    import subprocess
+
+    lines = [
+        b'frame=12\n',
+        b'out_time_us=N/A\n',
+        b'out_time_us=1000000\n',
+        b'progress=continue\n',
+        b'out_time_ms=3000000\n',  # microseconds too, despite the name
+        b'progress=end\n',
+    ]
+
+    class Proc:
+        def __init__(self, args, stdout=None, stderr=None):
+            self.stdout = iter(lines)
+            self.returncode = None
+
+        def wait(self):
+            self.returncode = 0
+
+    class Stream:
+        def global_args(self, *args):
+            self.extra = args
+            return self
+
+        def compile(self):
+            return ['ffmpeg', *self.extra]
+
+    seen = []
+    monkeypatch.setattr(subprocess, 'Popen', Proc)
+    media_tasks._run_ffmpeg(Stream(), seen.append, duration=4.0)
+    assert seen == [0.25, 0.75]
+
+
+@needs_ffmpeg
+def test_a_video_reports_ffmpegs_own_progress(video_post, monkeypatch):
+    """Encoding is most of a video's bar, and the numbers there come from
+    FFmpeg's own -progress output, rung by rung, weighted by pixels -- not
+    only a step as each rung finishes."""
+    reel = video_post(720, 1280, seconds=12)
+    written = []
+    real_write = media_tasks._Progress._write
+    monkeypatch.setattr(
+        media_tasks._Progress, '_write', lambda self, v: (written.append(v), real_write(self, v))
+    )
+    monkeypatch.setattr(media_tasks._Progress, 'MIN_INTERVAL', 0)
+    monkeypatch.setattr(media_tasks._Progress, 'MIN_STEP', 1)
+
+    assert process(reel) == f'Reel {reel.pk} processed OK'
+    assert written == sorted(written), written
+    # Where each rung ends: 6 + 86 x its cumulative share of the pixels.
+    total = 360**2 + 480**2 + 720**2
+    boundaries = {int(6 + 86 * s) for s in (360**2 / total, (360**2 + 480**2) / total, 1)}
+    within_a_rung = [v for v in written if 6 < v < 92 and v not in boundaries]
+    assert len(within_a_rung) >= 2, f'no progress from inside an encode: {written}'
+    reel.refresh_from_db()
+    assert reel.processing_progress == 100
+
+
+# ---------------------------------------------------------------------------
 # Object storage as a deployment configures it
 # ---------------------------------------------------------------------------
 #

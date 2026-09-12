@@ -49,6 +49,25 @@ widened `media`, `image` and `thumbnail` to 500), `processing_failed` (other
 transient errors outlasted the retries). The web app shows the author a plain sentence
 for each, never the code.
 
+### Progress
+
+`processing_progress` (0-100) is how far the worker actually is, written by
+the task that holds the claim -- never estimated from elapsed time:
+
+| Stage | Video | Photo | Measured from |
+|---|---|---|---|
+| fetch the original | 0-5 | 0-10 | bytes copied / object size |
+| probe | 6 | -- | |
+| encode / render | 6-92 | 10-50 | FFmpeg `-progress pipe:1` `out_time` / duration; photo outputs rendered |
+| store outputs | 92-99 | 50-99 | share of the output bytes stored in OBS |
+
+Video rungs are weighted by their pixel count (a 720p encode is most of the
+work). A row is written once a second at most, sooner only when the value has
+moved 5 points, and only by the run holding `processing_task_id`, so a run
+that lost its claim cannot move a bar. The worker stops at 99; 100 is written with READY in the same update. A
+retry starts again from 0, as does replacing the media; re-encoding a post
+that is already READY (the backfill) leaves it at 100.
+
 ## What is produced
 
 **Video** -- H.264 High / AAC, yuv420p, faststart, metadata (GPS included)
@@ -100,7 +119,7 @@ Thumbnails: 7-46 KB.
 `ReelSerializer` adds, without removing anything:
 
 - `processing_status`, `processing_error`, `media_type` (`video`/`image`, known
-  while processing)
+  while processing), `processing_progress` (100 once READY)
 - `media_variants` `{"360", "480"}`, `image_variants` `{"360", "720"}`,
   `image_webp_variants` `{"360", "720", "full"}` -- a key is absent when that
   file does not exist
@@ -113,17 +132,58 @@ The campaign feed (`/campaigns/<id>/feed/`) and campaign entries
 list an entry that is not READY only to its author. Views that build a URL by
 hand use `served_url`, which never returns a `source/` key.
 
+`GET /posts/processing/` is the batched status for the upload indicator: the
+caller's own posts only, one small query, no media URLs.
+
+```
+GET /api/v1/posts/processing/?ids=12,13     # those posts, any status (at most 20)
+GET /api/v1/posts/processing/               # own posts PROCESSING from the last day
+
+{"posts": [{"id": 12, "processing_status": "PROCESSING", "processing_progress": 60,
+            "processing_error": null, "media_type": "video", "queued": false,
+            "created_at": "…"}]}
+```
+
+`queued` is true while no worker has started the post yet. A post that is not
+the caller's, or no longer exists, is simply absent from `posts`.
+
 ## Web client
 
 - **Upload** (`pages/general/EnhancedPostPage.jsx`): sends `client_upload_id`,
   the same on every retry of a post and, for a gallery file, across a reload of
   the page (`utils/uploadId.js`, sessionStorage, 30 minutes, cleared on
-  success). The success screen says the post is being prepared.
+  success). As soon as the API accepts the upload (201 with the PROCESSING
+  post) the app goes to Home -- no success screen, no waiting for FFmpeg -- and
+  the upload moves to the corner indicator. A campaign entry is tracked the
+  same way.
+- **Upload indicator** (`components/common/UploadProgressIndicator.jsx`, top
+  right of every page): a ring around a small thumbnail of the upload (made
+  in the browser from the chosen file, `utils/uploadThumb.js`) with the worker's
+  own `processing_progress` -- "Waiting to process…" while `queued`, then 25%,
+  60%… The ring eases between readings; the number is always the last one the
+  server gave, and nothing counts up on a timer. At READY it shows "Posted"
+  for 2.5 s and goes; Home puts the post at the top of the feed without a
+  reload (`flipstar:post-ready`). At FAILED it stays, with the same plain
+  sentence as the post page and a Dismiss button. Tapping one opens the post
+  page. Up to three show, then "+N more uploading".
+- **Tracking** (`utils/uploadTracker.js`, one instance in
+  `services/uploadTracker.js`): every upload being processed is kept in
+  localStorage (`flipstar.processingUploads.v1`), so a refresh or a new tab
+  picks the list up and carries on; to catch uploads the list does not have
+  (storage cleared, another device) the app asks `GET /posts/processing/` (no
+  ids) once when it starts signed in. However many uploads
+  there are, each tick is **one** request, `GET /posts/processing/?ids=…`.
+  Only one tab polls (a Web Lock, `flipstar-processing-poller`); the others
+  follow through `storage` events and take over if it closes. Every 2 s for
+  the first 3 minutes of an upload, then 5 s, then 15 s; an entry older than
+  2 hours is dropped. At READY the full post is fetched once and the `/reels`
+  cache cleared. Signing out clears the list.
 - **Processing state** (`components/common/MediaProcessingState.jsx`): the
   author's PROCESSING / FAILED posts show a placeholder on the post page, the
   profile grid, the post viewer and campaign entries, and swap in the media
-  when READY (`hooks/usePostProcessing.js`: one request per post after 3, 5, 8
-  and 13 s, then every 15 s, stopping at READY/FAILED or after 15 minutes).
+  when READY. `hooks/usePostProcessing.js` watches through the same tracker,
+  so a post open on its page while it is in the indicator is still one
+  request per tick, not two.
 - **Renditions** (`utils/connection.js`): slow connection 360p, normal 480p,
   fast 720p. The home feed, Reels, the post page, both viewers and the
   campaign pages (`components/feed/ProcessedMedia.jsx`) all choose this way.
@@ -218,6 +278,12 @@ python manage.py generate_missing_media --only webp --commit
 Run the backfill once after deploying: until then, posts made through
 `/posts/create/` before this change are still served as their original upload.
 
+Migrations: `0119` widens `media`, `image` and `thumbnail` to 500 characters,
+`0120` adds `processing_progress` (default 0). On PostgreSQL both are
+catalogue-only changes -- no table rewrite. Deploy the API and the worker
+image together: a worker without `0120` cannot report progress, and the API
+reads the column.
+
 A post whose original was removed under the retention setting cannot be
 re-processed; the command reports it.
 
@@ -228,14 +294,20 @@ Logs: `media.processed reel=… kind=… seconds=… source_bytes=… output_byt
 
 `tests/integration/test_media_pipeline.py` -- intake, category, idempotency,
 visibility, editing and deleting, retries, retention, campaign feed and
-entries, the backfill filter, and real FFmpeg encodes (9:16, 16:9, 1:1,
-360p-1080p, with and without audio, rotated, WebM, tiny, an efficient upload
-that must not grow). The FFmpeg tests skip when `ffmpeg` is not installed;
-CI's integration job installs it.
+entries, the backfill filter, progress (the status endpoint, throttling, a
+retry resetting it, FFmpeg's progress lines, and a real 12 s encode that must
+report values from inside a rung, not only as each one ends), and real FFmpeg encodes
+(9:16, 16:9, 1:1, 360p-1080p, with and without audio, rotated, WebM, tiny, an
+efficient upload that must not grow). The FFmpeg tests skip when `ffmpeg` is
+not installed; CI's integration job installs it.
 
 Web: `tests/mediaPipeline.test.js` (`npm test`) for the pickers, status, upload
-ids and polling; `tests/browser/media.harness.jsx` (`npm run test:browser --
-media`) plays real recorded clips through the post page, Reels and the
-campaign feed and checks, from the server's request log, which files the
-browser fetched -- the right rung, WebP instead of JPEG, and never a
-`source/` original.
+ids and the upload tracker (one request per tick for many uploads, refresh,
+two tabs, READY/FAILED/expiry); `tests/browser/media.harness.jsx` (`npm run
+test:browser -- media`) plays real recorded clips through the post page, Reels
+and the campaign feed and checks, from the server's request log, which files
+the browser fetched -- the right rung, WebP instead of JPEG, and never a
+`source/` original -- and drives the corner indicator through the percentages
+the stub server reports, a failure, a reload and several uploads at once.
+`camera.harness.jsx` checks that posting lands on Home with the upload in the
+indicator.

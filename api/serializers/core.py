@@ -303,6 +303,8 @@ class ReelSerializer(serializers.ModelSerializer):
     # the original is private and never served, so a client shows the
     # thumbnail or a placeholder until then.
     processing_status = serializers.CharField(read_only=True)
+    # 0-100, from the worker's real progress while PROCESSING; 100 once READY.
+    processing_progress = serializers.SerializerMethodField()
     # A short code when FAILED (e.g. "video_too_long"), never an exception.
     processing_error = serializers.SerializerMethodField()
     # "video" or "image", known from the moment of upload -- while a video is
@@ -343,6 +345,7 @@ class ReelSerializer(serializers.ModelSerializer):
             'image_variants',
             'image_webp_variants',
             'processing_status',
+            'processing_progress',
             'processing_error',
             'media_type',
         ]
@@ -508,6 +511,13 @@ class ReelSerializer(serializers.ModelSerializer):
     def get_processing_error(self, obj):
         return getattr(obj, 'processing_error', '') or None
 
+    def get_processing_progress(self, obj):
+        # Older rows were never processed by the pipeline and hold 0; READY is
+        # complete by definition.
+        if getattr(obj, 'processing_status', 'READY') == 'READY':
+            return 100
+        return int(getattr(obj, 'processing_progress', 0) or 0)
+
     _STILL_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif')
 
     def get_media_type(self, obj):
@@ -610,6 +620,7 @@ def reel_media_payload(reel, request=None):
         'image_webp_variants': s.get_image_webp_variants(reel),
         'media_type': s.get_media_type(reel),
         'processing_status': reel.processing_status,
+        'processing_progress': s.get_processing_progress(reel),
         'processing_error': s.get_processing_error(reel),
     }
 

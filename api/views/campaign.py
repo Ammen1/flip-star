@@ -729,6 +729,7 @@ def user_campaign_detail(request, campaign_id):
                 'reel__blurhash',
                 'reel__duration',
                 'reel__processing_status',
+                'reel__processing_progress',
                 'reel__processing_error',
             )
             .order_by('-vote_count')

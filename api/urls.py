@@ -71,6 +71,7 @@ from api.views.core import (
     mark_notifications_read,
     mark_single_notification_read,
     privacy_policy,
+    processing_posts,
     register,
     register_with_phone,
     resend_subscription_otp,
@@ -559,6 +560,7 @@ urlpatterns = [
     ),
     path('setup-admin/', setup_admin, name='setup-admin'),
     path('posts/create/', create_post, name='create-post'),
+    path('posts/processing/', processing_posts, name='posts-processing'),
     path('notifications/', get_user_notifications, name='user-notifications'),
     path(
         'notifications/unread-count/',
