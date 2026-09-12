@@ -455,7 +455,7 @@ jobs:
       # single build → scan → push pipeline.
 
       - name: Trivy scan (API) -- fail on CRITICAL
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
           severity: "CRITICAL"
@@ -463,7 +463,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan (Celery) -- fail on CRITICAL
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
           severity: "CRITICAL"
@@ -471,7 +471,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan -- full report (HIGH+, non-blocking)
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
@@ -480,7 +480,7 @@ jobs:
           format: "table"
 
       - name: Trivy scan (Celery) -- full report (HIGH+, non-blocking)
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
@@ -588,7 +588,7 @@ jobs:
       # Trivy scan runs on the exact image built above -- same job, same
       # Docker daemon, no transfer. CRITICAL is fatal; HIGH+ is informational.
       - name: Trivy scan (API) -- fail on CRITICAL
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
           severity: "CRITICAL"
@@ -596,7 +596,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan (Celery) -- fail on CRITICAL
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
           severity: "CRITICAL"
@@ -604,7 +604,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Trivy scan -- full report (HIGH+, non-blocking)
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           image-ref: ${{ env.IMAGE_API }}:${{ steps.tag.outputs.sha }}
@@ -613,7 +613,7 @@ jobs:
           format: "table"
 
       - name: Trivy scan (Celery) -- full report (HIGH+, non-blocking)
-        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         if: always()
         with:
           image-ref: ${{ env.IMAGE_CELERY }}:${{ steps.tag.outputs.sha }}
