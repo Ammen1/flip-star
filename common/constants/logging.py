@@ -101,6 +101,16 @@ def build_logging_config(level: str = 'INFO', json_format: bool = False) -> dict
                 'level': 'WARNING',
                 'propagate': False,
             },
+            # The S3 client stack (OBS media). At DEBUG it writes about ten
+            # lines per request -- and per media URL it signs, which is every
+            # URL in a feed response when the bucket needs signed URLs --
+            # including the canonical request and the signature itself.
+            # Pinned for the same reason as daphne above; their failures still
+            # surface, as WARNING here and through the callers' own logging.
+            **{
+                name: {'handlers': ['console'], 'level': 'WARNING', 'propagate': False}
+                for name in ('botocore', 'boto3', 's3transfer', 'urllib3')
+            },
             'api': {
                 'handlers': ['console'],
                 'level': level,

@@ -361,9 +361,13 @@ class ReelSerializer(serializers.ModelSerializer):
             if not name:
                 return None
 
-            # Already a full URL (stored via raw SQL after Cloudinary upload) — return as-is
+            # Already a full URL (processed media, or an older Cloudinary
+            # upload). Signed when it points into our own bucket and that
+            # bucket's objects are private; otherwise as stored.
             if name.startswith('http://') or name.startswith('https://'):
-                return name
+                from api.services.media_pipeline import servable_url
+
+                return servable_url(name)
 
             # Properly rooted local path (e.g. /media/reels/fallback_5.webm)
             if name.startswith('/'):
@@ -424,7 +428,9 @@ class ReelSerializer(serializers.ModelSerializer):
 
         name = str(value)
         if name.startswith('http://') or name.startswith('https://'):
-            return name
+            from api.services.media_pipeline import servable_url
+
+            return servable_url(name)
 
         if name.startswith('/'):
             return self._absolute(name, request)

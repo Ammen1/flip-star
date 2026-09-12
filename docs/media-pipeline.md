@@ -40,8 +40,11 @@ stores it; the answer comes as soon as the bytes are in OBS.
 pipeline are `READY` and are served exactly as they were.
 
 Failure codes: `invalid_media`, `video_too_long`, `source_missing`,
-`long_video_unpaid`, `processing_failed` (transient errors outlasted the
-retries).
+`long_video_unpaid`, `storage_write_failed` (the encode worked but OBS refused
+the output -- a configuration problem; the reason is in the worker's
+`[TASKS] S3/OBS upload failed` warning), `processing_failed` (other transient
+errors outlasted the retries). The web app shows the author a plain sentence
+for each, never the code.
 
 ## What is produced
 
@@ -170,13 +173,33 @@ Processed objects are written with `Cache-Control: public, max-age=31536000,
 immutable` (their keys never change content); originals with
 `private, no-store`.
 
+### Public or private bucket
+
+The worker writes with exactly the ACL the web process uses:
+
+| `S3_DEFAULT_ACL` | Objects written | Media URLs the API returns |
+|---|---|---|
+| `public-read` (default) | public-read; originals explicitly private | plain, stable URLs |
+| empty | no ACL header at all (the bucket's default, private) | signed (`S3_QUERYSTRING_AUTH` follows) |
+
+On a private bucket the worker still records processed media as
+`{S3_ENDPOINT_URL}/{bucket}/{key}`; the API signs those on the way out
+(`servable_url`), as it signs every other media URL. Signed URLs change on
+every response, so browsers cannot cache them across visits -- the price of a
+private bucket.
+
+The S3 client libraries (`botocore`, `boto3`, `s3transfer`, `urllib3`) log at
+WARNING whatever `LOG_LEVEL` is: at DEBUG they write about ten lines per
+signed URL, signature included.
+
 ## Operations
 
 ```
 # re-process specific posts (always queues)
 python manage.py reprocess_media --reel 123 --reel 456
 
-# every FAILED post: dry run, then queue
+# every FAILED post: dry run, then queue. After fixing a storage problem,
+# this brings back the posts that failed on it -- their originals are intact.
 python manage.py reprocess_media --failed
 python manage.py reprocess_media --failed --commit
 

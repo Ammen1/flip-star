@@ -136,9 +136,12 @@ def _upload_to_s3(local_path, s3_key):
             s3_kwargs['endpoint_url'] = endpoint_url
 
         extra = {'ContentType': mimetypes.guess_type(s3_key)[0] or 'application/octet-stream'}
-        # The same ACL the web process writes with; a bucket that rejects ACL
-        # headers is configured with S3_DEFAULT_ACL= (empty) and gets none.
-        acl = getattr(settings, 'AWS_DEFAULT_ACL', 'public-read')
+        # The same ACL the web process writes with, and none when none is
+        # configured. S3_DEFAULT_ACL= (empty) leaves AWS_DEFAULT_ACL undefined;
+        # this used to fall back to public-read regardless, so on a bucket
+        # that refuses public ACLs every processed file failed to upload and
+        # every post ended FAILED after its retries.
+        acl = getattr(settings, 'AWS_DEFAULT_ACL', None)
         if acl:
             extra['ACL'] = acl
         if immutable:
@@ -704,6 +707,14 @@ class _Permanent(Exception):
         self.code = code
 
 
+class _StorageWriteFailed(RuntimeError):
+    """The encode worked but object storage refused the result. Retried like
+    any transient error; if it outlasts the retries the post records
+    `storage_write_failed` rather than a generic failure, since the cause is
+    configuration or OBS, not the upload -- and the reason is in the
+    '[TASKS] S3/OBS upload failed' warning just before it."""
+
+
 def _claim(reel_id, task_id, force):
     """Take the post for this task, or say why not.
 
@@ -815,7 +826,7 @@ def _run_video(reel, version, workdir, live):
     primary_size = os.path.getsize(out_video)
     primary_url = _publish(out_video, f'{base}/{os.path.basename(out_video)}')
     if not primary_url:
-        raise RuntimeError('primary rendition could not be stored')
+        raise _StorageWriteFailed('primary rendition could not be stored')
     fields = {
         'media': primary_url,
         'duration': duration,
@@ -865,7 +876,7 @@ def _run_image(reel, version, workdir, live):
     webp_size = os.path.getsize(full_webp) if full_webp else None
     image_url = _publish(full_jpg, f'{base}/full.jpg')
     if not image_url:
-        raise RuntimeError('primary image could not be stored')
+        raise _StorageWriteFailed('primary image could not be stored')
     fields = {
         'image': image_url,
         'image_webp': '',
@@ -1030,7 +1041,12 @@ def process_reel_media(self, reel_id, force=False):
         # On the final attempt, record the failure. Without this a reel that
         # exhausted its retries is indistinguishable from one still queued.
         if self.request.retries >= self.max_retries:
-            _give_up(reel_id, task_id, 'processing_failed', live)
+            code = (
+                'storage_write_failed'
+                if isinstance(exc, _StorageWriteFailed)
+                else 'processing_failed'
+            )
+            _give_up(reel_id, task_id, code, live)
             return f'Reel {reel_id} failed after retries'
         raise self.retry(exc=exc) from exc
     finally:

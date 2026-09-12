@@ -155,9 +155,11 @@ _source_storage = None
 def source_storage():
     """Where originals are kept: the same bucket, but private.
 
-    The rest of the app writes public-read objects (media is served straight
-    from OBS). Originals are not served, so they are written with a private
-    ACL; the worker reads them with its own credentials.
+    Where the rest of the app writes public-read objects, originals are
+    written with an explicit private ACL: they are never served. Where no ACL
+    is configured (S3_DEFAULT_ACL empty: objects are private by default, or
+    the bucket refuses ACL headers) none is sent. The worker reads them with
+    its own credentials either way.
     """
     global _source_storage
     if _source_storage is None:
@@ -167,7 +169,7 @@ def source_storage():
             from storages.backends.s3boto3 import S3Boto3Storage
 
             _source_storage = S3Boto3Storage(
-                default_acl='private',
+                default_acl='private' if getattr(settings, 'AWS_DEFAULT_ACL', None) else None,
                 querystring_auth=True,
                 object_parameters={'CacheControl': 'private, no-store'},
             )
@@ -246,6 +248,42 @@ def queue_processing(reel_id):
     transaction.on_commit(_send, robust=True)
 
 
+def own_storage_key(url):
+    """The key of a full URL into this app's own bucket -- the form the worker
+    records processed media in, {S3_ENDPOINT_URL}/{bucket}/{key} -- or None."""
+    endpoint = (getattr(settings, 'S3_ENDPOINT_URL', '') or '').rstrip('/')
+    bucket = getattr(settings, 'S3_BUCKET_NAME', '') or ''
+    if not (url and endpoint and bucket):
+        return None
+    prefix = f'{endpoint}/{bucket}/'
+    if not url.startswith(prefix):
+        return None
+    return url[len(prefix) :].split('?', 1)[0] or None
+
+
+def servable_url(url):
+    """A stored full URL as a client should load it.
+
+    Where the bucket's objects are not public (AWS_QUERYSTRING_AUTH -- which
+    is on whenever S3_DEFAULT_ACL is not public-read) an unsigned URL answers
+    403, and the worker records processed media as unsigned URLs. Those are
+    signed here, the way storage signs every other media URL; anything else
+    passes through unchanged. A source/ original is never returned.
+    """
+    key = own_storage_key(url)
+    if key is None:
+        return url
+    if key.startswith(SOURCE_PREFIX):
+        return None
+    if not getattr(settings, 'AWS_QUERYSTRING_AUTH', False):
+        return url
+    try:
+        return default_storage.url(key)
+    except Exception as exc:  # pragma: no cover - fall back to what was stored
+        logger.warning('media.servable_url could not sign %s: %s', key, exc)
+        return url
+
+
 def served_url(field, request=None):
     """The URL a client may load for a stored media field, or None.
 
@@ -261,7 +299,7 @@ def served_url(field, request=None):
     if not name:
         return None
     if name.startswith(('http://', 'https://')):
-        return name
+        return servable_url(name)
     if name.startswith(SOURCE_PREFIX):
         return None
     try:

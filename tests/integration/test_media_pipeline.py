@@ -735,6 +735,138 @@ def test_the_backfill_only_takes_posts_the_pipeline_has_not_finished(author, mon
 
 
 # ---------------------------------------------------------------------------
+# Object storage as a deployment configures it
+# ---------------------------------------------------------------------------
+#
+# Staging runs with S3_DEFAULT_ACL empty: objects are private and every media
+# URL is signed. There the worker sent a public-read ACL anyway (a fallback),
+# OBS refused every processed file, and each web post ended FAILED.
+
+
+class FakeS3:
+    def __init__(self):
+        self.uploads = []
+
+    def upload_file(self, local_path, bucket, key, ExtraArgs=None):
+        self.uploads.append((bucket, key, dict(ExtraArgs or {})))
+
+
+@pytest.fixture
+def obs(settings, monkeypatch):
+    import boto3
+
+    settings.S3_BUCKET_NAME = 'flipstar-media'
+    settings.S3_ENDPOINT_URL = 'https://obs.example'
+    settings.S3_REGION_NAME = 'et-global-3'
+    settings.S3_ACCESS_KEY_ID = 'key'
+    settings.S3_SECRET_ACCESS_KEY = 'secret'
+    client = FakeS3()
+    monkeypatch.setattr(boto3, 'client', lambda *a, **k: client)
+    return client
+
+
+def test_processed_files_carry_no_acl_where_none_is_configured(obs, settings, tmp_path):
+    if hasattr(settings, 'AWS_DEFAULT_ACL'):
+        del settings.AWS_DEFAULT_ACL
+    local = tmp_path / 'full.jpg'
+    local.write_bytes(b'jpeg')
+
+    url = media_tasks._upload_to_s3(str(local), 'processed/images/1/v1/full.jpg')
+
+    assert url == 'https://obs.example/flipstar-media/processed/images/1/v1/full.jpg'
+    _bucket, _key, extra = obs.uploads[-1]
+    assert 'ACL' not in extra, 'sent an ACL the deployment does not use'
+    assert extra['ContentType'] == 'image/jpeg'
+    assert 'immutable' in extra['CacheControl']
+
+
+def test_processed_files_carry_the_configured_acl(obs, settings, tmp_path):
+    settings.AWS_DEFAULT_ACL = 'public-read'
+    local = tmp_path / '360p.mp4'
+    local.write_bytes(b'mp4')
+    media_tasks._upload_to_s3(str(local), 'processed/videos/1/v1/360p.mp4')
+    assert obs.uploads[-1][2]['ACL'] == 'public-read'
+    assert obs.uploads[-1][2]['ContentType'] == 'video/mp4'
+
+
+def test_originals_carry_no_acl_where_none_is_configured(settings, monkeypatch):
+    from api.services import media_pipeline
+    from infrastructure.storage.config import S3_STORAGE
+
+    settings.DEFAULT_FILE_STORAGE = S3_STORAGE
+    settings.AWS_STORAGE_BUCKET_NAME = 'flipstar-media'
+    if hasattr(settings, 'AWS_DEFAULT_ACL'):
+        del settings.AWS_DEFAULT_ACL
+    monkeypatch.setattr(media_pipeline, '_source_storage', None)
+    assert media_pipeline.source_storage().default_acl is None
+
+    settings.AWS_DEFAULT_ACL = 'public-read'
+    monkeypatch.setattr(media_pipeline, '_source_storage', None)
+    assert media_pipeline.source_storage().default_acl == 'private', 'an original went public'
+
+
+def test_media_in_a_private_bucket_is_served_signed(author, stranger, settings, monkeypatch):
+    from django.core.files.storage import default_storage
+
+    from api.services.media_pipeline import servable_url
+
+    settings.S3_BUCKET_NAME = 'flipstar-media'
+    settings.S3_ENDPOINT_URL = 'https://obs.example'
+    settings.AWS_QUERYSTRING_AUTH = True
+    signed = []
+
+    def sign(key):
+        signed.append(key)
+        return f'https://obs.example/flipstar-media/{key}?X-Amz-Signature=abc'
+
+    monkeypatch.setattr(default_storage, 'url', sign)
+    base = 'https://obs.example/flipstar-media/processed/videos/7/v1'
+    reel = Reel.objects.create(user=author, media=f'{base}/720p.mp4', media_360=f'{base}/360p.mp4')
+
+    row = list_reels(stranger)[reel.pk]
+    assert row['media'] == f'{base}/720p.mp4?X-Amz-Signature=abc'
+    assert row['media_variants']['360'] == f'{base}/360p.mp4?X-Amz-Signature=abc'
+    assert 'processed/videos/7/v1/720p.mp4' in signed
+
+    settings.AWS_QUERYSTRING_AUTH = False  # public objects: as stored
+    assert servable_url(f'{base}/720p.mp4') == f'{base}/720p.mp4'
+    elsewhere = 'https://res.cloudinary.com/demo/video/upload/clip.mp4'
+    assert servable_url(elsewhere) == elsewhere
+    assert servable_url('https://obs.example/flipstar-media/source/videos/1/a.mp4') is None
+
+
+def test_output_storage_refusing_the_files_fails_with_its_own_code(
+    image_post, settings, monkeypatch
+):
+    from celery.exceptions import Retry
+
+    reel = image_post(jpeg_bytes(800, 600))
+    settings.S3_BUCKET_NAME = 'flipstar-media'
+    monkeypatch.setattr(media_tasks, '_upload_to_s3', lambda path, key: None)  # OBS refused
+
+    for number in range(media_tasks.process_reel_media.max_retries):
+        with pytest.raises(Retry):
+            attempt(reel, number)
+    assert attempt(reel, media_tasks.process_reel_media.max_retries).get() == (
+        f'Reel {reel.pk} failed after retries'
+    )
+    reel.refresh_from_db()
+    assert reel.processing_status == MediaStatus.FAILED
+    assert reel.processing_error == 'storage_write_failed'
+
+
+def test_the_s3_client_is_not_logged_at_debug():
+    """At DEBUG it logs every URL signature -- ten lines each, the signature
+    included -- which is what flooded the staging logs."""
+    from common.constants.logging import build_logging_config
+
+    loggers = build_logging_config(level='DEBUG')['loggers']
+    for name in ('botocore', 'boto3', 's3transfer', 'urllib3'):
+        assert loggers[name]['level'] == 'WARNING', name
+    assert loggers['api']['level'] == 'DEBUG', 'the app itself should still follow LOG_LEVEL'
+
+
+# ---------------------------------------------------------------------------
 # Replacing a post's media, and deleting a post
 # ---------------------------------------------------------------------------
 
