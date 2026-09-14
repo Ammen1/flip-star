@@ -21,7 +21,10 @@ data:
   # here Django answers 400 DisallowedHost with an HTML page, before the
   # webhook view ever runs. That is indistinguishable from a parse failure
   # in the logs, which is how it went unnoticed.
-  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,172.16.170.2,10.0.0.93"
+  # partner-webserver679.phinfra.local:7890 is TIMWE's infrastructure probing
+  # the backend (it also hits /api/v1/timwe/sync-order-relation); without it
+  # here Django answers 400 DisallowedHost and logs an ERROR for every probe.
+  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,172.16.170.2,10.0.0.93,partner-webserver679.phinfra.local"
 
   # The pod CIDR, so X-Forwarded-For from ingress-nginx is honoured.
   # common/security/client_ip.py only trusts that header when the immediate
