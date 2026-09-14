@@ -68,8 +68,12 @@ class _ExtendedUserThrottle(_ExtendedRateMixin, UserRateThrottle):
 
 def _make(scope_name: str):
     """Build an (anon, user) pair of throttles bound to the same scope name."""
-    anon = type(f'{scope_name.title()}AnonThrottle', (_ExtendedAnonThrottle,), {'scope': scope_name})
-    user = type(f'{scope_name.title()}UserThrottle', (_ExtendedUserThrottle,), {'scope': scope_name})
+    anon = type(
+        f'{scope_name.title()}AnonThrottle', (_ExtendedAnonThrottle,), {'scope': scope_name}
+    )
+    user = type(
+        f'{scope_name.title()}UserThrottle', (_ExtendedUserThrottle,), {'scope': scope_name}
+    )
     return anon, user
 
 
@@ -80,6 +84,7 @@ PasswordResetAnonThrottle, PasswordResetUserThrottle = _make('password_reset')
 PhoneLookupAnonThrottle, PhoneLookupUserThrottle = _make('phone_lookup')
 # Report submission is IsAuthenticated-only, so no anon counterpart is wired up.
 _ReportAnonThrottle, ReportUserThrottle = _make('report')
+MediaRefreshAnonThrottle, MediaRefreshUserThrottle = _make('media_refresh')
 
 
 def _get_throttle_ident(request) -> str:

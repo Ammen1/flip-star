@@ -253,11 +253,16 @@ def test_total_route_count_is_stable():
     batched status the web upload indicator polls -- one request per tick for
     every upload still processing, the caller's own posts only.
 
+    +1 for posts/media/ (api/views/core.py: refresh_post_media): media URLs
+    signed now for posts a client already has, and the diagnosis of one that
+    would not load (api/services/media_availability.py). Same visibility as
+    the feed; never an original.
+
     Update it deliberately when the API genuinely changes.
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 330, (
+    assert len(urlpatterns) == 331, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )

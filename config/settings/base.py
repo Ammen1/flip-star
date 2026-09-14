@@ -175,6 +175,9 @@ REST_FRAMEWORK = {
         'password_reset': '5/min',
         'phone_lookup': '20/min',
         'report': '5/hour',
+        # POST /posts/media/: fresh media URLs for posts a client already has.
+        # A long feed session refreshes in batches of up to 20 posts.
+        'media_refresh': '120/min',
     },
 }
 
@@ -253,6 +256,9 @@ if _storage['default_acl']:
 # URLs rotate their signature on every call, so the same object arrives under a
 # new URL in every API response and no browser or CDN cache can ever hit.
 AWS_QUERYSTRING_AUTH = _storage['querystring_auth']
+# Lifetime of those signatures (seconds); see docs/media-pipeline.md, "When a
+# video will not load".
+AWS_QUERYSTRING_EXPIRE = _storage['querystring_expire']
 AWS_S3_OBJECT_PARAMETERS = _storage['object_parameters']
 
 # Video MIME types must be registered for range-request streaming to work.

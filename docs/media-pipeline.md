@@ -195,6 +195,9 @@ the caller's, or no longer exists, is simply absent from `posts`.
   `none`/`metadata`, no `autoPlay` attribute in Reels).
 - **Edit Post** (profile): replacement media is sent with a `client_upload_id`
   too, so a retried edit is recognised rather than refused with 409.
+- **Media that stops loading** (an expired signature, a replaced or lost file):
+  every player refreshes and retries through `services/mediaRecovery.js`
+  before it says unavailable -- see "When a video will not load".
 
 ## Retries and duplicates
 
@@ -226,6 +229,7 @@ the caller's, or no longer exists, is simply absent from `posts`.
 | `MEDIA_MAX_VIDEO_SECONDS` | 92 | longer videos FAIL with `video_too_long` |
 | `MEDIA_MAX_IMAGE_PIXELS` | 40000000 | larger photos get 400 `image_too_large` |
 | `MEDIA_SOURCE_RETENTION_DAYS` | 0 | 0 keeps originals forever |
+| `S3_QUERYSTRING_EXPIRE` | 3600 | seconds a signed media URL works (private bucket); see "When a video will not load" |
 
 With retention above 0, `purge_processed_sources` (daily) deletes originals of
 posts that have been READY for that many days -- only after confirming the
@@ -254,6 +258,88 @@ private bucket.
 The S3 client libraries (`botocore`, `boto3`, `s3transfer`, `urllib3`) log at
 WARNING whatever `LOG_LEVEL` is: at DEBUG they write about ten lines per
 signed URL, signature included.
+
+## When a video will not load
+
+**Why it happened.** On a private bucket (staging) every media URL is signed
+and works for `S3_QUERYSTRING_EXPIRE` seconds -- an hour by default. The web
+app held those URLs for as long as a page stayed open and replayed them from
+its feed caches; OBS then answers 403, which a `<video>` reports as error 4.
+The Reels card hid its player on the first error and read "Video
+unavailable" for good, even once fresh media arrived, and nothing on the
+server heard about it. A post edited or re-processed since the client
+fetched it has the same symptom: its old version's files are removed.
+
+**What happens now.**
+
+- *Before a URL runs out* the web app asks for new ones:
+  `hooks/useFreshMedia.js` a little before each post's earliest signature
+  expires, and Reels once a minute for every loaded card -- one request for
+  up to 20 posts. A playing clip keeps its file until it stops or its URL is
+  about to die.
+- *Feed caches* (Reels, Home, Profile, campaign feed) are never shown when a
+  URL in them has run out or will within five minutes (`utils/signedUrl.js`).
+- *A load that fails anyway* is reported to `POST /api/v1/posts/media/` with
+  the URL, the media error and the screen; the server works out why, logs it,
+  and answers with the post's media signed now, less any rendition storage
+  has lost. The player swaps it in and carries on where it stopped. A post
+  is retried at most twice in ten minutes (`utils/mediaRecovery.js`); only
+  then does it say unavailable. Never an original.
+
+```
+POST /api/v1/posts/media/
+{"ids": [12, 13],
+ "failures": [{"id": 12, "url": "<the URL that did not load>", "error": "4", "surface": "reels"}]}
+
+{"posts": [{"id": 12, "media": "...", "media_variants": {...}, "thumbnail": "...", ...,
+            "media_check": {"reason": "expired_signature", "repairing": false}},
+           {"id": 13, ..., "media_check": null}],
+ "expires_in": 3600}
+```
+
+Same visibility as the feed (moderation, READY or own), anonymous allowed,
+20 ids and 5 failures per request, throttled (`media_refresh`, 120/min).
+
+**The reasons**, in the answer and in the log (`api/services/media_availability.py`):
+
+| `reason` | Meaning | What to do |
+|---|---|---|
+| `expired_signature` | the URL was signed longer ago than `S3_QUERYSTRING_EXPIRE` | nothing; expected for pages left open |
+| `superseded` | the URL is for media the post no longer has (edited, re-processed) | nothing |
+| `object_missing` | storage has no such object (404) | the post is re-processed from its original automatically, once per 30 min; `check_media` lists others |
+| `access_denied` | OBS refused the API's own credentials (403) | bucket policy / ACL of that object |
+| `storage_error` | OBS did not answer (timeout, 5xx) | OBS status, network from the pods |
+| `clock_skew` | the object is there, but OBS's clock is more than 2 min from ours | NTP on the API nodes -- signatures from a skewed clock are refused |
+| `unsigned` | an unsigned URL into the private bucket | the stored URL's host does not match `S3_ENDPOINT_URL` |
+| `original_requested` | a URL into `source/` | a client bug; originals are never served |
+| `external` | not this app's storage (old Cloudinary URL) | re-upload or re-process the post |
+| `not_ready` | the post is processing or failed | nothing |
+| `available` | nothing wrong on the server's side: the object is there and a fresh URL is valid | the browser: network, codec (see `error`) |
+
+Log lines -- one per reported failure; the key, never the signature:
+
+```
+media.unavailable reel=50 field=media_480 reason=expired_signature status=- skew=- surface=reels error=4 key=processed/videos/50/v1/480p.mp4 missing=- repairing=False viewer=17
+media.unavailable reel=51 field=media reason=object_missing status=404 skew=0 surface=home error=4 key=processed/videos/51/v2/720p.mp4 missing=media,media_480 repairing=True viewer=anon
+media.repair_queued reel=51 missing=media,media_480
+```
+
+`expired_signature`, `superseded` and `not_ready` are INFO; `clock_skew`,
+`unsigned`, `external` and `available` WARNING; the rest ERROR. Storage is
+asked (HEAD, the app's credentials) only when the URL itself does not explain
+the failure, and one answer is reused for a minute.
+
+**From the server's side**, without waiting for a viewer:
+
+```
+python manage.py check_media                  # READY posts of the last 7 days
+python manage.py check_media --reel 50 --reel 51
+python manage.py check_media --days 30 --repair   # ... and re-process posts with missing files
+```
+
+It HEADs every rendition each post advertises, prints missing (404), denied
+(403) or unreachable files, how URLs are signed and for how long, and the
+clock difference between the pod and OBS.
 
 ## Operations
 
@@ -311,3 +397,15 @@ the browser fetched -- the right rung, WebP instead of JPEG, and never a
 the stub server reports, a failure, a reload and several uploads at once.
 `camera.harness.jsx` checks that posting lands on Home with the upload in the
 indicator.
+
+Media that stops working: `tests/integration/test_media_availability.py`
+(refresh signing, every diagnosis reason against a fake OBS -- expired,
+superseded, missing, 403, 5xx, unreachable, clock skew, unsigned, originals --
+missing renditions left out, repair queued once, visibility, the feed signing
+afresh on each request, `check_media`); `tests/mediaRecovery.test.js` (URL
+expiry parsing, batching, shared requests, the retry limit, offline); and in
+the browser the stub signs URLs as a private bucket does and answers 403/404
+the way OBS does: an expired URL in Reels is reported and replaced and the
+clip plays, a lost rung falls back to one that exists, a post with no files
+left says "Video unavailable" once without looping, a cached feed with dead
+URLs is not replayed, and the campaign feed and post page recover too.

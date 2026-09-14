@@ -385,6 +385,20 @@ SCHEMA: tuple[Key, ...] = (
     _k('S3_USE_SSL', kind='bool', group='storage'),
     _k('S3_DEFAULT_ACL', group='storage'),
     _k(
+        'S3_QUERYSTRING_AUTH',
+        kind='bool',
+        group='storage',
+        doc='Sign media URLs. Defaults on exactly when S3_DEFAULT_ACL is not '
+        'public-read (a private bucket needs signatures).',
+    ),
+    _k(
+        'S3_QUERYSTRING_EXPIRE',
+        kind='int',
+        group='storage',
+        doc='Seconds a signed media URL works (default 3600, 60 to 604800). '
+        'Clients refresh expired URLs through POST /api/v1/posts/media/.',
+    ),
+    _k(
         'MINIO_ROOT_USER',
         group='storage',
         doc='Local MinIO console/API user (docker-compose only; the Kubernetes '

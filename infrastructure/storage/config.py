@@ -86,6 +86,15 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
         cast=bool,
     )
 
+    # How long a signed URL works, in seconds. django-storages' own default,
+    # stated here so it is visible: every media URL the API hands out from a
+    # private bucket stops working this long after the response, and clients
+    # must ask again (POST /api/v1/posts/media/) rather than keep using it.
+    # SigV4 caps presigned URLs at seven days.
+    querystring_expire = min(
+        max(config('S3_QUERYSTRING_EXPIRE', default=3600, cast=int), 60), 7 * 24 * 3600
+    )
+
     # Cache-Control written onto uploaded objects. Media is immutable: the key
     # contains the upload's own name, and processing writes to a new key rather
     # than overwriting, so a stored copy never goes stale. Without this header
@@ -104,6 +113,7 @@ def apply_storage_settings(media_url: str) -> dict[str, Any]:
         'staticfiles_storage': WHITENOISE_STORAGE,
         'use_ssl': False,
         'querystring_auth': querystring_auth,
+        'querystring_expire': querystring_expire,
         'object_parameters': object_parameters,
         'media_url': media_url,
         'default_acl': default_acl,

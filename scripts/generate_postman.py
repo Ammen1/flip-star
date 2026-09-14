@@ -196,6 +196,17 @@ BODIES = {
     'boost-engagement': {'reel_id': 1, 'engagement_type': 'like'},
     'boost-calculate-cost': {'duration_hours': 24, 'has_premium_targeting': False},
     'create-post': {'caption': 'My first post', 'hashtags': 'flipstar,ethiopia', 'campaign_id': ''},
+    'posts-media': {
+        'ids': [1, 2],
+        'failures': [
+            {
+                'id': 1,
+                'url': 'https://obs.example/flipstar-media/processed/videos/1/v1/480p.mp4?X-Amz-Date=...',
+                'error': '4',
+                'surface': 'reels',
+            }
+        ],
+    },
     'create-campaign-post': {'campaign_id': 1, 'caption': 'Campaign entry', 'hashtags': 'contest'},
     'campaign-enter': {'reel_id': 1},
     'cast-vote': {'finalist_id': 2},

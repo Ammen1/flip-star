@@ -313,6 +313,23 @@ def served_url(field, request=None):
     return request.build_absolute_uri(url)
 
 
+def storage_client():
+    """A boto3 client for the media bucket with the app's own credentials, or
+    None where media lives on the local filesystem."""
+    if not getattr(settings, 'S3_BUCKET_NAME', ''):
+        return None
+    import boto3
+
+    kwargs = {
+        'aws_access_key_id': settings.S3_ACCESS_KEY_ID,
+        'aws_secret_access_key': settings.S3_SECRET_ACCESS_KEY,
+        'region_name': settings.S3_REGION_NAME,
+    }
+    if settings.S3_ENDPOINT_URL:
+        kwargs['endpoint_url'] = settings.S3_ENDPOINT_URL
+    return boto3.client('s3', **kwargs)
+
+
 def processed_media_exists(reel):
     """Whether the post's processed primary file is actually in storage."""
     from api.tasks.media import PROCESSED_PREFIX

@@ -64,6 +64,8 @@ from common.security import EncryptedPayloadMixin, encrypted_endpoint, is_pin_to
 from common.throttling import (
     LoginAnonThrottle,
     LoginUserThrottle,
+    MediaRefreshAnonThrottle,
+    MediaRefreshUserThrottle,
     OtpSendAnonThrottle,
     OtpSendUserThrottle,
     OtpVerifyAnonThrottle,
@@ -1511,6 +1513,112 @@ def processing_posts(request):
     return Response({'posts': rows})
 
 
+def moderation_visible(queryset, user):
+    """What moderation lets `user` see: nothing hidden by a moderator, and
+    nothing from a banned, shadowbanned or temporarily banned account --
+    except, for a signed-in user, their own posts. The feed's rule
+    (ReelViewSet); anything else that hands out a post's media applies it
+    too, so the two cannot drift apart."""
+    now = timezone.now()
+    ban_over = Q(user__profile__ban_expires_at__isnull=True) | Q(
+        user__profile__ban_expires_at__lte=now
+    )
+    if user is not None and getattr(user, 'is_authenticated', False):
+        return queryset.filter(
+            Q(is_hidden=False)
+            & (
+                Q(user=user)
+                | (Q(user__is_active=True) & Q(user__profile__is_shadowbanned=False) & ban_over)
+            )
+        )
+    return queryset.filter(
+        is_hidden=False, user__is_active=True, user__profile__is_shadowbanned=False
+    ).filter(ban_over)
+
+
+MEDIA_REFRESH_MAX_IDS = 20
+MEDIA_REFRESH_MAX_FAILURES = 5
+
+
+def _ids_from(values, limit):
+    out = []
+    for value in values if isinstance(values, list | tuple) else []:
+        text = str(value).strip()
+        if text.isascii() and text.isdigit() and len(text) <= 10 and int(text) not in out:
+            out.append(int(text))
+        if len(out) >= limit:
+            break
+    return out
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([MediaRefreshAnonThrottle, MediaRefreshUserThrottle])
+def refresh_post_media(request):
+    """The media to load now for posts a client already has.
+
+    A client holds on to media URLs -- in a feed left open, in its feed
+    caches -- and where the bucket is private those URLs are signed and stop
+    working after S3_QUERYSTRING_EXPIRE. This answers with the posts' media
+    signed now, the same fields the feed carries (reel_media_payload).
+
+        {"ids": [12, 13],
+         "failures": [{"id": 12, "url": "<the URL that did not load>",
+                       "error": "4", "surface": "reels"}]}
+
+    A failure is diagnosed (api/services/media_availability.py) and logged as
+    `media.unavailable` with its reason; that post's answer carries
+    `media_check: {"reason", "repairing"}` and leaves out any rendition
+    storage says is missing. At most 20 ids and 5 failures; posts the caller
+    may not see (moderation, or still processing and not theirs) are left
+    out. Never an original under source/.
+    """
+    from django.conf import settings
+
+    from api.services.media_availability import check_failure, media_payload
+
+    data = request.data if hasattr(request.data, 'get') else {}
+    failures = {}
+    raw_failures = data.get('failures')
+    for failure in raw_failures if isinstance(raw_failures, list) else []:
+        if not isinstance(failure, dict):
+            continue
+        ids = _ids_from([failure.get('id')], 1)
+        if ids and ids[0] not in failures and len(failures) < MEDIA_REFRESH_MAX_FAILURES:
+            failures[ids[0]] = failure
+    ids = _ids_from([*failures, *(data.get('ids') or [])], MEDIA_REFRESH_MAX_IDS)
+    if not ids:
+        return Response({'posts': [], 'expires_in': None})
+
+    posts = moderation_visible(
+        Reel.objects.filter(pk__in=ids).select_related('user', 'user__profile'), request.user
+    ).visible_to(request.user)
+    by_id = {post.pk: post for post in posts}
+
+    rows = []
+    for pk in ids:
+        post = by_id.get(pk)
+        if post is None:
+            continue
+        if pk in failures:
+            payload, check = check_failure(post, failures[pk], request)
+        else:
+            payload, check = media_payload(post, request), None
+        rows.append({'id': pk, **payload, 'media_check': check})
+
+    signed = bool(getattr(settings, 'AWS_QUERYSTRING_AUTH', False)) and bool(
+        getattr(settings, 'S3_BUCKET_NAME', '')
+    )
+    return Response(
+        {
+            'posts': rows,
+            # How long the URLs above work, for a client deciding when to ask
+            # again; null when they do not expire.
+            'expires_in': getattr(settings, 'AWS_QUERYSTRING_EXPIRE', 3600) if signed else None,
+        }
+    )
+
+
 class _PostNeedsCoins(Exception):
     def __init__(self, message, available):
         super().__init__(message)
@@ -2055,8 +2163,6 @@ class ReelViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         try:
-            from django.db.models import Q
-
             from api.models import Comment
 
             # Prefetch recent comments to avoid N+1 queries in serializer
@@ -2081,33 +2187,9 @@ class ReelViewSet(viewsets.ModelViewSet):
             # - is_shadowbanned: User shadowbanned (content hidden from others, but visible to owner)
             # - is_active=False: User permanently banned
             # - ban_expires_at > now: User temporarily banned
-            if self.request.user.is_authenticated:
-                # Authenticated users: show their own content even if shadowbanned/temp-banned
-                # but hide content from other banned users
-                queryset = queryset.filter(
-                    Q(is_hidden=False)  # Content not hidden by moderation
-                    & Q(
-                        Q(user=self.request.user)  # OR it's their own content
-                        | Q(
-                            Q(user__is_active=True)  # User is active
-                            & Q(user__profile__is_shadowbanned=False)  # Not shadowbanned
-                            & (
-                                Q(user__profile__ban_expires_at__isnull=True)  # Not temp banned
-                                | Q(
-                                    user__profile__ban_expires_at__lte=timezone.now()
-                                )  # OR temp ban expired
-                            )
-                        )
-                    )
-                )
-            else:
-                # Anonymous users: hide all banned/shadowbanned content
-                queryset = queryset.filter(
-                    is_hidden=False, user__is_active=True, user__profile__is_shadowbanned=False
-                ).filter(
-                    Q(user__profile__ban_expires_at__isnull=True)
-                    | Q(user__profile__ban_expires_at__lte=timezone.now())
-                )
+            # Signed-in users still see their own content. The same rule
+            # guards POST /posts/media/ (moderation_visible).
+            queryset = moderation_visible(queryset, self.request.user)
 
             # Skip NotInterested filter to prevent crashes - it's causing performance issues
             # If needed, can be re-enabled later with optimization
