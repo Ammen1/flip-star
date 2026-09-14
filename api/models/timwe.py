@@ -45,9 +45,11 @@ class TimweSyncOrderLog(models.Model):
     service_id = models.CharField(max_length=21, blank=True)
 
     #: The MA's own identifiers, carried in extensionInfo. transaction_id is
-    #: what TIMWE support will quote when a subscriber disputes something.
-    transaction_id = models.CharField(max_length=64, blank=True, db_index=True)
-    order_key = models.CharField(max_length=64, blank=True)
+    #: what TIMWE support will quote when a subscriber disputes something. The
+    #: MA's format is a long UUID-like token (observed 81 chars), far past the
+    #: original 64, so it is kept roomy to avoid truncation errors on insert.
+    transaction_id = models.CharField(max_length=128, blank=True, db_index=True)
+    order_key = models.CharField(max_length=128, blank=True)
     keyword = models.CharField(max_length=32, blank=True)
     update_reason = models.CharField(max_length=16, blank=True)
 
