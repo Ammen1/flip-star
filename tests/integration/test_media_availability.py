@@ -127,19 +127,28 @@ def private_obs(settings, monkeypatch):
 
 
 def ready_video(user, version=1, **extra):
-    n = Reel.objects.count() + 1
-    base = f'{OBS}/processed/videos/{n}/v{version}'
-    return Reel.objects.create(
-        user=user,
-        media=f'{base}/720p.mp4',
-        media_480=f'{base}/480p.mp4',
-        media_360=f'{base}/360p.mp4',
-        thumbnail=f'{OBS}/processed/thumbnails/{n}/v{version}/thumb.jpg',
-        original_media=f'source/videos/{user.pk}/orig{n}.mp4',
-        processed_at=timezone.now(),
-        media_version=version,
-        **extra,
+    post = Reel.objects.create(user=user, **extra)
+    base = f'{OBS}/processed/videos/{post.pk}/v{version}'
+    post.media = f'{base}/720p.mp4'
+    post.media_480 = f'{base}/480p.mp4'
+    post.media_360 = f'{base}/360p.mp4'
+    post.thumbnail = f'{OBS}/processed/thumbnails/{post.pk}/v{version}/thumb.jpg'
+    post.original_media = f'source/videos/{user.pk}/orig{post.pk}.mp4'
+    post.processed_at = timezone.now()
+    post.media_version = version
+    post.save(
+        update_fields=[
+            'media',
+            'media_480',
+            'media_360',
+            'thumbnail',
+            'original_media',
+            'processed_at',
+            'media_version',
+        ]
     )
+    post.refresh_from_db()
+    return post
 
 
 def key_of(url):
