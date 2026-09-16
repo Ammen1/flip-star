@@ -68,7 +68,7 @@ default is the guide**: an unconfigured deployment behaves exactly as before.
 |---|---|---|---|
 | Address | `http://IP:Port/AmountChargingService/services/AmountCharging` | `https://10.175.206.42:443/soap-payment-api/ws/AmountChargingService/services/chargeAmount` | `TIMWE_CHARGE_URL` |
 | Certificate | trusted by a public CA | none: their own example needs `curl -k` | `TIMWE_CHARGE_CA_BUNDLE`, `TIMWE_CHARGE_VERIFY_TLS` |
-| `spPassword` | `MD5(spId + Password + timeStamp)` | the password itself | `TIMWE_CHARGE_PASSWORD_MODE` |
+| `spPassword` | `MD5(spId + Password + timeStamp)` | the password itself | `TIMWE_CHARGE_AUTH_MODE` |
 | `timeStamp` | UTC `yyyyMMddHHmmss` | `2700000000` — not a date | — (we always send a real one) |
 | `serviceId` | the subscription service | a different one (`…7334` where subscriptions are `…7331`) | `TIMWE_CHARGE_SERVICE_ID` |
 | `currency` | ISO 4217, `ETB` | `Birr` | `TIMWE_CURRENCY`, now passed through as written |
@@ -79,7 +79,7 @@ default is the guide**: an unconfigured deployment behaves exactly as before.
 
 ### The password in the request
 
-`TIMWE_CHARGE_PASSWORD_MODE='plain'` sends the account password inside every
+`TIMWE_CHARGE_AUTH_MODE='plain'` sends the account password inside every
 charge. It exists because that is what TIMWE's accepted example does, and it is
 constrained accordingly:
 

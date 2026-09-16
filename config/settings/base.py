@@ -496,7 +496,7 @@ TIMWE_CHARGE_TEL_PREFIX = config('TIMWE_CHARGE_TEL_PREFIX', default=True, cast=b
 # account password never crosses the wire. 'plain' sends the password itself,
 # which is what TIMWE's own working example does; it is refused over plain
 # HTTP, because it puts the password in every charge request.
-TIMWE_CHARGE_PASSWORD_MODE = config('TIMWE_CHARGE_PASSWORD_MODE', default='md5')
+TIMWE_CHARGE_AUTH_MODE = config('TIMWE_CHARGE_AUTH_MODE', default='md5')
 # TIMWE serve chargeAmount over HTTPS on an IP address with a certificate no
 # public CA vouches for. Point this at their certificate file and only that
 # certificate is trusted -- the setting to prefer.

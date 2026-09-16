@@ -437,14 +437,14 @@ def test_the_password_is_hashed_and_never_sent_by_default(settings):
 
 def test_plain_mode_sends_the_password_as_timwe_s_own_example_does(settings):
     settings.TIMWE_CHARGE_URL = 'https://ma.test/soap-payment-api/ws/x/services/chargeAmount'
-    settings.TIMWE_CHARGE_PASSWORD_MODE = 'plain'
+    settings.TIMWE_CHARGE_AUTH_MODE = 'plain'
 
     assert f'<v2:spPassword>{settings.TIMWE_SP_PASSWORD}</v2:spPassword>' in build()
 
 
 def test_plain_mode_is_refused_over_an_unencrypted_endpoint(settings):
     """Plain mode puts the password in the request; http would publish it."""
-    settings.TIMWE_CHARGE_PASSWORD_MODE = 'plain'  # CONFIG's URL is http
+    settings.TIMWE_CHARGE_AUTH_MODE = 'plain'  # CONFIG's URL is http
 
     assert 'must be encrypted' in TimweChargeService.endpoint_problem()
     with pytest.raises(TimweConfigurationError, match='encrypted'):
@@ -452,10 +452,10 @@ def test_plain_mode_is_refused_over_an_unencrypted_endpoint(settings):
 
 
 def test_an_unknown_password_mode_is_refused(settings):
-    settings.TIMWE_CHARGE_PASSWORD_MODE = 'sha256'
+    settings.TIMWE_CHARGE_AUTH_MODE = 'sha256'
 
-    assert 'TIMWE_CHARGE_PASSWORD_MODE' in TimweChargeService.endpoint_problem()
-    with pytest.raises(TimweConfigurationError, match='TIMWE_CHARGE_PASSWORD_MODE'):
+    assert 'TIMWE_CHARGE_AUTH_MODE' in TimweChargeService.endpoint_problem()
+    with pytest.raises(TimweConfigurationError, match='TIMWE_CHARGE_AUTH_MODE'):
         build()
 
 
@@ -498,7 +498,7 @@ def test_every_unverified_charge_says_so_in_the_log(settings, caplog):
 
 def test_no_password_reaches_the_logs_in_either_mode(settings, caplog):
     settings.TIMWE_CHARGE_URL = 'https://ma.test/soap-payment-api/ws/x/services/chargeAmount'
-    settings.TIMWE_CHARGE_PASSWORD_MODE = 'plain'
+    settings.TIMWE_CHARGE_AUTH_MODE = 'plain'
     settings.TIMWE_CHARGE_VERIFY_TLS = False
     caplog.set_level('DEBUG')
 

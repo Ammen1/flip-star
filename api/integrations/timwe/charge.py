@@ -223,10 +223,10 @@ class TimweChargeService:
         'plain' puts the password inside every charge request. endpoint_problem
         refuses it over plain HTTP for that reason, and it is never logged.
         """
-        mode = (getattr(settings, 'TIMWE_CHARGE_PASSWORD_MODE', 'md5') or 'md5').strip().lower()
+        mode = (getattr(settings, 'TIMWE_CHARGE_AUTH_MODE', 'md5') or 'md5').strip().lower()
         if mode not in ('md5', 'plain'):
             raise TimweConfigurationError(
-                "TIMWE_CHARGE_PASSWORD_MODE must be 'md5' (the guide) or 'plain' "
+                "TIMWE_CHARGE_AUTH_MODE must be 'md5' (the guide) or 'plain' "
                 "(what TIMWE's own example sends)."
             )
         return mode == 'md5'
@@ -349,7 +349,7 @@ class TimweChargeService:
             return str(exc)
         if not hashed and parts.scheme != 'https':
             return (
-                "TIMWE_CHARGE_PASSWORD_MODE='plain' puts the account password in every "
+                "TIMWE_CHARGE_AUTH_MODE='plain' puts the account password in every "
                 'charge request, so the connection must be encrypted. Use an https '
                 'TIMWE_CHARGE_URL, or the hashed password the guide specifies.'
             )
@@ -388,7 +388,7 @@ class TimweChargeService:
         rather than a password hash, and the input contains a per-request
         timestamp. That is also why the digest must never be logged or reused.
 
-        Under TIMWE_CHARGE_PASSWORD_MODE='plain' the password goes out as it
+        Under TIMWE_CHARGE_AUTH_MODE='plain' the password goes out as it
         is, which is what TIMWE's own working example sends. Either way the
         value returned here is a credential: it is never logged, and the
         'plain' form is allowed only over https (see endpoint_problem).

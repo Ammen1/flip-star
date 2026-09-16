@@ -247,7 +247,7 @@ SCHEMA: tuple[Key, ...] = (
         "(TIMWE's working example). Default true.",
     ),
     _k(
-        'TIMWE_CHARGE_PASSWORD_MODE',
+        'TIMWE_CHARGE_AUTH_MODE',
         group='timwe',
         doc="'md5' (default, the guide): spPassword = MD5(spId+Password+timeStamp), "
         "the password never leaves us. 'plain' sends the password itself, as TIMWE's "
