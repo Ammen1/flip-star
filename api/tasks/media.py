@@ -278,15 +278,33 @@ def _delete_version(reel_id, version=None, keep=None):
             if settings.S3_ENDPOINT_URL:
                 s3_kwargs['endpoint_url'] = settings.S3_ENDPOINT_URL
             s3 = boto3.client('s3', **s3_kwargs)
+            removed = 0
             for prefix in prefixes:
-                listed = s3.list_objects_v2(Bucket=settings.S3_BUCKET_NAME, Prefix=prefix)
-                keys = [
-                    {'Key': o['Key']}
-                    for o in listed.get('Contents', [])
-                    if not (kept and o['Key'][len(prefix) :].startswith(kept))
-                ]
-                if keys:
-                    s3.delete_objects(Bucket=settings.S3_BUCKET_NAME, Delete={'Objects': keys})
+                # ListObjects (v1), not V2. Every deletion in the system depends
+                # on this call, and Ethio Telecom's OBS answers V2 with
+                # NoSuchKey -- which this function then swallowed, so nothing
+                # was ever deleted and the bucket filled up. Paginated for the
+                # same reason a single call was wrong: it saw only the first
+                # 1000 objects, and a post with several runs can exceed that.
+                batch = []
+                pages = s3.get_paginator('list_objects').paginate(
+                    Bucket=settings.S3_BUCKET_NAME, Prefix=prefix
+                )
+                for page in pages:
+                    for obj in page.get('Contents', []):
+                        if kept and obj['Key'][len(prefix) :].startswith(kept):
+                            continue
+                        batch.append({'Key': obj['Key']})
+                        if len(batch) == 1000:  # the API's own limit per call
+                            s3.delete_objects(
+                                Bucket=settings.S3_BUCKET_NAME, Delete={'Objects': batch}
+                            )
+                            removed += len(batch)
+                            batch = []
+                if batch:
+                    s3.delete_objects(Bucket=settings.S3_BUCKET_NAME, Delete={'Objects': batch})
+                    removed += len(batch)
+            logger.info('[TASKS] removed %s stored objects of reel %s', removed, reel_id)
         else:
             for prefix in prefixes:
                 base = os.path.join(settings.MEDIA_ROOT, prefix)

@@ -2048,3 +2048,108 @@ def test_a_file_that_is_not_really_a_video_fails(author, subscribed, queued):
     pk = create(author, upload('x.mp4', MP4_HEADER)).data['id']
     reel = Reel.objects.get(pk=pk)
     assert process(reel) == f'Reel {reel.pk} rejected: invalid_media'
+
+
+# ─── deleting stored media through an S3 gateway ──────────────────────────────
+
+
+class DeletingOBS:
+    """An object store that speaks ListObjects but refuses ListObjectsV2.
+
+    That is Ethio Telecom's OBS: it answers V2 with NoSuchKey. Deletion is the
+    one path that lists, so a client that only knows V2 silently deletes
+    nothing -- and the bucket fills until uploads fail with
+    InsufficientStorageSpace, which is exactly what happened in staging.
+    """
+
+    def __init__(self, keys):
+        self.keys = list(keys)
+        self.deleted = []
+
+    def list_objects_v2(self, **kwargs):  # pragma: no cover - must never be called
+        raise AssertionError('ListObjectsV2 is not supported by every gateway')
+
+    def get_paginator(self, name):
+        assert name == 'list_objects', f'unsupported paginator {name}'
+        store = self
+
+        class Paginator:
+            def paginate(self, Bucket, Prefix='', **kwargs):  # noqa: N803 - boto3's spelling
+                matching = [k for k in store.keys if k.startswith(Prefix)]
+                # Paged like the real thing, so a batch boundary is exercised.
+                for start in range(0, len(matching), 2) or [0]:
+                    yield {'Contents': [{'Key': k} for k in matching[start : start + 2]]}
+
+        return Paginator()
+
+    def delete_objects(self, Bucket, Delete):  # noqa: N803 - boto3's spelling
+        keys = [o['Key'] for o in Delete['Objects']]
+        assert len(keys) <= 1000, 'the API refuses more than 1000 keys per call'
+        self.deleted.extend(keys)
+        self.keys = [k for k in self.keys if k not in keys]
+
+
+@pytest.fixture
+def fake_s3(monkeypatch, settings):
+    settings.S3_BUCKET_NAME = 'flipstar-media'
+    settings.S3_ACCESS_KEY_ID = 'key'
+    settings.S3_SECRET_ACCESS_KEY = 'secret'
+    settings.S3_REGION_NAME = 'et-global-3'
+    settings.S3_ENDPOINT_URL = 'https://obs.example.et'
+
+    def make(keys):
+        store = DeletingOBS(keys)
+        import boto3
+
+        monkeypatch.setattr(boto3, 'client', lambda *a, **k: store)
+        return store
+
+    return make
+
+
+def test_a_deleted_post_loses_its_media_on_a_gateway_without_v2(fake_s3):
+    store = fake_s3(
+        [
+            'processed/videos/7/v1/720.mp4',
+            'processed/videos/7/v2/720.mp4',
+            'processed/thumbnails/7/v2/thumb.jpg',
+            'processed/videos/8/v1/720.mp4',
+        ]
+    )
+
+    media_tasks._delete_version(7)
+
+    assert sorted(store.deleted) == [
+        'processed/thumbnails/7/v2/thumb.jpg',
+        'processed/videos/7/v1/720.mp4',
+        'processed/videos/7/v2/720.mp4',
+    ]
+    assert store.keys == ['processed/videos/8/v1/720.mp4'], "another post's media was touched"
+
+
+def test_superseded_runs_go_and_the_one_in_use_stays(fake_s3):
+    store = fake_s3(
+        [
+            'processed/videos/7/v1/720.mp4',
+            'processed/videos/7/v2/720.mp4',
+            'processed/videos/7/v3/720.mp4',
+        ]
+    )
+
+    media_tasks._delete_version(7, keep=3)
+
+    assert sorted(store.deleted) == [
+        'processed/videos/7/v1/720.mp4',
+        'processed/videos/7/v2/720.mp4',
+    ]
+    assert store.keys == ['processed/videos/7/v3/720.mp4']
+
+
+def test_more_objects_than_one_delete_call_allows_are_all_removed(fake_s3):
+    keys = [f'processed/videos/9/v1/part-{n:04}.mp4' for n in range(2500)]
+    store = fake_s3(keys)
+
+    media_tasks._delete_version(9)
+
+    assert len(store.deleted) == 2500
+    assert store.keys == []
