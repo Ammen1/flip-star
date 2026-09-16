@@ -145,6 +145,16 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.purge_processed_sources',
         'schedule': 86400.0,
     },
+    # Lapsed TIMWE airtime subscriptions: charge each one due a renewal, and
+    # try again an hour after TIMWE refused one (too little airtime), for
+    # TIMWE_RENEWAL_WINDOW_DAYS. A no-op unless both renewal switches are on.
+    # Expires before the next run, so a backlog after an outage is one sweep,
+    # not one per missed hour.
+    'renew-expired-airtime-subscriptions': {
+        'task': 'api.tasks.subscription_renewal.sweep_expired_subscriptions',
+        'schedule': 3600.0,
+        'options': {'expires': 3300},
+    },
 }
 
 # Auto-discover tasks in all registered apps

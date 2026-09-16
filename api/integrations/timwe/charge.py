@@ -99,8 +99,11 @@ MAX_REFERENCE_CODE_LENGTH = 30
 #: Guide p.21: ChargingInformation.description, length 255, mandatory.
 MAX_DESCRIPTION_LENGTH = 255
 
-#: Guide p.21: currency is an ISO 4217 code, length 3.
-CURRENCY_PATTERN = re.compile(r'^[A-Z]{3}$')
+#: Guide p.21 says currency is an ISO 4217 code (ETB). TIMWE's own working
+#: example sends ``Birr``, so the value is passed through as configured and
+#: only checked for being letters -- the MA is the authority on what it
+#: accepts, and refusing 'Birr' refused the only spelling seen to work.
+CURRENCY_PATTERN = re.compile(r'^[A-Za-z]{2,10}$')
 
 #: Guide pp.22-24: every chargeAmount error code is SVC or POL plus four
 #: digits. A faultcode that does not look like this -- ``soapenv:Server``, say
@@ -178,11 +181,76 @@ class TimweChargeService:
 
     @classmethod
     def get_service_id(cls) -> str:
-        return getattr(settings, 'TIMWE_SERVICE_ID', '') or ''
+        """The service a charge is made under.
+
+        TIMWE's working charge example quotes a different service than the one
+        their subscription notifications carry, so charging has its own
+        setting and falls back to TIMWE_SERVICE_ID when it is unset.
+        """
+        return (getattr(settings, 'TIMWE_CHARGE_SERVICE_ID', '') or '') or (
+            getattr(settings, 'TIMWE_SERVICE_ID', '') or ''
+        )
 
     @classmethod
     def get_currency(cls) -> str:
         return getattr(settings, 'TIMWE_CURRENCY', '') or ''
+
+    @classmethod
+    def get_charge_code(cls) -> str:
+        """The MA's charging code, sent as <code> when the caller names none."""
+        return getattr(settings, 'TIMWE_CHARGE_CODE', '') or ''
+
+    @classmethod
+    def uses_tel_prefix(cls) -> bool:
+        """Whether endUserIdentifier is written ``tel:2519...`` or bare digits.
+
+        The guide's field table shows the prefix; TIMWE's working example
+        omits it. Both name the same subscriber, so this is their gateway's
+        to decide.
+        """
+        return bool(getattr(settings, 'TIMWE_CHARGE_TEL_PREFIX', True))
+
+    @classmethod
+    def password_is_hashed(cls) -> bool:
+        """Whether spPassword is the MD5 digest (guide p.20) or the password itself.
+
+        The guide specifies MD5(spId + Password + timeStamp), and that is the
+        default: the account password never crosses the wire. TIMWE's own
+        working example instead sends the password verbatim, with a timeStamp
+        that is not even a date, so which one their gateway accepts is a fact
+        about their deployment rather than something to infer.
+
+        'plain' puts the password inside every charge request. endpoint_problem
+        refuses it over plain HTTP for that reason, and it is never logged.
+        """
+        mode = (getattr(settings, 'TIMWE_CHARGE_PASSWORD_MODE', 'md5') or 'md5').strip().lower()
+        if mode not in ('md5', 'plain'):
+            raise TimweConfigurationError(
+                "TIMWE_CHARGE_PASSWORD_MODE must be 'md5' (the guide) or 'plain' "
+                "(what TIMWE's own example sends)."
+            )
+        return mode == 'md5'
+
+    @classmethod
+    def tls_verification(cls):
+        """What ``requests`` is given as ``verify``: a CA bundle, or on/off.
+
+        TIMWE serve chargeAmount over HTTPS on an IP address, and their own
+        example needed ``curl -k``, so the certificate does not chain to a
+        public CA. TIMWE_CHARGE_CA_BUNDLE is the answer that keeps the
+        guarantee: point it at their certificate and only that certificate is
+        trusted.
+
+        TIMWE_CHARGE_VERIFY_TLS=false is the fallback for staging while that
+        file is being obtained. It means the connection is still encrypted but
+        no longer proves who is on the other end -- someone on the path could
+        read or alter a charge, and read the password when the mode is
+        'plain'. execute() logs a warning on every charge sent that way.
+        """
+        bundle = (getattr(settings, 'TIMWE_CHARGE_CA_BUNDLE', '') or '').strip()
+        if bundle:
+            return bundle
+        return bool(getattr(settings, 'TIMWE_CHARGE_VERIFY_TLS', True))
 
     @classmethod
     def get_timeout(cls) -> int:
@@ -237,11 +305,13 @@ class TimweChargeService:
     def endpoint_problem(cls) -> str:
         """Why TIMWE_CHARGE_URL cannot be the AmountCharging endpoint, or ''.
 
-        Refuses the two mistakes this integration has already come close to:
-        the guide's ``http://IP:Port/...`` template configured literally, and
-        the SMPP gateway's host and port reused for charging. The same host on
-        a different port is allowed -- TIMWE may well serve both from one box.
-        An unset URL is not a problem here; missing_configuration reports it.
+        Refuses the three mistakes this integration has already come close to:
+        the guide's ``http://IP:Port/...`` template configured literally, the
+        SMPP gateway's host and port reused for charging, and the account
+        password sent in the clear over an unencrypted connection. The same
+        host on a different port is allowed -- TIMWE serve SMPP and charging
+        from one box. An unset URL is not a problem here;
+        missing_configuration reports it.
         """
         url = cls.get_endpoint().strip()
         if not url:
@@ -269,6 +339,19 @@ class TimweChargeService:
             return (
                 'TIMWE_CHARGE_URL points at the SMPP gateway (TIMWE_SMPP_HOST:TIMWE_SMPP_PORT). '
                 'chargeAmount is a separate endpoint that TIMWE must supply.'
+            )
+
+        try:
+            hashed = cls.password_is_hashed()
+        except TimweConfigurationError as exc:
+            # Reported like any other configuration problem: this is called by
+            # the deployment check, which expects a message rather than a raise.
+            return str(exc)
+        if not hashed and parts.scheme != 'https':
+            return (
+                "TIMWE_CHARGE_PASSWORD_MODE='plain' puts the account password in every "
+                'charge request, so the connection must be encrypted. Use an https '
+                'TIMWE_CHARGE_URL, or the hashed password the guide specifies.'
             )
         return ''
 
@@ -304,7 +387,14 @@ class TimweChargeService:
         here. MD5 is the MA's choice, not ours: it is a message authenticator
         rather than a password hash, and the input contains a per-request
         timestamp. That is also why the digest must never be logged or reused.
+
+        Under TIMWE_CHARGE_PASSWORD_MODE='plain' the password goes out as it
+        is, which is what TIMWE's own working example sends. Either way the
+        value returned here is a credential: it is never logged, and the
+        'plain' form is allowed only over https (see endpoint_problem).
         """
+        if not cls.password_is_hashed():
+            return cls.get_sp_account_password()
         raw = f'{cls.get_sp_id()}{cls.get_sp_account_password()}{timestamp}'
         return hashlib.md5(raw.encode('utf-8')).hexdigest()  # noqa: S324
 
@@ -370,8 +460,13 @@ class TimweChargeService:
 
     @classmethod
     def format_end_user_identifier(cls, msisdn: str) -> str:
-        """``tel:`` + MSISDN including country code (guide p.21)."""
-        return f'tel:{cls.normalize_msisdn(msisdn)}'
+        """The charged account: ``tel:`` + MSISDN (guide p.21), or bare digits.
+
+        See uses_tel_prefix -- the guide's table and TIMWE's working example
+        disagree, and only their gateway settles it.
+        """
+        number = cls.normalize_msisdn(msisdn)
+        return f'tel:{number}' if cls.uses_tel_prefix() else number
 
     @classmethod
     def validate_description(cls, description: str) -> str:
@@ -387,11 +482,16 @@ class TimweChargeService:
 
     @classmethod
     def validate_currency(cls) -> str:
-        """The configured currency, checked as an ISO 4217 code (guide p.21)."""
-        currency = cls.get_currency().strip().upper()
+        """The configured currency, spelled as the MA wants it.
+
+        Sent exactly as configured -- not upper-cased -- because TIMWE's
+        gateway accepted ``Birr`` where the guide promised ISO 4217.
+        """
+        currency = cls.get_currency().strip()
         if not CURRENCY_PATTERN.match(currency):
             raise TimweConfigurationError(
-                'TIMWE_CURRENCY must be a three-letter ISO 4217 code, e.g. ETB.'
+                'TIMWE_CURRENCY must be letters only, e.g. ETB (guide p.21) or Birr '
+                "(what TIMWE's own example sends)."
             )
         return currency
 
@@ -441,7 +541,9 @@ class TimweChargeService:
         subscriber = cls.normalize_msisdn(msisdn)
 
         timestamp = timestamp or cls.build_timestamp()
-        code_element = f'\n            <code>{escape(charge_code)}</code>' if charge_code else ''
+        # The MA's charging code: the caller's, else the configured default.
+        code = charge_code or cls.get_charge_code()
+        code_element = f'\n            <code>{escape(code)}</code>' if code else ''
 
         return f"""<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
 xmlns:v2="http://www.huawei.com.cn/schema/common/v2_1"
@@ -459,7 +561,7 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
   </soapenv:Header>
   <soapenv:Body>
     <loc:chargeAmount>
-      <loc:endUserIdentifier>tel:{escape(subscriber)}</loc:endUserIdentifier>
+      <loc:endUserIdentifier>{escape(cls.format_end_user_identifier(subscriber))}</loc:endUserIdentifier>
       <loc:charge>
         <description>{escape(text)}</description>
         <currency>{escape(currency)}</currency>
@@ -602,6 +704,23 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
         )
         read_timeout = cls.get_timeout()
 
+        verify = cls.tls_verification()
+        if verify is False:
+            # Every charge sent this way, not once at startup: an unverified
+            # connection proves nothing about who is being paid, and this is
+            # the line that says so in the record of the charge itself.
+            logger.warning(
+                'TIMWE_CHARGE_TLS_UNVERIFIED',
+                extra={
+                    'operation': 'timwe_charge',
+                    'reference_code': reference_code,
+                    'detail': (
+                        'TIMWE_CHARGE_VERIFY_TLS is false: the MA certificate is not '
+                        'checked. Set TIMWE_CHARGE_CA_BUNDLE to their certificate.'
+                    ),
+                },
+            )
+
         started = time.monotonic()
 
         def elapsed() -> int:
@@ -613,6 +732,7 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
                 data=envelope.encode('utf-8'),
                 headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': ''},
                 timeout=(CONNECT_TIMEOUT, read_timeout),
+                verify=verify,
             )
         except requests.exceptions.ConnectTimeout:
             # Must precede both handlers below: ConnectTimeout subclasses

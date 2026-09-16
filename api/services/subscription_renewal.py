@@ -11,22 +11,34 @@ the server's own records.
 
 The rules that keep this from charging anyone twice
 ---------------------------------------------------
-* One attempt per renewal period. A period is the plan plus the end_date that
-  ran out. The idempotency key is derived from exactly that and is unique in
-  the database, and a partial unique constraint on (subscription,
-  renewal_period_end) says the same thing a second way. However many requests
-  arrive while a plan is lapsed, at most one reaches TIMWE.
+* One live attempt per renewal period. A period is the plan plus the end_date
+  that ran out. Each attempt's idempotency key is derived from that and its
+  attempt number and is unique in the database, and a partial unique
+  constraint on (subscription, renewal_period_end) allows one pending,
+  successful or ambiguous charge per period. However many requests arrive
+  while a plan is lapsed, at most one charge that could take money reaches
+  TIMWE.
 * A pending or ambiguous attempt is never followed by another. After a timeout
   the subscriber may already have paid; the answer comes from reconciling the
   reference code with TIMWE (``manage.py timwe_charge_check --reconcile``),
   never from charging again to find out.
-* A failed attempt is not retried automatically either. The plan stays expired
-  until the subscriber opts in again on the short code.
+* A refused attempt -- TIMWE answered no, or never received it -- took
+  nothing, so it is tried again TIMWE_RENEWAL_RETRY_MINUTES later (default an
+  hour), for up to TIMWE_RENEWAL_WINDOW_DAYS after the period ran out. That is
+  the subscriber with too little airtime being renewed once they top up.
+  After the window the plan stays expired until they opt in again.
 * The plan is renewed only after a confirmed success, in one database
   transaction with the claim that marks the charge fulfilled. If that fails
   after TIMWE has charged, the charge stays success-but-unfulfilled: the next
   check applies it without charging again, and the reconciliation report lists
   it until then.
+
+Who asks
+--------
+Nobody has to be using the app. An hourly beat job (``sweep_due_renewals``)
+queues every lapsed airtime subscriber who is due, and the status endpoint and
+posting a video ask for the one user in front of them. All three end in
+``check_and_renew_subscription``, which applies every rule above.
 
 What this cannot protect against
 --------------------------------
@@ -42,6 +54,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from api.models.subscription import SubscriptionHistory, SubscriptionPayment, SubscriptionPlan
@@ -83,6 +96,19 @@ RENEWABLE_STATUSES = ('active', 'expired', 'grace_period')
 #: every poll of the status endpoint while one is waiting to run.
 QUEUE_MARKER_SECONDS = 120
 
+#: A refused charge may be followed by another after this share of the retry
+#: interval. A little under the whole of it, because the hourly sweep starts
+#: on the hour and the attempt it is following may have run a few seconds
+#: past one; waiting the full hour would skip every other hour.
+RETRY_EARLY = 0.9
+
+#: Retries are never closer together than this, whatever is configured.
+MIN_RETRY_MINUTES = 10
+
+#: The most subscribers one sweep queues. Any beyond are next in line an hour
+#: later, when the ones queued now have an attempt on record.
+SWEEP_BATCH = 500
+
 
 @dataclass(frozen=True)
 class RenewalStatus:
@@ -112,57 +138,124 @@ def _mask(msisdn: str) -> str:
     return f'{digits[:5]}****{digits[-3:]}' if len(digits) > 6 else digits
 
 
-def lapsed_short_code_plan(user):
-    """The user's TIMWE short-code subscription whose period has run out, or None.
+def _setting_int(name: str, default: int) -> int:
+    try:
+        return int(getattr(settings, name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def retry_interval() -> timedelta:
+    """How long after TIMWE refuses a renewal charge the next attempt is made."""
+    minutes = _setting_int('TIMWE_RENEWAL_RETRY_MINUTES', 60)
+    return timedelta(minutes=max(minutes, MIN_RETRY_MINUTES))
+
+
+def renewal_window() -> timedelta:
+    """How long after a period runs out renewal keeps being attempted."""
+    return timedelta(days=max(_setting_int('TIMWE_RENEWAL_WINDOW_DAYS', 7), 1))
+
+
+def _renewable_plans(now):
+    """Every TIMWE short-code plan whose period ran out inside the renewal window.
 
     Identified by what the subscription actually is -- a TIMWE SMS plan on the
     configured short code, for a tier with a price and a duration -- never by
-    anything the client says. A plan TIMWE recorded against a different
-    service than the configured one is not this service's to renew. OneVAS and
-    telebirr plans are never candidates: those subscribers agreed to be billed
-    somewhere else.
+    anything the client says. OneVAS and telebirr plans are never candidates:
+    those subscribers agreed to be billed somewhere else.
+    """
+    return SubscriptionPlan.objects.filter(
+        payment_method='timwe',
+        subscription_source='sms',
+        status__in=RENEWABLE_STATUSES,
+        end_date__isnull=False,
+        end_date__lte=now,
+        end_date__gte=now - renewal_window(),
+        tier__short_code=_short_code(),
+        tier__duration_days__gt=0,
+        tier__price_etb__gt=0,
+    ).select_related('tier')
+
+
+def _for_this_service(plan) -> bool:
+    """A plan TIMWE recorded against another service is not this service's to renew."""
+    service_id = getattr(settings, 'TIMWE_SERVICE_ID', '') or ''
+    plan_service = (plan.metadata or {}).get('service_id') or ''
+    return not (service_id and plan_service and plan_service != service_id)
+
+
+def lapsed_short_code_plan(user):
+    """The user's TIMWE short-code subscription whose period has run out, or None.
+
+    The newest one, and only inside the renewal window: a subscription that
+    ran out longer ago than TIMWE_RENEWAL_WINDOW_DAYS is not renewed from here.
     """
     if user is None or not getattr(user, 'is_authenticated', False):
         return None
 
-    plans = (
-        SubscriptionPlan.objects.filter(
-            user=user,
-            payment_method='timwe',
-            subscription_source='sms',
-            status__in=RENEWABLE_STATUSES,
-            end_date__isnull=False,
-            end_date__lte=timezone.now(),
-            tier__short_code=_short_code(),
-            tier__duration_days__gt=0,
-            tier__price_etb__gt=0,
-        )
-        .select_related('tier')
-        .order_by('-end_date')
-    )
-    service_id = getattr(settings, 'TIMWE_SERVICE_ID', '') or ''
-    for plan in plans:
-        plan_service = (plan.metadata or {}).get('service_id') or ''
-        if service_id and plan_service and plan_service != service_id:
-            continue
-        return plan
+    for plan in _renewable_plans(timezone.now()).filter(user=user).order_by('-end_date'):
+        if _for_this_service(plan):
+            return plan
     return None
 
 
-def renewal_idempotency_key(plan) -> str:
-    """One key per (plan, period that ran out) -- the unit charged at most once."""
-    return f'sub-renewal:{plan.pk}:{plan.end_date.isoformat()}'
+def renewal_idempotency_key(plan, attempt: int = 1) -> str:
+    """One key per (plan, period that ran out, attempt) -- each charged at most once.
+
+    The first attempt keeps the key it has always had; a retry after a refusal
+    adds its number.
+    """
+    key = f'sub-renewal:{plan.pk}:{plan.end_date.isoformat()}'
+    return key if attempt <= 1 else f'{key}:{attempt}'
+
+
+def _period_charges(plan):
+    return TimweChargeTransaction.objects.filter(
+        purpose=RENEWAL_PURPOSE, subscription=plan, renewal_period_end=plan.end_date
+    )
 
 
 def existing_renewal_charge(plan):
-    """The charge already made for this plan's lapsed period, if any."""
-    return (
-        TimweChargeTransaction.objects.filter(
-            purpose=RENEWAL_PURPOSE, subscription=plan, renewal_period_end=plan.end_date
-        )
-        .order_by('-created_at')
-        .first()
+    """The latest charge made for this plan's lapsed period, if any."""
+    return _period_charges(plan).order_by('-created_at').first()
+
+
+def next_attempt(plan) -> int:
+    """The number the next charge for this plan's lapsed period would carry.
+
+    Counted, not stored: two workers that count the same number build the same
+    idempotency key, and the second finds the first's charge instead of
+    sending one.
+    """
+    return _period_charges(plan).count() + 1
+
+
+def _may_try_again(charge, now) -> bool:
+    """TIMWE refused this charge, so nothing was taken, and it is time to try again.
+
+    Only ever a refusal: 'failed' is recorded solely for a Fault from the MA or
+    a request that never reached it. A pending, ambiguous or successful charge
+    is never followed by another.
+    """
+    return charge.status == 'failed' and now >= charge.created_at + retry_interval() * RETRY_EARLY
+
+
+def _charge_number(user, plan):
+    """``(number, '')`` for the number a renewal may charge, or ``(number, reason)`` not to.
+
+    The number charged is the account's own registered number -- and it must
+    be the number TIMWE subscribed on the short code. Charging any other would
+    bill someone who never opted in.
+    """
+    registered = normalize_ethiopian_phone(
+        getattr(getattr(user, 'profile', None), 'phone_number', '') or ''
     )
+    if not registered:
+        return '', REASON_NO_MSISDN
+    subscribed = normalize_ethiopian_phone(plan.onevas_phone_number or '')
+    if subscribed and subscribed != registered:
+        return registered, REASON_MSISDN_MISMATCH
+    return registered, ''
 
 
 def _status_from_charge(plan, charge) -> RenewalStatus:
@@ -184,9 +277,11 @@ def subscription_status(user) -> RenewalStatus:
         return RenewalStatus(INACTIVE)
 
     charge = existing_renewal_charge(plan)
-    if charge is not None:
+    if charge is not None and not _may_try_again(charge, timezone.now()):
         return _status_from_charge(plan, charge)
-    return RenewalStatus(EXPIRED, plan, reason=REASON_DUE if renewal_enabled() else REASON_DISABLED)
+    return RenewalStatus(
+        EXPIRED, plan, charge, reason=REASON_DUE if renewal_enabled() else REASON_DISABLED
+    )
 
 
 def check_and_renew_subscription(user) -> RenewalStatus:
@@ -221,35 +316,22 @@ def _renew(user, plan) -> RenewalStatus:
     from api.services.timwe_charging import ChargeRefused, request_charge
 
     tier = plan.tier
+    attempt = next_attempt(plan)
     base_log = {
         'operation': 'subscription_renewal',
         'user_id': user.pk,
         'plan_id': str(plan.pk),
         'period_end': plan.end_date.isoformat(),
+        'attempt': attempt,
     }
 
-    # The number charged is the account's own registered number -- and it must
-    # be the number TIMWE subscribed on the short code. Charging any other
-    # would bill someone who never opted in.
-    registered = normalize_ethiopian_phone(
-        getattr(getattr(user, 'profile', None), 'phone_number', '') or ''
-    )
-    if not registered:
-        logger.warning(
-            'SUBSCRIPTION_RENEWAL_SKIPPED', extra={**base_log, 'reason': REASON_NO_MSISDN}
-        )
-        return RenewalStatus(EXPIRED, plan, reason=REASON_NO_MSISDN)
-    subscribed = normalize_ethiopian_phone(plan.onevas_phone_number or '')
-    if subscribed and subscribed != registered:
-        logger.warning(
-            'SUBSCRIPTION_RENEWAL_SKIPPED',
-            extra={
-                **base_log,
-                'reason': REASON_MSISDN_MISMATCH,
-                'masked_msisdn': _mask(registered),
-            },
-        )
-        return RenewalStatus(EXPIRED, plan, reason=REASON_MSISDN_MISMATCH)
+    registered, skip = _charge_number(user, plan)
+    if skip:
+        extra = {**base_log, 'reason': skip}
+        if registered:
+            extra['masked_msisdn'] = _mask(registered)
+        logger.warning('SUBSCRIPTION_RENEWAL_SKIPPED', extra=extra)
+        return RenewalStatus(EXPIRED, plan, reason=skip)
 
     logger.info(
         'SUBSCRIPTION_RENEWAL_STARTED',
@@ -267,7 +349,7 @@ def _renew(user, plan) -> RenewalStatus:
             # From the tier -- never from the request.
             amount=tier.price_etb,
             description=f'FlipStar {tier.name} renewal',
-            idempotency_key=renewal_idempotency_key(plan),
+            idempotency_key=renewal_idempotency_key(plan, attempt),
             subscription_tier=tier,
             purpose=RENEWAL_PURPOSE,
             subscription=plan,
@@ -277,9 +359,10 @@ def _renew(user, plan) -> RenewalStatus:
         )
     except (ChargeRefused, TimweConfigurationError) as exc:
         # Refused before anything was sent -- unless a concurrent attempt owns
-        # this period and only the replay was refused. Report that one.
+        # this period and only the replay was refused. Report that one. An
+        # earlier refusal owns nothing; this attempt was simply not made.
         existing = existing_renewal_charge(plan)
-        if existing is not None:
+        if existing is not None and existing.status != 'failed':
             return _status_from_charge(plan, existing)
         logger.warning(
             'SUBSCRIPTION_RENEWAL_NOT_ATTEMPTED',
@@ -449,3 +532,139 @@ def schedule_renewal(user, plan) -> bool:
         extra={'operation': 'subscription_renewal', 'user_id': user.pk, 'plan_id': str(plan.pk)},
     )
     return True
+
+
+# ---------------------------------------------------------------------------
+# The hourly sweep
+# ---------------------------------------------------------------------------
+
+
+def _charging_not_working():
+    """An outcome that says charging itself is not working -- our credentials,
+    configuration or address, the network, or an MA that takes the request and
+    never answers -- rather than anything about the subscriber."""
+    from api.integrations.timwe.charge import OUTCOME_REJECTED, OUTCOME_UNREACHABLE
+    from api.integrations.timwe.errors import CHARGE_PERMANENT
+
+    refused_for_our_reasons = Q(status='failed') & (
+        Q(outcome=OUTCOME_UNREACHABLE)
+        | Q(error_code__in=CHARGE_PERMANENT)
+        | Q(outcome=OUTCOME_REJECTED, error_code='')
+    )
+    return refused_for_our_reasons | Q(status__in=('timeout', 'unknown'))
+
+
+def charging_looks_broken(now) -> bool:
+    """Renewal charges finished lately, and not one of them worked.
+
+    While that holds, the sweep sends one charge an hour rather than hundreds
+    that would all end the same way: refused, which looks like an attack to
+    TIMWE, or unanswered, which leaves hundreds of ambiguous charges to
+    reconcile by hand. The first that succeeds, or is refused for a reason of
+    the subscriber's, ends it. A subscriber short of airtime is not a fault:
+    those are what the retries are for.
+    """
+    recent = TimweChargeTransaction.objects.filter(
+        purpose=RENEWAL_PURPOSE, completed_at__gte=now - retry_interval()
+    )
+    broken = _charging_not_working()
+    return recent.filter(broken).exists() and not recent.exclude(broken).exists()
+
+
+def _sweep_candidates(now):
+    """Lapsed plans the sweep may queue: inside the window, with no live charge
+    for the period, no refusal too recent to follow, and no other subscription
+    active. Newest first, so a backlog clears from the most recent lapses."""
+    from api.models import Subscription
+
+    holding = TimweChargeTransaction.objects.filter(
+        purpose=RENEWAL_PURPOSE,
+        subscription=OuterRef('pk'),
+        renewal_period_end=OuterRef('end_date'),
+    ).filter(
+        Q(status__in=('pending', 'timeout', 'unknown'))
+        | Q(created_at__gt=now - retry_interval() * RETRY_EARLY)
+    )
+    active_plan = SubscriptionPlan.objects.filter(
+        user=OuterRef('user'), status='active', end_date__gt=now
+    )
+    active_legacy = Subscription.objects.filter(user=OuterRef('user'), expires_at__gt=now)
+    return (
+        _renewable_plans(now)
+        .filter(user__isnull=False)
+        .filter(~Exists(holding), ~Exists(active_plan), ~Exists(active_legacy))
+        .select_related('tier', 'user__profile')
+        .order_by('-end_date')
+    )
+
+
+def due_renewals(now=None):
+    """Yield ``(plan, skip_reason)`` for each subscriber the sweep would act on.
+
+    One plan per user -- their newest for this service, which is the one
+    renewal charges for. ``skip_reason`` is empty when the plan is due a
+    charge. Reads only; ``timwe_charge_check --renewals`` prints it.
+    """
+    now = now or timezone.now()
+    seen = set()
+    for plan in _sweep_candidates(now).iterator(chunk_size=500):
+        if plan.user_id in seen or not _for_this_service(plan):
+            continue
+        seen.add(plan.user_id)
+        _, skip = _charge_number(plan.user, plan)
+        yield plan, skip
+
+
+def sweep_due_renewals(limit: int = SWEEP_BATCH) -> dict:
+    """Queue a renewal for every lapsed airtime subscription that is due one.
+
+    Run hourly by celery beat, so a subscriber is renewed whether or not they
+    open the app. Charges nothing itself: each subscriber's renewal is its own
+    task, through check_and_renew_subscription, which decides again with every
+    guard. A subscriber queued here and by the app in the same minute is still
+    charged at most once.
+    """
+    from api.integrations.timwe.charge import TimweChargeService
+    from api.integrations.timwe.errors import TimweConfigurationError
+
+    summary = {'queued': 0, 'skipped': 0, 'canary': False, 'ran': False}
+    if not renewal_enabled():
+        return summary
+    try:
+        TimweChargeService.ensure_configured()
+    except TimweConfigurationError as exc:
+        # Names only: the message never carries a value.
+        logger.error(
+            'SUBSCRIPTION_RENEWAL_SWEEP_NOT_CONFIGURED',
+            extra={'operation': 'subscription_renewal', 'reason': str(exc)},
+        )
+        return summary
+
+    summary['ran'] = True
+    now = timezone.now()
+    if charging_looks_broken(now):
+        limit = 1
+        summary['canary'] = True
+        logger.warning(
+            'SUBSCRIPTION_RENEWAL_SWEEP_CANARY',
+            extra={
+                'operation': 'subscription_renewal',
+                'reason': 'no recent renewal charge worked; sending one',
+            },
+        )
+
+    for plan, skip in due_renewals(now):
+        if summary['queued'] >= limit:
+            break
+        if skip:
+            summary['skipped'] += 1
+            continue
+        if not schedule_renewal(plan.user, plan):
+            # The broker is not taking tasks; the rest would fail the same way.
+            break
+        summary['queued'] += 1
+
+    logger.info(
+        'SUBSCRIPTION_RENEWAL_SWEEP', extra={'operation': 'subscription_renewal', **summary}
+    )
+    return summary

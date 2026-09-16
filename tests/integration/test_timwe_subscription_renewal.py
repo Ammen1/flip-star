@@ -8,6 +8,8 @@ confirmed charge. The expensive mistakes this suite exists to prevent:
 
 * charging twice for one period -- concurrent requests, a retried task, a
   pending or ambiguous attempt followed by another;
+* trying again after a refusal before the retry interval is up, or ever after
+  an ambiguous attempt -- and charging anyone once the renewal window closes;
 * renewing before, or without, a confirmed charge;
 * charging anyone the client names, at a price the client names;
 * charging while the switches are off.
@@ -367,7 +369,7 @@ def test_a_rejected_charge_leaves_the_subscription_expired(user, plan):
     assert not SubscriptionPayment.objects.filter(subscription=plan).exists()
 
 
-def test_a_failed_period_is_not_charged_again(user, plan):
+def test_a_refused_period_is_not_charged_again_straight_away(user, plan):
     renew(user, return_value=reply(fault_body('SVC0270'), status=500))
 
     status, posted = renew(user, return_value=reply(SUCCESS_BODY))
@@ -427,7 +429,7 @@ def test_a_request_arriving_mid_charge_does_not_charge_again(user, plan):
     assert renewal_rows().count() == 1
 
 
-def test_the_database_allows_one_charge_per_renewal_period(user, plan):
+def test_the_database_allows_one_live_charge_per_renewal_period(user, plan):
     common = {
         'user': user,
         'msisdn': MSISDN,
@@ -777,3 +779,389 @@ def test_renewal_logs_never_carry_the_full_number_or_secrets(user, plan, caplog)
         flat = json.dumps(record.__dict__, default=str)
         assert MSISDN not in flat
         assert CONFIG['TIMWE_SP_PASSWORD'] not in flat
+
+
+# ─── a refusal is tried again; an ambiguous charge never is ───────────────────
+
+
+def age(charge, minutes):
+    """Pretend a charge was made this many minutes ago."""
+    then = timezone.now() - timedelta(minutes=minutes)
+    TimweChargeTransaction.objects.filter(pk=charge.pk).update(created_at=then, completed_at=then)
+
+
+def refuse(user):
+    """One renewal attempt TIMWE refuses: the subscriber is short of airtime."""
+    renew(user, return_value=reply(fault_body('SVC0270'), status=500))
+    return renewal_rows().order_by('-created_at').first()
+
+
+def test_a_refused_renewal_is_charged_again_an_hour_later(user, plan):
+    """Too little airtime at ten is not the end of it: they may have topped up by eleven."""
+    period_end = plan.end_date
+    age(refuse(user), 61)
+
+    status, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    posted.assert_called_once()
+    assert status.state == renewal.RENEWED
+    first, second = renewal_rows().order_by('created_at')
+    assert (first.status, second.status) == ('failed', 'success')
+    assert first.renewal_period_end == second.renewal_period_end == period_end
+    assert second.idempotency_key.endswith(':2')
+    assert first.reference_code != second.reference_code
+    plan.refresh_from_db()
+    assert plan.is_active
+
+
+def test_a_refusal_is_not_followed_by_another_within_the_hour(user, plan):
+    age(refuse(user), 30)
+
+    status, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    posted.assert_not_called()
+    assert status.reason == renewal.REASON_FAILED
+
+
+def test_a_charge_that_never_reached_timwe_is_tried_again(user, plan):
+    renew(user, side_effect=refused())
+    age(renewal_rows().get(), 61)
+
+    status, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    posted.assert_called_once()
+    assert status.state == renewal.RENEWED
+
+
+@pytest.mark.parametrize(
+    'post_kwargs',
+    [
+        {'side_effect': requests.exceptions.ReadTimeout('slow')},
+        {'return_value': reply('Internal Server Error', status=500)},
+        {'return_value': reply('')},
+    ],
+    ids=['timeout', 'http-500-no-fault', 'empty'],
+)
+def test_an_ambiguous_charge_is_never_tried_again_however_long_ago(user, plan, post_kwargs):
+    """The subscriber may have paid. Reconcile; never charge again to find out."""
+    renew(user, **post_kwargs)
+    age(renewal_rows().get(), 60 * 24 * 3)
+
+    # Not due -- the rule itself, not only the database constraint behind it.
+    assert renewal.subscription_status(user).state == renewal.PAYMENT_PENDING
+    status, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    posted.assert_not_called()
+    assert status.state == renewal.PAYMENT_PENDING
+
+
+def test_a_retry_racing_another_never_sends_a_second_charge(user, plan):
+    """A second worker past every check is stopped by the database alone."""
+    age(refuse(user), 61)
+    inner = {}
+
+    def slow_timwe(*args, **kwargs):
+        inner['status'] = renewal._renew(user, plan)
+        return reply(SUCCESS_BODY)
+
+    status, posted = renew(user, side_effect=slow_timwe)
+
+    assert posted.call_count == 1
+    assert inner['status'].state == renewal.PAYMENT_PENDING
+    assert status.state == renewal.RENEWED
+    assert renewal_rows().count() == 2
+
+
+def test_the_database_allows_a_retry_after_a_refusal_but_one_live_charge(user, plan):
+    common = {
+        'user': user,
+        'msisdn': MSISDN,
+        'amount': 3,
+        'currency': 'ETB',
+        'purpose': renewal.RENEWAL_PURPOSE,
+        'subscription': plan,
+        'renewal_period_end': plan.end_date,
+    }
+    TimweChargeTransaction.objects.create(
+        reference_code='FSrefused1', idempotency_key='k1', status='failed', **common
+    )
+    TimweChargeTransaction.objects.create(
+        reference_code='FSretry1', idempotency_key='k2', status='pending', **common
+    )
+    with pytest.raises(IntegrityError), transaction.atomic():
+        TimweChargeTransaction.objects.create(
+            reference_code='FSthird1', idempotency_key='k3', status='pending', **common
+        )
+
+
+def test_the_retry_interval_is_configurable(settings, user, plan):
+    settings.TIMWE_RENEWAL_RETRY_MINUTES = 180
+    charge = refuse(user)
+
+    age(charge, 61)
+    _, posted = renew(user, return_value=reply(SUCCESS_BODY))
+    posted.assert_not_called()
+
+    age(charge, 181)
+    _, posted = renew(user, return_value=reply(SUCCESS_BODY))
+    posted.assert_called_once()
+
+
+def test_retries_are_never_closer_than_ten_minutes(settings, user, plan):
+    settings.TIMWE_RENEWAL_RETRY_MINUTES = 0
+    age(refuse(user), 5)
+
+    _, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    posted.assert_not_called()
+
+
+def test_no_one_is_charged_once_the_window_has_closed(user, tier):
+    """A week after the period ended, the subscriber opts in again; nobody is billed out of the blue."""
+    lapsed_plan(user, tier, end_date=timezone.now() - timedelta(days=7, hours=1))
+
+    status, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    assert status.state == renewal.INACTIVE
+    posted.assert_not_called()
+
+
+def test_the_window_is_configurable(settings, user, tier):
+    settings.TIMWE_RENEWAL_WINDOW_DAYS = 30
+    lapsed_plan(user, tier, end_date=timezone.now() - timedelta(days=8))
+
+    status, posted = renew(user, return_value=reply(SUCCESS_BODY))
+
+    posted.assert_called_once()
+    assert status.state == renewal.RENEWED
+
+
+def test_status_queues_the_retry_once_it_is_due(user, plan, status_of):
+    age(refuse(user), 61)
+
+    with patch(POST) as posted, patch(QUEUE) as queued:
+        body = status_of(user)
+
+    posted.assert_not_called()
+    queued.assert_called_once_with(user.pk)
+    assert body['status'] == 'PAYMENT_PENDING'
+    assert body['renewal'] == {'state': 'scheduled'}
+
+
+# ─── the hourly sweep ─────────────────────────────────────────────────────────
+
+
+def subscriber(name, number, tier, **plan_overrides):
+    """Another short-code subscriber, with a plan that ran out an hour ago."""
+    account = User.objects.create_user(username=name, password='x')
+    account.profile.phone_number = number
+    account.profile.save(update_fields=['phone_number'])
+    lapsed_plan(account, tier, **{'onevas_phone_number': number, **plan_overrides})
+    return account
+
+
+def sweep():
+    with patch(POST) as posted, patch(QUEUE) as queued:
+        summary = renewal.sweep_due_renewals()
+    posted.assert_not_called()  # the sweep itself never charges
+    return summary, sorted(call.args[0] for call in queued.call_args_list)
+
+
+def test_the_sweep_queues_every_lapsed_airtime_subscriber_and_no_one_else(user, tier, plan):
+    second = subscriber('second', '251911111111', tier)
+    subscriber('still-active', '251911111112', tier, end_date=timezone.now() + timedelta(hours=5))
+    subscriber('telebirr', '251911111113', tier, payment_method='telebirr')
+    subscriber('onevas', '251911111114', tier, payment_method='onevas')
+    subscriber('stopped', '251911111115', tier, status='cancelled')
+    subscriber('long-gone', '251911111116', tier, end_date=timezone.now() - timedelta(days=8))
+    renewed_elsewhere = subscriber('renewed-elsewhere', '251911111117', tier)
+    lapsed_plan(
+        renewed_elsewhere,
+        tier,
+        payment_method='telebirr',
+        onevas_subscription_id=str(uuid.uuid4()),
+        end_date=timezone.now() + timedelta(days=3),
+    )
+
+    summary, queued = sweep()
+
+    assert queued == sorted([user.pk, second.pk])
+    assert summary['queued'] == 2
+
+
+@pytest.mark.parametrize('flag', ['TIMWE_CHARGING_ENABLED', 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED'])
+def test_the_sweep_does_nothing_with_either_switch_off(settings, user, plan, flag):
+    setattr(settings, flag, False)
+
+    summary, queued = sweep()
+
+    assert queued == []
+    assert summary['ran'] is False
+
+
+@pytest.mark.parametrize(
+    'overrides',
+    [
+        {'TIMWE_CHARGE_URL': ''},
+        {'TIMWE_SP_PASSWORD': ''},
+        {
+            'TIMWE_SMPP_HOST': '10.175.206.42',
+            'TIMWE_SMPP_PORT': 6986,
+            'TIMWE_CHARGE_URL': (
+                'http://10.175.206.42:6986/AmountChargingService/services/AmountCharging'
+            ),
+        },
+    ],
+    ids=['no-url', 'no-password', 'smpp-address'],
+)
+def test_the_sweep_does_nothing_until_charging_is_configured(settings, user, plan, overrides):
+    for key, value in overrides.items():
+        setattr(settings, key, value)
+
+    summary, queued = sweep()
+
+    assert queued == []
+    assert summary['ran'] is False
+
+
+def test_the_sweep_waits_out_a_refusal_then_tries_again(user, plan):
+    charge = refuse(user)
+
+    assert sweep()[1] == []
+    age(charge, 61)
+    assert sweep()[1] == [user.pk]
+
+
+def test_the_sweep_never_queues_a_period_with_an_ambiguous_charge(user, plan):
+    renew(user, side_effect=requests.exceptions.ReadTimeout('slow'))
+    age(renewal_rows().get(), 60 * 24 * 3)
+
+    assert sweep()[1] == []
+
+
+def test_the_sweep_skips_subscribers_it_may_not_charge(user, tier, plan):
+    user.profile.phone_number = ''
+    user.profile.save(update_fields=['phone_number'])
+    subscriber('moved', '251911111118', tier, onevas_phone_number='251911000000')
+
+    summary, queued = sweep()
+
+    assert queued == []
+    assert summary['skipped'] == 2
+
+
+def test_the_sweep_sends_one_charge_while_every_recent_one_failed_on_our_side(user, tier, plan):
+    """Wrong credentials would fail for everyone; one request an hour finds out, not hundreds."""
+    subscriber('second', '251911111111', tier)
+    subscriber('third', '251911111112', tier)
+    earlier = subscriber('earlier', '251911111113', tier)
+    renew(earlier, return_value=reply(fault_body('SVC0901'), status=500))
+
+    summary, queued = sweep()
+
+    assert summary['canary'] is True
+    assert len(queued) == 1
+
+
+def test_an_ma_that_never_answers_gets_one_charge_an_hour(user, tier, plan):
+    """Every unanswered charge is one to reconcile by hand; do not make hundreds."""
+    subscriber('second', '251911111111', tier)
+    earlier = subscriber('earlier', '251911111113', tier)
+    renew(earlier, side_effect=requests.exceptions.ReadTimeout('no answer'))
+
+    summary, queued = sweep()
+
+    assert summary['canary'] is True
+    assert len(queued) == 1
+
+
+def test_the_canary_ends_with_the_first_charge_that_works(user, tier, plan):
+    subscriber('second', '251911111111', tier)
+    broken = subscriber('broken', '251911111113', tier)
+    renew(broken, return_value=reply(fault_body('SVC0901'), status=500))
+    working = subscriber('working', '251911111114', tier)
+    renew(working, return_value=reply(SUCCESS_BODY))
+
+    summary, queued = sweep()
+
+    assert summary['canary'] is False
+    assert len(queued) == 2
+
+
+def test_a_subscriber_short_of_airtime_does_not_slow_the_sweep(user, tier, plan):
+    subscriber('second', '251911111111', tier)
+    earlier = subscriber('earlier', '251911111113', tier)
+    renew(earlier, return_value=reply(fault_body('SVC0270'), status=500))
+
+    summary, queued = sweep()
+
+    assert summary['canary'] is False
+    assert len(queued) == 2
+
+
+def test_the_sweep_stops_at_its_batch(user, tier, plan):
+    subscriber('second', '251911111111', tier)
+    subscriber('third', '251911111112', tier)
+
+    with patch(POST), patch(QUEUE) as queued:
+        summary = renewal.sweep_due_renewals(limit=2)
+
+    assert summary['queued'] == 2
+    assert queued.call_count == 2
+
+
+def test_the_sweep_charges_and_renews_end_to_end(user, tier, plan):
+    second = subscriber('second', '251911111111', tier)
+
+    with (
+        patch(POST, return_value=reply(SUCCESS_BODY)) as posted,
+        patch(QUEUE, side_effect=renew_expired_subscription),
+    ):
+        summary = renewal.sweep_due_renewals()
+        again = renewal.sweep_due_renewals()
+
+    assert summary['queued'] == 2
+    assert again['queued'] == 0
+    assert posted.call_count == 2
+    for account in (user, second):
+        assert SubscriptionPlan.objects.get(user=account).is_active
+    assert renewal_rows().filter(status='success').count() == 2
+
+
+def test_the_sweep_is_scheduled_every_hour():
+    from api.celery import app
+    from api.tasks import sweep_expired_subscriptions
+
+    entries = [
+        entry
+        for entry in app.conf.beat_schedule.values()
+        if entry['task'] == sweep_expired_subscriptions.name
+    ]
+    assert len(entries) == 1
+    assert entries[0]['schedule'] == 3600.0
+
+
+def test_the_sweep_task_runs_the_sweep(user, plan):
+    from api.tasks import sweep_expired_subscriptions
+
+    with patch(POST), patch(QUEUE) as queued:
+        summary = sweep_expired_subscriptions()
+
+    assert summary['queued'] == 1
+    queued.assert_called_once_with(user.pk)
+
+
+def test_the_renewals_preview_charges_and_queues_nothing(user, tier, plan):
+    subscriber('moved', '251911111118', tier, onevas_phone_number='251911000000')
+    out = StringIO()
+
+    with patch(POST) as posted, patch(QUEUE) as queued:
+        call_command('timwe_charge_check', '--renewals', stdout=out)
+
+    posted.assert_not_called()
+    queued.assert_not_called()
+    report = out.getvalue()
+    assert 'DUE' in report
+    assert renewal.REASON_MSISDN_MISMATCH in report
+    assert '1 due, 1 skipped' in report
+    assert MSISDN not in report

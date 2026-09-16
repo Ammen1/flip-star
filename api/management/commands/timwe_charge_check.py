@@ -26,6 +26,10 @@ lists every charge still needing a human: PENDING, TIMEOUT or UNKNOWN (the
 subscriber may or may not have paid), and SUCCESS not yet applied (paid, but
 the renewal or coins not yet delivered). Each row carries the reference code to
 quote to TIMWE. It also summarises recent charging by purpose and outcome.
+
+What the hourly renewal job would charge right now -- never charges anything:
+
+    python manage.py timwe_charge_check --renewals
 """
 
 import socket
@@ -73,12 +77,22 @@ class Command(BaseCommand):
             default=24,
             help='With --reconcile: the window the summary covers. Default 24.',
         )
+        parser.add_argument(
+            '--renewals',
+            action='store_true',
+            help='List the lapsed airtime subscriptions the hourly renewal job would charge '
+            'now. Charges nothing.',
+        )
 
     def handle(self, *args, **options):
-        if options['reconcile']:
+        if options['reconcile'] or options['renewals']:
             if options['charge']:
-                raise CommandError('--reconcile never charges; do not combine it with --charge.')
-            self._reconcile(hours=max(1, options['hours']))
+                flag = '--reconcile' if options['reconcile'] else '--renewals'
+                raise CommandError(f'{flag} never charges; do not combine it with --charge.')
+            if options['renewals']:
+                self._renewals()
+            if options['reconcile']:
+                self._reconcile(hours=max(1, options['hours']))
             return
 
         ok = self._check_configuration()
@@ -127,6 +141,12 @@ class Command(BaseCommand):
             on = bool(getattr(settings, flag, False))
             mark = self.style.WARNING('ON') if on else 'off'
             self.stdout.write(f'  {flag:34} {mark}')
+        from api.services.subscription_renewal import renewal_window, retry_interval
+
+        self.stdout.write(
+            f'  renewal retries      every {int(retry_interval().total_seconds() // 60)} min '
+            f'for {renewal_window().days} days (hourly job)'
+        )
 
         endpoint = TimweChargeService.get_endpoint()
         if endpoint:
@@ -134,6 +154,37 @@ class Command(BaseCommand):
         currency = TimweChargeService.get_currency()
         if currency:
             self.stdout.write(f'  currency               {currency}')
+
+        # Which dialect this pod will speak. The guide and TIMWE's own working
+        # example disagree on all of these, so the operator sees what will
+        # actually go on the wire before any charge is made.
+        try:
+            hashed = TimweChargeService.password_is_hashed()
+        except TimweConfigurationError as exc:
+            self.stdout.write(self.style.ERROR(f'  {exc}'))
+            return False
+        self.stdout.write(
+            '  password               '
+            + ('MD5 digest (guide)' if hashed else self.style.WARNING('sent in the request'))
+        )
+        verify = TimweChargeService.tls_verification()
+        if verify is True:
+            described = 'public CAs'
+        elif verify is False:
+            described = self.style.WARNING('NOT CHECKED (TIMWE_CHARGE_VERIFY_TLS=false)')
+        else:
+            described = f'certificate file {verify}'
+        self.stdout.write(f'  certificate            {described}')
+        self.stdout.write(
+            f'  charge service id      {TimweChargeService.get_service_id()}'
+            + ('' if getattr(settings, 'TIMWE_CHARGE_SERVICE_ID', '') else ' (TIMWE_SERVICE_ID)')
+        )
+        code = TimweChargeService.get_charge_code()
+        self.stdout.write(f'  charging code          {code or "<none>"}')
+        self.stdout.write(
+            '  endUserIdentifier      '
+            + ('tel:2519...' if TimweChargeService.uses_tel_prefix() else 'bare digits')
+        )
 
         try:
             timeout = TimweChargeService.get_timeout()
@@ -204,6 +255,50 @@ class Command(BaseCommand):
             return False
         self.stdout.write(self.style.SUCCESS(f'  {host}:{port} reachable'))
         return True
+
+    # -- renewals -------------------------------------------------------------
+
+    def _renewals(self):
+        """What the hourly sweep would queue now. Reads only; nothing is charged or queued."""
+        from django.utils import timezone
+
+        from api.services import subscription_renewal as renewal
+
+        now = timezone.now()
+        self.stdout.write(self.style.MIGRATE_HEADING('Hourly renewal job (nothing is charged)'))
+        on = renewal.renewal_enabled()
+        self.stdout.write(
+            f'  switches            {self.style.WARNING("ON") if on else "off -- the job does nothing"}'
+        )
+        self.stdout.write(
+            f'  retry after refusal every {int(renewal.retry_interval().total_seconds() // 60)} min, '
+            f'for {renewal.renewal_window().days} days after the period ends'
+        )
+        if renewal.charging_looks_broken(now):
+            self.stdout.write(
+                self.style.WARNING(
+                    '  no recent renewal charge worked (refused for our reasons, or unanswered): '
+                    'the next run sends ONE'
+                )
+            )
+
+        due = skipped = 0
+        for plan, skip in renewal.due_renewals(now):
+            number = getattr(getattr(plan.user, 'profile', None), 'phone_number', '') or ''
+            state = f'skip: {skip}' if skip else 'DUE'
+            if skip:
+                skipped += 1
+            else:
+                due += 1
+            attempt = renewal.next_attempt(plan)
+            self.stdout.write(
+                f'  user={plan.user_id:<8} {_mask(number):14} {plan.tier.name[:24]:24} '
+                f'{int(plan.tier.price_etb)} {TimweChargeService.get_currency() or "ETB"}  '
+                f'ended {plan.end_date:%Y-%m-%d %H:%M}  attempt {attempt}  {state}'
+            )
+        self.stdout.write(f'  {due} due, {skipped} skipped')
+        if due and not on:
+            self.stdout.write('  (none will be charged while the switches are off)')
 
     # -- reconciliation ------------------------------------------------------
 

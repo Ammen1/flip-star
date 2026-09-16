@@ -4,9 +4,11 @@ Charging a subscriber's airtime through the TIMWE Master Aggregator.
 Protocol reference: *New Partner Integration User Guide — TIMWE ETHIO MA v1.3*,
 pp. 17–24.
 
-> **Status: not yet proven against TIMWE.** The implementation is complete and
-> tested against a mocked gateway, but the real endpoint has not been supplied,
-> so no request has ever reached the MA. See [Before going live](#before-going-live).
+> **Status: the endpoint answers, the backend has not used it yet.** On
+> 2026-09-16 TIMWE supplied a request that their gateway accepted. It differs
+> from their own written guide in six ways -- see
+> [TIMWE's dialect](#timwes-dialect) -- each now a setting. No charge has yet
+> been made by this backend.
 
 ## Not the SMPP link
 
@@ -15,7 +17,7 @@ pp. 17–24.
 | Purpose | SMS / OTP delivery | Deduct a fee from airtime |
 | Protocol | SMPP v3.4, persistent TCP | Parlay X 3.1, SOAP over HTTP |
 | Address | `TIMWE_SMPP_HOST:PORT` | `TIMWE_CHARGE_URL` |
-| Auth | bind `system_id` / password | `MD5(spId + Password + timeStamp)` per request |
+| Auth | bind `system_id` / password | `MD5(spId + Password + timeStamp)` per request, or the password itself where TIMWE require it |
 
 **Never point `TIMWE_CHARGE_URL` at the SMPP host.** The guide gives the charge
 endpoint's shape but not its address; TIMWE must supply it.
@@ -45,16 +47,60 @@ All values resolve through Vault → environment → `.env`, declared in
 
 | Key | Value | Who supplies it |
 |---|---|---|
-| `TIMWE_CHARGE_URL` | `http://IP:Port/AmountChargingService/services/AmountCharging` | **TIMWE — unknown today** |
+| `TIMWE_CHARGE_URL` | `https://10.175.206.42:443/soap-payment-api/ws/AmountChargingService/services/chargeAmount` | TIMWE. Note the path is **not** the guide's `/AmountChargingService/services/AmountCharging`, and it is https. Never `10.175.206.42:6986`: that is the SMPP gateway, and the backend refuses it. |
 | `TIMWE_SP_ID` | believed `300263` | TIMWE; matches SMPP login and partner-log `spID` |
 | `TIMWE_SP_PASSWORD` | secret | **TIMWE — confirm; need not equal the SMPP password** |
 | `TIMWE_SERVICE_ID` | believed `30026300007331` | TIMWE; partner log pairs it with `spID=300263` |
-| `TIMWE_CURRENCY` | `ETB` | ISO 4217, three letters |
+| `TIMWE_CURRENCY` | `ETB` per the guide; TIMWE's own example sends `Birr` | Sent exactly as configured — see [TIMWE's dialect](#timwes-dialect) |
 | `TIMWE_CHARGE_TIMEOUT` | `60` | Guide p.17: the MA answers within 60s |
 | `TIMWE_AIRTIME_PURCHASE_ENABLED` | `false` | **Business decision** — see below |
 
 Add missing keys with `vault kv patch` — never `put`, which replaces the whole
 secret. Restart `flipstar-backend` afterwards.
+
+## TIMWE's dialect
+
+TIMWE's guide and TIMWE's own working request disagree. Their gateway is the
+authority, so each difference is a setting rather than a rewrite. **Every
+default is the guide**: an unconfigured deployment behaves exactly as before.
+
+| | Guide (the default) | TIMWE's working example | Setting |
+|---|---|---|---|
+| Address | `http://IP:Port/AmountChargingService/services/AmountCharging` | `https://10.175.206.42:443/soap-payment-api/ws/AmountChargingService/services/chargeAmount` | `TIMWE_CHARGE_URL` |
+| Certificate | trusted by a public CA | none: their own example needs `curl -k` | `TIMWE_CHARGE_CA_BUNDLE`, `TIMWE_CHARGE_VERIFY_TLS` |
+| `spPassword` | `MD5(spId + Password + timeStamp)` | the password itself | `TIMWE_CHARGE_PASSWORD_MODE` |
+| `timeStamp` | UTC `yyyyMMddHHmmss` | `2700000000` — not a date | — (we always send a real one) |
+| `serviceId` | the subscription service | a different one (`…7334` where subscriptions are `…7331`) | `TIMWE_CHARGE_SERVICE_ID` |
+| `currency` | ISO 4217, `ETB` | `Birr` | `TIMWE_CURRENCY`, now passed through as written |
+| `endUserIdentifier` | `tel:2519…` | `2519…` | `TIMWE_CHARGE_TEL_PREFIX` |
+| `code` | optional | `255` | `TIMWE_CHARGE_CODE` |
+
+`timwe_charge_check` prints the dialect in force before anything is sent.
+
+### The password in the request
+
+`TIMWE_CHARGE_PASSWORD_MODE='plain'` sends the account password inside every
+charge. It exists because that is what TIMWE's accepted example does, and it is
+constrained accordingly:
+
+* refused unless `TIMWE_CHARGE_URL` is https (`endpoint_problem`), so it is
+  never published over an unencrypted connection;
+* never logged, in either mode, and never echoed by `timwe_charge_check`;
+* `'md5'` remains the default. If TIMWE accept the digest, use it and this
+  setting never needs to exist in a deployment.
+
+### The certificate
+
+Their endpoint is HTTPS on an IP address with a certificate no public CA
+vouches for. In order of preference:
+
+1. `TIMWE_CHARGE_CA_BUNDLE=/path/to/timwe.pem` — ask TIMWE for the certificate.
+   Only that certificate is then trusted, which is the full guarantee.
+2. `TIMWE_CHARGE_VERIFY_TLS=false` — staging stopgap. The connection is
+   encrypted but unauthenticated: someone on the path could read or alter a
+   charge, and read the password when the mode is `plain`. Every charge sent
+   this way logs `TIMWE_CHARGE_TLS_UNVERIFIED` with its reference code. It must
+   be true in production.
 
 ## Authentication
 
@@ -77,9 +123,9 @@ than the request changing to match.
 | Field | Rule | Source |
 |---|---|---|
 | `OA`, `FA` | `251XXXXXXXXX`, identical | p.20–21 |
-| `endUserIdentifier` | `tel:251XXXXXXXXX` | p.21 |
+| `endUserIdentifier` | `tel:251XXXXXXXXX`, or bare digits with `TIMWE_CHARGE_TEL_PREFIX=false` | p.21 |
 | `description` | mandatory, ≤ 255 | p.21 |
-| `currency` | ISO 4217, 3 letters | p.21 |
+| `currency` | letters, as the MA spells them (`ETB`, `Birr`) | p.21 |
 | `amount` | positive integer, ≤ 4 digits, **no decimal point** | p.21–22 |
 | `code` | optional, ≤ 30 | p.22 |
 | `referenceCode` | mandatory, unique, ≤ 30 | p.21 |
@@ -208,18 +254,21 @@ charge. The client never asks for it and supplies none of its terms.
 | Setting | Meaning |
 |---|---|
 | `TIMWE_CHARGING_ENABLED` | Master switch. While false no chargeAmount is ever sent — coin purchases, renewals and `timwe_charge_check --charge` alike. |
-| `TIMWE_SUBSCRIPTION_RENEWAL_ENABLED` | This flow. Renewal needs both. |
+| `TIMWE_SUBSCRIPTION_RENEWAL_ENABLED` | This flow, including the hourly job. Renewal needs both. |
+| `TIMWE_RENEWAL_RETRY_MINUTES` | Default `60`. How long after TIMWE **refused** a renewal charge the next attempt is made. Never under 10. |
+| `TIMWE_RENEWAL_WINDOW_DAYS` | Default `7`. How long after the period ends renewal keeps being attempted. |
 
 ### What is renewable
 
 A plan is renewed only when **all** hold:
 
-- `payment_method='timwe'` and `subscription_source='sms'` — OneVAS, telebirr
-  and coin plans never are;
+- `payment_method='timwe'` and `subscription_source='sms'` (TIMWE airtime).
+  OneVAS, telebirr and coin plans never are;
 - its tier is on `SMS_SHORT_CODE`, with a price and a duration (not on-demand);
 - TIMWE recorded it under `TIMWE_SERVICE_ID`, when it recorded a service;
-- status `active`, `expired` or `grace_period` with `end_date` in the past —
-  **never `cancelled`**: that subscriber sent STOP;
+- status `active`, `expired` or `grace_period`, with `end_date` in the past but
+  no more than `TIMWE_RENEWAL_WINDOW_DAYS` ago. **Never `cancelled`**: that
+  subscriber sent STOP;
 - the account has no other active subscription;
 - the account's registered number is the number TIMWE subscribed.
 
@@ -227,26 +276,65 @@ Amount = the tier's `price_etb`. Number = the profile's phone, normalised
 (`9xxxxxxxx` → `2519xxxxxxxx`). Duration = the tier's `duration_days`, from now
 — the one-off free-trial days are not granted again.
 
-### Once per period
+### One live charge per period; refusals are retried
 
-The period is *(plan, the `end_date` that ran out)*. It is charged at most once:
+The period is *(plan, the `end_date` that ran out)*. It gets at most one charge
+that could have taken money:
 
-- the idempotency key is `sub-renewal:<plan>:<end_date>`, unique in the database;
-- a partial unique constraint allows one renewal charge per
-  `(subscription, renewal_period_end)`;
+- each attempt's idempotency key is `sub-renewal:<plan>:<end_date>` (then
+  `…:2`, `…:3` for retries), unique in the database;
+- a partial unique constraint allows one **pending, successful or ambiguous**
+  charge per `(subscription, renewal_period_end)`. Failed rows are outside it;
 - a concurrent request finds the existing row and gets its state instead.
 
-A **pending or ambiguous** attempt is never followed by another, and neither is
-a **failed** one — the plan stays expired until the subscriber opts in again.
+What happens after each outcome:
+
+| Last attempt | Next |
+|---|---|
+| **Refused** (`failed`: a Fault such as `SVC0270`, or the MA unreachable). Nothing was taken | Tried again after `TIMWE_RENEWAL_RETRY_MINUTES`, until the window closes. This is the subscriber short of airtime being renewed once they top up. |
+| **Pending / timeout / unknown** (ambiguous) | **Never** tried again. Reconcile the reference code with TIMWE. |
+| **Success** | The plan is renewed; the next period starts over. |
+
+After the window closes the plan stays expired until the subscriber opts in
+again on the short code.
 
 ### Where it runs
 
 | Trigger | How |
 |---|---|
+| **Hourly beat job** (`sweep_expired_subscriptions`) | Queues `renew_expired_subscription` for every lapsed airtime subscriber who is due, whether or not they open the app. See below. |
 | `GET /subscription/status/` | **Queues** a Celery task (`renew_expired_subscription`) and answers immediately with `status: PAYMENT_PENDING`. It never waits on TIMWE. |
 | Posting a video (`create_post`) | Renews **inline**. On a confirmed charge the post goes through; while one is pending it answers `403` with `code: PAYMENT_PENDING`. |
 
-PIN reset does not trigger a charge.
+All three end in `check_and_renew_subscription`, which applies every rule
+above, so a subscriber queued by the job and by the app in the same minute is
+still charged once. PIN reset does not trigger a charge.
+
+### The hourly job
+
+`api.tasks.subscription_renewal.sweep_expired_subscriptions` runs on Celery
+beat every hour (`api/celery.py`). It charges nothing itself; it queues one
+task per due subscriber.
+
+- It does nothing unless both switches are on **and** chargeAmount is fully
+  configured. A missing value or an SMPP address logs
+  `SUBSCRIPTION_RENEWAL_SWEEP_NOT_CONFIGURED`.
+- It skips a subscriber with a live charge for the period, a refusal too recent
+  to follow, another active subscription, or no matching registered number.
+- It queues at most 500 subscribers per run, most recent lapses first. The rest
+  go an hour later.
+- **Canary.** If no renewal charge that finished in the last interval worked,
+  the job sends **one** charge that hour instead of hundreds that would end the
+  same way. "Didn't work" means refused for our reasons (`SVC0901`, `SVC0002`,
+  `POL0910`, an HTTP error without SOAP, the MA unreachable) or unanswered
+  (timeout/unknown, each one a charge to reconcile by hand). The first charge
+  that succeeds, or fails for a subscriber reason such as `SVC0270`, ends it.
+
+See what it would charge right now, without charging or queueing anything:
+
+```
+kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py timwe_charge_check --renewals
+```
 
 ### `/subscription/status/` additions
 
@@ -277,10 +365,12 @@ Lists every PENDING, TIMEOUT or UNKNOWN charge and every one paid but not yet
 applied, with its reference code, and summarises the last 24 hours by purpose
 and status, latency and TIMWE error codes. It never charges.
 
-Log events: `SUBSCRIPTION_RENEWAL_STARTED`, `…_QUEUED`,
+Log events: `SUBSCRIPTION_RENEWAL_STARTED` (with `attempt`), `…_QUEUED`,
 `…_DUPLICATE_PREVENTED`, `…_APPLIED`, `…_FAILED`, `…_AMBIGUOUS`, `…_SKIPPED`,
-`…_APPLY_FAILED`, plus the charge's own `TIMWE_CHARGE_REQUESTED` /
-`TIMWE_CHARGE_COMPLETED` (latency, TIMWE error code). Numbers are masked.
+`…_APPLY_FAILED`, `…_SWEEP` (queued / skipped / canary per run),
+`…_SWEEP_CANARY`, `…_SWEEP_NOT_CONFIGURED`, plus the charge's own
+`TIMWE_CHARGE_REQUESTED` / `TIMWE_CHARGE_COMPLETED` (latency, TIMWE error
+code). Numbers are masked.
 
 ## The business flow is switched off
 
@@ -347,7 +437,7 @@ kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py tim
 kubectl -n flipstar-staging exec deploy/flipstar-backend -- python manage.py timwe_charge_check --reconcile
 ```
 
-Expect `[X] 0117_timwe_subscription_renewal` and all three switches `off`. The
+Expect `[X] 0122_timwe_renewal_retries` and all three switches `off`. The
 first check opens a TCP connection to `TIMWE_CHARGE_URL` if it is fully
 configured — no HTTP, no charge; `--reconcile` only reads.
 

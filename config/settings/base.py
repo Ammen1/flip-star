@@ -482,6 +482,29 @@ TIMWE_SP_PASSWORD = config('TIMWE_SP_PASSWORD', default='')
 TIMWE_SERVICE_ID = config('TIMWE_SERVICE_ID', default='')
 TIMWE_CURRENCY = config('TIMWE_CURRENCY', default='')
 TIMWE_CHARGE_TIMEOUT = config('TIMWE_CHARGE_TIMEOUT', default=60, cast=int)
+# Where TIMWE's own working chargeAmount example differs from their written
+# guide. Defaults are the guide; set these from what their gateway actually
+# accepts. TIMWE_CHARGE_SERVICE_ID falls back to TIMWE_SERVICE_ID, which is the
+# service their subscription notifications carry -- charging may be another.
+TIMWE_CHARGE_SERVICE_ID = config('TIMWE_CHARGE_SERVICE_ID', default='')
+# The MA's charging code, sent as <code>. Optional per the guide (p.21).
+TIMWE_CHARGE_CODE = config('TIMWE_CHARGE_CODE', default='')
+# endUserIdentifier as 'tel:2519...' (the guide's field table) or bare digits
+# (what TIMWE's example sends).
+TIMWE_CHARGE_TEL_PREFIX = config('TIMWE_CHARGE_TEL_PREFIX', default=True, cast=bool)
+# 'md5' is the guide: spPassword = MD5(spId + Password + timeStamp), and the
+# account password never crosses the wire. 'plain' sends the password itself,
+# which is what TIMWE's own working example does; it is refused over plain
+# HTTP, because it puts the password in every charge request.
+TIMWE_CHARGE_PASSWORD_MODE = config('TIMWE_CHARGE_PASSWORD_MODE', default='md5')
+# TIMWE serve chargeAmount over HTTPS on an IP address with a certificate no
+# public CA vouches for. Point this at their certificate file and only that
+# certificate is trusted -- the setting to prefer.
+TIMWE_CHARGE_CA_BUNDLE = config('TIMWE_CHARGE_CA_BUNDLE', default='')
+# The fallback while that file is being obtained: still encrypted, but no
+# longer proof of who is on the other end. Every charge sent this way logs
+# TIMWE_CHARGE_TLS_UNVERIFIED. Must stay true in production.
+TIMWE_CHARGE_VERIFY_TLS = config('TIMWE_CHARGE_VERIFY_TLS', default=True, cast=bool)
 # Coin purchase via airtime, charged through TIMWE chargeAmount. OFF by default
 # and deliberately so: the flow was disabled by policy ("Ethio Telecom SIM
 # cards are only accessible for SMS OTP verification"). Turning it on reverses
@@ -501,6 +524,13 @@ TIMWE_CHARGING_ENABLED = config('TIMWE_CHARGING_ENABLED', default=False, cast=bo
 TIMWE_SUBSCRIPTION_RENEWAL_ENABLED = config(
     'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED', default=False, cast=bool
 )
+# While renewal is on, an hourly beat job charges every lapsed airtime
+# subscription that is due. A charge TIMWE refused -- low balance, the MA
+# unreachable -- took nothing, so it is tried again this many minutes later...
+TIMWE_RENEWAL_RETRY_MINUTES = config('TIMWE_RENEWAL_RETRY_MINUTES', default=60, cast=int)
+# ...for up to this many days after the period ran out. After that the
+# subscription is left expired and the subscriber opts in again on the short code.
+TIMWE_RENEWAL_WINDOW_DAYS = config('TIMWE_RENEWAL_WINDOW_DAYS', default=7, cast=int)
 TIMWE_ALLOWED_IPS = [
     ip.strip() for ip in config('TIMWE_ALLOWED_IPS', default='').split(',') if ip.strip()
 ]

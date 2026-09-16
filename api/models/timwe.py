@@ -164,8 +164,10 @@ class TimweChargeTransaction(models.Model):
 
     #: For a renewal: the plan being renewed, and the end of the period that
     #: ran out. Together they name one renewal period, and the constraint below
-    #: allows exactly one charge for it -- the database's half of "an expired
-    #: subscription is charged once, however many requests arrive".
+    #: allows exactly one live charge for it -- pending, successful or
+    #: ambiguous -- the database's half of "an expired subscription is charged
+    #: once, however many requests arrive". Failed attempts are outside it: TIMWE
+    #: refused them, nothing was taken, and the period may be tried again.
     subscription = models.ForeignKey(
         'api.SubscriptionPlan',
         on_delete=models.SET_NULL,
@@ -221,8 +223,8 @@ class TimweChargeTransaction(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['subscription', 'renewal_period_end'],
-                condition=models.Q(purpose='subscription_renewal'),
-                name='timwe_one_renewal_charge_per_period',
+                condition=models.Q(purpose='subscription_renewal') & ~models.Q(status='failed'),
+                name='timwe_one_live_renewal_charge_per_period',
             ),
         ]
 

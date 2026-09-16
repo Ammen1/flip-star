@@ -226,6 +226,47 @@ SCHEMA: tuple[Key, ...] = (
         'per request. Secret. Confirm with TIMWE -- it need not equal the SMPP password.',
     ),
     _k('TIMWE_SERVICE_ID', group='timwe'),
+    _k(
+        'TIMWE_CHARGE_SERVICE_ID',
+        group='timwe',
+        doc='Service quoted on chargeAmount, when TIMWE charge under a different '
+        'service than their subscription notifications carry. Falls back to '
+        'TIMWE_SERVICE_ID.',
+    ),
+    _k(
+        'TIMWE_CHARGE_CODE',
+        group='timwe',
+        doc="The MA's charging code, sent as <code>. Optional per the guide; "
+        "TIMWE's own working example sends one.",
+    ),
+    _k(
+        'TIMWE_CHARGE_TEL_PREFIX',
+        kind='bool',
+        group='timwe',
+        doc="Write endUserIdentifier as 'tel:2519...' (guide) or bare digits "
+        "(TIMWE's working example). Default true.",
+    ),
+    _k(
+        'TIMWE_CHARGE_PASSWORD_MODE',
+        group='timwe',
+        doc="'md5' (default, the guide): spPassword = MD5(spId+Password+timeStamp), "
+        "the password never leaves us. 'plain' sends the password itself, as TIMWE's "
+        'own example does; refused over plain HTTP.',
+    ),
+    _k(
+        'TIMWE_CHARGE_CA_BUNDLE',
+        group='timwe',
+        doc="Path to TIMWE's chargeAmount certificate. Set it and only that "
+        'certificate is trusted -- the answer to their untrusted HTTPS endpoint.',
+    ),
+    _k(
+        'TIMWE_CHARGE_VERIFY_TLS',
+        kind='bool',
+        group='timwe',
+        doc='Default true. False stops the MA certificate being checked: encrypted '
+        'but unauthenticated, so a party on the path could read or alter a charge. '
+        'Staging stopgap only; every charge logs TIMWE_CHARGE_TLS_UNVERIFIED.',
+    ),
     _k('TIMWE_CURRENCY', group='timwe'),
     _k(
         'TIMWE_CHARGE_TIMEOUT',
@@ -254,6 +295,20 @@ SCHEMA: tuple[Key, ...] = (
         group='timwe',
         doc='Charge an expired short-code subscriber once for the next period. Off by '
         'default; leave off unless TIMWE confirms it does not renew these itself.',
+    ),
+    _k(
+        'TIMWE_RENEWAL_RETRY_MINUTES',
+        kind='int',
+        group='timwe',
+        doc='Minutes before a renewal charge TIMWE refused (nothing taken) is tried '
+        'again. Default 60. Ambiguous charges are never retried.',
+    ),
+    _k(
+        'TIMWE_RENEWAL_WINDOW_DAYS',
+        kind='int',
+        group='timwe',
+        doc='Days after a short-code subscription runs out that renewal keeps being '
+        'attempted. Default 7; after that the subscriber must opt in again.',
     ),
     _k('TIMWE_ALLOWED_IPS', kind='csv', group='timwe'),
     # -- timwe smpp -----------------------------------------------------------

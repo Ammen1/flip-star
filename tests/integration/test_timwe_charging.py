@@ -380,11 +380,135 @@ def test_a_reference_code_outside_one_to_thirty_is_refused(bad):
         build(reference_code=bad)
 
 
-def test_a_non_iso_currency_is_refused(settings):
-    settings.TIMWE_CURRENCY = 'BIRR'
+def test_the_currency_is_sent_as_the_ma_spells_it(settings):
+    """The guide promised ISO 4217. TIMWE's own working example sends 'Birr',
+    and their gateway accepted it, so the configured spelling goes on the wire
+    untouched rather than being corrected into something they refuse."""
+    settings.TIMWE_CURRENCY = 'Birr'
 
-    with pytest.raises(TimweConfigurationError, match='ISO 4217'):
+    assert '<currency>Birr</currency>' in build()
+
+
+@pytest.mark.parametrize('bad', ['', 'ET B', 'ETB1', 'B' * 11])
+def test_a_currency_that_is_not_letters_is_refused(settings, bad):
+    settings.TIMWE_CURRENCY = bad
+
+    with pytest.raises(TimweConfigurationError):
         build()
+
+
+def test_the_identifier_can_drop_the_tel_prefix(settings):
+    """The guide's field table shows tel:; TIMWE's working example omits it."""
+    settings.TIMWE_CHARGE_TEL_PREFIX = False
+
+    assert f'<loc:endUserIdentifier>{MSISDN}</loc:endUserIdentifier>' in build()
+
+
+def test_charging_can_use_its_own_service_and_code(settings):
+    """TIMWE's charge example quotes a different service than their
+    subscription notifications, and a charging code the guide calls optional."""
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+    settings.TIMWE_CHARGE_CODE = '255'
+
+    xml = build()
+
+    assert '<v2:serviceId>30026300007334</v2:serviceId>' in xml
+    assert '<code>255</code>' in xml
+
+
+def test_the_subscription_service_is_used_when_charging_has_no_service_of_its_own(settings):
+    settings.TIMWE_CHARGE_SERVICE_ID = ''
+
+    assert f'<v2:serviceId>{settings.TIMWE_SERVICE_ID}</v2:serviceId>' in build()
+
+
+# ===========================================================================
+# The MA's dialect: how the password travels, and whether the endpoint is proven
+# ===========================================================================
+
+
+def test_the_password_is_hashed_and_never_sent_by_default(settings):
+    """The guide's rule, and the default: the account password stays here."""
+    xml = build()
+
+    assert settings.TIMWE_SP_PASSWORD not in xml
+    assert TimweChargeService.build_sp_password('20260910123045') in xml
+
+
+def test_plain_mode_sends_the_password_as_timwe_s_own_example_does(settings):
+    settings.TIMWE_CHARGE_URL = 'https://ma.test/soap-payment-api/ws/x/services/chargeAmount'
+    settings.TIMWE_CHARGE_PASSWORD_MODE = 'plain'
+
+    assert f'<v2:spPassword>{settings.TIMWE_SP_PASSWORD}</v2:spPassword>' in build()
+
+
+def test_plain_mode_is_refused_over_an_unencrypted_endpoint(settings):
+    """Plain mode puts the password in the request; http would publish it."""
+    settings.TIMWE_CHARGE_PASSWORD_MODE = 'plain'  # CONFIG's URL is http
+
+    assert 'must be encrypted' in TimweChargeService.endpoint_problem()
+    with pytest.raises(TimweConfigurationError, match='encrypted'):
+        build()
+
+
+def test_an_unknown_password_mode_is_refused(settings):
+    settings.TIMWE_CHARGE_PASSWORD_MODE = 'sha256'
+
+    assert 'TIMWE_CHARGE_PASSWORD_MODE' in TimweChargeService.endpoint_problem()
+    with pytest.raises(TimweConfigurationError, match='TIMWE_CHARGE_PASSWORD_MODE'):
+        build()
+
+
+def test_the_certificate_is_verified_by_default(settings, user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as posted:
+        TimweChargeService.execute(
+            msisdn=MSISDN, amount=1, description='x', reference_code='FSVERIFY1'
+        )
+
+    assert posted.call_args.kwargs['verify'] is True
+
+
+def test_a_certificate_file_is_used_when_one_is_configured(settings):
+    settings.TIMWE_CHARGE_CA_BUNDLE = '/etc/ssl/timwe.pem'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as posted:
+        TimweChargeService.execute(
+            msisdn=MSISDN, amount=1, description='x', reference_code='FSVERIFY2'
+        )
+
+    assert posted.call_args.kwargs['verify'] == '/etc/ssl/timwe.pem'
+
+
+def test_every_unverified_charge_says_so_in_the_log(settings, caplog):
+    """An unverified connection proves nothing about who is being paid, so the
+    record of the charge says it was sent that way."""
+    settings.TIMWE_CHARGE_VERIFY_TLS = False
+    caplog.set_level('WARNING')
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as posted:
+        TimweChargeService.execute(
+            msisdn=MSISDN, amount=1, description='x', reference_code='FSVERIFY3'
+        )
+
+    assert posted.call_args.kwargs['verify'] is False
+    warned = [r for r in caplog.records if r.getMessage() == 'TIMWE_CHARGE_TLS_UNVERIFIED']
+    assert len(warned) == 1
+    assert warned[0].reference_code == 'FSVERIFY3'
+
+
+def test_no_password_reaches_the_logs_in_either_mode(settings, caplog):
+    settings.TIMWE_CHARGE_URL = 'https://ma.test/soap-payment-api/ws/x/services/chargeAmount'
+    settings.TIMWE_CHARGE_PASSWORD_MODE = 'plain'
+    settings.TIMWE_CHARGE_VERIFY_TLS = False
+    caplog.set_level('DEBUG')
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        TimweChargeService.execute(
+            msisdn=MSISDN, amount=1, description='x', reference_code='FSVERIFY4'
+        )
+
+    flat = json.dumps([r.__dict__ for r in caplog.records], default=str)
+    assert settings.TIMWE_SP_PASSWORD not in flat
 
 
 def test_generated_references_fill_the_thirty_character_limit():

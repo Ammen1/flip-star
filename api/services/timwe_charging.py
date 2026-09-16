@@ -206,14 +206,18 @@ def request_charge(
         try:
             existing = TimweChargeTransaction.objects.get(idempotency_key=idempotency_key)
         except TimweChargeTransaction.DoesNotExist:
-            # The key is free, so the collision was the one-renewal-per-period
-            # constraint: another attempt owns this subscription period.
+            # The key is free, so the collision was the one-live-renewal-per-
+            # period constraint: another attempt owns this subscription period.
+            # Refused attempts are outside that constraint, so theirs is the
+            # live one.
             existing = (
                 TimweChargeTransaction.objects.filter(
                     purpose=purpose,
                     subscription=subscription,
                     renewal_period_end=renewal_period_end,
-                ).first()
+                )
+                .exclude(status='failed')
+                .first()
                 if subscription is not None
                 else None
             )
