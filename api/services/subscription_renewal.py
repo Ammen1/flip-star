@@ -487,6 +487,26 @@ def apply_renewal(charge) -> bool:
         )
         return False
 
+    # The subscriber has just been charged by us rather than by the MA, so the
+    # MA sends them nothing. Outside the transaction above: a text that cannot
+    # be queued must not undo a renewal that has been paid for.
+    try:
+        from api.services import sms_subscription
+
+        sms_subscription.send_subscription_sms(
+            charge.msisdn,
+            sms_subscription.build_renewal_message(tier=tier, plan=plan),
+            tier,
+            purpose='subscription_renewal',
+            # One message per charge, however many times this is retried.
+            idempotency_key=f'renewal-sms:{charge.reference_code}',
+        )
+    except Exception:
+        logger.exception(
+            'SUBSCRIPTION_RENEWAL_SMS_FAILED',
+            extra={'reference_code': charge.reference_code},
+        )
+
     logger.info(
         'SUBSCRIPTION_RENEWAL_APPLIED',
         extra={

@@ -311,7 +311,8 @@ def test_the_payment_is_recorded(client, monkeypatch):
     sent = []
     monkeypatch.setattr(
         'api.services.sms_subscription.send_subscription_sms',
-        lambda phone, message, tier: sent.append((phone, message)),
+        # **kwargs: the sender also takes a purpose and an idempotency key now.
+        lambda phone, message, tier, **kwargs: sent.append((phone, message)),
     )
 
     post(client, SEEDED_ENVELOPE)
@@ -333,7 +334,8 @@ def test_the_subscriber_is_texted_the_otp(client, monkeypatch):
     sent = []
     monkeypatch.setattr(
         'api.services.sms_subscription.send_subscription_sms',
-        lambda phone, message, tier: sent.append((phone, message)),
+        # **kwargs: the sender also takes a purpose and an idempotency key now.
+        lambda phone, message, tier, **kwargs: sent.append((phone, message)),
     )
 
     post(client, SEEDED_ENVELOPE)

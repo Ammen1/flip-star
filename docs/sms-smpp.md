@@ -69,6 +69,30 @@ identifiers, `300263` and `015164`. Nothing here chooses between them: set
 separate settings because they answer separate questions — one authenticates
 the link, the other labels the message.
 
+## What the app sends
+
+Every message carries a `purpose`, which is how the ledger is read back.
+
+| `purpose` | When | Where |
+|---|---|---|
+| `otp_<action>` (`otp_login`, `otp_password_reset`, …), `otp_subscription_setup` | The user asks for a code | `api/services/otp.py`, `api/views/direct_debit.py` |
+| `subscription_welcome` | First charge on the short code: what they bought, the link and the OTP | `api/views/timwe.py` |
+| `subscription_renewal` | A period charged again — by the MA, or by our own renewal job. No OTP: the subscriber's existing code stays valid | `api/views/timwe.py`, `api/services/subscription_renewal.py` |
+| `subscription_cancelled` | They texted STOP. Without it, the only sign the cancellation worked is a charge that never arrives | `api/views/timwe.py` |
+| `withdrawal_paid` | The payout left, with the reference to quote to telebirr or the bank | `api/services/withdrawal_sms.py` |
+| `withdrawal_failed` | It did not, and what happened to the points | `api/services/withdrawal_sms.py` |
+
+Two rules hold across all of them:
+
+* **One message per event.** The idempotency key names the event — the MA's
+  `transactionID`, the charge's reference code, `withdrawal:<id>:paid` — so a
+  retried notification or a repeated Telebirr webhook cannot text somebody
+  twice.
+* **A message is never allowed to undo the thing it reports.** Every caller
+  queues outside the transaction and swallows failures: a subscription that
+  was charged, a cancellation the MA already applied, and a payout that has
+  left all stand whether or not the SMS could be queued.
+
 ## Delivery state
 
 `SmsMessage.status` distinguishes acceptance from delivery:

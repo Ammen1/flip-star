@@ -29,6 +29,12 @@ from api.models.direct_debit import (
     DirectDebitTransaction,
 )
 from api.models.subscription import SubscriptionPayment, SubscriptionPlan, SubscriptionTier
+from api.services.withdrawal_sms import (
+    notify_failed as notify_withdrawal_failed,
+)
+from api.services.withdrawal_sms import (
+    notify_paid as notify_withdrawal_paid,
+)
 from common.permissions.roles import HasAdminPermission
 from common.security import encrypted_endpoint
 
@@ -1600,6 +1606,7 @@ def telebirr_b2c_webhook(request):
                                     'telebirr_transaction_id',
                                 ]
                             )
+                            notify_withdrawal_paid(withdrawal)
                         else:
                             withdrawal.status = 'failed'
                             withdrawal.rejection_reason = (
@@ -1610,6 +1617,7 @@ def telebirr_b2c_webhook(request):
                                 user=withdrawal.user
                             )
                             user_profile.add_points(withdrawal.point_amount, total_field=None)
+                            notify_withdrawal_failed(withdrawal, refunded=True)
 
                 return Response({'success': True})
 
@@ -1687,6 +1695,7 @@ def telebirr_b2c_webhook(request):
                         'telebirr_transaction_id',
                     ]
                 )
+                notify_withdrawal_paid(withdrawal)
                 logger.info('Telebirr B2C webhook: withdrawal #%s marked completed', withdrawal.id)
             else:
                 withdrawal.status = 'failed'
@@ -1696,6 +1705,7 @@ def telebirr_b2c_webhook(request):
                 withdrawal.save(update_fields=['status', 'rejection_reason'])
                 user_profile = UserProfile.objects.select_for_update().get(user=withdrawal.user)
                 user_profile.add_points(withdrawal.point_amount, total_field=None)
+                notify_withdrawal_failed(withdrawal, refunded=True)
                 logger.info(
                     'Telebirr B2C webhook: withdrawal #%s failed, %s points refunded to %s',
                     withdrawal.id,

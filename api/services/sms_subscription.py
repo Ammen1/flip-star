@@ -51,6 +51,16 @@ STOP_KEYWORDS = {
     'ondemand': 'STOP',
 }
 
+#: What a subscriber texts to start each plan. These are the keywords the MA's
+#: own notifications carry -- '1' alongside STOP1, '2' alongside Stop2 -- and
+#: the cancellation SMS quotes one so a subscriber who changes their mind knows
+#: how to come back. On-demand has none, and that sentence is then left out.
+SUBSCRIBE_KEYWORDS = {
+    'daily': '1',
+    'weekly': '2',
+    'monthly': '3',
+}
+
 #: How the price reads in the SMS: "5 ETB per day".
 PRICE_PERIODS = {
     'daily': 'day',
@@ -326,7 +336,54 @@ def build_welcome_message(*, tier, result, phone_number, base_url):
     )
 
 
-def send_subscription_sms(phone_number, message, tier, *, idempotency_key=None):
+def build_renewal_message(*, tier, plan):
+    """The SMS for a period the subscriber has just been charged for again.
+
+    A renewal is not a first subscription, and saying "you have successfully
+    subscribed" every day on a daily plan reads as a mistake -- worse, the
+    welcome message carries a fresh OTP, and sending one invalidates the code
+    the subscriber may still be using. This says what was taken, what it buys,
+    and how to stop; the way in is already in their hands.
+    """
+    stop_keyword = STOP_KEYWORDS.get(tier.duration_type, 'STOP')
+    price_period = PRICE_PERIODS.get(tier.duration_type, 'day')
+    until = plan.end_date.strftime('%Y-%m-%d %H:%M') if plan.end_date else ''
+
+    valid = f' Your subscription is valid until {until}.' if until else ''
+    return (
+        f'Dear valued customer, your {tier.name} Flipstar subscription has been '
+        f'renewed for {tier.price_etb} ETB per {price_period}.{valid} '
+        f'To cancel your subscription at any time, please send {stop_keyword} '
+        f'to {tier.short_code}.'
+    )
+
+
+def subscribe_keyword_for(tier):
+    """The keyword that starts this plan, or '' when it has none to quote."""
+    return SUBSCRIBE_KEYWORDS.get(getattr(tier, 'duration_type', ''), '')
+
+
+def build_cancellation_message(*, tier, subscribe_keyword=''):
+    """The SMS confirming a STOP.
+
+    A subscriber who texts STOP has no other confirmation that it worked: the
+    app cannot tell them (they may never open it again) and the aggregator's
+    own notification goes to us, not to them. Without this the only evidence
+    that the cancellation took effect is a charge that does not arrive.
+    """
+    again = (
+        f' To subscribe again, send {subscribe_keyword} to {tier.short_code}.'
+        if subscribe_keyword
+        else ''
+    )
+    return (
+        f'Dear valued customer, your {tier.name} Flipstar subscription has been '
+        f'cancelled and you will not be charged again.{again} '
+        f'Thank you for using Flipstar.'
+    )
+
+
+def send_subscription_sms(phone_number, message, tier, *, idempotency_key=None, purpose=None):
     """Queue the subscriber's message on the configured gateway.
 
     Goes through the SMS gateway abstraction rather than any one provider:
@@ -337,6 +394,10 @@ def send_subscription_sms(phone_number, message, tier, *, idempotency_key=None):
     ``idempotency_key`` is what stops a retried subscription notification
     producing a second OTP that invalidates the first. Callers that can name
     the event -- by the aggregator's transaction id, say -- should pass one.
+
+    ``purpose`` labels the row in the SmsMessage ledger, so a welcome, a
+    renewal and a cancellation can be told apart when reconciling what was
+    sent.
     """
     from api.services.sms.dispatch import SmsNotQueued, queue_sms
 
@@ -344,7 +405,7 @@ def send_subscription_sms(phone_number, message, tier, *, idempotency_key=None):
         queue_sms(
             phone_number=phone_number,
             text=message,
-            purpose='subscription_welcome',
+            purpose=purpose or 'subscription_welcome',
             idempotency_key=idempotency_key,
         )
     except SmsNotQueued:

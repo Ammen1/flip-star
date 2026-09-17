@@ -41,6 +41,12 @@ from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
     classify_initiation_failure,
 )
+from api.services.withdrawal_sms import (
+    notify_failed as notify_withdrawal_failed,
+)
+from api.services.withdrawal_sms import (
+    notify_paid as notify_withdrawal_paid,
+)
 from api.views.core import _normalize_ethiopian_phone
 from common.security import encrypted_endpoint
 
@@ -438,6 +444,7 @@ def request_withdrawal(request):
                     # the existing, documented no-op quirk in
                     # WithdrawalRequest.mark_rejected for the coin side.
                     user_profile.add_points(point_amount, total_field=None)
+                    notify_withdrawal_failed(withdrawal, refunded=True)
 
             return Response(
                 {
@@ -1030,6 +1037,10 @@ def admin_withdrawal_action(request, withdrawal_id):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
                 withdrawal.mark_rejected(request.user, reason=notes)
+                # refunded=False on purpose: mark_rejected refunds the
+                # legacy coin field, which a points withdrawal never sets,
+                # so the points are not back yet. See its own note.
+                notify_withdrawal_failed(withdrawal, refunded=False)
 
             elif action == 'mark_processing':
                 if withdrawal.status not in ('approved',):
@@ -1057,6 +1068,7 @@ def admin_withdrawal_action(request, withdrawal_id):
                 if notes:
                     withdrawal.admin_notes = notes
                     withdrawal.save()
+                notify_withdrawal_paid(withdrawal)
     except WithdrawalRequest.DoesNotExist:
         return Response({'error': 'Withdrawal not found'}, status=status.HTTP_404_NOT_FOUND)
 

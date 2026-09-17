@@ -282,16 +282,32 @@ def _apply_relation(relation, tier, user):
         # the subscription transaction, and never allowed to fail the request --
         # a non-zero result makes the MA retry a charge we have already applied.
         try:
-            message = sms_subscription.build_welcome_message(
-                tier=tier,
-                result=result,
-                phone_number=relation.msisdn,
-                base_url=settings.TIMWE_SUBSCRIPTION_LINK_BASE,
+            renewed = result.action == 'renewed'
+            if renewed:
+                # A period charged again, not a new subscription: no OTP, so
+                # the code the subscriber already holds keeps working.
+                message = sms_subscription.build_renewal_message(tier=tier, plan=result.plan)
+            else:
+                message = sms_subscription.build_welcome_message(
+                    tier=tier,
+                    result=result,
+                    phone_number=relation.msisdn,
+                    base_url=settings.TIMWE_SUBSCRIPTION_LINK_BASE,
+                )
+            sms_subscription.send_subscription_sms(
+                relation.msisdn,
+                message,
+                tier,
+                purpose='subscription_renewal' if renewed else 'subscription_welcome',
+                # The MA's own id for this event: a retried notification finds
+                # the message already queued instead of sending a second one.
+                idempotency_key=(
+                    f'timwe-sub:{relation.transaction_id}' if relation.transaction_id else None
+                ),
             )
-            sms_subscription.send_subscription_sms(relation.msisdn, message, tier)
         except Exception:
             logger.exception(
-                'TIMWE subscription applied but the welcome SMS failed',
+                'TIMWE subscription applied but the SMS failed',
                 extra={'plan_id': str(result.plan.id)},
             )
 
@@ -314,8 +330,36 @@ def _apply_relation(relation, tier, user):
             # Deliberately not 2031 ("subscription relationship does not
             # exist"). The MA is reporting something it has already done;
             # answering with an error makes it retry a cancellation we can
-            # never satisfy. Recorded, and reconciled from the log.
+            # never satisfy. Recorded, and reconciled from the log. No SMS
+            # either: nothing changed, and a second "you are cancelled" for a
+            # subscription that was already gone is a message about our
+            # bookkeeping, not about them.
             return False, 'No active subscription to cancel.'
+
+        # A subscriber who texts STOP otherwise gets no confirmation at all:
+        # the app cannot tell them and the MA's notification comes to us. Sent
+        # outside the cancellation, and never allowed to fail the request -- a
+        # non-zero result makes the MA retry a cancellation already applied.
+        try:
+            sms_subscription.send_subscription_sms(
+                relation.msisdn,
+                sms_subscription.build_cancellation_message(
+                    tier=tier,
+                    # The keyword that started it is the one that starts it
+                    # again, and the MA quotes it on the way out.
+                    subscribe_keyword=sms_subscription.subscribe_keyword_for(tier),
+                ),
+                tier,
+                purpose='subscription_cancelled',
+                idempotency_key=(
+                    f'timwe-unsub:{relation.transaction_id}' if relation.transaction_id else None
+                ),
+            )
+        except Exception:
+            logger.exception(
+                'TIMWE subscription cancelled but the SMS failed',
+                extra={'product_id': relation.product_id},
+            )
 
         logger.info(
             'TIMWE subscription cancelled',
