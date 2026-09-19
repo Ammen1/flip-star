@@ -25,7 +25,7 @@ class TelebirrDirectDebitService:
 
     def __init__(self):
         self.soap_url = getattr(settings, 'TELEBIRR_SOAP_URL', '')
-        self.verify_ssl = getattr(settings, 'TELEBIRR_VERIFY_SSL', True)
+        self.verify_ssl = getattr(settings, 'TELEBIRR_VERIFY_SSL', False)
         self.third_party_id = getattr(settings, 'TELEBIRR_THIRD_PARTY_ID', '')
         self.third_party_password = getattr(settings, 'TELEBIRR_THIRD_PARTY_PASSWORD', '')
         self.shortcode = getattr(settings, 'TELEBIRR_SHORTCODE', '9286')

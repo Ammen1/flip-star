@@ -384,6 +384,13 @@ TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='')
 TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='')
 TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='')
 TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='')
+# Whether SOAP calls to the Telebirr gateway verify the server certificate.
+# The provider's testbed endpoints (internal IPs such as 10.180.70.177) serve
+# a private certificate that is not chain-trusted locally, so verification is
+# OFF by default -- the pre-existing behavior before TELEBIRR_VERIFY_SSL was
+# introduced. Set it to true in a deployment that has the provider's CA
+# installed and trusts the chain.
+TELEBIRR_VERIFY_SSL = config('TELEBIRR_VERIFY_SSL', default=False, cast=bool)
 
 # ---------------------------------------------------------------------------
 # Crypto test endpoints -- DEVELOPMENT AND STAGING ONLY
