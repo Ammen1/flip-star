@@ -413,7 +413,14 @@ TELEBIRR_ORG_OPERATOR_CREDENTIAL = config('TELEBIRR_ORG_OPERATOR_CREDENTIAL', de
 # Telebirr B2C (Business-to-Consumer payouts, e.g. withdrawal payouts).
 # Falls back to the direct-debit org-operator/third-party credentials above
 # when unset -- see TelebirrDirectDebitService.initiate_b2c_payment.
-TELEBIRR_B2C_SERVICE_CODE = config('TELEBIRR_B2C_SERVICE_CODE', default='2304')
+# The account a payout leaves FROM. Separate from TELEBIRR_SHORTCODE, which
+# is the C2B code money arrives at: telebirr issues a different short code for
+# each direction, and sending the C2B one on a B2C request -- or, as happened
+# here, sending an empty element because the shared setting was never set --
+# is refused by the gateway with no useful reason. Falls back to
+# TELEBIRR_SHORTCODE so nothing changes for a deployment that has only one.
+TELEBIRR_B2C_SHORTCODE = config('TELEBIRR_B2C_SHORTCODE', default='53906')
+TELEBIRR_B2C_SERVICE_CODE = config('TELEBIRR_B2C_SERVICE_CODE', default='53906')
 TELEBIRR_B2C_REASON_TYPE = config(
     'TELEBIRR_B2C_REASON_TYPE', default='Pay for Individual B2C_VDF_Demo'
 )

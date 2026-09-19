@@ -12,15 +12,16 @@ import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from django.conf import settings
+
 import requests
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 
 class TelebirrDirectDebitService:
     """Telebirr Direct Debit SOAP Service"""
-    
+
     def __init__(self):
         self.soap_url = getattr(settings, 'TELEBIRR_SOAP_URL', '')
         self.third_party_id = getattr(settings, 'TELEBIRR_THIRD_PARTY_ID', '')
@@ -35,6 +36,11 @@ class TelebirrDirectDebitService:
         self.org_operator_credential = getattr(settings, 'TELEBIRR_ORG_OPERATOR_CREDENTIAL', '')
 
         # B2C (Business-to-Consumer payouts, e.g. withdrawal payouts)
+        # The account payouts leave FROM. Distinct from self.shortcode, which
+        # is where money arrives (C2B): telebirr issues one code per
+        # direction. Falls back to the C2B code for a deployment that has only
+        # been given one.
+        self.b2c_shortcode = getattr(settings, 'TELEBIRR_B2C_SHORTCODE', '') or self.shortcode
         self.b2c_service_code = getattr(settings, 'TELEBIRR_B2C_SERVICE_CODE', '2304')
         self.b2c_reason_type = getattr(settings, 'TELEBIRR_B2C_REASON_TYPE', 'Pay for Individual B2C_VDF_Demo')
         self.b2c_result_url = getattr(settings, 'TELEBIRR_B2C_RESULT_URL', '')
@@ -55,19 +61,19 @@ class TelebirrDirectDebitService:
 
         # No SOAP client initialization needed for raw requests
         self.client = None
-    
+
     def _generate_originator_conversation_id(self):
         """Generate unique originator conversation ID"""
         return f"S_X{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    
+
     def _generate_conversation_id(self):
         """Generate unique conversation ID"""
         return f"AG_{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:12]}"
-    
+
     def _generate_timestamp(self):
         """Generate timestamp in YYYYMMDDHHMMSS format"""
         return datetime.now().strftime('%Y%m%d%H%M%S')
-    
+
     def _build_soap_envelope(self, command_id, initiator, receiver_party, body_xml, caller_id=None, caller_password=None):
         """
         Build SOAP envelope for Telebirr Direct Debit API
@@ -86,15 +92,15 @@ class TelebirrDirectDebitService:
         originator_conversation_id = self._generate_originator_conversation_id()
         conversation_id = self._generate_conversation_id()
         timestamp = self._generate_timestamp()
-        
+
         # Use provided caller credentials or default to third_party
         caller_third_party_id = caller_id or self.third_party_id
         caller_password = caller_password or self.third_party_password
-        
+
         shortcode_xml = ""
         if 'ShortCode' in initiator and initiator['ShortCode']:
             shortcode_xml = f"\n            <req:ShortCode>{initiator['ShortCode']}</req:ShortCode>"
-            
+
         soap_envelope = f'''<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:api="http://cps.huawei.com/cpsinterface/api_requestmgr" xmlns:req="http://cps.huawei.com/cpsinterface/request" xmlns:com="http://cps.huawei.com/cpsinterface/common">
   <soapenv:Header/>
@@ -131,12 +137,12 @@ class TelebirrDirectDebitService:
     </api:Request>
   </soapenv:Body>
 </soapenv:Envelope>'''
-        
+
         return soap_envelope, originator_conversation_id, conversation_id
-    
-    def create_mandate(self, payer_msisdn, payer_reference_number, frequency, 
+
+    def create_mandate(self, payer_msisdn, payer_reference_number, frequency,
                       first_payment_date, expiry_date, payee_shortcode=None,
-                      payee_account_name=None, start_range_of_days=1, 
+                      payee_account_name=None, start_range_of_days=1,
                       end_range_of_days=31, debug=False):
         """
         Create Direct Debit Mandate
@@ -162,26 +168,26 @@ class TelebirrDirectDebitService:
                 first_payment_date = first_payment_date.strftime('%Y%m%d')
             if isinstance(expiry_date, datetime):
                 expiry_date = expiry_date.strftime('%Y%m%d')
-            
+
             # Set defaults
             if payee_shortcode is None:
                 payee_shortcode = self.shortcode
             if payee_account_name is None:
                 payee_account_name = self.payee_account_name
-            
+
             # Build initiator (SP Operator)
             initiator = {
                 'IdentifierType': 14,  # SP Operator Username
                 'Identifier': self.sp_operator_id or self.third_party_id,
                 'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
-            
+
             # Build receiver party (Payer MSISDN)
             receiver_party = {
                 'IdentifierType': 1,  # MSISDN
                 'Identifier': payer_msisdn,
             }
-            
+
             # Build body XML according to Telebirr documentation
             body_xml = f'''<req:CreateDirectDebitMandateByPayerRequest>
           <req:Payee> 
@@ -198,7 +204,7 @@ class TelebirrDirectDebitService:
             <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
           </req:DirectDebitMandateInfo>
         </req:CreateDirectDebitMandateByPayerRequest>'''
-            
+
             # Build SOAP envelope
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='CreateDirectDebitMandateByCustomer',
@@ -206,7 +212,7 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
-            
+
             # Print SOAP envelope for debugging if debug=True
             if debug:
                 print("=" * 80)
@@ -214,15 +220,15 @@ class TelebirrDirectDebitService:
                 print("=" * 80)
                 print(soap_envelope)
                 print("=" * 80)
-            
+
             # Make raw SOAP request
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'CreateDirectDebitMandateByCustomer'
             }
-            
+
             response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-            
+
             # Parse response
             if response.status_code == 200:
                 # Check for SOAP fault
@@ -232,17 +238,17 @@ class TelebirrDirectDebitService:
                         'error': 'SOAP Fault returned',
                         'response_text': response.text[:500]
                     }
-                
+
                 # Parse ResponseCode and ResponseDesc
                 # Simple XML parsing for response
                 try:
                     import re
                     response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
                     response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
-                    
+
                     response_code = response_code_match.group(1) if response_code_match else '1'
                     response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
-                    
+
                     if response_code == '0':
                         return {
                             'success': True,
@@ -269,14 +275,14 @@ class TelebirrDirectDebitService:
                     'success': False,
                     'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
-            
+
         except Exception as e:
             return {
                 'success': False,
                 'error': f'Mandate creation failed: {str(e)}'
             }
-    
-    def activate_mandate(self, mandate_id, payer_msisdn, agreed_tc=True, 
+
+    def activate_mandate(self, mandate_id, payer_msisdn, agreed_tc=True,
                         payer_account_name=''):
         """
         Activate Direct Debit Mandate
@@ -297,19 +303,19 @@ class TelebirrDirectDebitService:
                 'Identifier': self.sp_operator_id or self.third_party_id,
                 'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
-            
+
             # Build receiver party (Payer MSISDN)
             receiver_party = {
                 'IdentifierType': 1,  # MSISDN
                 'Identifier': payer_msisdn,
             }
-            
+
             # Build body XML according to Telebirr documentation
             body_xml = f'''<req:ActivateDirectDebitMandateRequest>
           <req:MandateID>{mandate_id}</req:MandateID>
           <req:AgreedTC>{'1' if agreed_tc else '0'}</req:AgreedTC>
         </req:ActivateDirectDebitMandateRequest>'''
-            
+
             # Build SOAP envelope
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='ActivateCustomerDirectDebitMandate',
@@ -317,15 +323,15 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
-            
+
             # Make raw SOAP request
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'ActivateCustomerDirectDebitMandate'
             }
-            
+
             response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-            
+
             # Parse response
             if response.status_code == 200:
                 if 'soapenv:Fault' in response.text:
@@ -334,15 +340,15 @@ class TelebirrDirectDebitService:
                         'error': 'SOAP Fault returned',
                         'response_text': response.text[:500]
                     }
-                
+
                 try:
                     import re
                     response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
                     response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
-                    
+
                     response_code = response_code_match.group(1) if response_code_match else '1'
                     response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
-                    
+
                     if response_code == '0':
                         return {
                             'success': True,
@@ -369,13 +375,13 @@ class TelebirrDirectDebitService:
                     'success': False,
                     'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
-            
+
         except Exception as e:
             return {
                 'success': False,
                 'error': f'Mandate activation failed: {str(e)}'
             }
-    
+
     def initiate_debit(self, payer_reference_number, amount,
                       currency='ETB', shortcode=None, mandate_id=None, debug=False):
         """
@@ -437,7 +443,7 @@ class TelebirrDirectDebitService:
           </req:Parameters>
         </req:TransactionRequest>
         <req:Remark>Direct debit for {payer_reference_number}</req:Remark>'''
-            
+
             # Build SOAP envelope (Caller uses ThirdParty credentials, Initiator uses Organization Operator)
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='InitTrans_Initiate Direct Debit Transaction',
@@ -445,7 +451,7 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
-            
+
             # Print SOAP envelope for debugging if debug=True
             if debug:
                 print("=" * 80)
@@ -453,15 +459,15 @@ class TelebirrDirectDebitService:
                 print("=" * 80)
                 print(soap_envelope)
                 print("=" * 80)
-            
+
             # Make raw SOAP request
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'InitTrans_Initiate Direct Debit Transaction'
             }
-            
+
             response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-            
+
             # Parse response
             if response.status_code == 200:
                 if 'soapenv:Fault' in response.text:
@@ -470,17 +476,17 @@ class TelebirrDirectDebitService:
                         'error': 'SOAP Fault returned',
                         'response_text': response.text[:500]
                     }
-                
+
                 try:
                     import re
                     response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
                     response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
                     transaction_id_match = re.search(r'<res:TransactionID>([^<]+)</res:TransactionID>', response.text)
-                    
+
                     response_code = response_code_match.group(1) if response_code_match else '1'
                     response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
                     transaction_id = transaction_id_match.group(1) if transaction_id_match else None
-                    
+
                     if response_code == '0':
                         return {
                             'success': True,
@@ -508,17 +514,17 @@ class TelebirrDirectDebitService:
                     'success': False,
                     'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
-            
+
         except Exception as e:
             return {
                 'success': False,
                 'error': f'Direct debit initiation failed: {str(e)}'
             }
-    
-    def create_one_off_payment(self, payer_msisdn, payer_reference_number, 
+
+    def create_one_off_payment(self, payer_msisdn, payer_reference_number,
                               frequency='01', first_payment_date=None, expiry_date=None,
-                              payee_shortcode=None, payee_account_name=None, 
-                              start_range_of_days=1, end_range_of_days=31, 
+                              payee_shortcode=None, payee_account_name=None,
+                              start_range_of_days=1, end_range_of_days=31,
                               debug=False):
         """
         Create One-Off Payment for Coin Purchasing
@@ -562,31 +568,31 @@ class TelebirrDirectDebitService:
                 expiry_date = first_payment_date
             elif hasattr(expiry_date, 'strftime'):
                 expiry_date = expiry_date.strftime('%Y%m%d')
-            
+
             # Use provided frequency (default '01' for one-off payment)
             # Can be overridden for testing other frequencies
             if not frequency:
                 frequency = '01'
-            
+
             # Set defaults
             if payee_shortcode is None:
                 payee_shortcode = self.shortcode
             if payee_account_name is None:
                 payee_account_name = self.payee_account_name
-            
+
             # Build initiator (SP Operator)
             initiator = {
                 'IdentifierType': 14,  # SP Operator Username
                 'Identifier': self.sp_operator_id or self.third_party_id,
                 'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
-            
+
             # Build receiver party (Payer MSISDN)
             receiver_party = {
                 'IdentifierType': 1,  # MSISDN
                 'Identifier': payer_msisdn,
             }
-            
+
             # Build body XML for one-off payment
             body_xml = f'''<req:CreateDirectDebitMandateByPayerRequest>
           <req:Payee> 
@@ -603,7 +609,7 @@ class TelebirrDirectDebitService:
             <com:ExpiryDate>{expiry_date}</com:ExpiryDate>
           </req:DirectDebitMandateInfo>
         </req:CreateDirectDebitMandateByPayerRequest>'''
-            
+
             # Build SOAP envelope
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='CreateDirectDebitMandateByCustomer',
@@ -611,7 +617,7 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
-            
+
             # Print SOAP envelope for debugging if debug=True
             if debug:
                 print("=" * 80)
@@ -619,15 +625,15 @@ class TelebirrDirectDebitService:
                 print("=" * 80)
                 print(soap_envelope)
                 print("=" * 80)
-            
+
             # Make raw SOAP request
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'CreateDirectDebitMandateByCustomer'
             }
-            
+
             response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-            
+
             # Parse response
             if response.status_code == 200:
                 # Check for SOAP fault
@@ -637,19 +643,19 @@ class TelebirrDirectDebitService:
                         'error': 'SOAP Fault returned',
                         'response_text': response.text[:500]
                     }
-                
+
                 # Parse ResponseCode and ResponseDesc using regex
                 try:
                     import re
                     response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
                     response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
-                    
+
                     response_code = response_code_match.group(1) if response_code_match else '1'
                     response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
                 except:
                     response_code = '1'
                     response_desc = 'Parse error'
-                
+
                 if response_code == '0':
                     return {
                         'success': True,
@@ -670,13 +676,13 @@ class TelebirrDirectDebitService:
                     'success': False,
                     'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
-            
+
         except Exception as e:
             return {
                 'success': False,
                 'error': f'One-off payment request failed: {str(e)}'
             }
-    
+
     def cancel_mandate(self, mandate_id, payer_msisdn, debug=False):
         """
         Cancel Direct Debit Mandate
@@ -696,18 +702,18 @@ class TelebirrDirectDebitService:
                 'Identifier': self.sp_operator_id or self.third_party_id,
                 'SecurityCredential': self.sp_operator_credential or self.third_party_password,
             }
-            
+
             # Build receiver party (Payer MSISDN)
             receiver_party = {
                 'IdentifierType': 1,  # MSISDN
                 'Identifier': payer_msisdn,
             }
-            
+
             # Build body XML according to Telebirr documentation
             body_xml = f'''<req:CancelDirectDebitMandateByPayerRequest>
                <req:MandateID>{mandate_id}</req:MandateID>
             </req:CancelDirectDebitMandateByPayerRequest>'''
-            
+
             # Build SOAP envelope
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='CancelCustomerDirectDebitMandateByPayer',
@@ -715,7 +721,7 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
-            
+
             # Print SOAP envelope for debugging if debug=True
             if debug:
                 print("=" * 80)
@@ -723,15 +729,15 @@ class TelebirrDirectDebitService:
                 print("=" * 80)
                 print(soap_envelope)
                 print("=" * 80)
-            
+
             # Make raw SOAP request
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'CancelCustomerDirectDebitMandateByPayer'
             }
-            
+
             response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-            
+
             # Parse response
             if response.status_code == 200:
                 if 'soapenv:Fault' in response.text:
@@ -740,15 +746,15 @@ class TelebirrDirectDebitService:
                         'error': 'SOAP Fault returned',
                         'response_text': response.text[:500]
                     }
-                
+
                 try:
                     import re
                     response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
                     response_desc_match = re.search(r'<res:ResponseDesc>([^<]+)</res:ResponseDesc>', response.text)
-                    
+
                     response_code = response_code_match.group(1) if response_code_match else '1'
                     response_desc = response_desc_match.group(1) if response_desc_match else 'Unknown error'
-                    
+
                     if response_code == '0':
                         return {
                             'success': True,
@@ -775,13 +781,13 @@ class TelebirrDirectDebitService:
                     'success': False,
                     'error': f'HTTP {response.status_code}: {response.text[:200]}'
                 }
-            
+
         except Exception as e:
             return {
                 'success': False,
                 'error': f'Mandate cancellation failed: {str(e)}'
             }
-    
+
     def query_mandate_by_payer(self, payer_msisdn, mandate_statuses=None, debug=False):
         """
         Query Direct Debit Mandate by Payer
@@ -802,23 +808,23 @@ class TelebirrDirectDebitService:
                 'SecurityCredential': self.org_operator_credential or self.third_party_password,
                 'ShortCode': self.shortcode,
             }
-            
+
             # Build receiver party (Payer MSISDN)
             receiver_party = {
                 'IdentifierType': 1,  # MSISDN
                 'Identifier': payer_msisdn,
             }
-            
+
             # Build body XML with mandate statuses
             if mandate_statuses and len(mandate_statuses) > 0:
                 status_xml = '\n'.join([f'          <req:MandateStatus>{status}</req:MandateStatus>' for status in mandate_statuses])
             else:
                 status_xml = ''
-            
+
             body_xml = f'''<req:QueryDirectDebitMandateByPayerRequest>
 {status_xml}
         </req:QueryDirectDebitMandateByPayerRequest>'''
-            
+
             # Build SOAP envelope
             soap_envelope, originator_conversation_id, conversation_id = self._build_soap_envelope(
                 command_id='QueryDirectDebitMandateByPayer',
@@ -826,7 +832,7 @@ class TelebirrDirectDebitService:
                 receiver_party=receiver_party,
                 body_xml=body_xml
             )
-            
+
             # Print SOAP envelope for debugging if debug=True
             if debug:
                 print("=" * 80)
@@ -834,15 +840,15 @@ class TelebirrDirectDebitService:
                 print("=" * 80)
                 print(soap_envelope)
                 print("=" * 80)
-            
+
             # Make raw SOAP request
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'QueryDirectDebitMandateByPayer'
             }
-            
+
             response = requests.post(self.soap_url, data=soap_envelope, headers=headers, timeout=30, verify=False)
-            
+
             # Parse response
             if response.status_code == 200:
                 if 'soapenv:Fault' in response.text:
@@ -851,7 +857,7 @@ class TelebirrDirectDebitService:
                         'error': 'SOAP Fault returned',
                         'response_text': response.text[:500]
                     }
-                
+
                 try:
                     import re
                     response_code_match = re.search(r'<res:ResponseCode>(\d+)</res:ResponseCode>', response.text)
@@ -931,7 +937,7 @@ class TelebirrDirectDebitService:
                 'success': False,
                 'error': f'Mandate query failed: {str(e)}'
             }
-    
+
     def process_callback(self, callback_data):
         """
         Process async callback from Telebirr
@@ -949,15 +955,15 @@ class TelebirrDirectDebitService:
             result_desc = callback_data.get('ResultDesc')
             conversation_id = callback_data.get('ConversationID')
             originator_conversation_id = callback_data.get('OriginatorConversationID')
-            
+
             # Determine success
             is_success = result_code == '0' and result_type == '0'
-            
+
             # Extract transaction ID if present
             transaction_id = None
             if 'TransactionResult' in callback_data:
                 transaction_id = callback_data['TransactionResult'].get('TransactionID')
-            
+
             return {
                 'success': is_success,
                 'result_code': result_code,
@@ -967,7 +973,7 @@ class TelebirrDirectDebitService:
                 'transaction_id': transaction_id,
                 'raw_data': callback_data
             }
-            
+
         except Exception as e:
             return {
                 'success': False,
@@ -1002,6 +1008,25 @@ class TelebirrDirectDebitService:
             if reference_data is None:
                 reference_data = {}
 
+            # Refuse before sending rather than after being refused.
+            #
+            # The envelope renders <req:ShortCode> unconditionally, so an
+            # unset short code goes out as an empty element and telebirr
+            # answers with a generic failure that names nothing. Every payout
+            # then fails identically, and the withdrawal is marked failed with
+            # no way to tell a misconfiguration from an outage. This is how
+            # staging ran: TELEBIRR_SHORTCODE was never set.
+            if not self.b2c_shortcode:
+                logger.error(
+                    'B2C payout refused: no short code configured '
+                    '(set TELEBIRR_B2C_SHORTCODE, or TELEBIRR_SHORTCODE)'
+                )
+                return {
+                    'success': False,
+                    'error': 'Payouts are not configured. Please contact support.',
+                    'code': 'b2c_shortcode_missing',
+                }
+
             # Build initiator based on type -- use B2C-specific credentials
             # for B2C payments, falling back to the direct-debit ones.
             if initiator_type == 'sp_operator':
@@ -1017,7 +1042,7 @@ class TelebirrDirectDebitService:
                     'IdentifierType': 12,  # Organization Operator/Username
                     'Identifier': b2c_org_id,
                     'SecurityCredential': b2c_org_credential,
-                    'ShortCode': self.shortcode,
+                    'ShortCode': self.b2c_shortcode,
                 }
 
             receiver_party = {

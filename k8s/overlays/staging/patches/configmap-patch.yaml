@@ -96,6 +96,13 @@ data:
   # being lost the same way subscription ones were.
   TELEBIRR_B2C_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrB2C/"
 
+  # The account a withdrawal is paid FROM. telebirr issues one short code per
+  # direction: 53906 for B2C (money out) and 53599 for C2B (money in). They
+  # shared a single setting until now, and TELEBIRR_SHORTCODE was never set,
+  # so every payout went out with an empty <req:ShortCode> and was refused
+  # with a generic error -- which is what the failed withdrawals were.
+  TELEBIRR_B2C_SHORTCODE: "53906"
+
   # H5 / SuperApp (Fabric) async payment notification.
   #
   # This was set in .env but never in the ConfigMap, so the deployed pod ran
