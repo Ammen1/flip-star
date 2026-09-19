@@ -131,29 +131,52 @@ def _view_source(func_name):
 
 
 @pytest.mark.parametrize('view_name', ['telebirr_initiate_payment', 'telebirr_ussd_purchase'])
-def test_the_charge_comes_from_the_row_not_the_request(view_name):
+def test_the_coin_figure_never_comes_from_the_request(view_name):
     """
     The manipulation case.
 
-    Both purchase entry points accept only a package_id. Whatever price or coin
-    amount a client posts alongside it is never read, so the amount charged is
-    always the stored one.
+    A client may say how much money to take -- that is what a custom amount is
+    -- but never how many coins it is worth. Whatever coin or price figure it
+    posts alongside is never read, so what gets credited is always computed
+    here.
 
     Asserted against the source rather than by calling the view, because
     proving a value is *not* read cannot be done from the outside: a view that
-    silently preferred a posted price would return exactly the same response
-    shape as one that ignored it.
+    silently preferred a posted coin count would return exactly the same
+    response shape as one that ignored it.
     """
     source = _view_source(view_name)
 
     assert "request.data.get('package_id')" in source, 'must select by id'
-    assert 'package.price_etb' in source, 'amount must derive from the row'
 
-    for forged in ('price', 'amount', 'coin', 'total', 'birr'):
+    # 'amount' is deliberately absent from this list for the USSD view: see
+    # the test below, which covers the one field a client may name.
+    for forged in ('price', 'coin', 'total', 'birr'):
         assert f"request.data.get('{forged}" not in source, (
-            f'{view_name} reads {forged!r} from the client -- the amount charged '
-            'must come from the CoinPackage row, never the request'
+            f'{view_name} reads {forged!r} from the client -- what is charged and '
+            'credited must be computed server-side, never posted'
         )
+
+
+def test_the_h5_entry_point_still_takes_a_package_and_nothing_else():
+    """Custom amounts were added to the USSD path only. /wallet/telebirr/
+    initiate/ has no amount form, so it must keep refusing one."""
+    source = _view_source('telebirr_initiate_payment')
+
+    assert 'package.price_etb' in source, 'amount must derive from the row'
+    assert (
+        "request.data.get('amount" not in source
+    ), 'the H5 entry point started reading an amount from the client'
+
+
+def test_the_ussd_entry_point_prices_the_amount_itself():
+    """The custom path takes an amount and prices it here. What makes that
+    safe is that the coins come from quote(), not from the request."""
+    source = _view_source('telebirr_ussd_purchase')
+
+    assert "request.data.get('amount_etb')" in source, 'must accept a custom amount'
+    assert 'quote_coins(' in source, 'the amount must be priced by coin_pricing.quote'
+    assert "priced['coins']" in source, 'the coin figure must come from the quote'
 
 
 def test_inactive_package_cannot_be_purchased(packages):

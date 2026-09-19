@@ -36,6 +36,7 @@ from api.services.coin_packages import (
     pending_coin_purchase,
     purchase_pending_payload,
 )
+from api.services.coin_pricing import public_pricing as custom_purchase_pricing
 from api.services.media_pipeline import served_url
 from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
@@ -656,7 +657,12 @@ def public_wallet_config(request):
         {
             'currency': 'ETB',
             'currency_label': 'Birr',
+            # The *withdrawal* rate: coins -> birr. Not what a birr buys.
             'coins_per_birr': config.coins_per_birr,
+            # What a birr buys, plus the limits, so the page can show a figure
+            # while somebody types instead of asking the server per keystroke.
+            # Display only -- the purchase endpoint prices the sale itself.
+            'custom_purchase': custom_purchase_pricing(config),
             'points_per_birr': config.points_per_birr,
             'withdrawal_min_points': config.withdrawal_min_points,
             'withdrawal_max_points_per_request': config.withdrawal_max_points_per_request,
@@ -1412,7 +1418,11 @@ def _credit_telebirr_order(merch_order_id, payment_order_id=None):
             return False, 0
 
         package = coin_tx.package
-        total_coins = package.get_total_coins() if package else 0
+        # A custom-amount purchase has no package. Before this it fell to the
+        # `else 0` and credited nothing -- the money was taken and the buyer
+        # got no coins, with the transaction marked successful. The quote the
+        # server committed to at initiation is what gets honoured.
+        total_coins = package.get_total_coins() if package else (coin_tx.quoted_coins or 0)
 
         balance = UserCoinBalance.objects.select_for_update().get(user=coin_tx.user)
         balance.telebirr_purchased_balance = (balance.telebirr_purchased_balance or 0) + total_coins
@@ -1618,16 +1628,50 @@ def telebirr_query_order(request):
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
 def telebirr_ussd_purchase(request):
-    """Initiate a USSD Push payment (BuyGoodsForCustomer) for a coin purchase."""
-    package_id = request.data.get('package_id')
-    if not package_id:
-        return Response({'error': 'package_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    """Initiate a USSD Push payment (BuyGoodsForCustomer) for a coin purchase.
 
-    try:
-        package = CoinPackage.objects.get(id=package_id, is_active=True)
-    except CoinPackage.DoesNotExist:
+    Takes either a `package_id` -- one of the fixed offers -- or an
+    `amount_etb`, for a buyer who wants an amount no package covers.
+
+    The amount is priced here, by api/services/coin_pricing.quote, and whatever
+    the client believed is discarded. A client that asks for 5 birr and claims
+    it is worth 50,000 coins gets 50, because the number that reaches the
+    ledger is the one this function computes. An amount that happens to match a
+    package price is served by that package instead, bonus included, so nobody
+    is quietly charged a package price for fewer coins than the package gives.
+    """
+    from api.services.coin_pricing import CoinPricingError
+    from api.services.coin_pricing import quote as quote_coins
+
+    package_id = request.data.get('package_id')
+    raw_amount = request.data.get('amount_etb')
+
+    package = None
+    quoted_coins = None
+    amount_etb = None
+
+    if package_id:
+        try:
+            package = CoinPackage.objects.get(id=package_id, is_active=True)
+        except CoinPackage.DoesNotExist:
+            return Response(
+                {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+            )
+    elif raw_amount is not None:
+        try:
+            priced = quote_coins(raw_amount)
+        except CoinPricingError as exc:
+            # The message is written for a buyer to read; `code` lets the
+            # client react without parsing prose.
+            return Response(
+                {'error': str(exc), 'code': exc.code}, status=status.HTTP_400_BAD_REQUEST
+            )
+        package = priced['package']
+        amount_etb = priced['amount_etb']
+        quoted_coins = priced['coins']
+    else:
         return Response(
-            {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+            {'error': 'package_id or amount_etb is required'}, status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
@@ -1648,7 +1692,7 @@ def telebirr_ussd_purchase(request):
     # the user twice -- each push carries its own OriginatorConversationID, so
     # both callbacks credit legitimately and nothing downstream can tell the
     # two apart.
-    existing = pending_coin_purchase(request.user, package)
+    existing = pending_coin_purchase(request.user, package) if package else None
     if existing is not None:
         logger.info(
             '[USSD PURCHASE] Duplicate suppressed for user=%s package=%s, pending=%s',
@@ -1658,8 +1702,12 @@ def telebirr_ussd_purchase(request):
         )
         return Response(purchase_pending_payload(existing), status=status.HTTP_409_CONFLICT)
 
-    amount = f'{float(package.price_etb):.2f}'
-    coins = package.get_total_coins()
+    if package:
+        amount = f'{float(package.price_etb):.2f}'
+        coins = package.get_total_coins()
+    else:
+        amount = f'{float(amount_etb):.2f}'
+        coins = quoted_coins
 
     result = telebirr_direct_debit_service.initiate_ussd_push_payment(
         amount=amount,
@@ -1688,13 +1736,18 @@ def telebirr_ussd_purchase(request):
             coins=0,
             payment_method='telebirr_ussd',
             package=package,
-            description=f'Failed USSD Push initiation for {package.name}: {error_text}'[:255],
+            quoted_coins=quoted_coins,
+            amount_etb=amount_etb,
+            description=(
+                f'Failed USSD Push initiation for '
+                f'{package.name if package else f"{amount} ETB"}: {error_text}'
+            )[:255],
             is_successful=False,
         )
         logger.warning(
-            '[USSD PURCHASE] Initiation failed for user=%s package=%s: %s',
+            '[USSD PURCHASE] Initiation failed for user=%s %s: %s',
             request.user.id,
-            package.id,
+            f'package={package.id}' if package else f'amount={amount}',
             reason,
         )
 
@@ -1716,23 +1769,39 @@ def telebirr_ussd_purchase(request):
         payment_method='telebirr_ussd',
         payment_reference=result.get('originator_conversation_id'),
         package=package,
-        description=f'Pending USSD Push payment for {package.name}',
+        quoted_coins=quoted_coins,
+        amount_etb=amount_etb,
+        description=(
+            f'Pending USSD Push payment for {package.name}'
+            if package
+            else f'Pending USSD Push payment for {amount} ETB ({coins} coins)'
+        ),
         is_successful=False,
     )
 
+    # `package` stays in the response for the clients that read it; a custom
+    # amount has none, and `purchase` carries what was actually bought either
+    # way so a caller never has to special-case the two.
     return Response(
         {
             'success': True,
             'originator_conversation_id': result.get('originator_conversation_id'),
             'conversation_id': result.get('conversation_id'),
             'message': result.get('message'),
+            'purchase': {
+                'amount_etb': amount,
+                'total_coins': coins,
+                'is_custom': package is None,
+            },
             'package': {
                 'id': package.id,
                 'name': package.name,
                 'coin_amount': package.coin_amount,
                 'bonus_coins': package.bonus_coins,
                 'total_coins': coins,
-            },
+            }
+            if package
+            else None,
         }
     )
 
@@ -1755,7 +1824,11 @@ def _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=None)
             return False, 0
 
         package = coin_tx.package
-        total_coins = package.get_total_coins() if package else 0
+        # A custom-amount purchase has no package. Before this it fell to
+        # the `else 0` and credited nothing -- the money was taken and the
+        # buyer got no coins, with the row marked successful. The quote the
+        # server committed to at initiation is what gets honoured.
+        total_coins = package.get_total_coins() if package else (coin_tx.quoted_coins or 0)
 
         balance = UserCoinBalance.objects.select_for_update().get(user=coin_tx.user)
         balance.telebirr_purchased_balance = (balance.telebirr_purchased_balance or 0) + total_coins
@@ -1777,7 +1850,9 @@ def _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=None)
         coin_tx.is_successful = True
         coin_tx.payment_reference = transaction_id or originator_conversation_id
         coin_tx.description = (
-            f'Successful USSD Push payment for {package.name if package else "Unknown"}'
+            f'Successful USSD Push payment for {package.name}'
+            if package
+            else f'Successful USSD Push payment for {coin_tx.amount_etb} ETB ({total_coins} coins)'
         )
         coin_tx.save()
 

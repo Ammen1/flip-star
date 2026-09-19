@@ -144,6 +144,24 @@ class WalletConfig(models.Model):
     min_balance_to_post = models.PositiveIntegerField(default=0)
     min_balance_to_join_campaign = models.PositiveIntegerField(default=50)
 
+    # ============ CUSTOM COIN PURCHASE (Birr -> Coin) ============
+    # A buyer who wants an amount no package offers. The *rate* is not here on
+    # purpose: it is derived from the packages themselves, so there is one
+    # price list rather than two that can disagree. See
+    # api/services/coin_pricing.py.
+    custom_purchase_min_etb = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('1.00'),
+        help_text='Smallest custom coin purchase, in ETB',
+    )
+    custom_purchase_max_etb = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=Decimal('1000.00'),
+        help_text='Largest custom coin purchase, in ETB',
+    )
+
     # ============ WITHDRAWAL (Coin -> Birr) ============
     withdrawal_enabled = models.BooleanField(
         default=True, help_text='Allow users to withdraw coins to Birr'

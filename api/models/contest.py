@@ -219,6 +219,24 @@ class CoinTransaction(models.Model):
     # Fee tracking (e.g., 5% for airtime)
     fee_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    # A custom-amount purchase has no package, so the coins it bought cannot
+    # be looked up later -- the webhook that credits it would find nothing and
+    # credit zero. The server records its own quote here at initiation and
+    # honours exactly that on payment, which also means a client cannot ask
+    # for one price and be credited for another.
+    quoted_coins = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Coins the server committed to for a custom-amount purchase',
+    )
+    amount_etb = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text='Birr charged for a custom-amount purchase (packages carry their own price)',
+    )
+
     description = models.CharField(max_length=255, blank=True)
     is_successful = models.BooleanField(default=True)
 
