@@ -55,4 +55,4 @@ images:
   newTag: 50609197efb2be2aee955342f9bcd18063fe2b91
 - name: ghcr.io/ammen1/flipstar-web
   newName: ghcr.io/ammen1/flipstar-web
-  newTag: 95f3325fe0c037bac9b2acbca1dd81108dd5fbf3
+  newTag: 8a78207c6fbee2326a83b7c2419b94ba8dc1cc89
