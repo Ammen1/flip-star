@@ -554,6 +554,8 @@ def login_with_phone(request):
         if user.check_password(password):
             token, _ = Token.objects.get_or_create(user=user)
             return Response({'user': UserSerializer(user).data, 'token': token.key})
+        if not user.has_usable_password():
+            return _pin_not_set_response(phone)
         return Response({'error': 'Invalid password'}, status=status.HTTP_401_UNAUTHORIZED)
 
     if sms_subscription and not sms_subscription.user:
@@ -575,6 +577,8 @@ def login_with_phone(request):
         if user.check_password(password):
             token, _ = Token.objects.get_or_create(user=user)
             return Response({'user': UserSerializer(user).data, 'token': token.key})
+        if not user.has_usable_password():
+            return _pin_not_set_response(phone)
         return Response({'error': 'Invalid password'}, status=status.HTTP_401_UNAUTHORIZED)
     except UserProfile.DoesNotExist:
         pass
@@ -1325,6 +1329,38 @@ def _subscribe_hint():
     return (
         f'To subscribe, send 1 (Daily), 2 (Weekly) or 3 (Monthly) to {short_code} '
         'to pay with airtime, or subscribe with telebirr through the SuperApp or USSD.'
+    )
+
+
+#: A subscriber who has an account but has never chosen a PIN. Distinguished
+#: from a wrong PIN because the two need opposite things from the user: one
+#: should try again, the other has nothing to try.
+PIN_NOT_SET_CODE = 'pin_not_set'
+
+
+def _pin_not_set_response(phone):
+    """Tell a subscriber who has no PIN where to get one.
+
+    Subscribing by telebirr USSD push creates the account with
+    ``password=None`` (see api/views/subscription.py) -- there is no
+    registration step in that flow, and nothing ever asks for a PIN. Such a
+    subscriber typing their number and any PIN used to be told "Invalid
+    password", which is false: there is no password to get wrong. They would
+    then try to register and be told the number was already taken, leaving no
+    route forward at all.
+
+    The route that does work is the PIN reset: it sends an OTP to this number
+    and sets a PIN on the existing account. This response names it so the
+    client can take them straight there.
+    """
+    return Response(
+        {
+            'code': PIN_NOT_SET_CODE,
+            'error': 'You have not set a PIN yet. Set one to finish signing in.',
+            'requires_pin_setup': True,
+            'phone': phone,
+        },
+        status=status.HTTP_403_FORBIDDEN,
     )
 
 
