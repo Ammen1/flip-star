@@ -126,7 +126,11 @@ def _serialize_transaction(tx):
 def _serialize_withdrawal(w):
     return {
         'id': w.id,
+        # Both: `coin_amount` is the legacy field and is 0 on everything the
+        # points flow creates, so a client showing "what you withdrew" from it
+        # alone displays nothing.
         'coin_amount': w.coin_amount,
+        'point_amount': w.point_amount,
         'gross_birr': str(w.gross_birr),
         'fee_birr': str(w.fee_birr),
         'net_birr': str(w.net_birr),
