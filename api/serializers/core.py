@@ -280,6 +280,8 @@ class ReelSerializer(serializers.ModelSerializer):
     recent_comments = serializers.SerializerMethodField()
     votes = serializers.SerializerMethodField()  # Calculate dynamically from Vote table
     gift_count = serializers.SerializerMethodField()  # Count of gifts received
+    is_boosted = serializers.SerializerMethodField()
+    boost_ends_at = serializers.SerializerMethodField()
     campaign_id = serializers.PrimaryKeyRelatedField(source='campaign', read_only=True)
     campaign_title = serializers.CharField(source='campaign.title', read_only=True, default=None)
     category = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -336,6 +338,8 @@ class ReelSerializer(serializers.ModelSerializer):
             'is_saved',
             'recent_comments',
             'is_campaign_post',
+            'is_boosted',
+            'boost_ends_at',
             'campaign_id',
             'campaign_title',
             'category',
@@ -533,6 +537,49 @@ class ReelSerializer(serializers.ModelSerializer):
         if getattr(obj, 'original_image', '') or str(getattr(obj, 'image', '') or ''):
             return 'image'
         return None
+
+    def _live_boost(self, obj):
+        """The boost campaign actually running on this post right now, or None.
+
+        Deliberately not `obj.is_boosted`. That column is a denormalised flag:
+        it is set when a campaign starts and cleared by a sweep that runs every
+        five minutes, so between a boost ending and the sweep noticing it says
+        "boosted" about a post that is not. If the sweep is not running it says
+        so forever.
+
+        Feeds already annotate `has_active_boost` with exactly this condition
+        (see api/views/core.py::get_trending_reels), so where that annotation
+        exists it is used and costs nothing. Everywhere else the campaign is
+        read directly, which is one query on a detail view and correct in both
+        places -- the point is that "boosted" means the same thing no matter
+        which endpoint is asked.
+        """
+        from django.utils import timezone
+
+        campaign = getattr(obj, 'active_boost_campaign', None)
+        if campaign is None:
+            return None
+        if campaign.status != 'active':
+            return None
+        if not campaign.end_time or campaign.end_time <= timezone.now():
+            return None
+        if (campaign.coins_remaining or 0) <= 0:
+            return None
+        return campaign
+
+    def get_is_boosted(self, obj):
+        # The annotation is authoritative where a feed provided it: it was
+        # computed in SQL against the same conditions, for every row at once.
+        annotated = getattr(obj, 'has_active_boost', None)
+        if annotated is not None:
+            return bool(annotated)
+        return self._live_boost(obj) is not None
+
+    def get_boost_ends_at(self, obj):
+        """When the boost stops, so a client can show a countdown or hide the
+        badge itself without waiting for the next request."""
+        campaign = self._live_boost(obj)
+        return campaign.end_time.isoformat() if campaign else None
 
     def get_comment_count(self, obj):
         # Always use actual count to ensure accuracy

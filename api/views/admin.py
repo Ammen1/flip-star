@@ -452,7 +452,15 @@ def admin_reel_detail(request, reel_id):
         # processing state, resolved the way the feed resolves them.
         **reel_media_payload(reel, request),
         'is_hidden': reel.is_hidden,
-        'is_boosted': reel.is_boosted,
+        # The live campaign, not the stored flag: an expired boost left the
+        # flag set and the admin kept showing "Boosted" for it.
+        'is_boosted': bool(
+            reel.active_boost_campaign
+            and reel.active_boost_campaign.status == 'active'
+            and reel.active_boost_campaign.end_time
+            and reel.active_boost_campaign.end_time > timezone.now()
+            and (reel.active_boost_campaign.coins_remaining or 0) > 0
+        ),
         'campaign': {'id': reel.campaign.id, 'title': reel.campaign.title} if reel.campaign else None,
         'created_at': reel.created_at.isoformat(),
         'comments': comments_data,
