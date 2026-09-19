@@ -51,6 +51,7 @@ def campaign_for(reel, *, ends_in=timedelta(hours=2), status='active', coins_rem
         coins_spent=0,
         coins_remaining=coins_remaining,
         expected_impressions=1000,
+        hourly_budget=50,
     )
     # What starting a boost does: point the post at the campaign and flag it.
     reel.active_boost_campaign = campaign
