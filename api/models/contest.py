@@ -169,6 +169,7 @@ class CoinTransaction(models.Model):
         ('purchase', 'Coin Purchase'),
         ('welcome_bonus', 'Welcome Bonus'),
         ('daily_login', 'Daily Login Bonus'),
+        ('subscription_gift', 'Subscription Charge Gift'),
         ('spin_reward', 'Daily Spin Reward'),
         ('post_bonus', 'Daily Post Bonus'),
         ('campaign_join', 'Campaign Join Reward'),
@@ -237,6 +238,21 @@ class CoinTransaction(models.Model):
                 fields=['payment_method', 'payment_reference'],
                 condition=models.Q(payment_reference__gt='') & models.Q(is_successful=False),
                 name='unique_pending_coin_transaction_payment_reference',
+            ),
+            # One subscription gift per charge, enforced here rather than by a
+            # check in Python. api/services/subscription_gift.py is reached
+            # from a signal on SubscriptionPayment, so a webhook delivered
+            # twice, a Celery retry and two workers racing all attempt the
+            # same insert; the second is refused and the service reads that
+            # refusal as "already paid" instead of crediting again.
+            #
+            # Scoped to this transaction type so it cannot interfere with the
+            # purchase rows the constraint above governs, which reuse
+            # payment_reference for the provider's own id.
+            models.UniqueConstraint(
+                fields=['transaction_type', 'payment_reference'],
+                condition=models.Q(transaction_type='subscription_gift'),
+                name='one_subscription_gift_per_payment',
             ),
         ]
 

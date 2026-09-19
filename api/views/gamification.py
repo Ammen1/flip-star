@@ -62,11 +62,18 @@ def debug_gamification(request):
         )
 
 
-DAILY_LOGIN_BONUS = {
-    'daily': {'coins': 3, 'label': 'Daily Bonus'},
-    7: {'coins': 50, 'label': '7 Day Streak Bonus! 🎉'},
-    30: {'coins': 150, 'label': '30 Day Streak Bonus! 🎉'},
-}
+# The login bonus is over. Coins are now earned by paying for a
+# subscription -- one gift per completed charge -- which is granted
+# automatically and needs no claim: see api/services/subscription_gift.py.
+#
+# `profile.login_streak` and `last_login_date` are left in place and still
+# reported below, because the mobile app reads them and this repository does
+# not build the mobile app. They simply stop advancing.
+LOGIN_BONUS_ENDED = (
+    'The daily login bonus has ended. Coins now come with your subscription: '
+    'every time your plan is charged, the gift is added to your balance '
+    'automatically -- there is nothing to claim.'
+)
 
 
 @api_view(['GET'])
@@ -89,16 +96,11 @@ def get_gamification_status(request):
     try:
         today = timezone.localdate()
 
-        # Check login bonus for today
-        login_bonus_available = profile.last_login_date != today
-
-        # Calculate next login bonus (3 coins daily, with milestone bonuses at 7 and 30 days)
-        next_streak = profile.login_streak + 1
-        next_bonus = DAILY_LOGIN_BONUS.get('daily')
-        if next_streak == 7:
-            next_bonus = DAILY_LOGIN_BONUS.get(7)
-        elif next_streak == 30:
-            next_bonus = DAILY_LOGIN_BONUS.get(30)
+        # Nothing is claimable: the login bonus has ended. The field stays in
+        # the payload because the mobile app reads it, and False is what makes
+        # that client show no claim button rather than crash.
+        login_bonus_available = False
+        next_bonus = None
 
         # Reset daily counters if needed
         if profile.last_gift_reset != today:
@@ -161,95 +163,27 @@ def get_gamification_status(request):
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
 def claim_login_bonus(request):
-    """Claim daily login bonus"""
-    profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    coin_balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
-    today = timezone.localdate()
+    """Refuse the login bonus, which no longer exists.
 
-    print(
-        f'[STREAK DEBUG] User: {request.user.username}, Today: {today}, Last login: {profile.last_login_date}, Current streak: {profile.login_streak}'
-    )
+    Coins are earned by paying now: one gift every time a subscription charge
+    completes, credited automatically by
+    `api/services/subscription_gift.py`. There is nothing to claim, so this
+    grants nothing, touches no streak and moves no balance.
 
-    # Check if already claimed today
-    if profile.last_login_date == today:
-        print('[STREAK DEBUG] Already claimed today')
-        return Response(
-            {'error': 'Login bonus already claimed today', 'next_claim': 'tomorrow'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Check streak continuity (use local calendar days)
-    if profile.last_login_date:
-        days_since_last = (today - profile.last_login_date).days
-        print(f'[STREAK DEBUG] Days since last login: {days_since_last}')
-        if days_since_last > 1:
-            # Streak broken — reset to 0 before increment
-            print('[STREAK DEBUG] Streak broken, resetting to 0')
-            profile.login_streak = 0
-        elif days_since_last == 1:
-            # Consecutive day - keep current streak, will increment below
-            print(f'[STREAK DEBUG] Consecutive day, keeping streak at {profile.login_streak}')
-        # days_since_last == 0 means already claimed (handled above)
-    else:
-        # First-ever claim — start at 0, will increment to 1
-        print('[STREAK DEBUG] First ever claim, setting streak to 0')
-        profile.login_streak = 0
-
-    # Increment streak (capped at 30)
-    profile.login_streak = min(profile.login_streak + 1, 30)
-    profile.last_login_date = today
-    print(f'[STREAK DEBUG] New streak: {profile.login_streak}')
-
-    # Update longest streak
-    if profile.login_streak > profile.longest_login_streak:
-        profile.longest_login_streak = profile.login_streak
-
-    # Calculate bonus: 3 coins daily, with milestone bonuses at 7 and 30 days
-    coins_earned = DAILY_LOGIN_BONUS['daily']['coins']  # Base daily bonus
-    label = DAILY_LOGIN_BONUS['daily']['label']
-
-    # Add milestone bonuses (REPLACE daily bonus, not add to it)
-    if profile.login_streak == 7:
-        coins_earned = DAILY_LOGIN_BONUS[7]['coins']
-        label = DAILY_LOGIN_BONUS[7]['label']
-        print(f'[STREAK DEBUG] 7 day milestone! Earning {coins_earned} coins')
-    elif profile.login_streak == 30:
-        coins_earned = DAILY_LOGIN_BONUS[30]['coins']
-        label = DAILY_LOGIN_BONUS[30]['label']
-        print(f'[STREAK DEBUG] 30 day milestone! Earning {coins_earned} coins')
-
-    with transaction.atomic():
-        # Update coin balance using UserCoinBalance
-        coin_balance.add_earned(
-            coins_earned, transaction_type='daily_login', description=f'Login bonus: {label}'
-        )
-
-        # Update profile
-        profile.save()
-
-        # Log activity
-        GamificationActivity.objects.create(
-            user=request.user,
-            activity_type='login_bonus',
-            points_value=coins_earned,
-            activity_date=today,
-            metadata={'streak_day': profile.login_streak, 'label': label},
-        )
-
-    print(
-        f'[STREAK DEBUG] Bonus claimed: {coins_earned} coins, New balance: {coin_balance.balance}'
-    )
-
+    The route is kept rather than deleted because the shipped mobile app
+    calls it -- from its Home screen on every launch and from its
+    Gamification screen behind a button -- and this repository does not build
+    that app. A 404 would surface there as an unexplained error. A refusal
+    with a reason is shown to the user as the alert text, so somebody who
+    taps Claim is told where their coins come from instead.
+    """
     return Response(
         {
-            'streak_day': profile.login_streak,
-            'coins_earned': coins_earned,
-            'label': label,
-            'new_balance': coin_balance.balance,
-            'login_streak': profile.login_streak,
-            'longest_streak': profile.longest_login_streak,
-            'next_bonus': DAILY_LOGIN_BONUS.get('daily'),
-        }
+            'error': LOGIN_BONUS_ENDED,
+            'coins_earned': 0,
+            'bonus_available': False,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
     )
 
 

@@ -1,8 +1,11 @@
+import logging
 import uuid
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -30,6 +33,15 @@ class SubscriptionTier(models.Model):
         help_text=(
             'Bonus coins granted each time this tier activates or renews. '
             'These are tracked separately and cannot be used to send gifts.'
+        ),
+    )
+    charge_gift_coins = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            'Gift coins granted every time a charge on this tier completes -- '
+            'daily for a daily plan, weekly for a weekly one. Spendable and '
+            'giftable, unlike bonus_coins. This replaced the daily login '
+            'bonus: see api/services/subscription_gift.py.'
         ),
     )
     price_coins = models.IntegerField(
@@ -991,3 +1003,28 @@ class PendingTelebirrMandate(models.Model):
 
     def __str__(self):
         return f'{self.mct_contract_no} ({self.status})'
+
+
+@receiver(post_save, sender=SubscriptionPayment)
+def grant_subscription_gift(sender, instance, **kwargs):
+    """Pay the subscriber their gift coins when a charge completes.
+
+    Hung on the payment rather than on each of the six places that create one
+    -- the short-code subscribe, the hourly renewal sweep, direct debit, the
+    SuperApp checkout -- so a path added later is covered without anybody
+    remembering to call it. It runs on update as well as insert, because some
+    of those write the row as `pending` and complete it afterwards.
+
+    Never raises. This runs inside the caller's transaction, and a charge that
+    succeeded must not be rolled back because a reward could not be written.
+    The grant is idempotent and keyed on the payment, so anything lost here
+    can be re-granted by a later save without paying twice.
+    """
+    if instance.status != 'completed':
+        return
+    try:
+        from api.services.subscription_gift import grant_for_payment
+
+        grant_for_payment(instance)
+    except Exception:
+        logging.getLogger(__name__).exception('SUBSCRIPTION_GIFT_FAILED payment=%s', instance.pk)
