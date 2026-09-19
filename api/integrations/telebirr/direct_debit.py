@@ -1257,6 +1257,19 @@ class TelebirrDirectDebitService:
                 verify=self.verify_ssl,
             )
 
+            # Log what came back. Until now this method logged only that a
+            # payout was being attempted and then returned silently, so a
+            # withdrawal that never arrived left no record of what telebirr
+            # said about it -- which is exactly the state four stuck payouts
+            # were found in. The ShortCode is included because an unset one is
+            # the failure this integration is most prone to.
+            logger.info(
+                'B2C response: http=%s shortcode=%r body=%s',
+                response.status_code,
+                self.b2c_shortcode,
+                response.text[:400],
+            )
+
             if response.status_code != 200:
                 return {
                     'success': False,
@@ -1284,6 +1297,18 @@ class TelebirrDirectDebitService:
                 )
 
                 if response_code == '0':
+                    # Accepted, NOT paid. telebirr settles asynchronously and
+                    # reports the real outcome to the ResultURL; a withdrawal
+                    # stays 'processing' until that arrives. No payout has
+                    # ever reached 'completed' on this deployment, so this
+                    # line is what distinguishes "never accepted" from
+                    # "accepted and never confirmed".
+                    logger.info(
+                        'B2C accepted for processing (not yet paid): ocid=%s conv=%s desc=%s',
+                        originator_conversation_id,
+                        conversation_id,
+                        response_desc,
+                    )
                     return {
                         'success': True,
                         'originator_conversation_id': originator_conversation_id,
@@ -1291,6 +1316,12 @@ class TelebirrDirectDebitService:
                         'message': response_desc,
                         'response_code': response_code,
                     }
+                logger.error(
+                    'B2C refused: code=%s desc=%s shortcode=%r',
+                    response_code,
+                    response_desc,
+                    self.b2c_shortcode,
+                )
                 return {
                     'success': False,
                     'error': response_desc,
