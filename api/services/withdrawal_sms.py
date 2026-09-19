@@ -14,9 +14,10 @@ Two messages, and only two, because each one costs money to send:
 * **failed** -- it did not, and here is what happened to their points.
 
 Whether the points came back is passed in by the caller rather than guessed
-from the status: the automatic payout paths refund them, and admin rejection
-currently does not (see WithdrawalRequest.mark_rejected). Telling somebody
-their points are back when they are not would be worse than saying nothing.
+from the status. Every path that ends a withdrawal without paying refunds it
+(WithdrawalRequest.refund_to_user), but the caller is the only one that knows
+whether the refund ran and moved anything: telling somebody their points are
+back when they are not would be worse than saying nothing.
 
 Never raises. A withdrawal that has been paid must not be un-paid, nor a
 webhook answered with an error, because a text message could not be queued.

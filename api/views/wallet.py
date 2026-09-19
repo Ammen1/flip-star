@@ -437,14 +437,16 @@ def request_withdrawal(request):
                         f"B2C payment failed: {b2c_result.get('error', 'Unknown error')}"
                     )
                     withdrawal.save(update_fields=['status', 'rejection_reason'])
-                    # Refund the points. total_field is intentionally omitted:
-                    # _apply_delta only ever increments a total counter, and
-                    # points_withdrawn_total must not end up counting a
-                    # withdrawal that was never actually paid out. Matches
-                    # the existing, documented no-op quirk in
-                    # WithdrawalRequest.mark_rejected for the coin side.
-                    user_profile.add_points(point_amount, total_field=None)
-                    notify_withdrawal_failed(withdrawal, refunded=True)
+                    # The one refund path, shared with rejection and
+                    # cancellation, so the three endings that do not pay
+                    # cannot drift apart again. Safe against a double refund
+                    # for the same reason as the others: the row is locked and
+                    # has already left 'pending' in this transaction.
+                    refunded = withdrawal.refund_to_user(reason='failed')
+                    # refund_to_user worked through its own copy of the
+                    # profile; this one is what the response below reports.
+                    user_profile.refresh_from_db(fields=['points'])
+                    notify_withdrawal_failed(withdrawal, refunded=any(refunded.values()))
 
             return Response(
                 {
@@ -566,7 +568,7 @@ def my_withdrawals(request):
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
 def cancel_withdrawal(request, withdrawal_id):
-    """Cancel a pending withdrawal request and refund the coins."""
+    """Cancel a pending withdrawal request and give back what it took."""
     try:
         withdrawal = WithdrawalRequest.objects.get(id=withdrawal_id, user=request.user)
     except WithdrawalRequest.DoesNotExist:
@@ -578,28 +580,41 @@ def cancel_withdrawal(request, withdrawal_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Refund coins back to earned balance
+    # Lock the row and re-read the status under that lock before refunding
+    # anything. The check above is against a copy read outside any
+    # transaction, so two taps on Cancel arriving together both passed it and
+    # both refunded -- the user got their balance back twice for one
+    # withdrawal. Moving out of 'pending' inside the same transaction as the
+    # refund is what makes the second one a no-op.
+    #
+    # The refund itself is WithdrawalRequest.refund_to_user, shared with
+    # rejection, because this hand-rolled version returned `coin_amount` to
+    # the coin balance -- zero on every withdrawal the points flow creates,
+    # so cancelling one silently kept the user's points.
+    with db_transaction.atomic():
+        withdrawal = WithdrawalRequest.objects.select_for_update().get(pk=withdrawal.pk)
+        if not withdrawal.can_cancel():
+            return Response(
+                {'error': f'Cannot cancel a {withdrawal.status} withdrawal'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        withdrawal.status = 'cancelled'
+        withdrawal.save(update_fields=['status'])
+        withdrawal.refund_to_user(reason='cancelled')
+
     balance = _get_or_create_balance(request.user)
-    balance.earned_balance = (balance.earned_balance or 0) + withdrawal.coin_amount
-    balance.total_withdrawn = max(0, balance.total_withdrawn - withdrawal.coin_amount)
-    balance._sync_balance()
-    balance.save()
-
-    CoinTransaction.objects.create(
-        user=request.user,
-        transaction_type='refund',
-        coins=withdrawal.coin_amount,
-        description=f'Cancelled withdrawal #{withdrawal.id}',
-    )
-
-    withdrawal.status = 'cancelled'
-    withdrawal.save()
+    request.user.profile.refresh_from_db(fields=['points'])
 
     return Response(
         {
-            'message': 'Withdrawal cancelled and coins refunded',
+            'message': 'Withdrawal cancelled and your balance returned',
             'withdrawal': _serialize_withdrawal(withdrawal),
             'new_balance': {
+                # Points as well as coins: what a points withdrawal returns is
+                # points, and the old response reported only the coin balance,
+                # so the screen showed an unchanged number after a refund.
+                'points': request.user.profile.points,
                 'total': balance.balance,
                 'earned': balance.earned_balance,
                 'purchased': balance.purchased_balance,
@@ -1036,11 +1051,11 @@ def admin_withdrawal_action(request, withdrawal_id):
                         {'error': f'Cannot reject a {withdrawal.status} withdrawal'},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                withdrawal.mark_rejected(request.user, reason=notes)
-                # refunded=False on purpose: mark_rejected refunds the
-                # legacy coin field, which a points withdrawal never sets,
-                # so the points are not back yet. See its own note.
-                notify_withdrawal_failed(withdrawal, refunded=False)
+                refunded = withdrawal.mark_rejected(request.user, reason=notes)
+                # The balance really is back now -- mark_rejected returns what
+                # it put back, so the message reports the refund only when one
+                # actually happened rather than trusting the status.
+                notify_withdrawal_failed(withdrawal, refunded=any(refunded.values()))
 
             elif action == 'mark_processing':
                 if withdrawal.status not in ('approved',):

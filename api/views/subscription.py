@@ -257,8 +257,21 @@ class SubscriptionTierViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
         return super().get_queryset().order_by('sort_order', 'price_etb')
 
     def list(self, request):
-        """Get all active tiers"""
+        """Get all active tiers.
+
+        On-demand is left out for anyone who does not have an account yet. It
+        is a pay-per-use top-up on an account that already exists -- it has no
+        duration and grants nothing on its own -- so offering it as somebody's
+        first subscription gives them a charge and no service. A first-time
+        subscriber picks daily, weekly or monthly; the request that reaches us
+        for them carries no user.
+
+        Here rather than in each client, so the web app, the SuperApp and
+        anything added later get the same answer to "what may I buy".
+        """
         tiers = self.get_queryset()
+        if not request.user.is_authenticated:
+            tiers = tiers.exclude(duration_type='ondemand')
         data = [
             {
                 'id': str(tier.id),

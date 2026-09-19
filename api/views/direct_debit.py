@@ -1544,7 +1544,6 @@ def telebirr_b2c_webhook(request):
     double-crediting a payout or double-refunding points. We always return
     200 so Telebirr does not retry-storm us.
     """
-    from api.models import UserProfile
     from api.models.wallet import WithdrawalRequest
 
     raw_body = request.body or b''
@@ -1613,11 +1612,12 @@ def telebirr_b2c_webhook(request):
                                 f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
                             )
                             withdrawal.save(update_fields=['status', 'rejection_reason'])
-                            user_profile = UserProfile.objects.select_for_update().get(
-                                user=withdrawal.user
-                            )
-                            user_profile.add_points(withdrawal.point_amount, total_field=None)
-                            notify_withdrawal_failed(withdrawal, refunded=True)
+                            # The shared refund (WithdrawalRequest.refund_to_user),
+                            # not add_points directly: a legacy coin withdrawal
+                            # has point_amount 0, and add_points(0) raises
+                            # rather than doing nothing.
+                            refunded = withdrawal.refund_to_user(reason='failed')
+                            notify_withdrawal_failed(withdrawal, refunded=any(refunded.values()))
 
                 return Response({'success': True})
 
@@ -1703,13 +1703,14 @@ def telebirr_b2c_webhook(request):
                     f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
                 )
                 withdrawal.save(update_fields=['status', 'rejection_reason'])
-                user_profile = UserProfile.objects.select_for_update().get(user=withdrawal.user)
-                user_profile.add_points(withdrawal.point_amount, total_field=None)
-                notify_withdrawal_failed(withdrawal, refunded=True)
+                # See the note on the other failure branch above: one refund
+                # path for all of them, and it handles a coin-era row too.
+                refunded = withdrawal.refund_to_user(reason='failed')
+                notify_withdrawal_failed(withdrawal, refunded=any(refunded.values()))
                 logger.info(
-                    'Telebirr B2C webhook: withdrawal #%s failed, %s points refunded to %s',
+                    'Telebirr B2C webhook: withdrawal #%s failed, refunded %s to %s',
                     withdrawal.id,
-                    withdrawal.point_amount,
+                    refunded,
                     withdrawal.user.username,
                 )
 

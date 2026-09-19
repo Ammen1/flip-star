@@ -393,28 +393,47 @@ class WithdrawalRequest(models.Model):
             self.payout_reference = payout_reference
         self.save()
 
-    def mark_rejected(self, admin_user, reason=''):
-        self.status = 'rejected'
-        self.reviewed_at = timezone.now()
-        self.reviewed_by = admin_user
-        self.rejection_reason = reason
-        self.save()
+    def refund_to_user(self, *, reason):
+        """Put back what this withdrawal took. Returns what went back.
 
-        # Refund coins back to user's earned balance. Row-locked and
-        # routed through UserCoinBalance.add_earned rather than a hand-rolled
-        # read-modify-write -- see that method's docstring for why a plain
-        # `balance.earned_balance += x; balance.save()` here would lose a
-        # concurrent refund (e.g. two rejections landing at once).
-        #
-        # NOTE (not a concurrency issue, flagging separately): this refunds
-        # `coin_amount`, the legacy field. The current withdrawal-creation
-        # flow (api/views/wallet.py::request_withdrawal) deducts from
-        # `UserProfile.points` via `point_amount` instead and never sets
-        # `coin_amount`, so this refund is a no-op for every withdrawal
-        # created through that flow -- rejecting one does not currently
-        # give the user their points back. Pre-existing, out of scope for
-        # a concurrency fix; left as-is pending a decision on the intended
-        # business behavior.
+        A withdrawal takes the balance when it is *requested* -- see
+        `api/views/wallet.py::request_withdrawal`, "Deduct points now
+        (refunded if rejected)" -- so every ending that does not pay the user
+        has to give it back: admin rejection, cancellation by the user, or a
+        payout that could not be started.
+
+        One method for all of them because a withdrawal row can carry either
+        kind of balance. `point_amount` is the current flow; `coin_amount` is
+        the legacy one and is zero on anything created since. Refunding the
+        wrong one is how this went wrong before: rejection refunded
+        `coin_amount` alone, which a points withdrawal never sets, so the
+        refund ran, reported success and moved nothing -- the user's points
+        were gone for good.
+
+        Both paths here row-lock the balance they touch (`add_points` and
+        `add_earned` do it internally), so a refund racing another change to
+        the same balance cannot lose an update.
+
+        `points_withdrawn_total` is deliberately not wound back: it is a
+        lifetime counter that only ever goes up, and the automatic payout
+        path made the same choice for the same reason. It therefore counts
+        some withdrawals that were never paid -- inaccurate, but only in a
+        reported total, and it is not this method's to change alone.
+
+        **The caller is responsible for not calling this twice.** There is no
+        flag on the row saying a refund happened; what prevents a double
+        refund is the caller holding the withdrawal's row lock and moving it
+        out of a refundable status in the same transaction. Every call site
+        here does that.
+        """
+        refunded = {'points': 0, 'coins': 0}
+
+        if self.point_amount:
+            profile = self.user.profile
+            # total_field is omitted on purpose: see the note above.
+            profile.add_points(self.point_amount, total_field=None)
+            refunded['points'] = self.point_amount
+
         if self.coin_amount:
             from .contest import UserCoinBalance
 
@@ -422,5 +441,22 @@ class WithdrawalRequest(models.Model):
             balance.add_earned(
                 self.coin_amount,
                 transaction_type='refund',
-                description=f'Refund for rejected withdrawal #{self.pk}',
+                description=f'Refund for {reason} withdrawal #{self.pk}',
             )
+            refunded['coins'] = self.coin_amount
+
+        return refunded
+
+    def mark_rejected(self, admin_user, reason=''):
+        """Reject this withdrawal and return the balance it took.
+
+        Call inside a transaction holding this row's lock, having checked the
+        status: that is what stops a second rejection refunding twice.
+        """
+        self.status = 'rejected'
+        self.reviewed_at = timezone.now()
+        self.reviewed_by = admin_user
+        self.rejection_reason = reason
+        self.save()
+
+        return self.refund_to_user(reason='rejected')

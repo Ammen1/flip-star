@@ -145,10 +145,27 @@ gateway as an emergency rollback; that gateway is deleted and the value now
 fails at the first send like any other unknown provider. The OTP service no
 longer takes a OneVAS application key or product number either.
 
-## Not yet verified
+## What has been proven, and what has not
 
-The SMPP bind, a real `submit_sm` and DLR behaviour have **not** been tested
-against the live TIMWE gateway. `telnet 10.175.206.42 6986` connecting proves
-TCP reachability only — not that the credentials authenticate, that the
-addressing is what TIMWE expect, or that receipts arrive. Treat this as
-unproven until a real bind and a test submission have been run.
+**Proven, 2026-09-16 against the live gateway.** The worker binds
+(`SMPP_BOUND gateway=10.175.206.42:6986`) and TIMWE accepts messages: a
+message queued from the backend pod reached `submitted` with a provider
+message id, which means the credentials authenticate and the addressing is
+what TIMWE expect.
+
+```
+kubectl -n flipstar-staging exec -i deploy/flipstar-backend -- python manage.py shell <<'EOF'
+from api.services.sms.dispatch import queue_sms
+print(queue_sms(phone_number='2519XXXXXXXX', text='FlipStar SMS test', purpose='manual_test').id)
+EOF
+```
+
+**Not proven.** No message has ever reached `delivered`: no delivery receipt
+has been seen from TIMWE. Until one arrives, `submitted` is the end of the
+road and a delivered message cannot be told from a lost one — for OTPs as
+much as for anything else. Two things to settle with TIMWE:
+
+* whether delivery receipts are enabled for this account (our side asks for
+  them whenever `TIMWE_SMPP_REGISTERED_DELIVERY` is 1, the default);
+* whether the messages are actually arriving on handsets, which only a person
+  holding the phone can confirm.
