@@ -47,7 +47,7 @@ class SmsNotQueued(Exception):
     """The message could not even be recorded -- e.g. an unusable number."""
 
 
-def queue_sms(*, phone_number, text, purpose='', idempotency_key=None):
+def queue_sms(*, phone_number, text, purpose='', idempotency_key=None, provider=''):
     """Record an SMS and hand it to the worker. Returns the SmsMessage.
 
     Never raises for gateway problems, because none are consulted here. A
@@ -73,6 +73,11 @@ def queue_sms(*, phone_number, text, purpose='', idempotency_key=None):
                 recipient=destination,
                 body=text,
                 purpose=purpose,
+                # Which transport this message wants. Blank means the
+                # configured default (SMPP), which is every message except a
+                # telebirr subscription notice -- so the short-code and TIMWE
+                # flows are untouched by the existence of a second provider.
+                provider=provider,
                 status=SmsStatus.QUEUED,
             )
     except IntegrityError:
@@ -134,7 +139,11 @@ def deliver(message_id):
         )
         return message
 
-    gateway = get_gateway()
+    # The message's own transport when it asked for one, the configured
+    # default otherwise. Called with no argument in the default case so the
+    # signature every existing caller and test stub relies on is unchanged --
+    # only a message that pinned a provider takes the other branch.
+    gateway = get_gateway(message.provider) if message.provider else get_gateway()
     SmsMessage.objects.filter(pk=message.pk).update(attempts=message.attempts + 1)
 
     logger.info(

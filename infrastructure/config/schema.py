@@ -339,6 +339,26 @@ SCHEMA: tuple[Key, ...] = (
         group='sms',
         doc='SMPP bind password. Secret: resolve through Vault, never log it.',
     ),
+    # SkyConnect: a second transport, used ONLY for telebirr subscription
+    # notices. SMS_PROVIDER above is unaffected -- the short code, TIMWE and
+    # every OTP stay on SMPP.
+    _k(
+        'SKYCONNECT_SMS_API_URL',
+        group='sms',
+        doc='SkyConnect send endpoint, e.g. '
+        'https://api.sms.skyconnectsolutions.et/api/v1/sms/send.',
+    ),
+    _k(
+        'SKYCONNECT_SMS_API_KEY',
+        group='sms',
+        doc='SkyConnect bearer token. Secret: resolve through Vault, never log '
+        'it and never commit it. Sent as "Authorization: Bearer <key>".',
+    ),
+    _k(
+        'SKYCONNECT_SMS_SENDER_ID',
+        group='sms',
+        doc='What the handset shows as sender for telebirr subscription ' 'notices, e.g. Flipstar.',
+    ),
     _k(
         'TIMWE_SMPP_SYSTEM_TYPE',
         group='sms',

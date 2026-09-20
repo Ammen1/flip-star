@@ -30,25 +30,38 @@ def _build(name) -> SmsGateway:
         from api.services.sms.timwe_smpp import TimweSmppGateway
 
         return TimweSmppGateway()
+    if name == 'skyconnect':
+        from api.services.sms.skyconnect import SkyConnectGateway
+
+        return SkyConnectGateway()
     if name == 'console':
         from api.services.sms.console import ConsoleGateway
 
         return ConsoleGateway()
     raise UnknownSmsProvider(
         f'SMS_PROVIDER={name!r} is not a known gateway. '
-        "Expected 'timwe_smpp' (production) or 'console' (development). "
+        "Expected 'timwe_smpp' (production, short code and TIMWE), "
+        "'skyconnect' (telebirr subscription notices) or 'console' (development). "
         'OneVAS has been removed.'
     )
 
 
-def get_gateway() -> SmsGateway:
-    """The configured gateway.
+def get_gateway(name=None) -> SmsGateway:
+    """The gateway for a message, or the configured default.
+
+    `name` lets one message choose its own transport. Telebirr subscription
+    notices go over SkyConnect while everything else -- short code, TIMWE,
+    OTPs -- stays on SMPP, and that has to be decidable per message rather
+    than by flipping a global setting that would move all of them at once.
 
     Built per call rather than cached: the object is trivially cheap, and the
     expensive part -- the SMPP session -- is a process-wide singleton behind
     it. Caching here would only make settings changes in tests invisible.
     """
     from django.conf import settings
+
+    if name:
+        return _build(name)
 
     name = getattr(settings, 'SMS_PROVIDER', '') or ''
     if not name:

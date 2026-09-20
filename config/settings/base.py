@@ -591,6 +591,22 @@ TIMWE_SUBSCRIPTION_LINK_BASE = config(
 # refuses to start on an unknown value rather than picking one.
 SMS_PROVIDER = config('SMS_PROVIDER', default='timwe_smpp')
 
+# ── SkyConnect SMS ──────────────────────────────────────────────────────────
+#
+# A second transport, used only for telebirr subscription notices. It is NOT
+# the default provider: SMS_PROVIDER above still selects SMPP for everything
+# else -- OTPs, the short code, TIMWE -- and those flows are unchanged. A
+# message chooses this one per message (see api/services/sms/dispatch.py).
+#
+# The key is a credential: it belongs in Vault, resolved through the normal
+# chain, and must never be committed. It is read at call time and put in the
+# Authorization header; nothing logs it.
+SKYCONNECT_SMS_API_URL = config(
+    'SKYCONNECT_SMS_API_URL', default='https://api.sms.skyconnectsolutions.et/api/v1/sms/send'
+)
+SKYCONNECT_SMS_API_KEY = config('SKYCONNECT_SMS_API_KEY', default='')
+SKYCONNECT_SMS_SENDER_ID = config('SKYCONNECT_SMS_SENDER_ID', default='Flipstar')
+
 # The short code subscribers text to subscribe and send STOP to. TIMWE's now;
 # it was OneVAS's, and this replaces the ONEVAS_SHORT_CODE that went with it.
 SMS_SHORT_CODE = config('SMS_SHORT_CODE', default='9286')

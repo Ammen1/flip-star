@@ -33,6 +33,11 @@ from api.services.subscription_access import (
     pending_subscription_payment,
 )
 from api.services.superapp_sms_service import superapp_sms_service
+from api.services.telebirr_subscription_sms import SUPERAPP as TELEBIRR_SMS_SUPERAPP
+from api.services.telebirr_subscription_sms import USSD as TELEBIRR_SMS_USSD
+from api.services.telebirr_subscription_sms import (
+    notify_activated as notify_telebirr_subscription_activated,
+)
 from common.security import EncryptedPayloadMixin, encrypted_endpoint
 from common.throttling import PhoneLookupAnonThrottle, PhoneLookupUserThrottle
 
@@ -1145,7 +1150,10 @@ def telebirr_one_time_callback(request):
                     reason='One-time Telebirr payment completed',
                 )
 
-                logger.info('[TELEBIRR ONE-TIME] Subscription %s activated with coin grants', subscription.id)
+                logger.info(
+                    '[TELEBIRR ONE-TIME] Subscription %s activated with coin grants',
+                    subscription.id,
+                )
                 activated_subscription = subscription
             else:
                 logger.warning('[TELEBIRR ONE-TIME] Payment failed: %s', trade_status)
@@ -1171,6 +1179,12 @@ def telebirr_one_time_callback(request):
                         amount=activated_subscription.tier.price_etb,
                         duration_type=activated_subscription.duration_type,
                         end_date=activated_subscription.end_date,
+                        # Telebirr redelivers until acknowledged; without this
+                        # every delivery queued another SMS.
+                        idempotency_key=(
+                            f'telebirr-sub-active:{TELEBIRR_SMS_SUPERAPP}:'
+                            f'{activated_subscription.pk}'
+                        ),
                     )
             except Exception as sms_err:
                 logger.warning('[TELEBIRR ONE-TIME] Failed to send SMS: %s', sms_err)
@@ -1255,6 +1269,15 @@ def telebirr_one_time_query(request):
                                         amount=subscription.tier.price_etb,
                                         duration_type=subscription.duration_type,
                                         end_date=subscription.end_date,
+                                        # Same key as the callback path: the
+                                        # self-heal and the webhook describe
+                                        # one activation, so whichever runs
+                                        # second finds the message already
+                                        # queued instead of sending another.
+                                        idempotency_key=(
+                                            f'telebirr-sub-active:{TELEBIRR_SMS_SUPERAPP}:'
+                                            f'{subscription.pk}'
+                                        ),
                                     )
                             except Exception as sms_err:
                                 logger.warning(
@@ -1688,6 +1711,14 @@ def _activate_ussd_subscription_payment(payment, tier):
         action='created',
         reason=f'USSD Push payment: {tier.name} subscription',
     )
+
+    # Payment confirmed and plan active -- the point at which there is
+    # something true to tell the subscriber. Keyed on the payment, so a
+    # redelivered webhook finds the existing message rather than sending a
+    # second one. Never raises: a paid subscription is not undone by a
+    # notification.
+    notify_telebirr_subscription_activated(subscription, source=TELEBIRR_SMS_USSD, payment=payment)
+
     return subscription
 
 

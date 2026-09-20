@@ -18,27 +18,37 @@ class SuperAppSMSService:
         # The short code subscribers text -- TIMWE's, formerly OneVAS's.
         self.short_code = getattr(settings, 'SMS_SHORT_CODE', '') or '9286'
 
-    def _send_sms(self, phone_number, text, duration_type='weekly'):
+    def _send_sms(self, phone_number, text, duration_type='weekly', *, idempotency_key=None):
         """
-        Queue an SMS for delivery over TIMWE SMPP.
+        Queue an SMS about a telebirr SuperApp subscription.
+
+        Delivered over SkyConnect, not SMPP. These are telebirr messages; the
+        short-code and TIMWE flows keep SMPP and are unaffected, because the
+        transport is chosen per message rather than by a global setting.
 
         Args:
             phone_number: User's phone number (format: 2519...)
             text: SMS message content
             duration_type: Plan duration type. Unused -- it chose a OneVAS
                 product -- and kept so the callers below need not change.
+            idempotency_key: What makes this message one message. Telebirr
+                redelivers a callback until it is acknowledged, and without a
+                key each delivery queued another SMS to the same subscriber.
 
         Returns:
             bool: True if the message was recorded and queued. Queued, not
             delivered; SmsMessage.status carries the latter.
         """
         from api.services.sms.dispatch import SmsNotQueued, queue_sms
+        from api.services.telebirr_subscription_sms import PROVIDER as TELEBIRR_SMS_PROVIDER
 
         try:
             queue_sms(
                 phone_number=phone_number,
                 text=text,
                 purpose='superapp',
+                idempotency_key=idempotency_key,
+                provider=TELEBIRR_SMS_PROVIDER,
             )
         except SmsNotQueued as exc:
             logger.warning('[SuperApp SMS] Not queued for %s: %s', phone_number, exc)
@@ -46,7 +56,9 @@ class SuperAppSMSService:
         logger.info('[SuperApp SMS] Queued for %s', phone_number)
         return True
 
-    def send_subscription_success(self, phone_number, plan_name, amount, duration_type, end_date):
+    def send_subscription_success(
+        self, phone_number, plan_name, amount, duration_type, end_date, *, idempotency_key=None
+    ):
         """
         Send SMS when SuperApp subscription is successfully created (one-time payment)
 
@@ -69,7 +81,7 @@ class SuperAppSMSService:
             f"To renew, open the Telebirr SuperApp and subscribe again."
         )
 
-        return self._send_sms(phone_number, message, duration_type)
+        return self._send_sms(phone_number, message, duration_type, idempotency_key=idempotency_key)
 
     def send_subscription_renewal(
         self, phone_number, plan_name, amount, duration_type, next_renewal_date
