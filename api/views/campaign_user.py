@@ -36,10 +36,9 @@ def get_active_campaigns(request):
         status='active', start_date__lte=now, entry_deadline__gte=now
     )
 
-    # Get user profile for level check
+# Get user profile for level check
     user_profile = request.user.profile if request.user.is_authenticated and hasattr(request.user, 'profile') else None
     user_level = user_profile.level if user_profile else 1
-    user_xp = user_profile.xp if user_profile else 0
 
     data = []
     for campaign in campaigns:

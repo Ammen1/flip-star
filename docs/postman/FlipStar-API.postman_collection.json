@@ -11830,6 +11830,45 @@
           "response": []
         },
         {
+          "name": "POST posts media",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/posts/media/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "posts",
+                "media",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\n    1,\n    2\n  ],\n  \"failures\": [\n    {\n      \"id\": 1,\n      \"url\": \"https://obs.example/flipstar-media/processed/videos/1/v1/480p.mp4?X-Amz-Date=...\",\n      \"error\": \"4\",\n      \"surface\": \"reels\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
           "name": "GET reel list",
           "request": {
             "method": "GET",
