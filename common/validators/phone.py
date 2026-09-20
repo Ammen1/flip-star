@@ -84,6 +84,25 @@ def normalize_ethiopian_phone(raw):
     return COUNTRY_CODE + part if part else None
 
 
+def lookup_variants(raw):
+    """Accepted storage variants for a phone lookup.
+
+    New writes should use ``normalize_ethiopian_phone``. This exists for
+    reads against older rows that may still carry E.164 or local trunk forms.
+    """
+    part = _subscriber_part(raw)
+    if not part:
+        return []
+
+    variants = [
+        COUNTRY_CODE + part,
+        '+' + COUNTRY_CODE + part,
+        '0' + part,
+        part,
+    ]
+    return list(dict.fromkeys(variants))
+
+
 def to_e164(raw):
     """``+251XXXXXXXXX`` for API responses and display, or None when invalid."""
     part = _subscriber_part(raw)

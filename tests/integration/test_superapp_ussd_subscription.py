@@ -30,6 +30,7 @@ from django.utils import timezone
 from rest_framework.test import APIRequestFactory
 
 from api.models.subscription import SubscriptionPayment, SubscriptionPlan, SubscriptionTier
+from api.views.core import login_with_subscription_otp
 from api.views.subscription import (
     check_superapp_subscription,
     telebirr_ussd_subscription_initiate,
@@ -447,6 +448,32 @@ def test_check_superapp_subscription_finds_active_telebirr_subscription(db, mont
         subscription.delete()
 
 
+def test_check_superapp_subscription_finds_locally_stored_phone(db, monthly_tier):
+    now = timezone.now()
+    subscription = SubscriptionPlan.objects.create(
+        user=None,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='0988990011',
+        auto_renew=False,
+    )
+    try:
+        request = factory.post(
+            '/subscription/check-superapp/', {'phone': '+251988990011'}, format='json'
+        )
+
+        response = check_superapp_subscription(request)
+
+        assert response.status_code == 200
+        assert response.data['has_active_subscription'] is True
+    finally:
+        subscription.delete()
+
+
 def test_check_superapp_subscription_no_match(db):
     request = factory.post('/subscription/check-superapp/', {'phone': '0900000000'}, format='json')
 
@@ -454,6 +481,88 @@ def test_check_superapp_subscription_no_match(db):
 
     assert response.status_code == 200
     assert response.data['has_active_subscription'] is False
+
+
+def test_subscription_otp_creates_web_account_for_superapp_phone(
+    db, monthly_tier, _server_keys, client_keys
+):
+    now = timezone.now()
+    subscription = SubscriptionPlan.objects.create(
+        user=None,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='251988990011',
+        setup_otp='123456',
+        auto_renew=False,
+    )
+    try:
+        response = _post_encrypted(
+            '/auth/login-with-subscription-otp/',
+            {
+                'phone': '+251988990011',
+                'otp': '123456',
+                'username': 'superapp_web_user',
+                'password': '739284',
+            },
+            server_public_key=_server_keys,
+            client_keys=client_keys,
+            view=login_with_subscription_otp,
+        )
+
+        assert response.status_code == 201, response.data
+        assert response.data['user']['username'] == 'superapp_web_user'
+        assert response.data['token']
+        subscription.refresh_from_db()
+        assert subscription.user.username == 'superapp_web_user'
+        assert subscription.setup_otp is None
+        assert subscription.user.check_password('739284')
+    finally:
+        subscription.delete()
+
+
+def test_subscription_otp_sets_first_pin_for_existing_superapp_user(
+    db, monthly_tier, _server_keys, client_keys
+):
+    user = User.objects.create_user(username='superapp_without_pin', password=None)
+    now = timezone.now()
+    subscription = SubscriptionPlan.objects.create(
+        user=user,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='251988990011',
+        setup_otp='123456',
+        auto_renew=False,
+    )
+    try:
+        response = _post_encrypted(
+            '/auth/login-with-subscription-otp/',
+            {
+                'phone': '+251988990011',
+                'otp': '123456',
+                'password': '739284',
+            },
+            server_public_key=_server_keys,
+            client_keys=client_keys,
+            view=login_with_subscription_otp,
+        )
+
+        assert response.status_code == 200, response.data
+        assert response.data['token']
+        user.refresh_from_db()
+        assert user.check_password('739284')
+        subscription.refresh_from_db()
+        assert subscription.setup_otp is None
+    finally:
+        subscription.delete()
+        user.delete()
 
 
 def test_validate_subscription_token_returns_phone(db, monthly_tier, _server_keys, client_keys):

@@ -89,7 +89,7 @@ from common.throttling import (
     clear_failures,
     is_blocked,
 )
-from common.validators import normalize_ethiopian_phone
+from common.validators import lookup_variants, normalize_ethiopian_phone
 
 logger = logging.getLogger(__name__)
 
@@ -993,13 +993,22 @@ def login_with_subscription_otp(request):
 
     # Find subscription with matching OTP (works for both SMS and app subscriptions)
     print(f'[SUBSCRIPTION LOGIN DEBUG] Searching for subscription with phone: {phone}, otp: {otp}')
-    subscription = UserSubscription.objects.filter(
-        onevas_phone_number=phone, setup_otp=otp, status='active'
-    ).first()
+    phone_values = lookup_variants(phone)
+    subscription = (
+        UserSubscription.objects.filter(
+            Q(onevas_phone_number__in=phone_values) | Q(telebirr_phone_number__in=phone_values),
+            setup_otp=otp,
+            status='active',
+        )
+        .order_by('-start_date')
+        .first()
+    )
 
     if not subscription:
         # Debug: Try to find any subscription with this phone
-        all_subs = UserSubscription.objects.filter(onevas_phone_number=phone)
+        all_subs = UserSubscription.objects.filter(
+            Q(onevas_phone_number__in=phone_values) | Q(telebirr_phone_number__in=phone_values)
+        )
         print('[SUBSCRIPTION LOGIN DEBUG] No matching subscription found')
         print(
             f'[SUBSCRIPTION LOGIN DEBUG] All subscriptions with phone {phone}: {all_subs.count()}'
@@ -1021,10 +1030,21 @@ def login_with_subscription_otp(request):
             f'[SUBSCRIPTION LOGIN DEBUG] Subscription already has user: {subscription.user.username}'
         )
 
-        # Verify the provided password matches the user's password
         user = subscription.user
-        if not user.check_password(password):
-            return Response({'error': 'Invalid password'}, status=status.HTTP_400_BAD_REQUEST)
+        if user.has_usable_password():
+            # Existing PIN: this path is a login, so the submitted PIN must
+            # match. First-time SuperApp/USSD accounts have no usable password
+            # and fall through to set their PIN after OTP verification.
+            if not user.check_password(password):
+                return Response({'error': 'Invalid password'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            user.set_password(password)
+            user.save(update_fields=['password'])
+
+            profile, _created = UserProfile.objects.get_or_create(user=user)
+            if not profile.phone_number:
+                profile.phone_number = phone
+                profile.save(update_fields=['phone_number'])
 
         # Clear OTP after successful login
         subscription.setup_otp = None
