@@ -94,9 +94,7 @@ def save(viewer, reel):
     return SavedPost.objects.create(user=viewer, reel=reel)
 
 
-def test_saved_image_reels_carry_the_image_contract(
-    author, viewer, server_keys, client_keys
-):
+def test_saved_image_reels_carry_the_image_contract(author, viewer, server_keys, client_keys):
     reel = image_reel(author)
     save(viewer, reel)
 
@@ -111,9 +109,7 @@ def test_saved_image_reels_carry_the_image_contract(
     assert 'media' not in row or row['media'] is None
 
 
-def test_saved_video_reels_carry_the_video_contract(
-    author, viewer, server_keys, client_keys
-):
+def test_saved_video_reels_carry_the_video_contract(author, viewer, server_keys, client_keys):
     reel = video_reel(author)
     save(viewer, reel)
 
@@ -138,9 +134,7 @@ def test_unsaved_reels_are_not_returned(author, viewer, server_keys, client_keys
     assert unsaved_reel.id not in returned, 'only the viewer favourite appears'
 
 
-def test_saved_but_not_ready_reels_are_left_out(
-    author, viewer, server_keys, client_keys
-):
+def test_saved_but_not_ready_reels_are_left_out(author, viewer, server_keys, client_keys):
     """A reel still processing has no media to serve, exactly like the feeds:
     it waits until READY instead of surfacing a media-less tile."""
     reel = Reel.objects.create(
