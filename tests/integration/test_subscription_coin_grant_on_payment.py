@@ -11,14 +11,13 @@ daily job, and exactly once even if the webhook is delivered multiple times.
 """
 
 import json
-from decimal import Decimal
 
 import pytest
 from django.contrib.auth.models import User
 from django.test import RequestFactory
 from django.utils import timezone
 
-from api.models.contest import UserCoinBalance, CoinTransaction
+from api.models.contest import CoinTransaction, UserCoinBalance
 from api.models.subscription import (
     SubscriptionPayment,
     SubscriptionPlan,
@@ -259,12 +258,6 @@ def test_telebirr_one_time_callback_duplicate_grants_only_once(rf, user, tier):
         payment_reference='merch-dup',
     )
 
-    request_data = json.dumps({
-        'merch_order_id': 'merch-dup',
-        'trade_status': 'Completed',
-        'payment_order_id': 'order-dup',
-    })
-
     from unittest.mock import patch
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
@@ -321,7 +314,7 @@ def test_different_durations_receive_configured_allocation(rf):
     for tier in [daily_tier, weekly_tier, monthly_tier]:
         # Create fresh user and subscription for each tier for isolation
         user = make_user(f'duration_user_{tier.slug}')
-        sub = SubscriptionPlan.objects.create(
+        _ = SubscriptionPlan.objects.create(
             user=user,
             tier=tier,
             status='pending',
@@ -585,7 +578,7 @@ def test_coin_grants_create_audit_records(rf, user, tier):
     Coin grants must create audit records (CoinTransaction) showing why/how
     coins were granted.
     """
-    sub = SubscriptionPlan.objects.create(
+    _ = SubscriptionPlan.objects.create(
         user=user,
         tier=tier,
         status='pending',

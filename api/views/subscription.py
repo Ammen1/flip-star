@@ -1120,7 +1120,7 @@ def telebirr_one_time_callback(request):
 
                 # Create a completed SubscriptionPayment to trigger the charge_gift_coins
                 # grant via the post_save signal on SubscriptionPayment.
-                payment = SubscriptionPayment.objects.create(
+                SubscriptionPayment.objects.create(
                     user=subscription.user,
                     subscription=subscription,
                     amount=subscription.tier.price_etb,
