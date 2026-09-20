@@ -36,8 +36,12 @@ def get_active_campaigns(request):
         status='active', start_date__lte=now, entry_deadline__gte=now
     )
 
-# Get user profile for level check
-    user_profile = request.user.profile if request.user.is_authenticated and hasattr(request.user, 'profile') else None
+    # Get user profile for level check
+    user_profile = (
+        request.user.profile
+        if request.user.is_authenticated and hasattr(request.user, 'profile')
+        else None
+    )
     user_level = user_profile.level if user_profile else 1
 
     data = []
@@ -56,7 +60,11 @@ def get_active_campaigns(request):
         is_eligible = True
         if request.user.is_authenticated:
             if campaign.min_followers > 0 and hasattr(request.user, 'profile'):
-                follower_count = request.user.profile.user.followers.count() if hasattr(request.user.profile.user, 'followers') else 0
+                follower_count = (
+                    request.user.profile.user.followers.count()
+                    if hasattr(request.user.profile.user, 'followers')
+                    else 0
+                )
                 if follower_count < campaign.min_followers:
                     is_eligible = False
             if campaign.min_level > user_level:
@@ -128,7 +136,11 @@ def get_campaign_detail_extended(request, campaign_id):
     )
 
     # Get user's level and XP
-    user_profile = request.user.profile if request.user.is_authenticated and hasattr(request.user, 'profile') else None
+    user_profile = (
+        request.user.profile
+        if request.user.is_authenticated and hasattr(request.user, 'profile')
+        else None
+    )
     user_level = user_profile.level if user_profile else 1
     user_xp = user_profile.xp if user_profile else 0
     user_xp_for_next_level = (user_level * 1000) - user_xp if user_profile else 0
