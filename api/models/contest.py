@@ -170,6 +170,7 @@ class CoinTransaction(models.Model):
         ('welcome_bonus', 'Welcome Bonus'),
         ('daily_login', 'Daily Login Bonus'),
         ('subscription_gift', 'Subscription Charge Gift'),
+        ('ondemand_allocation', 'On-Demand Coin Allocation'),
         ('spin_reward', 'Daily Spin Reward'),
         ('post_bonus', 'Daily Post Bonus'),
         ('campaign_join', 'Campaign Join Reward'),
@@ -271,6 +272,16 @@ class CoinTransaction(models.Model):
                 fields=['transaction_type', 'payment_reference'],
                 condition=models.Q(transaction_type='subscription_gift'),
                 name='one_subscription_gift_per_payment',
+            ),
+            # The on-demand package's coins are granted once, upfront, when
+            # the payment for it completes. Same shape as the gift constraint
+            # above and for the same reason: the payment is the natural key,
+            # so a webhook delivered twice or a retried task cannot credit the
+            # package twice.
+            models.UniqueConstraint(
+                fields=['transaction_type', 'payment_reference'],
+                condition=models.Q(transaction_type='ondemand_allocation'),
+                name='one_ondemand_allocation_per_payment',
             ),
         ]
 

@@ -1111,9 +1111,31 @@ def telebirr_one_time_callback(request):
                         )
                         subscription.user = new_user
 
-                subscription.status = 'active'
                 subscription.payment_order_id = payment_order_id
                 subscription.save()
+
+                # Activate the subscription and grant the tier's bonus coins immediately.
+                # activate() handles idempotency: it grants bonus_coins only once per period.
+                subscription.activate()
+
+                # Create a completed SubscriptionPayment to trigger the charge_gift_coins
+                # grant via the post_save signal on SubscriptionPayment.
+                payment = SubscriptionPayment.objects.create(
+                    user=subscription.user,
+                    subscription=subscription,
+                    amount=subscription.tier.price_etb,
+                    currency='ETB',
+                    status='completed',
+                    payment_method='telebirr',
+                    onevas_transaction_id=payment_order_id or merch_order_id,
+                    duration_type=subscription.duration_type,
+                    period_start=subscription.start_date,
+                    period_end=subscription.end_date,
+                    metadata={
+                        'merch_order_id': merch_order_id,
+                        'trade_status': trade_status,
+                    },
+                )
 
                 SubscriptionHistory.objects.create(
                     user=subscription.user,
@@ -1123,7 +1145,7 @@ def telebirr_one_time_callback(request):
                     reason='One-time Telebirr payment completed',
                 )
 
-                logger.info('[TELEBIRR ONE-TIME] Subscription %s activated', subscription.id)
+                logger.info('[TELEBIRR ONE-TIME] Subscription %s activated with coin grants', subscription.id)
                 activated_subscription = subscription
             else:
                 logger.warning('[TELEBIRR ONE-TIME] Payment failed: %s', trade_status)
@@ -1616,13 +1638,15 @@ def _activate_ussd_subscription_payment(payment, tier):
     subscription = payment.subscription
 
     if subscription and subscription.status == 'pending':
-        subscription.status = 'active'
         subscription.tier = tier
         subscription.duration_type = tier.duration_type
         subscription.payment_method = 'telebirr'
         if not subscription.user:
             subscription.user = user
         subscription.save()
+        # Activate the subscription to grant the tier's bonus coins immediately.
+        # activate() handles idempotency: it grants bonus_coins only once per period.
+        subscription.activate()
     else:
         existing = UserSubscription.objects.filter(user=user, status='active').first()
         if existing:
@@ -1635,6 +1659,8 @@ def _activate_ussd_subscription_payment(payment, tier):
             existing.payment_method = 'telebirr'
             existing.save()
             subscription = existing
+            # Activate the existing subscription to grant bonus coins for the new period.
+            subscription.activate()
         else:
             now = timezone.now()
             end_date = now + timedelta(days=tier.duration_days) if tier.duration_days else None
@@ -1648,6 +1674,8 @@ def _activate_ussd_subscription_payment(payment, tier):
                 payment_method='telebirr',
                 auto_renew=False,
             )
+            # Activate the new subscription to grant the tier's bonus coins.
+            subscription.activate()
 
     payment.subscription = subscription
     payment.status = 'completed'

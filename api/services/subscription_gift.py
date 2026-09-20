@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 #: The ledger entry these gifts write. Every gift is findable by this alone.
 GIFT_TRANSACTION_TYPE = 'subscription_gift'
 
+#: The on-demand package's own coins, granted once at purchase.
+ALLOCATION_TRANSACTION_TYPE = 'ondemand_allocation'
+
+#: The plan type whose coins are bought outright rather than earned per period.
+ONDEMAND = 'ondemand'
+
 #: Statuses that mean the subscriber actually paid.
 PAID = 'completed'
 
@@ -56,6 +62,70 @@ def already_gifted(payment) -> bool:
     ).exists()
 
 
+def ondemand_allocation(tier):
+    """The coins an on-demand package includes, from the package itself.
+
+    `price_coins` is the number the package is configured and sold with --
+    "One-time purchase with 100 coins" in the seed. Read straight off the tier
+    rather than restated here, so repricing the package in the admin reprices
+    what a buyer receives and there is no second number to keep in step.
+
+    Scoped to on-demand deliberately. On the recurring tiers `price_coins` is
+    a *price* -- what the plan costs if you pay with coins -- and reading it as
+    an allocation there would hand out a month's subscription fee in coins.
+    """
+    if tier is None or getattr(tier, 'duration_type', None) != ONDEMAND:
+        return 0
+    return max(0, int(getattr(tier, 'price_coins', 0) or 0))
+
+
+def grant_ondemand_allocation(payment):
+    """Credit the on-demand package's coins. Returns how many.
+
+    Granted **on payment confirmation**, never before: the caller is a signal
+    on SubscriptionPayment that fires only for `completed`. Granted **once**:
+    the payment is the idempotency key, held by a unique constraint on the
+    ledger, so a webhook delivered twice settles for one grant.
+
+    Bonus bucket, not earned. These coins came with a package rather than
+    being worked for, and the bonus bucket is the one excluded from
+    `giftable_balance` -- so they cannot be cycled straight back out as gifts.
+    """
+    plan = payment.subscription
+    tier = getattr(plan, 'tier', None)
+    coins = ondemand_allocation(tier)
+    if not coins:
+        return 0
+
+    user_id = payment.user_id or getattr(plan, 'user_id', None)
+    if not user_id:
+        return 0
+
+    from api.models.contest import UserCoinBalance
+
+    try:
+        with transaction.atomic():
+            balance, _ = UserCoinBalance.objects.get_or_create(user_id=user_id)
+            balance.add_bonus(
+                coins,
+                transaction_type=ALLOCATION_TRANSACTION_TYPE,
+                payment_reference=str(payment.pk),
+                description=f'{tier.name} package: {coins} coins',
+            )
+    except IntegrityError:
+        logger.info(
+            'ONDEMAND_ALLOCATION_ALREADY_GRANTED',
+            extra={'payment_id': str(payment.pk), 'user_id': user_id},
+        )
+        return 0
+
+    logger.info(
+        'ONDEMAND_ALLOCATION_GRANTED',
+        extra={'payment_id': str(payment.pk), 'user_id': user_id, 'coins': coins},
+    )
+    return coins
+
+
 def grant_for_payment(payment) -> int:
     """Give the subscriber the coins this charge earns. Returns how many.
 
@@ -70,6 +140,18 @@ def grant_for_payment(payment) -> int:
 
     plan = payment.subscription
     tier = getattr(plan, 'tier', None)
+
+    # On-demand is bought outright: its coins come from the package, granted
+    # here and once. It does not also earn the per-period gift, which exists
+    # to reward a plan being charged again -- an on-demand package never is.
+    if getattr(tier, 'duration_type', None) == ONDEMAND:
+        return grant_ondemand_allocation(payment)
+
+    # Guard against duplicate grants: if this payment has already gifted coins,
+    # do not grant again. The payment id is the idempotency key.
+    if already_gifted(payment):
+        return 0
+
     coins = gift_coins_for(tier)
     if not coins:
         return 0
