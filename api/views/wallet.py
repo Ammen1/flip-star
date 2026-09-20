@@ -17,8 +17,8 @@ import logging
 from decimal import Decimal
 
 from django.contrib.auth.models import User
-from django.db import Q
 from django.db import transaction as db_transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.authtoken.models import Token
