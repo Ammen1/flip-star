@@ -17,6 +17,7 @@ import logging
 from decimal import Decimal
 
 from django.contrib.auth.models import User
+from django.db import Q
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from rest_framework import status
@@ -2032,7 +2033,9 @@ def telebirr_ussd_webhook(request):
         CoinTransaction.objects.filter(
             payment_reference=originator_conversation_id,
             payment_method='telebirr_ussd',
-            payment_state=payment_status.PENDING,
+            is_successful=False,
+        ).filter(
+            Q(payment_state=payment_status.PENDING) | Q(payment_state=payment_status.SUCCESS)
         ).update(
             description=f'Failed USSD Push payment: {result_desc}'[:255],
             payment_state=state,
