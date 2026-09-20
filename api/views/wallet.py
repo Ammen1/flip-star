@@ -31,6 +31,7 @@ from api.models.contest import CoinPackage, CoinTransaction, UserCoinBalance
 from api.models.core import UserProfile
 from api.models.wallet import WalletConfig, WithdrawalRequest
 from api.serializers.core import UserSerializer
+from api.services import payment_status
 from api.services.coin_packages import (
     fallback_payload,
     pending_coin_purchase,
@@ -1377,9 +1378,13 @@ def telebirr_initiate_payment(request):
         coins=0,  # credited after payment confirmation
         payment_method='telebirr',
         payment_reference=merch_order_id,
+        provider_conversation_id=merch_order_id,
         package=package,
         description=f'Pending Telebirr H5 payment for {package.name}',
         is_successful=False,
+        # The payment counter has only just opened. Until queryOrder or the
+        # notify says otherwise this is PENDING, and PENDING grants nothing.
+        payment_state=payment_status.PENDING,
     )
 
     return Response(
@@ -1452,6 +1457,8 @@ def _credit_telebirr_order(merch_order_id, payment_order_id=None):
 
         coin_tx.coins = total_coins
         coin_tx.is_successful = True
+        coin_tx.payment_state = payment_status.SUCCESS
+        coin_tx.payment_reason = ''
         coin_tx.payment_reference = payment_order_id or merch_order_id
         coin_tx.description = (
             f'Successful Telebirr payment for {package.name if package else "Unknown"}'
@@ -1485,12 +1492,24 @@ def telebirr_callback(request):
 
         return telebirr_one_time_callback(request)
 
-    if not notify.get('is_paid'):
-        CoinTransaction.objects.filter(
-            payment_reference=merch_order_id,
-            payment_method='telebirr',
-            is_successful=False,
-        ).update(description=f'Failed Telebirr payment: {notify.get("trade_status")}')
+    state, reason = payment_status.from_h5_order(trade_status=notify.get('trade_status'))
+
+    if not payment_status.grants_value(state):
+        # Only a terminal outcome closes the purchase. A notify that says the
+        # order is still in flight leaves the row PENDING rather than marking
+        # it failed -- being told "failed" for a payment that then succeeds is
+        # the same class of bug as being told "successful" for one that did
+        # not, in the other direction.
+        if payment_status.is_terminal(state):
+            CoinTransaction.objects.filter(
+                payment_reference=merch_order_id,
+                payment_method='telebirr',
+                payment_state=payment_status.PENDING,
+            ).update(
+                description=f'Failed Telebirr payment: {notify.get("trade_status")}'[:255],
+                payment_state=state,
+                payment_reason=reason or '',
+            )
         return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'received'})
 
     handled, coins_added = _credit_telebirr_order(
@@ -1606,22 +1625,47 @@ def telebirr_query_order(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # The provider's own status, mapped once into the vocabulary every client
+    # reads. `is_paid` alone could not distinguish PAY_FAILED from WAIT_PAY,
+    # so the SuperApp reported both as "pending" -- and the page draws
+    # anything that is not an outright error as a success.
+    state, reason = payment_status.from_h5_order(
+        order_status=result.get('order_status'),
+        trade_status=result.get('trade_status'),
+    )
+
     coins_added = 0
-    if result.get('is_paid'):
+    # Crediting keys off the mapped state, not off is_paid, so there is one
+    # answer to "did this succeed" rather than two that can disagree.
+    if payment_status.grants_value(state):
         _, coins_added = _credit_telebirr_order(
             merch_order_id, payment_order_id=result.get('payment_order_id')
         )
+    elif payment_status.is_terminal(state):
+        # A refusal is written down, so a reload after the payment counter
+        # closes still finds the failure instead of an eternal "pending".
+        CoinTransaction.objects.filter(
+            payment_reference=merch_order_id,
+            payment_method='telebirr',
+            payment_state=payment_status.PENDING,
+        ).update(
+            payment_state=state,
+            payment_reason=reason or '',
+            description=f'Failed Telebirr payment: {result.get("order_status") or state}'[:255],
+        )
 
     return Response(
-        {
-            'success': True,
-            'is_paid': result.get('is_paid'),
-            'trade_status': result.get('trade_status'),
-            'order_status': result.get('order_status'),
-            'merch_order_id': merch_order_id,
-            'payment_order_id': result.get('payment_order_id'),
-            'coins_added': coins_added,
-        }
+        payment_status.payload(
+            state,
+            reason,
+            success=True,
+            is_paid=result.get('is_paid'),
+            trade_status=result.get('trade_status'),
+            order_status=result.get('order_status'),
+            merch_order_id=merch_order_id,
+            payment_order_id=result.get('payment_order_id'),
+            coins_added=coins_added,
+        )
     )
 
 
@@ -1760,6 +1804,10 @@ def telebirr_ussd_purchase(request):
                 f'{package.name if package else f"{amount} ETB"}: {error_text}'
             )[:255],
             is_successful=False,
+            # Nothing reached telebirr, so this will never be confirmed: a
+            # terminal failure, not a payment to keep waiting on.
+            payment_state=payment_status.FAILED,
+            payment_reason=payment_status.classify_reason(error_text),
         )
         logger.warning(
             '[USSD PURCHASE] Initiation failed for user=%s %s: %s',
@@ -1785,6 +1833,7 @@ def telebirr_ussd_purchase(request):
         coins=0,  # credited after payment confirmation
         payment_method='telebirr_ussd',
         payment_reference=result.get('originator_conversation_id'),
+        provider_conversation_id=result.get('originator_conversation_id'),
         package=package,
         quoted_coins=quoted_coins,
         amount_etb=amount_etb,
@@ -1794,6 +1843,10 @@ def telebirr_ussd_purchase(request):
             else f'Pending USSD Push payment for {amount} ETB ({coins} coins)'
         ),
         is_successful=False,
+        # A push has gone to the handset and nothing has come back yet. The
+        # client polls /wallet/telebirr/ussd/status/ for this row, and until
+        # the callback lands it is told PENDING -- never success.
+        payment_state=payment_status.PENDING,
     )
 
     # `package` stays in the response for the clients that read it; a custom
@@ -1820,6 +1873,74 @@ def telebirr_ussd_purchase(request):
             if package
             else None,
         }
+    )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@encrypted_endpoint
+def telebirr_ussd_status(request):
+    """The state of a USSD Push coin purchase.
+
+    This did not exist. The page watched the wallet balance instead and called
+    any increase a successful purchase -- so a gift arriving mid-wait was
+    reported as "Payment successful!", and a payment telebirr refused was
+    reported, after a two-minute timeout, as "we have not received a
+    confirmation yet". Neither is the truth, and neither came from the server.
+
+    Scoped to the requesting user, so a conversation id is not a lookup key
+    for somebody else's purchase.
+
+    Query param: ?originator_conversation_id=<id>
+    """
+    conversation_id = request.query_params.get('originator_conversation_id')
+    if not conversation_id:
+        return Response(
+            {'error': 'originator_conversation_id is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # By provider_conversation_id, not payment_reference: crediting overwrites
+    # the latter with telebirr's transaction id, so a purchase confirmed
+    # between two polls would otherwise read as "not found" at the very moment
+    # it succeeded.
+    coin_tx = (
+        CoinTransaction.objects.filter(
+            user=request.user,
+            payment_method='telebirr_ussd',
+            provider_conversation_id=conversation_id,
+        )
+        .order_by('-created_at')
+        .first()
+    )
+    if coin_tx is None:
+        # Started before that column existed, and still waiting.
+        coin_tx = (
+            CoinTransaction.objects.filter(
+                user=request.user,
+                payment_method='telebirr_ussd',
+                payment_reference=conversation_id,
+            )
+            .order_by('-created_at')
+            .first()
+        )
+
+    if coin_tx is None:
+        return Response({'error': 'Purchase not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(
+        payment_status.payload(
+            coin_tx.payment_state,
+            coin_tx.payment_reason or None,
+            originator_conversation_id=conversation_id,
+            coins_added=coin_tx.coins if coin_tx.payment_state == payment_status.SUCCESS else 0,
+            amount_etb=(
+                str(coin_tx.amount_etb)
+                if coin_tx.amount_etb is not None
+                else (str(coin_tx.package.price_etb) if coin_tx.package else None)
+            ),
+            package_name=coin_tx.package.name if coin_tx.package else None,
+        )
     )
 
 
@@ -1865,6 +1986,8 @@ def _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=None)
 
         coin_tx.coins = total_coins
         coin_tx.is_successful = True
+        coin_tx.payment_state = payment_status.SUCCESS
+        coin_tx.payment_reason = ''
         coin_tx.payment_reference = transaction_id or originator_conversation_id
         coin_tx.description = (
             f'Successful USSD Push payment for {package.name}'
@@ -1899,12 +2022,22 @@ def telebirr_ussd_webhook(request):
     is_success = result_code == '0' and result_type == '0'
 
     if not is_success:
-        logger.warning('[USSD WEBHOOK] Payment failed: %s', result_desc)
+        state, reason = payment_status.from_ussd_result(result_code, result_type, result_desc)
+        logger.warning(
+            '[USSD WEBHOOK] Payment %s (%s): %s', state, reason or 'unclassified', result_desc
+        )
+        # Only a row still waiting is moved. A callback delivered twice finds
+        # nothing left in PENDING and changes nothing -- the same idempotence
+        # the success path gets from is_successful=False.
         CoinTransaction.objects.filter(
             payment_reference=originator_conversation_id,
             payment_method='telebirr_ussd',
-            is_successful=False,
-        ).update(description=f'Failed USSD Push payment: {result_desc}')
+            payment_state=payment_status.PENDING,
+        ).update(
+            description=f'Failed USSD Push payment: {result_desc}'[:255],
+            payment_state=state,
+            payment_reason=reason or '',
+        )
         return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'received'})
 
     handled, coins_added = _credit_telebirr_ussd_order(

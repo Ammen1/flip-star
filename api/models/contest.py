@@ -241,6 +241,46 @@ class CoinTransaction(models.Model):
     description = models.CharField(max_length=255, blank=True)
     is_successful = models.BooleanField(default=True)
 
+    # Where the payment actually got to.
+    #
+    # `is_successful` cannot answer that on its own: it is False both for a
+    # payment still waiting for its callback and for one telebirr refused, so
+    # nothing could tell a customer their payment had failed -- which is how a
+    # failed purchase came to be reported as "we have not received a
+    # confirmation yet". The vocabulary is api/services/payment_status.py, and
+    # the two fields are kept in step by mark_payment_state() below.
+    #
+    # Rows written before this column existed carry SUCCESS or PENDING
+    # according to their `is_successful` (migration 0100), which is exactly
+    # what they meant.
+    PAYMENT_STATES = [
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    payment_state = models.CharField(
+        max_length=16,
+        choices=PAYMENT_STATES,
+        default='SUCCESS',
+        db_index=True,
+        help_text='Authoritative payment state; only SUCCESS may move a balance',
+    )
+    # Why it did not succeed, for the message the customer is shown. Blank for
+    # a success, and for a failure the provider gave no usable wording for.
+    payment_reason = models.CharField(max_length=32, blank=True)
+
+    # The id the *client* holds while it waits: telebirr's
+    # OriginatorConversationID for a USSD push, our merch_order_id for H5.
+    #
+    # `payment_reference` cannot serve: crediting overwrites it with
+    # telebirr's own transaction id (which is what wallet and charging
+    # history show as the transaction id), so the moment a payment succeeded
+    # the page polling it could no longer find it -- a confirmed purchase
+    # would have read as "not found" on the very next poll. Kept separate so
+    # the correlation key survives the payment settling.
+    provider_conversation_id = models.CharField(max_length=100, blank=True, db_index=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -284,6 +324,20 @@ class CoinTransaction(models.Model):
                 name='one_ondemand_allocation_per_payment',
             ),
         ]
+
+    def mark_payment_state(self, state, reason=None, *, save=True):
+        """Record where the payment got to, keeping `is_successful` in step.
+
+        The two fields must never disagree -- `is_successful` is what the
+        balance arithmetic and the pending-row lookups key on, `payment_state`
+        is what a client is told -- so they are only ever set together.
+        """
+        self.payment_state = state
+        self.payment_reason = reason or ''
+        self.is_successful = state == 'SUCCESS'
+        if save:
+            self.save(update_fields=['payment_state', 'payment_reason', 'is_successful'])
+        return self
 
 
 class UserCoinBalance(models.Model):

@@ -471,6 +471,7 @@ from api.views.wallet import (
     telebirr_initiate_payment,
     telebirr_query_order,
     telebirr_ussd_purchase,
+    telebirr_ussd_status,
     telebirr_ussd_webhook,
     wallet_summary,
     wallet_transactions,
@@ -1077,6 +1078,9 @@ urlpatterns = [
     path('wallet/telebirr/auth/', telebirr_auth, name='telebirr-auth'),
     path('wallet/telebirr/query/', telebirr_query_order, name='telebirr-query'),
     path('wallet/telebirrUssdPurchase/', telebirr_ussd_purchase, name='telebirr-ussd-purchase'),
+    # What the page polls while the push is on the handset: the payment's
+    # own state, rather than a guess made from the wallet balance.
+    path('wallet/telebirr/ussd/status/', telebirr_ussd_status, name='telebirr-ussd-status'),
     path('webhooks/telebirrUssdPurchase/', telebirr_ussd_webhook, name='telebirr-ussd-webhook'),
     # Same view without the trailing slash. Telebirr registered
     # `http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase` -- no

@@ -26,6 +26,7 @@ from api.models.subscription import (
 from api.models.subscription import (
     SubscriptionPlan as UserSubscription,
 )
+from api.services import payment_status
 from api.services.subscription_access import (
     active_subscription_for,
     already_subscribed_payload,
@@ -1168,9 +1169,29 @@ def telebirr_one_time_callback(request):
                 )
                 activated_subscription = subscription
             else:
-                logger.warning('[TELEBIRR ONE-TIME] Payment failed: %s', trade_status)
-                subscription.status = 'failed'
-                subscription.save()
+                # The other direction of the same bug. This marked the
+                # subscription `failed` for *anything* that was not
+                # Completed -- a notify meaning "still waiting" included --
+                # and activation only ever looks at rows still `pending`. So a
+                # payment that then succeeded could never be applied: money
+                # taken, nothing granted, and the customer told it failed.
+                notified_state, notified_reason = payment_status.from_h5_order(
+                    trade_status=trade_status
+                )
+                if payment_status.is_terminal(notified_state):
+                    logger.warning(
+                        '[TELEBIRR ONE-TIME] Payment %s (%s): %s',
+                        notified_state,
+                        notified_reason or 'unclassified',
+                        trade_status,
+                    )
+                    subscription.status = 'failed'
+                    subscription.save()
+                else:
+                    logger.info(
+                        '[TELEBIRR ONE-TIME] Payment still in flight (%s); left pending',
+                        trade_status,
+                    )
 
         # Best-effort SMS, outside the transaction -- non-fatal if it fails,
         # the subscription is already activated.
@@ -1211,6 +1232,20 @@ def telebirr_one_time_callback(request):
         return Response({'result': 'SUCCESS', 'code': '0', 'msg': 'error processed'})
 
 
+#: A subscription's status, as a payment state. The two vocabularies are not
+#: the same thing -- 'expired' is a subscription that was paid for and has run
+#: out, which is a *successful* payment -- so the mapping is written down
+#: rather than inferred from the name.
+SUBSCRIPTION_STATES = {
+    'active': payment_status.SUCCESS,
+    'expired': payment_status.SUCCESS,
+    'grace_period': payment_status.SUCCESS,
+    'pending': payment_status.PENDING,
+    'failed': payment_status.FAILED,
+    'cancelled': payment_status.CANCELLED,
+}
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 @encrypted_endpoint
@@ -1241,6 +1276,7 @@ def telebirr_one_time_query(request):
         if not subscription:
             return Response({'error': 'Subscription not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        failure_reason = None
         if subscription.status == 'pending':
             try:
                 query_result = telebirr_service.query_order(merch_order_id)
@@ -1296,34 +1332,46 @@ def telebirr_one_time_query(request):
                                     '[TELEBIRR ONE-TIME] Self-heal SMS failed (non-fatal): %s',
                                     sms_err,
                                 )
-                elif query_result.get('success') and query_result.get('order_status') in (
-                    'PAY_FAILED',
-                    'CLOSED',
-                    'CANCELLED',
-                ):
-                    with transaction.atomic():
-                        locked = (
-                            UserSubscription.objects.select_for_update()
-                            .filter(pk=subscription.pk, status='pending')
-                            .first()
-                        )
-                        if locked is not None:
-                            locked.status = 'failed'
-                            locked.save()
-                            subscription = locked
+                elif query_result.get('success'):
+                    # The same mapping the coin flows use, so "failed" means
+                    # the same thing on both -- and an order_status this code
+                    # has not seen stays pending rather than being called a
+                    # failure it may not be.
+                    queried_state, queried_reason = payment_status.from_h5_order(
+                        order_status=query_result.get('order_status'),
+                        trade_status=query_result.get('trade_status'),
+                    )
+                    if payment_status.is_terminal(queried_state):
+                        with transaction.atomic():
+                            locked = (
+                                UserSubscription.objects.select_for_update()
+                                .filter(pk=subscription.pk, status='pending')
+                                .first()
+                            )
+                            if locked is not None:
+                                locked.status = 'failed'
+                                locked.save()
+                                subscription = locked
+                                failure_reason = queried_reason
             except Exception as query_err:
                 logger.warning(
                     '[TELEBIRR ONE-TIME] Active queryOrder check failed (non-fatal, leaving pending): %s',
                     query_err,
                 )
 
+        # `status` stays for the clients already reading it; `state` is the
+        # one vocabulary every payment flow answers in, and is what decides
+        # whether a success screen may be shown.
+        state = SUBSCRIPTION_STATES.get(subscription.status, payment_status.PENDING)
         return Response(
-            {
-                'status': subscription.status,
-                'subscription_id': str(subscription.id),
-                'end_date': subscription.end_date.isoformat() if subscription.end_date else None,
-                'plan_type': subscription.duration_type,
-            }
+            payment_status.payload(
+                state,
+                failure_reason if state != payment_status.SUCCESS else None,
+                status=subscription.status,
+                subscription_id=str(subscription.id),
+                end_date=subscription.end_date.isoformat() if subscription.end_date else None,
+                plan_type=subscription.duration_type,
+            )
         )
 
     except Exception as e:
