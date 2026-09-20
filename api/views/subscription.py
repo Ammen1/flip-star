@@ -71,18 +71,15 @@ class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
     def get(self, request):
         """Get current user's subscription status"""
         try:
-            from django.utils import timezone
-
             from api.models import Subscription
 
             print(
                 f'[SUBSCRIPTION STATUS] Checking subscription for user: {request.user.username} (ID: {request.user.id})'
             )
 
-            # First check new UserSubscription model
-            active_subscription = UserSubscription.objects.filter(
-                user=request.user, status='active', end_date__gt=timezone.now()
-            ).first()
+            # Use the shared predicate so the status API and subscriber-only
+            # endpoints cannot disagree about an active plan.
+            active_subscription = active_subscription_for(user=request.user)
 
             print(
                 f'[SUBSCRIPTION STATUS] UserSubscription active found: {active_subscription is not None}'

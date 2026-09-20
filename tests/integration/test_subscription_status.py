@@ -177,6 +177,47 @@ def test_active_subscription_returns_true(server_public_key, client_keys, user, 
     assert body['subscription']['tier']['name'] == 'Audit Monthly'
 
 
+def test_active_airtime_recurring_subscription_returns_true(
+    server_public_key, client_keys, user, tier
+):
+    """An active open-ended Airtime plan must grant access to both clients."""
+    pub, priv = client_keys
+    SubscriptionPlan.objects.create(
+        user=user,
+        tier=tier,
+        status='active',
+        payment_method='onevas',
+        auto_renew=True,
+        start_date=timezone.now() - timedelta(days=30),
+        end_date=None,
+    )
+
+    r = _get(user, pub)
+    assert r.status_code == 200, r.content[:400]
+    body = _body(r, server_public_key=server_public_key, client_private_key=priv)
+    _assert_contract(body)
+    assert body['has_subscription'] is True
+    assert body['subscription']['auto_renew'] is True
+    assert body['subscription']['end_date'] is None
+
+
+def test_active_plan_without_end_date_is_active_for_access(user, tier):
+    """The shared access predicate matches the status endpoint for open plans."""
+    from api.services.subscription_access import has_active_subscription
+
+    SubscriptionPlan.objects.create(
+        user=user,
+        tier=tier,
+        status='active',
+        payment_method='onevas',
+        auto_renew=True,
+        start_date=timezone.now() - timedelta(days=30),
+        end_date=None,
+    )
+
+    assert has_active_subscription(user) is True
+
+
 def test_expired_subscription_is_not_active(server_public_key, client_keys, user, tier):
     pub, priv = client_keys
     _plan(user, tier, status='active', days=-1)
@@ -227,7 +268,9 @@ def test_no_status_value_produces_a_500(server_public_key, client_keys, user, ti
     _assert_contract(_body(r, server_public_key=server_public_key, client_private_key=priv))
 
 
-def test_active_subscription_exposes_the_actual_store_gift(server_public_key, client_keys, user, tier):
+def test_active_subscription_exposes_the_actual_store_gift(
+    server_public_key, client_keys, user, tier
+):
     """The profile's Daily Streak panel shows the reward that exists, not one
     that is made up. Whatever amount this tier is configured to credit per
     completed charge (api/services/subscription_gift.py) must be exactly what

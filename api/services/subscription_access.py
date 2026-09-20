@@ -6,8 +6,8 @@ payload for the client; this module answers the single yes/no question the
 write endpoints need, using the same definition of "active" so the two can
 never disagree:
 
-* a ``SubscriptionPlan`` with ``status='active'`` whose ``end_date`` is still
-  in the future, or
+* a ``SubscriptionPlan`` with ``status='active'`` whose ``end_date`` is either
+    open-ended or still in the future, or
 * a legacy ``Subscription`` row that has not yet expired.
 
 Kept separate from the view so posting endpoints do not have to import view
@@ -36,7 +36,14 @@ def has_active_subscription(user):
 
     now = timezone.now()
 
-    if SubscriptionPlan.objects.filter(user=user, status='active', end_date__gt=now).exists():
+    if (
+        SubscriptionPlan.objects.filter(
+            user=user,
+            status='active',
+        )
+        .filter(models.Q(end_date__isnull=True) | models.Q(end_date__gt=now))
+        .exists()
+    ):
         return True
 
     return Subscription.objects.filter(user=user, expires_at__gt=now).exists()
