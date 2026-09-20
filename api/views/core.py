@@ -1,3 +1,4 @@
+import logging
 import re
 import string
 import traceback
@@ -59,6 +60,15 @@ from api.services.subscription_access import (
     payment_pending_payload,
     subscription_required_payload,
 )
+from api.services.usernames import (
+    is_duplicate_username_error,
+)
+from api.services.usernames import (
+    is_taken as username_is_taken,
+)
+from api.services.usernames import (
+    taken_payload as username_taken_payload,
+)
 from common.permissions import IsOwnerOrStaffOrReadOnly
 from common.security import EncryptedPayloadMixin, encrypted_endpoint, is_pin_too_weak
 from common.throttling import (
@@ -80,6 +90,8 @@ from common.throttling import (
     is_blocked,
 )
 from common.validators import normalize_ethiopian_phone
+
+logger = logging.getLogger(__name__)
 
 
 # ── OTP / Phone helpers ────────────────────────────────────────────────────
@@ -854,12 +866,12 @@ def register_with_phone(request):
             )
         print('[REGISTRATION DEBUG] Verification marker found')
 
-    if User.objects.filter(username=username).exists():
+    # Case-insensitive: 'Ammen' and 'ammen' are the same name here, because
+    # gift delivery resolves recipients with username__iexact and would match
+    # both. See api/services/usernames.py.
+    if username_is_taken(username):
         print(f'[REGISTRATION DEBUG] Username already taken: {username}')
-        return Response(
-            {'error': 'Username already taken. Please choose another.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
     if UserProfile.objects.filter(phone_number=phone).exists():
         print(f'[REGISTRATION DEBUG] Phone number already registered: {phone}')
         return Response(
@@ -925,7 +937,21 @@ def register_with_phone(request):
         import traceback
 
         print(f'[REGISTRATION DEBUG] Traceback: {traceback.format_exc()}')
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        # A duplicate that slipped past the pre-check: two requests passed it
+        # before either wrote, and the database constraint caught the second.
+        # That is the constraint doing its job, so it is reported as the same
+        # ordinary 409 the pre-check returns -- not as a failure.
+        if is_duplicate_username_error(e):
+            return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
+
+        # Everything else: logged in full, described in general. `str(e)` here
+        # put database constraint text, table names and column names in front
+        # of the customer.
+        logger.exception('[REGISTRATION] Failed for phone=%s', phone)
+        return Response(
+            {'error': 'We could not create your account. Please try again.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 # ── Forgot Password (email-based) ──────────────────────────────────────────
@@ -1021,9 +1047,9 @@ def login_with_subscription_otp(request):
             {'error': 'Username is required for new accounts'}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Check if username already exists
-    if User.objects.filter(username=username).exists():
-        return Response({'error': 'Username already taken'}, status=status.HTTP_400_BAD_REQUEST)
+    # Same rule as every other place a username is claimed.
+    if username_is_taken(username):
+        return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
 
     # Create user account
     try:
@@ -1061,11 +1087,18 @@ def login_with_subscription_otp(request):
         )
 
     except Exception as e:
-        print(f'[SUBSCRIPTION LOGIN DEBUG] Error: {str(e)}')
-        import traceback
+        # Same two cases as register_with_phone: a duplicate the constraint
+        # caught is a 409 the customer can act on, and anything else is logged
+        # in full but described in general. The traceback stays in the log --
+        # it was never something to return.
+        if is_duplicate_username_error(e):
+            return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
 
-        print(f'[SUBSCRIPTION LOGIN DEBUG] Traceback: {traceback.format_exc()}')
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        logger.exception('[SUBSCRIPTION LOGIN] Account creation failed')
+        return Response(
+            {'error': 'We could not create your account. Please try again.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
 
 @api_view(['POST'])
