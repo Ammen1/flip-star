@@ -237,6 +237,15 @@ def purchase_coins_on_demand(request):
     """
     from django.conf import settings
 
+    from api.services.subscription_access import coin_purchase_refusal
+
+    # The same rule the telebirr paths enforce: coins are a subscriber
+    # benefit. Refused before the airtime charge is built, so no money is
+    # taken from the account and no balance moves.
+    refusal = coin_purchase_refusal(request.user)
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     price_etb = (
         request.data.get('price_etb')
         or request.data.get('amount')

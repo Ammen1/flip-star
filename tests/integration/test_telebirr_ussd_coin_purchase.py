@@ -88,9 +88,32 @@ def package(db):
 
 @pytest.fixture
 def user_with_phone(db):
+    """A customer who can buy coins: phone on file, and active access.
+
+    The plan is not incidental. Coins are a subscriber benefit, and every
+    purchase endpoint refuses a caller without live access
+    (api/services/subscription_access.coin_purchase_refusal) before reading a
+    package or contacting telebirr -- so without it these tests are answered
+    403 and never reach the behaviour they describe.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from api.models import SubscriptionTier
+    from api.models.subscription import SubscriptionPlan
+
     u = User.objects.create_user(username='ussd_purchase_user', password='x')
     u.profile.phone_number = '251911000222'
     u.profile.save()
+
+    SubscriptionPlan.objects.create(
+        user=u,
+        tier=SubscriptionTier.objects.filter(duration_type='monthly').first(),
+        status='active',
+        start_date=timezone.now() - timedelta(days=1),
+        end_date=timezone.now() + timedelta(days=30),
+    )
     yield u
     u.delete()
 

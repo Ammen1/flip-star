@@ -135,6 +135,55 @@ class Campaign(models.Model):
     def __str__(self):
         return f'{self.title} ({self.status})'
 
+    #: The timeline, in the order the campaign actually runs. Stated once so
+    #: validation and any report of a broken campaign agree on what "in order"
+    #: means.
+    TIMELINE = (
+        ('start_date', 'Start date'),
+        ('entry_deadline', 'Entry deadline'),
+        ('voting_start', 'Voting start'),
+        ('voting_end', 'Voting end'),
+    )
+
+    def timeline_problems(self):
+        """Pairs of dates that run backwards, as readable sentences.
+
+        A campaign whose entry deadline falls after its voting end is not a
+        display bug: a timezone offset is uniform, so if one instant precedes
+        another it precedes it in every timezone -- rendering can collapse two
+        dates onto the same day but never reverse them. Dates that appear out
+        of order are stored out of order.
+
+        Nothing prevented that. The model had no validation, the create and
+        update endpoints passed the values straight through, and every layer
+        below faithfully displayed what it was given.
+
+        Blank dates are skipped rather than treated as zero: a campaign that
+        has not scheduled its voting yet is incomplete, not inconsistent.
+        """
+        problems = []
+        known = [(name, label, getattr(self, name)) for name, label in self.TIMELINE]
+        filled = [(name, label, value) for name, label, value in known if value is not None]
+
+        for (_, earlier_label, earlier), (_, later_label, later) in zip(
+            filled, filled[1:], strict=False
+        ):
+            if earlier > later:
+                problems.append(f'{earlier_label} is after {later_label}.')
+        return problems
+
+    def clean(self):
+        """Refuse a timeline that runs backwards.
+
+        Raises ValidationError so the Django admin and any serializer calling
+        full_clean() both reject it, rather than each re-deriving the rule.
+        """
+        from django.core.exceptions import ValidationError
+
+        problems = self.timeline_problems()
+        if problems:
+            raise ValidationError({'entry_deadline': problems})
+
     def is_active(self):
         now = timezone.now()
         if not self.start_date or not self.entry_deadline:

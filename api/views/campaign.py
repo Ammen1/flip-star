@@ -148,7 +148,7 @@ def admin_campaign_create(request):
         voting_start = request.data.get('voting_start') or None
         voting_end = request.data.get('voting_end') or None
 
-        campaign = Campaign.objects.create(
+        campaign = Campaign(
             title=request.data.get('title'),
             description=request.data.get('description'),
             campaign_type=request.data.get('campaign_type', 'grand'),
@@ -170,6 +170,21 @@ def admin_campaign_create(request):
             # From the account, not from request.data.
             organization=owning_organization,
         )
+
+        # Built unsaved so the timeline can be checked before anything is
+        # written -- a campaign whose dates run backwards is never stored, so
+        # no later screen has to cope with one.
+        problems = campaign.timeline_problems()
+        if problems:
+            return Response(
+                {
+                    'error': 'The campaign timeline is out of order.',
+                    'code': 'TIMELINE_OUT_OF_ORDER',
+                    'problems': problems,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        campaign.save()
 
         # Handle image upload
         if 'image' in request.FILES:
@@ -238,6 +253,20 @@ def admin_campaign_update(request, campaign_id):
         if 'image' in request.FILES:
             print(f"[UPDATE] Image file: {request.FILES['image'].name}")
             campaign.image = request.FILES['image']
+
+        # Refuse a timeline that runs backwards before it is stored. The model
+        # defines the rule; this is what stops a direct API call writing an
+        # entry deadline that falls after voting has ended.
+        problems = campaign.timeline_problems()
+        if problems:
+            return Response(
+                {
+                    'error': 'The campaign timeline is out of order.',
+                    'code': 'TIMELINE_OUT_OF_ORDER',
+                    'problems': problems,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         campaign.save()
         print(f'[UPDATE] Campaign {campaign_id} saved successfully')
@@ -474,6 +503,9 @@ def user_campaigns_list(request):
                 'has_entered': c.id in entered_ids,
                 'is_active': c_is_active,
                 'is_voting_open': c_is_voting,
+                'min_followers': c.min_followers,
+                'min_level': c.min_level,
+                'user_level': user_profile.level if user_profile else 1,
             }
         )
 
@@ -697,6 +729,20 @@ def user_campaign_detail(request, campaign_id):
         campaign = Campaign.objects.get(id=campaign_id)
         is_authenticated = request.user.is_authenticated
         user = request.user if is_authenticated else None
+        user_profile = user.profile if (user and hasattr(user, 'profile')) else None
+        user_level = user_profile.level if user_profile else 1
+        user_xp = user_profile.xp if user_profile else 0
+        user_xp_for_next_level = (user_level * 1000) - user_xp if user_profile else 0
+
+        # Check eligibility
+        is_eligible = True
+        if is_authenticated:
+            if campaign.min_followers > 0:
+                follower_count = Follow.objects.filter(following=user).count()
+                if follower_count < campaign.min_followers:
+                    is_eligible = False
+            if campaign.min_level > user_level:
+                is_eligible = False
 
         # An entry whose media is still being encoded (or failed) has nothing
         # to show anyone but its author, who sees its state instead.
@@ -791,6 +837,10 @@ def user_campaign_detail(request, campaign_id):
                 'required_hashtags': campaign.required_hashtags,
                 'current_user_id': user.id if user else None,
                 'entries': entries_data,
+                'user_level': user_level,
+                'user_xp': user_xp,
+                'user_xp_for_next_level': user_xp_for_next_level,
+                'is_eligible': is_eligible,
             }
         )
 

@@ -130,9 +130,32 @@ def configured(settings):
 
 @pytest.fixture
 def user():
+    """A customer who can buy coins: phone on file, and active access.
+
+    The access is not incidental. Coins are a subscriber benefit, and every
+    purchase endpoint now refuses a caller without a live plan (see
+    api/services/subscription_access.coin_purchase_refusal). A fixture without
+    one is refused 403 before reaching any of the charging behaviour these
+    tests are about.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from api.models import SubscriptionTier
+    from api.models.subscription import SubscriptionPlan
+
     u = User.objects.create_user(username='payer', password='x')
     u.profile.phone_number = MSISDN
     u.profile.save(update_fields=['phone_number'])
+
+    SubscriptionPlan.objects.create(
+        user=u,
+        tier=SubscriptionTier.objects.filter(duration_type='monthly').first(),
+        status='active',
+        start_date=timezone.now() - timedelta(days=1),
+        end_date=timezone.now() + timedelta(days=30),
+    )
     return u
 
 

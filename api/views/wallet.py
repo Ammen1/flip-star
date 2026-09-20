@@ -38,6 +38,7 @@ from api.services.coin_packages import (
 )
 from api.services.coin_pricing import public_pricing as custom_purchase_pricing
 from api.services.media_pipeline import served_url
+from api.services.subscription_access import coin_purchase_refusal
 from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
     classify_initiation_failure,
@@ -1330,6 +1331,11 @@ def telebirr_initiate_payment(request):
     the real Telebirr H5/Fabric flow, not a browser redirect. See
     api/integrations/telebirr/checkout.py's module docstring.
     """
+    # Same rule as the USSD path: refused before an order exists.
+    refusal = coin_purchase_refusal(request.user)
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     package_id = request.data.get('package_id')
 
     if not package_id:
@@ -1646,6 +1652,13 @@ def telebirr_ussd_purchase(request):
     """
     from api.services.coin_pricing import CoinPricingError
     from api.services.coin_pricing import quote as quote_coins
+
+    # Before anything is priced, reserved or sent to telebirr: coins are a
+    # subscriber benefit, so no access means no purchase. Checked here rather
+    # than only on the page, because the page is not what the API trusts.
+    refusal = coin_purchase_refusal(request.user)
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
 
     package_id = request.data.get('package_id')
     raw_amount = request.data.get('amount_etb')

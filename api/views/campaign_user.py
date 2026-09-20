@@ -36,6 +36,11 @@ def get_active_campaigns(request):
         status='active', start_date__lte=now, entry_deadline__gte=now
     )
 
+    # Get user profile for level check
+    user_profile = request.user.profile if request.user.is_authenticated and hasattr(request.user, 'profile') else None
+    user_level = user_profile.level if user_profile else 1
+    user_xp = user_profile.xp if user_profile else 0
+
     data = []
     for campaign in campaigns:
         # Get active theme
@@ -48,6 +53,16 @@ def get_active_campaigns(request):
             else None
         )
 
+        # Check eligibility
+        is_eligible = True
+        if request.user.is_authenticated:
+            if campaign.min_followers > 0 and hasattr(request.user, 'profile'):
+                follower_count = request.user.profile.user.followers.count() if hasattr(request.user.profile.user, 'followers') else 0
+                if follower_count < campaign.min_followers:
+                    is_eligible = False
+            if campaign.min_level > user_level:
+                is_eligible = False
+
         data.append(
             {
                 'id': campaign.id,
@@ -58,6 +73,9 @@ def get_active_campaigns(request):
                 'start_date': campaign.start_date,
                 'entry_deadline': campaign.entry_deadline,
                 'total_entries': campaign.total_entries,
+                'min_followers': campaign.min_followers,
+                'min_level': campaign.min_level,
+                'required_hashtags': campaign.required_hashtags,
                 'active_theme': {
                     'id': active_theme.id,
                     'title': active_theme.title,
@@ -70,6 +88,7 @@ def get_active_campaigns(request):
                 'user_joined': user_stats is not None,
                 'user_posts': user_stats.approved_posts if user_stats else 0,
                 'user_rank': user_stats.overall_rank if user_stats else None,
+                'is_eligible': is_eligible,
             }
         )
 
@@ -108,6 +127,12 @@ def get_campaign_detail_extended(request, campaign_id):
         if request.user.is_authenticated
         else None
     )
+
+    # Get user's level and XP
+    user_profile = request.user.profile if request.user.is_authenticated and hasattr(request.user, 'profile') else None
+    user_level = user_profile.level if user_profile else 1
+    user_xp = user_profile.xp if user_profile else 0
+    user_xp_for_next_level = (user_level * 1000) - user_xp if user_profile else 0
 
     # Get user's posts in this campaign
     user_posts = (
@@ -153,6 +178,9 @@ def get_campaign_detail_extended(request, campaign_id):
                 'required_hashtags': campaign.required_hashtags,
             },
             'themes': themes_data,
+            'user_level': user_level,
+            'user_xp': user_xp,
+            'user_xp_for_next_level': user_xp_for_next_level,
             'user_stats': {
                 'total_posts': user_stats.total_posts if user_stats else 0,
                 'approved_posts': user_stats.approved_posts if user_stats else 0,

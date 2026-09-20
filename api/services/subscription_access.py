@@ -56,6 +56,44 @@ def subscription_required_payload(message=None):
     }
 
 
+#: Refusing a coin purchase for want of access. Distinct from
+#: SUBSCRIPTION_REQUIRED_CODE so a client can tell "you cannot post" from
+#: "you cannot buy coins" and send the customer to the right place.
+COIN_PURCHASE_REQUIRES_ACCESS_CODE = 'ACCESS_REQUIRED_FOR_COIN_PURCHASE'
+
+COIN_PURCHASE_REQUIRES_ACCESS_MESSAGE = (
+    'Coins can only be bought with an active FlipStar plan. '
+    'Please subscribe or renew your plan, then try again.'
+)
+
+
+def coin_purchase_refusal(user):
+    """Why this customer may not buy coins, or None if they may.
+
+    One rule for every way in -- the USSD push, the SuperApp H5 order and the
+    airtime charge -- because a check on only some of them is not a rule, it
+    is a suggestion. The frontend hides the button; this is what makes it
+    true when somebody calls the API directly.
+
+    "Active access" is `has_active_subscription`, the same predicate that
+    gates posting, so access cannot come to mean two different things
+    depending on which feature asks. It already treats an `end_date` in the
+    past as inactive however the status column reads, which is what makes an
+    expired plan a refusal rather than a pass.
+
+    Returns a ready-to-send body, or None. Deliberately not a boolean: the
+    caller should not be composing its own wording for a rule defined here.
+    """
+    if has_active_subscription(user):
+        return None
+    return {
+        'success': False,
+        'code': COIN_PURCHASE_REQUIRES_ACCESS_CODE,
+        'error': COIN_PURCHASE_REQUIRES_ACCESS_MESSAGE,
+        'message': COIN_PURCHASE_REQUIRES_ACCESS_MESSAGE,
+    }
+
+
 ALREADY_SUBSCRIBED_CODE = 'ALREADY_SUBSCRIBED'
 
 
