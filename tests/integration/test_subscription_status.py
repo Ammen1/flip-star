@@ -128,6 +128,9 @@ def _assert_contract(body):
         assert sub is not None
         for key in ('id', 'tier', 'status', 'start_date', 'end_date', 'auto_renew'):
             assert key in sub, f'missing {key} in {sub}'
+        tier = sub['tier']
+        for key in ('id', 'name', 'duration_type', 'price_etb', 'charge_gift_coins'):
+            assert key in tier, f'missing reward contract key {key} in tier {tier}'
     else:
         assert body['subscription'] is None
 
@@ -222,6 +225,39 @@ def test_no_status_value_produces_a_500(server_public_key, client_keys, user, ti
     r = _get(user, pub)
     assert r.status_code == 200, f'status={state!r} -> {r.status_code}: {r.content[:300]}'
     _assert_contract(_body(r, server_public_key=server_public_key, client_private_key=priv))
+
+
+def test_active_subscription_exposes_the_actual_store_gift(server_public_key, client_keys, user, tier):
+    """The profile's Daily Streak panel shows the reward that exists, not one
+    that is made up. Whatever amount this tier is configured to credit per
+    completed charge (api/services/subscription_gift.py) must be exactly what
+    the endpoint hands the frontend, so the displayed figure always matches
+    what the ledger will actually credit."""
+    pub, priv = client_keys
+    tier.charge_gift_coins = 7
+    tier.save(update_fields=['charge_gift_coins'])
+    _plan(user, tier, status='active', days=30)
+
+    r = _get(user, pub)
+    assert r.status_code == 200, r.content[:400]
+    body = _body(r, server_public_key=server_public_key, client_private_key=priv)
+    _assert_contract(body)
+    assert body['subscription']['tier']['charge_gift_coins'] == 7
+
+
+def test_a_nil_gift_is_zero_not_invented(server_public_key, client_keys, user, tier):
+    """A tier configured to credit nothing must report 0 -- never a made-up
+    amount -- so the streak panel does not promise coins a charge will not
+    add."""
+    pub, priv = client_keys
+    tier.charge_gift_coins = 0
+    tier.save(update_fields=['charge_gift_coins'])
+    _plan(user, tier, status='active', days=30)
+
+    r = _get(user, pub)
+    assert r.status_code == 200, r.content[:400]
+    body = _body(r, server_public_key=server_public_key, client_private_key=priv)
+    assert body['subscription']['tier']['charge_gift_coins'] == 0
 
 
 # ─── safety ───────────────────────────────────────────────────────────────────

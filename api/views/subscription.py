@@ -111,6 +111,17 @@ class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
                                 'price_etb': float(active_subscription.tier.price_etb)
                                 if active_subscription.tier
                                 else 0,
+                                # The one coin reward the backend still grants on a
+                                # daily cadence: every completed charge on this tier
+                                # credits this many coins automatically (see
+                                # api/services/subscription_gift.py). The profile's
+                                # Daily Streak feature reads it to tell the customer
+                                # what their plan actually pays them per charge.
+                                'charge_gift_coins': (
+                                    active_subscription.tier.charge_gift_coins
+                                    if active_subscription.tier
+                                    else 0
+                                ),
                             },
                             'status': active_subscription.status,
                             # A null start_date on an otherwise active plan made
@@ -151,6 +162,7 @@ class UserSubscriptionStatusView(EncryptedPayloadMixin, APIView):
                                 'name': old_subscription.plan,
                                 'duration_type': None,
                                 'price_etb': 0,
+                                'charge_gift_coins': 0,
                             },
                             'status': 'active',
                             'start_date': old_subscription.started_at.isoformat()
