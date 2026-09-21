@@ -34,8 +34,7 @@ ETHIOPIAN_MOBILE_RE = re.compile(r'^[79]\d{8}$')
 COUNTRY_CODE = '251'
 
 INVALID_PHONE_MESSAGE = (
-    'Please enter a valid Ethiopian phone number starting with 9 '
-    '(e.g. 944365493).'
+    'Please enter a valid Ethiopian phone number starting with 9 ' '(e.g. 944365493).'
 )
 
 # Only these are stripped before matching. Anything else -- a letter, a stray
@@ -66,7 +65,7 @@ def _subscriber_part(raw):
     # Strip at most one country code, then at most one trunk prefix. Doing it
     # once each is what rejects '251251944365493' and '00944365493'.
     if s.startswith(COUNTRY_CODE):
-        s = s[len(COUNTRY_CODE):]
+        s = s[len(COUNTRY_CODE) :]
     elif s.startswith('0'):
         s = s[1:]
 
