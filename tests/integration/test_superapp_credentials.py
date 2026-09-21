@@ -15,6 +15,9 @@ SMPP, which needs no per-product key -- so send_login_otp no longer resolves a
 key from the tier, and a client-supplied one has nowhere to go.
 """
 
+import json
+
+import fakeredis
 import pytest
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
@@ -23,10 +26,46 @@ from api.models import SubscriptionPlan, SubscriptionTier
 from api.views.core import send_login_otp
 from api.views.subscription import check_superapp_subscription
 from api.views.wallet import telebirr_auth
+from common.security.e2e_encryption import encrypt_payload, generate_keypair
+from infrastructure.keys import redis_store
 
 pytestmark = pytest.mark.django_db
 
 factory = APIRequestFactory()
+
+
+@pytest.fixture
+def _server_keys(db):
+    from infrastructure.keys import key_manager
+
+    redis_store.set_client(fakeredis.FakeRedis(decode_responses=True))
+    key_manager.reset()
+    key_manager.initialize()
+    yield key_manager.get_public_key()
+    key_manager.reset()
+    redis_store.reset_client()
+
+
+@pytest.fixture
+def client_keys():
+    return generate_keypair()
+
+
+def _post_encrypted(url, body, *, server_public_key, client_keys, view):
+    client_public_key, client_private_key = client_keys
+    sealed = encrypt_payload(
+        body,
+        receiver_public_key_b64=server_public_key,
+        sender_private_key_b64=client_private_key,
+    )
+    request = factory.post(
+        url,
+        data=json.dumps(sealed.to_dict()),
+        content_type='application/json',
+        HTTP_X_CLIENT_PUBLIC_KEY=client_public_key,
+    )
+    return view(request)
+
 
 PHONE_LOCAL = '0988990011'
 PHONE_E164 = '251988990011'
@@ -112,7 +151,9 @@ def test_check_superapp_reports_no_subscription_without_leaking(db, onevas_produ
     assert TIER_KEY not in str(response.data)
 
 
-def test_telebirr_auth_logs_into_active_subscription_without_profile(db, monthly_tier, monkeypatch):
+def test_telebirr_auth_logs_into_active_subscription_without_profile(
+    db, monthly_tier, monkeypatch, _server_keys, client_keys
+):
     subscription = SubscriptionPlan.objects.create(
         user=None,
         tier=monthly_tier,
@@ -134,8 +175,12 @@ def test_telebirr_auth_logs_into_active_subscription_without_profile(db, monthly
     )
 
     try:
-        response = telebirr_auth(
-            factory.post('/wallet/telebirr/auth/', {'access_token': 'token'}, format='json')
+        response = _post_encrypted(
+            '/wallet/telebirr/auth/',
+            {'access_token': 'token'},
+            server_public_key=_server_keys,
+            client_keys=client_keys,
+            view=telebirr_auth,
         )
 
         assert response.status_code == 200
