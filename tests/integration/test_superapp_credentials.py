@@ -22,6 +22,7 @@ from rest_framework.test import APIRequestFactory
 from api.models import SubscriptionPlan, SubscriptionTier
 from api.views.core import send_login_otp
 from api.views.subscription import check_superapp_subscription
+from api.views.wallet import telebirr_auth
 
 pytestmark = pytest.mark.django_db
 
@@ -109,6 +110,41 @@ def test_check_superapp_reports_no_subscription_without_leaking(db, onevas_produ
     assert response.status_code == 200
     assert response.data['has_active_subscription'] is False
     assert TIER_KEY not in str(response.data)
+
+
+def test_telebirr_auth_logs_into_active_subscription_without_profile(db, monthly_tier, monkeypatch):
+    subscription = SubscriptionPlan.objects.create(
+        user=None,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=timezone.now(),
+        end_date=timezone.now() + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number=PHONE_E164,
+    )
+
+    monkeypatch.setattr(
+        'api.views.wallet.telebirr_service.request_auth_token',
+        lambda _token: {
+            'success': True,
+            'identifier': PHONE_E164,
+            'open_id': 'open-id',
+        },
+    )
+
+    try:
+        response = telebirr_auth(
+            factory.post('/wallet/telebirr/auth/', {'access_token': 'token'}, format='json')
+        )
+
+        assert response.status_code == 200
+        assert response.data['token']
+        subscription.refresh_from_db()
+        assert subscription.user is not None
+        assert response.data.get('requires_subscription') is not True
+    finally:
+        subscription.delete()
 
 
 # ---------------------------------------------------------------------------

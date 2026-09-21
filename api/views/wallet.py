@@ -40,7 +40,7 @@ from api.services.coin_packages import (
 )
 from api.services.coin_pricing import public_pricing as custom_purchase_pricing
 from api.services.media_pipeline import served_url
-from api.services.subscription_access import coin_purchase_refusal
+from api.services.subscription_access import active_subscription_for, coin_purchase_refusal
 from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
     classify_initiation_failure,
@@ -1572,6 +1572,38 @@ def telebirr_auth(request):
         'identifier': auth_result.get('identifier'),
         'nickName': auth_result.get('nickName'),
     }
+
+    # The subscription record is authoritative for a SuperApp subscriber.
+    # A callback can activate a plan before the profile row is backfilled, so
+    # checking UserProfile first incorrectly treats that paid customer as new
+    # and sends the H5 back to the subscription page.
+    active_plan = active_subscription_for(
+        phone_number=phone_number,
+        payment_method='telebirr',
+    )
+    if active_plan is not None:
+        user = active_plan.user
+        if user is None:
+            user, _created = User.objects.get_or_create(username=phone_number)
+            active_plan.user = user
+            active_plan.save(update_fields=['user', 'updated_at'])
+
+        profile, profile_created = UserProfile.objects.get_or_create(
+            user=user, defaults={'phone_number': phone_number}
+        )
+        if not profile_created and not profile.phone_number:
+            profile.phone_number = phone_number
+            profile.save(update_fields=['phone_number'])
+        UserCoinBalance.objects.get_or_create(user=user)
+        token, _created = Token.objects.get_or_create(user=user)
+        return Response(
+            {
+                'user': UserSerializer(user).data,
+                'token': token.key,
+                'telebirr_info': telebirr_info,
+                'subscription_id': str(active_plan.id),
+            }
+        )
 
     if profile:
         user = profile.user
