@@ -7,6 +7,8 @@ that resends a message is safe after SmppSubmitRejected -- the gateway said no
 its way to a handset.
 """
 
+from api.integrations.smpp.status import status_label
+
 
 class SmppError(Exception):
     """Base for every SMPP transport failure."""
@@ -29,6 +31,17 @@ class SmppSubmitRejected(SmppError):
     def __init__(self, message, *, status_code=None):
         super().__init__(message)
         self.status_code = status_code
+
+    @property
+    def code_label(self) -> str:
+        """What dispatch records as error_code.
+
+        The real SMPP status with its name -- ``SMPP_ESME_RINVMSGLEN (1)`` --
+        when the gateway gave one, plain ``rejected`` when it could not be
+        read. This is what turns a wall of identical ``code=1`` lines into
+        something an operator can act on.
+        """
+        return status_label(self.status_code)
 
 
 class SmppSubmitUncertain(SmppError):

@@ -41,6 +41,7 @@ from api.integrations.smpp.errors import (
     SmppSubmitRejected,
     SmppSubmitUncertain,
 )
+from api.integrations.smpp.status import data_coding_label, status_label
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +346,12 @@ class SmppClient:
         the response. So this sends, then waits for the reader to record the
         answer. Timing out is not the same as failing: the gateway may hold the
         message already, which is why it raises SmppSubmitUncertain.
+
+        Everything here is logged with the *names* the gateway used
+        (``SMPP_SUBMIT_TRANSMITTED`` / ``SMPP_SUBMIT_ACCEPTED`` /
+        ``SMPP_SUBMIT_REJECTED``), and never with the recipient, the text,
+        the OTP or any credential -- the message id and byte lengths identify
+        the submission well enough to correlate with dispatch's own lines.
         """
         self.config.validate()
         self.ensure_bound()
@@ -377,6 +384,13 @@ class SmppClient:
                     status = getattr(exc, 'args', [None, None])
                     code = status[1] if len(status) > 1 else None
                     self.last_error = f'submit rejected: {exc}'
+                    logger.warning(
+                        'SMPP_SUBMIT_REJECTED seq=%s status=%s part=%s/%s',
+                        first_sequence if first_sequence is not None else 'pending',
+                        status_label(code),
+                        index + 1,
+                        len(parts),
+                    )
                     raise SmppSubmitRejected(str(exc), status_code=code) from exc
                 except (OSError, smpplib.exceptions.ConnectionError) as exc:
                     # The socket broke. On the first part nothing was accepted;
@@ -390,12 +404,33 @@ class SmppClient:
                     ) from exc
                 except Exception as exc:
                     self.bound = False
-                    raise SmppSubmitUncertain(f'Submit outcome unknown: {exc}') from exc
+                    raise SmppSubmitUncertain(
+                        f'Submit outcome unknown (transmitted=unknown): {exc}'
+                    ) from exc
 
                 if index == 0:
                     first_sequence = getattr(pdu, 'sequence', None)
 
             self.last_submit_at = time.time()
+            logger.info(
+                'SMPP_SUBMIT_TRANSMITTED seq=%s parts=%s sizes=[%s] chars=%s '
+                'data_coding=%s esm_class=%s registered_delivery=%s '
+                'source_addr=%s source_ton=%s source_npi=%s dest_ton=%s dest_npi=%s '
+                'service_type=%s',
+                first_sequence if first_sequence is not None else 'pending',
+                len(parts),
+                ','.join(str(len(part)) for part in parts),
+                len(text),
+                data_coding_label(encoding_flag),
+                msg_type_flag,
+                self.config.registered_delivery,
+                self.config.source_addr or '<none>',
+                self.config.source_ton,
+                self.config.source_npi,
+                self.config.dest_ton,
+                self.config.dest_npi,
+                self.config.service_type or '<none>',
+            )
 
         # Deliberately outside self._lock. The response is delivered by the
         # reader thread, which needs the lock for its keepalive -- waiting here
@@ -406,15 +441,31 @@ class SmppClient:
         entry = self._waiter_for(first_sequence)
         try:
             if not entry['event'].wait(timeout=SUBMIT_TIMEOUT_SECONDS):
+                logger.warning(
+                    'SMPP_SUBMIT_UNANSWERED seq=%s waited=%ss transmitted=yes',
+                    first_sequence,
+                    SUBMIT_TIMEOUT_SECONDS,
+                )
                 raise SmppSubmitUncertain(
-                    f'No submit_sm_resp within {SUBMIT_TIMEOUT_SECONDS}s; '
+                    f'No submit_sm_resp within {SUBMIT_TIMEOUT_SECONDS}s (transmitted=yes); '
                     'the gateway may still have accepted the message.'
                 )
             if entry['error'] is not None:
-                raise SmppSubmitRejected(
-                    f'Gateway rejected submit_sm (status {entry["error"]}).',
-                    status_code=entry['error'],
+                error = entry['error']
+                logger.warning(
+                    'SMPP_SUBMIT_REJECTED seq=%s status=%s',
+                    first_sequence,
+                    status_label(error if isinstance(error, int) else error),
                 )
+                raise SmppSubmitRejected(
+                    f'Gateway rejected submit_sm (status {error}).',
+                    status_code=error,
+                )
+            logger.info(
+                'SMPP_SUBMIT_ACCEPTED seq=%s message_id=%s',
+                first_sequence,
+                entry['message_id'],
+            )
             return entry['message_id']
         finally:
             with self._pending_lock:

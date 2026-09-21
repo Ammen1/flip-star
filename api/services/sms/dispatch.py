@@ -159,7 +159,7 @@ def deliver(message_id):
         # Not retryable: no amount of waiting configures a gateway.
         return message
     except SmppSubmitRejected as exc:
-        _fail(message, gateway.name, str(exc.status_code or 'rejected'), str(exc))
+        _fail(message, gateway.name, exc.code_label, str(exc))
         SmsMessage.objects.filter(pk=message.pk).update(status=SmsStatus.REJECTED)
         return message
     except SmppSubmitUncertain as exc:
@@ -194,7 +194,7 @@ def deliver(message_id):
         error_message='',
     )
     logger.info(
-        'SMS_SUBMITTED sms_id=%s provider=%s message_id=%s to=%s',
+        'SMS_SENT sms_id=%s provider=%s message_id=%s to=%s',
         message.id,
         result.provider,
         result.message_id,
@@ -211,11 +211,14 @@ def _fail(message, provider, code, detail):
         error_message=str(detail)[:2000],
     )
     logger.warning(
-        'SMS_SUBMIT_FAILED sms_id=%s provider=%s code=%s to=%s',
+        'SMS_SUBMIT_FAILED sms_id=%s provider=%s code=%s to=%s detail=%s',
         message.id,
         provider,
         code,
         message.masked_recipient,
+        # Truncated: exception messages can be long, and should never carry
+        # credentials, but a safe sanity cap keeps log lines short.
+        str(detail)[:200],
     )
 
 

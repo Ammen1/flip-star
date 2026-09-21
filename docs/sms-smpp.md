@@ -135,8 +135,13 @@ sends a test SMS and never exposes credentials.
 Structured log events: `SMS_QUEUED`, `SMS_SUBMIT_STARTED`, `SMS_SUBMITTED`,
 `SMS_SUBMIT_FAILED`, `SMS_SUBMIT_UNCERTAIN`, `SMS_DELIVERED`,
 `SMS_DELIVERY_FAILED`, `SMPP_CONNECTING`, `SMPP_CONNECTED`, `SMPP_BOUND`,
-`SMPP_BIND_FAILED`, `SMPP_DISCONNECTED`, `SMPP_RECONNECTING`. Recipients are
-masked (`25191****678`); the password and `system_id` never appear.
+`SMPP_BIND_FAILED`, `SMPP_DISCONNECTED`, `SMPP_RECONNECTING`,
+`SMPP_SUBMIT_TRANSMITTED`, `SMPP_SUBMIT_ACCEPTED`, `SMPP_SUBMIT_REJECTED`,
+`SMPP_SUBMIT_UNANSWERED`. Recipients are masked (`25191****678`); the
+password and `system_id` never appear. A rejection is logged and stored with
+the SMPP status **name** — `SMPP_ESME_RINVMSGLEN (1)`, "Message Length is
+invalid", for command_status 1 — not a bare number, so a wall of identical
+`code=1` failures becomes addressable.
 
 ## No rollback to OneVAS
 

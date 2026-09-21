@@ -37,10 +37,11 @@ SMPP_SETTINGS = {
 
 
 class FakePdu:
-    def __init__(self, message_id=b'MSG-1', command='submit_sm_resp', sequence=1):
+    def __init__(self, message_id=b'MSG-1', command='submit_sm_resp', sequence=1, status=None):
         self.message_id = message_id
         self.command = command
         self.sequence = sequence
+        self.status = status
 
 
 class FakeSmppClient:
@@ -330,6 +331,198 @@ def test_a_long_message_returns_the_first_part_id():
 
 
 # ---------------------------------------------------------------------------
+# The exact submit_sm parameters, and what gets logged about them
+# ---------------------------------------------------------------------------
+
+
+def test_a_submitted_part_carries_the_configured_ton_npi_and_encoding():
+    """The addressing and encoding the gateway actually receives."""
+    client = make_client()
+    client.submit(destination='251912345678', text='hello')
+
+    sent = FakeSmppClient.instances[0].sent[0]
+    assert sent['data_coding'] == 0
+    assert sent['esm_class'] == 0
+    assert sent['registered_delivery'] == 1
+    assert sent['source_addr_ton'] == 3
+    assert sent['source_addr_npi'] == 0
+    assert sent['dest_addr_ton'] == 1
+    assert sent['dest_addr_npi'] == 1
+    assert sent['service_type'] == ''
+    client.close()
+
+
+def test_source_addr_comes_from_settings_not_hardcoded():
+    """9286 is what staging's environment sets, not something baked in."""
+    client = make_client(TIMWE_SMPP_SOURCE_ADDR='FLIPSTAR')
+    client.submit(destination='251912345678', text='hi')
+
+    assert FakeSmppClient.instances[0].sent[0]['source_addr'] == 'FLIPSTAR'
+    client.close()
+
+    client = make_client(TIMWE_SMPP_SOURCE_ADDR='')
+    client.submit(destination='251912345678', text='hi')
+
+    assert FakeSmppClient.instances[-1].sent[0]['source_addr'] == ''
+    client.close()
+
+
+def test_transmission_is_logged_with_parameters_but_no_pii(caplog):
+    """
+    The log line an operator reads to answer "what exactly did we send?".
+
+    It carries the parts, byte sizes, character count, data coding and
+    addressing -- and never the recipient, the OTP, the password or the
+    system id, which is what this test pins down.
+    """
+    client = make_client()
+    with caplog.at_level('INFO'):
+        client.submit(destination='251912345678', text='Your FlipStar code is 123456')
+
+    transmitted = [r for r in caplog.records if r.getMessage().startswith('SMPP_SUBMIT_TRANSMITTED')]
+    assert transmitted, 'no SMPP_SUBMIT_TRANSMITTED line'
+    line = transmitted[0].getMessage()
+    assert 'parts=1' in line
+    assert 'chars=28' in line
+    assert 'data_coding=SMPP_ENCODING_DEFAULT' in line
+    assert 'esm_class=0' in line
+    assert 'registered_delivery=1' in line
+    assert 'source_ton=3' in line
+    assert 'dest_ton=1' in line
+    assert '251912345678' not in caplog.text
+    assert '123456' not in caplog.text
+    client.close()
+
+
+def test_acceptance_is_logged_with_the_message_id(caplog):
+    client = make_client()
+    with caplog.at_level('INFO'):
+        client.submit(destination='251912345678', text='hi')
+
+    accepted = [r for r in caplog.records if r.getMessage().startswith('SMPP_SUBMIT_ACCEPTED')]
+    assert accepted, 'no SMPP_SUBMIT_ACCEPTED line'
+    assert 'message_id=MSG-1' in accepted[0].getMessage()
+    client.close()
+
+
+def test_a_nonzero_response_is_logged_as_the_real_status_name(caplog):
+    """
+    The heart of the staging mystery.
+
+    Every failure there logged ``code=1`` -- SMPP command_status 1, which is
+    ``SMPP_ESME_RINVMSGLEN`` ("Message Length is invalid"). The label is what
+    an operator needs to act, and it must come along with the rejection.
+    """
+    client = make_client()
+    client.connect()
+    fake = FakeSmppClient.instances[0]
+    fake.respond = False
+
+    original = fake.send_message
+
+    def send_then_reject(**kwargs):
+        pdu = original(**kwargs)
+        fake.error_handler(FakePdu(command='submit_sm_resp', sequence=pdu.sequence, status=1))
+        return pdu
+
+    fake.send_message = send_then_reject
+
+    with caplog.at_level('INFO'):
+        with pytest.raises(SmppSubmitRejected) as excinfo:
+            client.submit(destination='251912345678', text='hi')
+
+    assert excinfo.value.status_code == 1
+    assert excinfo.value.code_label == 'SMPP_ESME_RINVMSGLEN (1)'
+    assert any(
+        'SMPP_SUBMIT_REJECTED' in r.getMessage() and 'SMPP_ESME_RINVMSGLEN (1)' in r.getMessage()
+        for r in caplog.records
+    ), 'rejection not logged with the named status'
+    client.close()
+
+
+def test_an_unknown_status_is_labeled_by_the_number_not_invented(caplog):
+    """A status outside the table is shown verbatim rather than guessed at."""
+    client = make_client()
+    client.connect()
+    fake = FakeSmppClient.instances[0]
+    fake.respond = False
+
+    original = fake.send_message
+
+    def send_then_reject(**kwargs):
+        pdu = original(**kwargs)
+        fake.error_handler(FakePdu(command='submit_sm_resp', sequence=pdu.sequence, status=999))
+        return pdu
+
+    fake.send_message = send_then_reject
+
+    with caplog.at_level('INFO'):
+        with pytest.raises(SmppSubmitRejected) as excinfo:
+            client.submit(destination='251912345678', text='hi')
+
+    assert excinfo.value.code_label == 'status 999'
+    assert any(
+        'SMPP_SUBMIT_REJECTED' in r.getMessage() and 'status 999' in r.getMessage()
+        for r in caplog.records
+    )
+    client.close()
+
+
+def test_a_synchronous_rejection_carries_the_named_status(caplog):
+    """A submit_sm_resp that errors while sending is the same definite 'no'."""
+    client = make_client()
+    client.connect()
+    FakeSmppClient.instances[0].submit_error = smpplib.exceptions.PDUError('rejected', 1)
+
+    with caplog.at_level('INFO'):
+        with pytest.raises(SmppSubmitRejected) as excinfo:
+            client.submit(destination='251912345678', text='hi')
+
+    assert excinfo.value.code_label == 'SMPP_ESME_RINVMSGLEN (1)'
+    assert any(
+        'SMPP_SUBMIT_REJECTED' in r.getMessage() and 'SMPP_ESME_RINVMSGLEN (1)' in r.getMessage()
+        for r in caplog.records
+    )
+    client.close()
+
+
+def test_submit_logs_never_expose_credentials_otps_or_numbers(caplog):
+    """
+    The hard rule for this whole path: a log line may identify a submission,
+    never a subscriber. The OTP, the phone number, the SMPP password and the
+    system id must all stay out of what a log aggregator can index.
+    """
+    client = make_client()
+    with caplog.at_level('DEBUG'):
+        client.submit(destination='251912345678', text='Your OTP is 123456')
+
+    assert 'test-password-not-real' not in caplog.text
+    assert 'test-system' not in caplog.text
+    assert '251912345678' not in caplog.text
+    assert '123456' not in caplog.text
+    client.close()
+
+
+def test_an_unanswered_submission_is_logged_as_uncertain(monkeypatch, caplog):
+    import api.integrations.smpp.client as client_module
+
+    monkeypatch.setattr(client_module, 'SUBMIT_TIMEOUT_SECONDS', 0.2)
+
+    client = make_client()
+    client.connect()
+    FakeSmppClient.instances[0].respond = False
+
+    with caplog.at_level('INFO'):
+        with pytest.raises(SmppSubmitUncertain):
+            client.submit(destination='251912345678', text='hi')
+
+    assert any(
+        'SMPP_SUBMIT_UNANSWERED' in r.getMessage() for r in caplog.records
+    )
+    client.close()
+
+
+# ---------------------------------------------------------------------------
 # Credentials must not leak
 # ---------------------------------------------------------------------------
 
@@ -506,4 +699,87 @@ def test_pending_responses_do_not_leak():
         client.submit(destination='251912345678', text='hi')
 
     assert client._pending == {}
+    client.close()
+
+
+# ---------------------------------------------------------------------------
+# Spec-required: destination format, source address, transmitted= marker
+# ---------------------------------------------------------------------------
+
+
+def test_destination_wire_format_is_251_without_plus():
+    """
+    normalize_ethiopian_phone returns '251XXXXXXXXX' (no leading '+'), and
+    that is exactly what hits the SMPP wire.  dest_ton=1 (International) /
+    dest_npi=1 (ISDN) is the correct pairing for that format with TIMWE.
+    If a '+' slipped in, the gateway would reject with RINVDSTADR.
+    """
+    client = make_client()
+    client.submit(destination='251912345678', text='hi')
+
+    sent = FakeSmppClient.instances[0].sent[0]
+    assert sent['destination_addr'] == '251912345678', (
+        'destination_addr must be 251... not +251... on the wire'
+    )
+    assert not sent['destination_addr'].startswith('+'), (
+        'a leading + is not expected; dest_ton=1/npi=1 works with bare digits'
+    )
+    assert sent['dest_addr_ton'] == 1
+    assert sent['dest_addr_npi'] == 1
+    client.close()
+
+
+def test_transmitted_log_includes_source_addr(caplog):
+    """
+    An operator who reads a submitted log must be able to see which
+    source address (short code) was used, without having to inspect
+    the Kubernetes secret or the Vault path.
+    """
+    client = make_client(TIMWE_SMPP_SOURCE_ADDR='9286')
+    with caplog.at_level('INFO'):
+        client.submit(destination='251912345678', text='Your code is 999888')
+
+    transmitted = [
+        r for r in caplog.records
+        if r.getMessage().startswith('SMPP_SUBMIT_TRANSMITTED')
+    ]
+    assert transmitted, 'no SMPP_SUBMIT_TRANSMITTED log line'
+    line = transmitted[0].getMessage()
+    assert 'source_addr=9286' in line, (
+        'source_addr must appear in SMPP_SUBMIT_TRANSMITTED so staging '
+        'operators can confirm which short-code reached the gateway'
+    )
+    # The recipient and message text must never appear in the log.
+    assert '251912345678' not in line
+    assert '999888' not in line
+    client.close()
+
+
+def test_unanswered_submission_log_shows_transmitted_yes(monkeypatch, caplog):
+    """
+    When submit_sm is sent but no submit_sm_resp arrives, the uncertainty
+    log must carry 'transmitted=yes' so an operator knows the PDU reached
+    the socket layer, distinguishing it from a pre-send failure.
+    """
+    import api.integrations.smpp.client as client_module
+
+    monkeypatch.setattr(client_module, 'SUBMIT_TIMEOUT_SECONDS', 0.2)
+
+    client = make_client()
+    client.connect()
+    FakeSmppClient.instances[0].respond = False
+
+    with caplog.at_level('WARNING'):
+        with pytest.raises(SmppSubmitUncertain):
+            client.submit(destination='251912345678', text='hi')
+
+    unanswered = [
+        r for r in caplog.records
+        if 'SMPP_SUBMIT_UNANSWERED' in r.getMessage()
+    ]
+    assert unanswered, 'no SMPP_SUBMIT_UNANSWERED log line'
+    assert 'transmitted=yes' in unanswered[0].getMessage(), (
+        'unanswered log must carry transmitted=yes so it is distinct from '
+        'a pre-send connection failure'
+    )
     client.close()

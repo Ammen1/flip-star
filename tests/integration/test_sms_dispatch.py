@@ -176,6 +176,40 @@ def test_a_rejected_submission_is_marked_rejected(monkeypatch):
     assert SmsMessage.objects.get(pk=message.pk).status == SmsStatus.REJECTED
 
 
+def test_a_rejection_records_the_named_status_not_a_bare_number(monkeypatch):
+    """
+    The staging tell: status 1 came back as ``code=1`` in the log and on the
+    row, indistinguishable from any other failure. It is SMPP command_status 1,
+    SMPP_ESME_RINVMSGLEN -- "Message Length is invalid" -- and that name is
+    what a rejection should record.
+    """
+    monkeypatch.setattr(
+        'api.services.sms.dispatch.get_gateway',
+        lambda **kw: RecordingGateway(error=SmppSubmitRejected('no', status_code=1)),
+    )
+    message = queue_sms(phone_number=MSISDN, text='hi')
+
+    deliver(str(message.id))
+
+    row = SmsMessage.objects.get(pk=message.pk)
+    assert row.status == SmsStatus.REJECTED
+    assert row.error_code == 'SMPP_ESME_RINVMSGLEN (1)'
+
+
+def test_a_rejection_without_a_readable_status_stays_rejected(monkeypatch):
+    monkeypatch.setattr(
+        'api.services.sms.dispatch.get_gateway',
+        lambda **kw: RecordingGateway(error=SmppSubmitRejected('no')),  # noqa: S106
+    )
+    message = queue_sms(phone_number=MSISDN, text='hi')
+
+    deliver(str(message.id))
+
+    row = SmsMessage.objects.get(pk=message.pk)
+    assert row.status == SmsStatus.REJECTED
+    assert row.error_code == 'rejected'
+
+
 def test_a_connection_failure_raises_so_celery_can_retry(monkeypatch):
     monkeypatch.setattr(
         'api.services.sms.dispatch.get_gateway',
@@ -378,3 +412,85 @@ def test_the_subscription_sms_helper_does_not_use_onevas(monkeypatch):
     assert sms_subscription.send_subscription_sms(MSISDN, 'welcome', Tier()) is True
     assert posted == []
     assert SmsMessage.objects.filter(purpose='subscription_welcome').count() == 1
+
+
+# ---------------------------------------------------------------------------
+# Spec-required: log event names and detail fields
+# ---------------------------------------------------------------------------
+
+
+def test_success_logs_sms_sent(gateway, caplog):
+    """
+    The acceptance criterion requires SMS_SENT on a successful submission.
+    SMS_SUBMITTED (the old name) must no longer appear.
+    """
+    message = queue_sms(phone_number=MSISDN, text='hi')
+
+    with caplog.at_level('INFO'):
+        deliver(str(message.id))
+
+    events = [r.getMessage() for r in caplog.records]
+    assert any('SMS_SENT' in e for e in events), (
+        'SMS_SENT must be logged on a successful delivery'
+    )
+    assert not any('SMS_SUBMITTED' in e for e in events), (
+        'SMS_SUBMITTED is the old event name and must not appear'
+    )
+
+
+def test_rejection_logs_named_smpp_status(monkeypatch, caplog):
+    """
+    A rejected submission must log the SMPP command_status name, not a bare
+    integer.  code=1 is unactionable; code=SMPP_ESME_RINVMSGLEN (1) tells
+    an operator which SMPP parameter the gateway rejected.
+    """
+    monkeypatch.setattr(
+        'api.services.sms.dispatch.get_gateway',
+        lambda **kw: RecordingGateway(error=SmppSubmitRejected('no', status_code=1)),
+    )
+    message = queue_sms(phone_number=MSISDN, text='hi')
+
+    with caplog.at_level('WARNING'):
+        deliver(str(message.id))
+
+    failed_lines = [
+        r.getMessage()
+        for r in caplog.records
+        if 'SMS_SUBMIT_FAILED' in r.getMessage()
+    ]
+    assert failed_lines, 'expected an SMS_SUBMIT_FAILED log line'
+    line = failed_lines[0]
+    assert 'SMPP_ESME_RINVMSGLEN (1)' in line, (
+        f'Expected named SMPP status in log, got: {line!r}'
+    )
+    # The bare number must not be the only thing logged.
+    assert 'code=1 ' not in line
+
+
+def test_failure_log_includes_detail(monkeypatch, caplog):
+    """
+    The detail= field carries the exception message so an operator can
+    distinguish a parameter error from a network error in the log stream
+    without having to query the database row.
+    """
+    error_text = 'Gateway rejected submit_sm (status 88).'
+    monkeypatch.setattr(
+        'api.services.sms.dispatch.get_gateway',
+        lambda **kw: RecordingGateway(error=SmppSubmitRejected(error_text, status_code=88)),
+    )
+    message = queue_sms(phone_number=MSISDN, text='hi')
+
+    with caplog.at_level('WARNING'):
+        deliver(str(message.id))
+
+    failed_lines = [
+        r.getMessage()
+        for r in caplog.records
+        if 'SMS_SUBMIT_FAILED' in r.getMessage()
+    ]
+    assert failed_lines
+    line = failed_lines[0]
+    assert 'detail=' in line, 'detail= field is missing from SMS_SUBMIT_FAILED log'
+    # The detail must not contain secrets (it comes from the exception message
+    # which must never embed credentials -- verified here with a safe string).
+    assert error_text[:50] in line
