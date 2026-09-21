@@ -3,15 +3,14 @@ Telling a telebirr subscriber their plan is active.
 
 Two flows reach this: the USSD push and the SuperApp. Both end with a payment
 confirmed and a plan activated, and until now neither said anything -- the
-subscriber paid and found out by opening the app. The short-code and TIMWE
-flows already notify over SMPP and are deliberately left alone.
+subscriber paid and found out by opening the app.
 
-Why a separate transport
-------------------------
-Telebirr notices go over SkyConnect's HTTP API; everything else -- OTPs, the
-short code, TIMWE -- stays on SMPP. That is a per-message choice, not a
-global one, so introducing this provider cannot move a message that was
-working before. `queue_sms(provider=...)` is what carries it.
+The transport
+-------------
+Telebirr notices queue like every other application message and go over the
+same MA/SMPP gateway as OTPs, short-code and TIMWE messages. No provider is
+pinned here, so the configured default (``SMS_PROVIDER``) carries them -- the
+same path the short-code and TIMWE welcome messages use.
 
 Why not a separate pipeline
 ---------------------------
@@ -19,8 +18,7 @@ None is needed. `queue_sms` already owns the parts that are easy to get
 wrong: a unique key that makes a repeated webhook find the existing row
 instead of sending twice, a durable record of what was sent and what happened
 to it, retry for failures worth retrying, and masking so a number never
-reaches a log in full. Adding a transport should not mean rebuilding any of
-that.
+reaches a log in full.
 
 Why nothing here raises
 -----------------------
@@ -36,9 +34,6 @@ retried.
 import logging
 
 logger = logging.getLogger(__name__)
-
-#: The transport. Named here so a call site cannot pick a different one.
-PROVIDER = 'skyconnect'
 
 #: How the ledger is read back: "which telebirr subscribers did we notify?"
 PURPOSE = 'telebirr_subscription_activated'
@@ -122,7 +117,6 @@ def notify_activated(plan, *, source, payment=None):
             text=build_activation_message(plan),
             purpose=PURPOSE,
             idempotency_key=key,
-            provider=PROVIDER,
         )
     except Exception:
         # Recorded, never raised: see the module docstring. A plan the

@@ -104,7 +104,7 @@ def coin_purchase_refusal(user):
 ALREADY_SUBSCRIBED_CODE = 'ALREADY_SUBSCRIBED'
 
 
-def active_subscription_for(user=None, phone_number=None):
+def active_subscription_for(user=None, phone_number=None, payment_method=None):
     """The caller's live subscription, or None.
 
     Resolves by `user` when signed in, otherwise by `phone_number` -- which is
@@ -118,6 +118,8 @@ def active_subscription_for(user=None, phone_number=None):
 
     now = timezone.now()
     qs = SubscriptionPlan.objects.filter(status='active').select_related('tier')
+    if payment_method:
+        qs = qs.filter(payment_method=payment_method)
 
     # An `end_date` in the past is not an active subscription however the
     # status column reads -- renewals that failed can leave the two disagreeing.
@@ -128,10 +130,21 @@ def active_subscription_for(user=None, phone_number=None):
 
     if phone_number:
         from api.models import UserProfile
+        from common.validators import lookup_variants
 
-        profile = UserProfile.objects.filter(phone_number=phone_number).first()
+        phone_values = lookup_variants(phone_number)
+        profile = UserProfile.objects.filter(phone_number__in=phone_values).first()
         if profile:
             return qs.filter(user=profile.user).order_by('-start_date').first()
+
+        return (
+            qs.filter(
+                models.Q(telebirr_phone_number__in=phone_values)
+                | models.Q(onevas_phone_number__in=phone_values)
+            )
+            .order_by('-start_date')
+            .first()
+        )
 
     return None
 

@@ -5,7 +5,7 @@ import traceback
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Exists, F, OuterRef, Prefetch, Q, Value
 from django.db.models.functions import Greatest
 from django.http import Http404
@@ -116,9 +116,18 @@ def _normalize_ethiopian_phone(phone):
 @permission_classes([AllowAny])
 @encrypted_endpoint
 def register(request):
+    username = request.data.get('username')
+    if username_is_taken(username):
+        return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
+
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
-        user = serializer.save()
+        try:
+            user = serializer.save()
+        except IntegrityError as e:
+            if is_duplicate_username_error(e):
+                return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
+            raise
         token, _ = Token.objects.get_or_create(user=user)
         return Response(
             {'user': UserSerializer(user).data, 'token': token.key}, status=status.HTTP_201_CREATED
@@ -142,12 +151,7 @@ def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
 
-    print(f'[LOGIN] Attempt - username: {username}, has_password: {bool(password)}')
-
     if not username or not password:
-        print(
-            f'[LOGIN] Missing credentials - username: {bool(username)}, password: {bool(password)}'
-        )
         return Response(
             {'error': 'Username and password required'}, status=status.HTTP_400_BAD_REQUEST
         )
@@ -170,12 +174,11 @@ def login(request):
     if user:
         print(f'[LOGIN] User found: {user.username}, checking password...')
         print(f'[LOGIN] User has usable password: {user.has_usable_password()}')
-        print(f"[LOGIN] Password hash prefix: {user.password[:20] if user.password else 'NONE'}...")
 
         if user.check_password(password):
             clear_failures(request, 'login')
             token, _ = Token.objects.get_or_create(user=user)
-            print(f'[LOGIN] Success - user: {user.username}, token: {token.key[:8]}...')
+            print(f'[LOGIN] Success - user: {user.username}')
             try:
                 from api.models.admin import SystemLog
 
@@ -228,8 +231,6 @@ def login(request):
     else:
         remaining = check_and_increment_failure(request, 'login', 6, 600)
         print(f'[LOGIN] User not found for: {username}')
-        all_users = list(User.objects.values_list('username', flat=True)[:5])
-        print(f'[LOGIN] Available usernames (first 5): {all_users}')
         try:
             from api.models.admin import SystemLog
 
@@ -771,12 +772,16 @@ def login_with_otp(request):
     try:
         user = UserProfile.objects.get(phone_number=phone).user
     except UserProfile.DoesNotExist:
-        subscription = UserSubscription.objects.filter(
-            telebirr_phone_number=phone,
-            payment_method='telebirr',
-            status='active',
-            end_date__gt=timezone.now(),
-        ).first()
+        phone_values = lookup_variants(phone)
+        subscription = (
+            UserSubscription.objects.filter(
+                telebirr_phone_number__in=phone_values,
+                payment_method='telebirr',
+                status='active',
+            )
+            .filter(Q(end_date__isnull=True) | Q(end_date__gt=timezone.now()))
+            .first()
+        )
         if not (subscription and subscription.user):
             return Response(
                 {'error': 'No account found. Please register first.'},

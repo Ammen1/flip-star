@@ -474,6 +474,31 @@ def test_check_superapp_subscription_finds_locally_stored_phone(db, monthly_tier
         subscription.delete()
 
 
+def test_check_superapp_subscription_accepts_active_open_ended_plan(db, monthly_tier):
+    subscription = SubscriptionPlan.objects.create(
+        user=None,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=timezone.now(),
+        end_date=None,
+        payment_method='telebirr',
+        telebirr_phone_number='251988990011',
+        auto_renew=True,
+    )
+    try:
+        request = factory.post(
+            '/subscription/check-superapp/', {'phone': '0988990011'}, format='json'
+        )
+
+        response = check_superapp_subscription(request)
+
+        assert response.status_code == 200
+        assert response.data['has_active_subscription'] is True
+    finally:
+        subscription.delete()
+
+
 def test_check_superapp_subscription_no_match(db):
     request = factory.post('/subscription/check-superapp/', {'phone': '0900000000'}, format='json')
 

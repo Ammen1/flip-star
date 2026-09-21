@@ -22,9 +22,8 @@ class SuperAppSMSService:
         """
         Queue an SMS about a telebirr SuperApp subscription.
 
-        Delivered over SkyConnect, not SMPP. These are telebirr messages; the
-        short-code and TIMWE flows keep SMPP and are unaffected, because the
-        transport is chosen per message rather than by a global setting.
+        Delivered over the MA/SMPP gateway, the same transport used by the
+        short-code and TIMWE flows.
 
         Args:
             phone_number: User's phone number (format: 2519...)
@@ -40,7 +39,6 @@ class SuperAppSMSService:
             delivered; SmsMessage.status carries the latter.
         """
         from api.services.sms.dispatch import SmsNotQueued, queue_sms
-        from api.services.telebirr_subscription_sms import PROVIDER as TELEBIRR_SMS_PROVIDER
 
         try:
             queue_sms(
@@ -48,7 +46,6 @@ class SuperAppSMSService:
                 text=text,
                 purpose='superapp',
                 idempotency_key=idempotency_key,
-                provider=TELEBIRR_SMS_PROVIDER,
             )
         except SmsNotQueued as exc:
             logger.warning('[SuperApp SMS] Not queued for %s: %s', phone_number, exc)

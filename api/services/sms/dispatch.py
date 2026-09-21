@@ -74,9 +74,8 @@ def queue_sms(*, phone_number, text, purpose='', idempotency_key=None, provider=
                 body=text,
                 purpose=purpose,
                 # Which transport this message wants. Blank means the
-                # configured default (SMPP), which is every message except a
-                # telebirr subscription notice -- so the short-code and TIMWE
-                # flows are untouched by the existence of a second provider.
+                # configured MA/SMPP default; Telebirr activation notices pin
+                # the same provider explicitly.
                 provider=provider,
                 status=SmsStatus.QUEUED,
             )

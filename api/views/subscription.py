@@ -1394,7 +1394,6 @@ def check_superapp_subscription(request):
     send-login-otp; that endpoint now resolves them from the tier itself.
     """
     from api.views.core import _normalize_ethiopian_phone
-    from common.validators import lookup_variants
 
     phone = request.data.get('phone', '').strip()
     if not phone:
@@ -1407,17 +1406,7 @@ def check_superapp_subscription(request):
         )
 
     try:
-        phone_values = lookup_variants(phone)
-        subscription = (
-            UserSubscription.objects.filter(
-                telebirr_phone_number__in=phone_values,
-                payment_method='telebirr',
-                status='active',
-                end_date__gt=timezone.now(),
-            )
-            .order_by('-start_date')
-            .first()
-        )
+        subscription = active_subscription_for(phone_number=phone, payment_method='telebirr')
 
         if not subscription:
             return Response(

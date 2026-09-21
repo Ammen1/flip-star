@@ -30,18 +30,14 @@ def _build(name) -> SmsGateway:
         from api.services.sms.timwe_smpp import TimweSmppGateway
 
         return TimweSmppGateway()
-    if name == 'skyconnect':
-        from api.services.sms.skyconnect import SkyConnectGateway
-
-        return SkyConnectGateway()
     if name == 'console':
         from api.services.sms.console import ConsoleGateway
 
         return ConsoleGateway()
     raise UnknownSmsProvider(
         f'SMS_PROVIDER={name!r} is not a known gateway. '
-        "Expected 'timwe_smpp' (production, short code and TIMWE), "
-        "'skyconnect' (telebirr subscription notices) or 'console' (development). "
+        "Expected 'timwe_smpp' (production MA/SMPP for all application SMS) "
+        "or 'console' (development). "
         'OneVAS has been removed.'
     )
 
@@ -49,10 +45,8 @@ def _build(name) -> SmsGateway:
 def get_gateway(name=None) -> SmsGateway:
     """The gateway for a message, or the configured default.
 
-    `name` lets one message choose its own transport. Telebirr subscription
-    notices go over SkyConnect while everything else -- short code, TIMWE,
-    OTPs -- stays on SMPP, and that has to be decidable per message rather
-    than by flipping a global setting that would move all of them at once.
+    `name` lets one message choose its own transport. Production application
+    SMS use the MA/SMPP gateway, including Telebirr activation notices.
 
     Built per call rather than cached: the object is trivially cheap, and the
     expensive part -- the SMPP session -- is a process-wide singleton behind
