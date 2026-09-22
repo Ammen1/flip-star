@@ -7,7 +7,16 @@ tell those apart, so nothing could tell a customer their payment had failed --
 they were shown "we have not received a confirmation yet" for a payment that
 was never going to arrive, or, through the SuperApp, a green tick.
 
-Existing rows are read as what they already meant:
+Columns only. The backfill that gives them their values is 0129, and the
+split is not cosmetic: PostgreSQL refuses to build an index on a table
+with pending trigger events, and Django defers the index for a db_index
+field to the end of the migration -- after any RunPython in the same
+migration has updated rows and queued foreign-key trigger events. Doing
+both here failed staging with
+``cannot CREATE INDEX "coin_transactions" because it has pending trigger
+events``. SQLite has no such rule, so the test suite never saw it.
+
+Existing rows are read as what they already meant (in 0129):
 
 * ``is_successful`` → SUCCESS.
 * not successful, and the webhook wrote a "Failed ..." description → FAILED,
@@ -18,39 +27,6 @@ Existing rows are read as what they already meant:
 """
 
 from django.db import migrations, models
-
-
-def set_state_from_history(apps, schema_editor):
-    CoinTransaction = apps.get_model('api', 'CoinTransaction')
-
-    CoinTransaction.objects.filter(is_successful=True).update(payment_state='SUCCESS')
-
-    # The webhook's own wording is the only surviving evidence of a refusal:
-    # api/views/wallet.py wrote 'Failed USSD Push payment: ...' /
-    # 'Failed Telebirr payment: ...' onto the row and left it otherwise
-    # indistinguishable from one still in flight.
-    CoinTransaction.objects.filter(is_successful=False, description__startswith='Failed').update(
-        payment_state='FAILED'
-    )
-
-    CoinTransaction.objects.filter(is_successful=False).exclude(
-        description__startswith='Failed'
-    ).update(payment_state='PENDING')
-
-    # Rows that have not settled still hold the conversation id in
-    # payment_reference, so the correlation key can be recovered for exactly
-    # the payments a client might still be waiting on. Settled rows had theirs
-    # overwritten by the provider's transaction id and it is simply gone --
-    # nothing is polling those.
-    for row in CoinTransaction.objects.filter(
-        is_successful=False, payment_method__in=('telebirr', 'telebirr_ussd')
-    ).exclude(payment_reference=''):
-        row.provider_conversation_id = row.payment_reference
-        row.save(update_fields=['provider_conversation_id'])
-
-
-def unset_state(apps, schema_editor):
-    """Nothing to undo: the columns go with the field."""
 
 
 class Migration(migrations.Migration):
@@ -85,5 +61,4 @@ class Migration(migrations.Migration):
                 max_length=16,
             ),
         ),
-        migrations.RunPython(set_state_from_history, unset_state),
     ]

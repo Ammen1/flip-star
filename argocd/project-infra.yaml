@@ -23,7 +23,13 @@ spec:
     deleting the application never reaches the data.
 
   sourceRepos:
+  # Both spellings of the same repository. Argo CD matches a repo credential
+  # by URL, and staging authenticates over SSH with a read-only deploy key
+  # (no expiry) after the HTTPS token expired and silently stopped every
+  # deploy for two days. HTTPS stays listed so production, which still uses
+  # it, is unaffected.
     - https://github.com/Ammen1/flip-star.git
+    - git@github.com:Ammen1/flip-star.git
 
   destinations:
     # Staging ONLY. Production keeps the managed-service assumption documented

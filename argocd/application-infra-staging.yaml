@@ -30,7 +30,11 @@ spec:
       value: https://github.com/Ammen1/flip-star/blob/main/k8s/infra/staging/README.md
 
   source:
-    repoURL: https://github.com/Ammen1/flip-star.git
+    # SSH, with a read-only deploy key held in the repo-flipstar-ssh
+    # secret. The previous HTTPS token expired on 2026-09-21 and Argo CD
+    # stopped being able to read this repo at all -- no deploy since, and
+    # nothing said so except a ComparisonError nobody was watching.
+    repoURL: git@github.com:Ammen1/flip-star.git
     targetRevision: main
     path: k8s/infra/staging
 
