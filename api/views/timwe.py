@@ -284,9 +284,17 @@ def _apply_relation(relation, tier, user):
         try:
             renewed = result.action == 'renewed'
             if renewed:
-                # A period charged again, not a new subscription: no OTP, so
-                # the code the subscriber already holds keeps working.
-                message = sms_subscription.build_renewal_message(tier=tier, plan=result.plan)
+                # A period charged again, not a new subscription -- but with
+                # the same way in, and with the OTP, because subscribe() has
+                # just replaced the stored one: without it the subscriber is
+                # left holding a code that has stopped working.
+                message = sms_subscription.build_renewal_message(
+                    tier=tier,
+                    plan=result.plan,
+                    phone_number=relation.msisdn,
+                    base_url=settings.TIMWE_SUBSCRIPTION_LINK_BASE,
+                    otp=result.otp,
+                )
             else:
                 message = sms_subscription.build_welcome_message(
                     tier=tier,

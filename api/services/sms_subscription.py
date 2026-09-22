@@ -303,6 +303,22 @@ def unsubscribe(*, phone_number, duration_type=None, reason, metadata=None, user
     return cancelled
 
 
+def access_link(*, base_url, phone_number, existing_user=False):
+    """The link that takes a subscriber into what they have paid for.
+
+    One definition, because every message that offers a way in must offer the
+    same one: the first subscription, a re-subscription, and each renewal
+    charge. They used to differ -- only the first carried a link at all, so a
+    subscriber who renewed for months was never told again how to get in, and
+    anyone who lost the first message had nothing to go back to.
+
+    `existing_user` sends an account holder to sign in rather than to
+    registration; the page reads both parameters.
+    """
+    existing = '&existing_user=true' if existing_user else ''
+    return f'{base_url}?subscription_tp=true&phone={phone_number}{existing}'
+
+
 def build_welcome_message(*, tier, result, phone_number, base_url):
     """The SMS a subscriber gets after being charged.
 
@@ -322,39 +338,71 @@ def build_welcome_message(*, tier, result, phone_number, base_url):
     else:
         trial = f'The subscription price is {tier.price_etb} ETB per {price_period}.'
 
-    existing = '&existing_user=true' if result.existing_user else ''
     started = result.plan.start_date.strftime('%Y-%m-%d %H:%M')
+    link = access_link(
+        base_url=base_url, phone_number=phone_number, existing_user=result.existing_user
+    )
 
     return (
         f'Dear valued customer, you have successfully subscribed to the {tier.name} '
         f'Flipstar service, effective from {started}. {trial} '
         f'To access your premium service, please click on '
-        f'{base_url}?subscription_tp=true&phone={phone_number}{existing} '
+        f'{link} '
         f'and enter your OTP: {result.otp}. '
         f'To cancel your subscription at any time, please send {stop_keyword} '
         f'to {tier.short_code}.'
     )
 
 
-def build_renewal_message(*, tier, plan):
+def build_renewal_message(*, tier, plan, phone_number=None, base_url=None, otp=None):
     """The SMS for a period the subscriber has just been charged for again.
 
-    A renewal is not a first subscription, and saying "you have successfully
-    subscribed" every day on a daily plan reads as a mistake -- worse, the
-    welcome message carries a fresh OTP, and sending one invalidates the code
-    the subscriber may still be using. This says what was taken, what it buys,
-    and how to stop; the way in is already in their hands.
+    It still does not say "you have successfully subscribed" -- reading that
+    every day on a daily plan looks like a mistake -- but it carries the same
+    way in as the first message. A subscriber who deleted that first SMS,
+    changed phone, or never got round to signing in had no link on any of the
+    messages they kept paying for.
+
+    `otp` is included only when the caller has just issued a new one, and that
+    distinction matters. The MA-driven renewal replaces ``plan.setup_otp`` in
+    the database, so the code the subscriber holds stops working the moment
+    they are charged again; saying nothing left them with a dead code and no
+    way to ask for another. The path that charges them ourselves does not
+    touch the stored code, passes no `otp`, and theirs keeps working.
+
+    **Written to fit two SMS segments.** Adding the link pushed it to three,
+    which is a 50% increase in send cost on a message a daily subscriber gets
+    every day. The words were cut, never the link or the code: the greeting
+    ("Dear valued customer"), "To access your premium service, please click
+    on" and "To cancel your subscription at any time, please send" carried no
+    information the subscriber needed. GSM-7 gives 153 septets per part, so
+    the budget is 306; the longest real plan renders around 259, and
+    ``tests/integration/test_subscription_and_withdrawal_sms.py`` holds it
+    there with api/services/sms/segments.py counting properly rather than
+    guessing from len().
     """
     stop_keyword = STOP_KEYWORDS.get(tier.duration_type, 'STOP')
     price_period = PRICE_PERIODS.get(tier.duration_type, 'day')
     until = plan.end_date.strftime('%Y-%m-%d %H:%M') if plan.end_date else ''
 
-    valid = f' Your subscription is valid until {until}.' if until else ''
+    # Kept with the time on it: on a daily plan "valid until" a bare date is
+    # today, which says nothing.
+    valid = f', valid until {until}' if until else ''
+
+    access = ''
+    if base_url and phone_number:
+        link = access_link(
+            base_url=base_url,
+            phone_number=phone_number,
+            existing_user=bool(getattr(plan, 'user_id', None)),
+        )
+        access = f' Open {link}'
+        access += f' and enter OTP {otp}.' if otp else '.'
+
     return (
-        f'Dear valued customer, your {tier.name} Flipstar subscription has been '
-        f'renewed for {tier.price_etb} ETB per {price_period}.{valid} '
-        f'To cancel your subscription at any time, please send {stop_keyword} '
-        f'to {tier.short_code}.'
+        f'Your {tier.name} Flipstar subscription is renewed for {tier.price_etb} ETB '
+        f'per {price_period}{valid}.{access} '
+        f'To cancel, send {stop_keyword} to {tier.short_code}.'
     )
 
 

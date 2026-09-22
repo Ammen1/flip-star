@@ -495,7 +495,15 @@ def apply_renewal(charge) -> bool:
 
         sms_subscription.send_subscription_sms(
             charge.msisdn,
-            sms_subscription.build_renewal_message(tier=tier, plan=plan),
+            # The link, so every charge tells the subscriber how to get in.
+            # No OTP: this path leaves plan.setup_otp alone, so whatever code
+            # they hold still works and a new one would break it.
+            sms_subscription.build_renewal_message(
+                tier=tier,
+                plan=plan,
+                phone_number=charge.msisdn,
+                base_url=settings.TIMWE_SUBSCRIPTION_LINK_BASE,
+            ),
             tier,
             purpose='subscription_renewal',
             # One message per charge, however many times this is retried.

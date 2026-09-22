@@ -7,7 +7,10 @@ see any other way:
 * **STOP** -- they text the short code to cancel, and nothing came back. The
   only evidence the cancellation worked was a charge that failed to arrive.
 * **a renewal** -- charged again, and told "you have successfully subscribed",
-  with a fresh OTP that quietly invalidated the one they were using.
+  with a fresh OTP that quietly invalidated the one they were using. It reads
+  as a renewal now, and carries the same link as the first message: only that
+  first one used to have it, so a subscriber who lost it was charged on with
+  no way back in.
 * **a withdrawal** -- points handed over, money expected somewhere else, and
   no word at any stage: not when it was paid, not when it failed, not when
   the points came back.
@@ -170,7 +173,13 @@ def test_the_first_charge_sends_the_welcome_message_with_the_way_in(daily_tier, 
     assert 'OTP' in sms.body
 
 
-def test_a_renewal_reads_as_a_renewal_and_keeps_the_old_otp(daily_tier, subscriber):
+def test_the_first_message_carries_a_link(daily_tier, subscriber):
+    _apply_relation(relation(), daily_tier, subscriber)
+
+    assert 'subscription_tp=true' in only_message().body
+
+
+def test_a_renewal_reads_as_a_renewal(daily_tier, subscriber):
     _apply_relation(relation(), daily_tier, subscriber)
     first = only_message()
     SmsMessage.objects.all().delete()
@@ -182,8 +191,219 @@ def test_a_renewal_reads_as_a_renewal_and_keeps_the_old_otp(daily_tier, subscrib
     assert sms.purpose == 'subscription_renewal'
     assert 'renewed' in sms.body
     assert '3 ETB' in sms.body
-    assert 'OTP' not in sms.body, 'a renewal must not invalidate the code they are using'
+    assert 'successfully subscribed' not in sms.body, 'a renewal is not a first subscription'
     assert first.body != sms.body
+
+
+def test_a_renewal_carries_the_same_way_in_as_the_first_message(daily_tier, subscriber):
+    """The reported gap: only the first message had a link. Somebody who lost
+    it, or never got round to signing in, was charged month after month with
+    no way back."""
+    _apply_relation(relation(), daily_tier, subscriber)
+    SmsMessage.objects.all().delete()
+
+    _apply_relation(relation(transaction_id='TX-2'), daily_tier, subscriber)
+
+    body = only_message().body
+    assert 'subscription_tp=true' in body, 'a renewal offers no way in'
+    assert MSISDN in body, 'the link does not carry their number'
+
+
+def test_a_renewal_sends_the_code_because_the_charge_replaced_it(daily_tier, subscriber):
+    """Why a renewal now carries an OTP, against the comment that used to say
+    it must not: this path already replaces plan.setup_otp when it charges, so
+    the code the subscriber was holding is dead either way. Saying nothing
+    left them with a code that had silently stopped working."""
+    _apply_relation(relation(), daily_tier, subscriber)
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+    first_code = plan.setup_otp
+    SmsMessage.objects.all().delete()
+
+    _apply_relation(relation(transaction_id='TX-2'), daily_tier, subscriber)
+
+    plan.refresh_from_db()
+    assert plan.setup_otp != first_code, 'the stored code was not replaced after all'
+    assert plan.setup_otp in only_message().body, 'the new code was never sent'
+
+
+def test_a_renewal_we_charge_ourselves_keeps_their_code(daily_tier, subscriber):
+    """The other renewal path does not touch the stored code, so it sends the
+    link and no OTP -- issuing one there would break a working code."""
+    from api.services import sms_subscription
+
+    _apply_relation(relation(), daily_tier, subscriber)
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+
+    body = sms_subscription.build_renewal_message(
+        tier=daily_tier,
+        plan=plan,
+        phone_number=MSISDN,
+        base_url='https://uat.flipstar.et/register',
+    )
+
+    assert 'subscription_tp=true' in body
+    assert 'OTP' not in body
+    assert plan.setup_otp not in body
+
+
+def test_every_message_offers_the_same_link(daily_tier, subscriber):
+    """One definition, so the three messages cannot drift apart again."""
+    from api.services import sms_subscription
+
+    link = sms_subscription.access_link(
+        base_url='https://uat.flipstar.et/register', phone_number=MSISDN
+    )
+
+    assert link.startswith('https://uat.flipstar.et/register?subscription_tp=true')
+    assert MSISDN in link
+    assert 'existing_user' not in link
+
+    with_account = sms_subscription.access_link(
+        base_url='https://uat.flipstar.et/register', phone_number=MSISDN, existing_user=True
+    )
+    assert 'existing_user=true' in with_account, 'an account holder is sent to sign in'
+
+
+# ── what a renewal costs to send ─────────────────────────────────────────────
+#
+# Adding the link pushed the renewal from 2 SMS segments to 3 -- a 50% rise in
+# send cost on a message a daily subscriber receives every day. The wording was
+# cut back to fit two, and these hold it there. Counted with
+# api/services/sms/segments.py: GSM-7 bills 153 septets per part, and `len()`
+# is not that number -- nine characters cost two septets, and a single
+# non-GSM character would halve the capacity.
+
+
+LINK_BASE = 'https://uat.flipstar.et/register'
+
+
+def renewal_text(tier, plan, *, otp=None):
+    from api.services import sms_subscription
+
+    return sms_subscription.build_renewal_message(
+        tier=tier, plan=plan, phone_number=MSISDN, base_url=LINK_BASE, otp=otp
+    )
+
+
+@pytest.mark.parametrize('duration', ['daily', 'weekly', 'monthly'])
+def test_a_renewal_fits_two_segments_on_every_plan(subscriber, duration):
+    """The longest plan renders around 250 septets against a 306 budget."""
+    from api.services.sms.segments import describe, segments
+
+    tier = SubscriptionTier.objects.get(duration_type=duration)
+    plan = SubscriptionPlan.objects.create(
+        user=subscriber,
+        tier=tier,
+        duration_type=duration,
+        status='active',
+        onevas_phone_number=MSISDN,
+    )
+    plan.activate()
+    plan.refresh_from_db()
+
+    with_code = renewal_text(tier, plan, otp='123456')
+    without = renewal_text(tier, plan)
+
+    assert segments(with_code) <= 2, f'{duration} with OTP: {describe(with_code)}'
+    assert segments(without) <= 2, f'{duration} without OTP: {describe(without)}'
+
+
+def test_the_longest_plausible_renewal_still_fits(subscriber):
+    """The seeded plans are short-named. This is the shape that would bust the
+    budget first: a long plan name, a four-figure price, and the longer of the
+    two links (an account holder gets `existing_user=true` on the end)."""
+    from api.services.sms.segments import describe, segments
+
+    tier = SubscriptionTier.objects.create(
+        name='Monthly Premium Plus',
+        duration_type='monthly',
+        duration_days=30,
+        price_etb=1500,
+        short_code='99999',
+        is_active=True,
+    )
+    plan = SubscriptionPlan.objects.create(
+        user=subscriber,
+        tier=tier,
+        duration_type='monthly',
+        status='active',
+        onevas_phone_number=MSISDN,
+    )
+    plan.activate()
+    plan.refresh_from_db()
+
+    body = renewal_text(tier, plan, otp='123456')
+
+    assert 'existing_user=true' in body, 'not the longer link after all'
+    assert segments(body) <= 2, describe(body)
+
+
+def test_a_renewal_is_sent_as_gsm7(daily_tier, subscriber):
+    """One non-GSM character -- a curly quote, an Amharic letter -- drops the
+    capacity from 153 to 67 per part and would make this four segments."""
+    from api.services.sms.segments import encoding_of
+
+    _apply_relation(relation(), daily_tier, subscriber)
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+
+    assert encoding_of(renewal_text(daily_tier, plan, otp='123456')) == 'GSM-7'
+
+
+def test_the_renewal_still_says_everything_it_must(daily_tier, subscriber):
+    """Shortened, not gutted: what was removed was the greeting and the
+    padding around the link, never the facts."""
+    _apply_relation(relation(), daily_tier, subscriber)
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+
+    body = renewal_text(daily_tier, plan, otp='123456')
+
+    assert 'Flipstar' in body
+    assert daily_tier.name in body, 'which plan'
+    assert f'{daily_tier.price_etb} ETB' in body, 'what it cost'
+    assert 'valid until' in body, 'what it bought'
+    assert 'subscription_tp=true' in body, 'the way in'
+    assert '123456' in body, 'the code'
+    assert 'STOP1' in body and str(daily_tier.short_code) in body, 'how to stop'
+    assert 'Dear valued customer' not in body, 'the greeting was the first thing cut'
+
+
+def test_the_first_subscription_message_is_unchanged(daily_tier, subscriber):
+    """Only the renewal was shortened. The welcome message still reads as it
+    did, greeting included."""
+    _apply_relation(relation(), daily_tier, subscriber)
+
+    body = only_message().body
+
+    assert body.startswith('Dear valued customer, you have successfully subscribed')
+    assert 'To access your premium service, please click on' in body
+    assert 'and enter your OTP:' in body
+    assert 'To cancel your subscription at any time, please send' in body
+
+
+def test_the_stop_confirmation_is_unchanged(daily_tier, subscriber):
+    """Untouched by this change."""
+    from api.services import sms_subscription
+
+    body = sms_subscription.build_cancellation_message(tier=daily_tier, subscribe_keyword='START1')
+
+    assert body.startswith('Dear valued customer, your')
+    assert 'has been cancelled and you will not be charged again' in body
+    assert 'To subscribe again, send START1' in body
+    assert 'Thank you for using Flipstar.' in body
+
+
+def test_a_renewal_without_a_link_configured_still_reads_properly(daily_tier, subscriber):
+    """No base URL means no link sentence -- not a broken one."""
+    from api.services import sms_subscription
+
+    _apply_relation(relation(), daily_tier, subscriber)
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+
+    body = sms_subscription.build_renewal_message(tier=daily_tier, plan=plan)
+
+    assert 'renewed' in body
+    assert 'click on' not in body
+    assert 'None' not in body
 
 
 # ── withdrawals ──────────────────────────────────────────────────────────────
