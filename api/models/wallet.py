@@ -76,7 +76,7 @@ class WalletConfig(models.Model):
     )
 
     cost_post_create = models.PositiveIntegerField(
-        default=0, help_text='Cost to create a post (0 = free)'
+        default=2, help_text='Cost to create a post (0 = free)'
     )
     cost_like = models.PositiveIntegerField(
         default=0, help_text='Coins charged when liking a campaign post (0 = free)'
@@ -105,12 +105,16 @@ class WalletConfig(models.Model):
         default=1200, help_text='Cost to make post trending for 24 hours'
     )
     cost_post_create_long_video = models.PositiveIntegerField(
-        default=0, help_text='Additional coins for campaign videos > 60 seconds (0 = free)'
+        default=98,
+        help_text=(
+            'Additional coins for campaign videos of 60 seconds or longer (0 = free). '
+            'Added to cost_post_create, so 2 + 98 = 100 for a long video.'
+        ),
     )
 
     # ============ NON-CAMPAIGN ACTION COSTS ============
     cost_post_create_non_campaign = models.PositiveIntegerField(
-        default=0, help_text='Cost to create a non-campaign post (0 = free)'
+        default=2, help_text='Cost to create a non-campaign post (0 = free)'
     )
     cost_like_non_campaign = models.PositiveIntegerField(
         default=0, help_text='Coins charged when liking a non-campaign post (0 = free)'
@@ -137,7 +141,11 @@ class WalletConfig(models.Model):
         default=1200, help_text='Cost to make non-campaign post trending for 24 hours'
     )
     cost_post_create_long_video_non_campaign = models.PositiveIntegerField(
-        default=0, help_text='Additional coins for non-campaign videos > 60 seconds (0 = free)'
+        default=98,
+        help_text=(
+            'Additional coins for non-campaign videos of 60 seconds or longer (0 = free). '
+            'Added to cost_post_create_non_campaign, so 2 + 98 = 100 for a long video.'
+        ),
     )
 
     # ============ MINIMUM BALANCE THRESHOLDS ============

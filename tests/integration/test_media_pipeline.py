@@ -1792,7 +1792,14 @@ def test_the_long_video_surcharge_is_charged_once(author, paid_posts):
     config = WalletConfig.get_config()
     config.cost_post_create_long_video_non_campaign = 7
     config.save()
-    reel = Reel.objects.create(user=author, processing_status=MediaStatus.PROCESSING)
+    # A video, because the surcharge is a video price: _charge_long_video
+    # refuses a post with no video on it, so a photo can never be charged
+    # it however it is called.
+    reel = Reel.objects.create(
+        user=author,
+        processing_status=MediaStatus.PROCESSING,
+        original_media='source/videos/1/clip.mp4',
+    )
     before = coins(author)
 
     media_tasks._charge_long_video(reel, 75)
@@ -1809,7 +1816,14 @@ def test_a_short_video_is_not_surcharged(author, paid_posts):
     config = WalletConfig.get_config()
     config.cost_post_create_long_video_non_campaign = 7
     config.save()
-    reel = Reel.objects.create(user=author, processing_status=MediaStatus.PROCESSING)
+    # A video, because the surcharge is a video price: _charge_long_video
+    # refuses a post with no video on it, so a photo can never be charged
+    # it however it is called.
+    reel = Reel.objects.create(
+        user=author,
+        processing_status=MediaStatus.PROCESSING,
+        original_media='source/videos/1/clip.mp4',
+    )
     before = coins(author)
 
     media_tasks._charge_long_video(reel, 59.9)
@@ -1822,7 +1836,14 @@ def test_an_unpaid_long_video_fails_instead_of_posting_free(author, paid_posts):
     config = WalletConfig.get_config()
     config.cost_post_create_long_video_non_campaign = 5000
     config.save()
-    reel = Reel.objects.create(user=author, processing_status=MediaStatus.PROCESSING)
+    # A video, because the surcharge is a video price: _charge_long_video
+    # refuses a post with no video on it, so a photo can never be charged
+    # it however it is called.
+    reel = Reel.objects.create(
+        user=author,
+        processing_status=MediaStatus.PROCESSING,
+        original_media='source/videos/1/clip.mp4',
+    )
     before = coins(author)
 
     with pytest.raises(media_tasks._Permanent) as exc:

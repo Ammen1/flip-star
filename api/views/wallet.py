@@ -32,7 +32,7 @@ from api.models.contest import CoinPackage, CoinTransaction, UserCoinBalance
 from api.models.core import UserProfile
 from api.models.wallet import WalletConfig, WithdrawalRequest
 from api.serializers.core import UserSerializer
-from api.services import payment_status
+from api.services import payment_status, post_pricing
 from api.services.coin_packages import (
     fallback_payload,
     pending_coin_purchase,
@@ -682,6 +682,12 @@ def public_wallet_config(request):
                 'campaign_winner': config.campaign_winner_reward,
                 'referral': config.referral_reward,
             },
+            # What a post costs, by what is being posted. The raw config
+            # fields below say which column a number came from; this says what
+            # a person will be charged, which is what the create screen shows.
+            # api/services/post_pricing.py owns the bands.
+            'post_costs': post_pricing.quote(config, is_campaign_post=False),
+            'campaign_post_costs': post_pricing.quote(config, is_campaign_post=True),
             'costs': {
                 'post_create': config.cost_post_create,
                 'like': config.cost_like,

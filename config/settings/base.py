@@ -277,7 +277,7 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
 # Media pipeline: api/services/media_pipeline.py (upload intake) and
 # api/tasks/media.py (processing). Documented in infrastructure/config/schema.py.
 MEDIA_MAX_UPLOAD_BYTES = config('MEDIA_MAX_UPLOAD_BYTES', default=50 * 1024 * 1024, cast=int)
-MEDIA_MAX_VIDEO_SECONDS = config('MEDIA_MAX_VIDEO_SECONDS', default=92, cast=int)
+MEDIA_MAX_VIDEO_SECONDS = config('MEDIA_MAX_VIDEO_SECONDS', default=120, cast=int)
 MEDIA_MAX_IMAGE_PIXELS = config('MEDIA_MAX_IMAGE_PIXELS', default=40_000_000, cast=int)
 # 0 keeps originals indefinitely -- the current behaviour, and the safe default
 # until someone decides re-processing from source is no longer needed.

@@ -919,29 +919,55 @@ def _claim(reel_id, task_id, force):
     return reel, None
 
 
+def _video_too_long(duration) -> bool:
+    """Is a measured duration beyond what may be posted?
+
+    ``settings.MEDIA_MAX_VIDEO_SECONDS`` is the one limit that decides -- the
+    same number the recorder stops at and the top of the long-video price
+    band. Inclusive of the limit itself: a 120.0-second video is accepted and
+    charged as a long video, 120.01 is rejected.
+
+    Named rather than written twice inline, because it is checked before and
+    after encoding and those two must not drift apart.
+    """
+    if not duration:
+        return False
+    try:
+        return float(duration) > settings.MEDIA_MAX_VIDEO_SECONDS
+    except (TypeError, ValueError):
+        return False
+
+
 def _charge_long_video(reel, duration):
-    """Charge the over-60-seconds surcharge once, now that the length is known.
+    """Charge the long-video difference once, now that the length is known.
 
     The upload request used to run ffprobe to decide this before answering;
     the worker is where the real duration is measured, so the charge moved
-    here. `long_video_charged` records it in the same transaction as the
-    debit, so a retry of this task cannot charge twice. A user who cannot pay
-    gets a failed post rather than a free long video.
+    here -- which is also why a client cannot buy a cheap long video by
+    claiming a short duration. `long_video_charged` records it in the same
+    transaction as the debit, so a retry of this task cannot charge twice. A
+    user who cannot pay gets a failed post rather than a free long video.
+
+    The band comes from api/services/post_pricing.py, shared with the request
+    that charged the base price. It is inclusive of 60 seconds: a 60.0-second
+    video is a long video, where this function previously charged it as short.
     """
     from django.db import transaction
 
     from api.models import Reel
     from api.models.contest import UserCoinBalance
     from api.models.wallet import WalletConfig
+    from api.services import post_pricing
 
-    if duration <= 60 or reel.long_video_charged:
+    if reel.long_video_charged or not post_pricing.is_long_video(duration):
+        return
+    # A photo has no duration and must never reach the video price, whatever
+    # a caller passes. The video path is the only caller today; this keeps the
+    # rule true of the function rather than of its call sites.
+    if not (reel.original_media or reel.media):
         return
     config = WalletConfig.get_config()
-    cost = (
-        config.cost_post_create_long_video
-        if reel.is_campaign_post
-        else config.cost_post_create_long_video_non_campaign
-    )
+    cost = post_pricing.long_video_extra(config, is_campaign_post=reel.is_campaign_post)
     if not cost:
         return
     with transaction.atomic():
@@ -954,7 +980,7 @@ def _charge_long_video(reel, duration):
             balance.spend_coins(
                 cost,
                 'post_long_video',
-                description=f'Video over 60 seconds (post {reel.pk})',
+                description=f'Video {post_pricing.LONG_VIDEO_SECONDS}s or longer (post {reel.pk})',
             )
         except ValueError as exc:
             raise _Permanent('long_video_unpaid') from exc
@@ -1007,8 +1033,7 @@ def _run_video(reel, version, workdir, live, progress=_NO_PROGRESS):
 
     # Rules that apply to a new upload, never to a post already published
     # (a backfill of old posts must not re-charge or reject them).
-    limit = settings.MEDIA_MAX_VIDEO_SECONDS
-    if not live and info['duration'] and info['duration'] > limit:
+    if not live and _video_too_long(info['duration']):
         raise _Permanent('video_too_long')
 
     out_video, out_thumb, duration, variants = _process_video(
@@ -1016,7 +1041,7 @@ def _run_video(reel, version, workdir, live, progress=_NO_PROGRESS):
     )
 
     if not live:
-        if duration > limit:
+        if _video_too_long(duration):
             raise _Permanent('video_too_long')
         _charge_long_video(reel, duration)
 

@@ -1888,11 +1888,15 @@ def _create_post_from_upload(request, upload_file, overlay_text=None):
         campaign = Campaign.objects.filter(id=campaign_id).first()
         is_campaign_post = campaign is not None
 
-    # The price of posting. The long-video surcharge is charged by the worker
-    # once it has measured the video (api/tasks/media.py _charge_long_video):
-    # deciding it here meant running ffprobe inside the request.
+    # The price of posting (api/services/post_pricing.py). The long-video
+    # difference is charged by the worker once it has measured the video
+    # (api/tasks/media.py _charge_long_video): deciding it here meant running
+    # ffprobe inside the request, and would mean trusting a duration the
+    # client sent.
+    from api.services import post_pricing
+
     config = WalletConfig.get_config()
-    cost = config.cost_post_create if is_campaign_post else config.cost_post_create_non_campaign
+    cost = post_pricing.base_cost(config, is_campaign_post=is_campaign_post)
 
     try:
         source = store_source(user, upload_file, intake)

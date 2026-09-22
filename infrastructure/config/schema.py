@@ -472,8 +472,10 @@ SCHEMA: tuple[Key, ...] = (
         'MEDIA_MAX_VIDEO_SECONDS',
         kind='int',
         group='storage',
-        doc='Longest video the worker accepts. Default 92: the recorder stops '
-        'at 90 and a recording runs a little over.',
+        doc='Longest video the worker accepts. Default 120, matching the '
+        'recorder (MAX_REC) and the top of the long-video price band '
+        '(api/services/post_pricing.py). A video measured longer is rejected '
+        'as video_too_long.',
     ),
     _k(
         'MEDIA_MAX_IMAGE_PIXELS',
