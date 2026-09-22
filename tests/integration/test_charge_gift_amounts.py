@@ -9,6 +9,11 @@ The daily plan already rewarded every charge this way (3, what the login bonus
 used to pay). Migration 0127 gives weekly 25 and monthly 120 per charge and
 zeros on-demand, whose package pays its coins outright instead (`test_ondemand_allocation`). These tests pin the shipped amounts and the
 charging-side payout so the numbers cannot drift.
+
+The payout itself is now spread across the days of the period rather than
+paid in one lump on the day of the charge -- see
+tests/integration/test_daily_subscription_gift.py. What these still pin is
+the per-plan **total**, which is what the days add up to.
 """
 
 from decimal import Decimal
@@ -80,22 +85,27 @@ def gifts(user):
     return CoinTransaction.objects.filter(user=user, transaction_type=GIFT_TRANSACTION_TYPE)
 
 
-@pytest.mark.parametrize('slug,amount', [('weekly', 25), ('monthly', 120)])
-def test_each_charge_pays_its_plan_gift(subscriber, slug, amount):
-    """A completed payment on the seeded tier pays the plan's gift out -- on
-    first subscription and again on each renewal charge."""
-    plan = SubscriptionPlan.objects.create(
-        user=subscriber, tier=SubscriptionTier.objects.get(duration_type=slug), status='active'
-    )
+@pytest.mark.parametrize('slug,first_day,total', [('weekly', 4, 25), ('monthly', 4, 120)])
+def test_each_charge_starts_paying_its_plan_gift(subscriber, slug, first_day, total):
+    """A completed payment pays the period's **first day**, not the whole
+    period. The rest arrive daily (api/services/subscription_daily_gift.py,
+    tests/integration/test_daily_subscription_gift.py); the plan's total is
+    still what the days add up to."""
+    from api.services.subscription_daily_gift import schedule_for
+
+    tier = SubscriptionTier.objects.get(duration_type=slug)
+    plan = SubscriptionPlan.objects.create(user=subscriber, tier=tier, status='active')
 
     pay(plan)
-    assert gift_balance(subscriber) == amount
+    assert gift_balance(subscriber) == first_day
     assert gifts(subscriber).count() == 1
 
-    # a renewal is a new completed payment, so it pays out again
+    # A renewal is a new payment covering new days, so it pays its day one too.
     pay(plan)
-    assert gift_balance(subscriber) == amount * 2
+    assert gift_balance(subscriber) == first_day * 2
     assert gifts(subscriber).count() == 2
+
+    assert sum(schedule_for(tier)) == total, 'the period is still worth its total'
 
 
 @pytest.mark.parametrize('slug', ['weekly', 'monthly'])
@@ -146,18 +156,21 @@ def test_tiers_with_other_slugs_get_their_plan_amounts(renamed_tiers_all_paying_
         assert tier.charge_gift_coins == expected, f'{tier.slug} pays {tier.charge_gift_coins}'
 
 
-def test_a_weekly_subscriber_is_then_paid_25_not_3(renamed_tiers_all_paying_three, subscriber):
-    """End to end, on the renamed tiers: the payout a subscriber actually sees."""
+def test_a_weekly_subscriber_is_then_paid_from_25_not_3(renamed_tiers_all_paying_three, subscriber):
+    """End to end on the renamed tiers: the week is worth 25, and its first
+    day pays 4 -- where before migration 0128 the whole week was worth 3."""
     from django.apps import apps
 
+    from api.services.subscription_daily_gift import schedule_for
+
     _migration_0128().set_gifts(apps, None)
-    plan = SubscriptionPlan.objects.create(
-        user=subscriber, tier=SubscriptionTier.objects.get(duration_type='weekly'), status='active'
-    )
+    tier = SubscriptionTier.objects.get(duration_type='weekly')
+    plan = SubscriptionPlan.objects.create(user=subscriber, tier=tier, status='active')
 
     pay(plan)
 
-    assert gift_balance(subscriber) == 25
+    assert schedule_for(tier) == [4, 4, 4, 4, 3, 3, 3]
+    assert gift_balance(subscriber) == 4, 'day one'
 
 
 def test_an_amount_set_in_the_admin_is_left_alone():

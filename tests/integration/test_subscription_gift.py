@@ -175,8 +175,12 @@ def test_a_subscription_with_no_user_yet_is_not_an_error(tier):
 
 
 def test_the_gift_is_traceable_to_the_charge_that_paid_for_it(plan, subscriber):
+    """The reference now carries the day as well as the charge, because a
+    period pays a day at a time (api/services/subscription_daily_gift.py). A
+    daily plan is one day long, so its charge still produces exactly one row."""
     payment = charge(plan)
 
     gift = gifts_for(subscriber).get()
-    assert gift.payment_reference == str(payment.pk)
+    assert str(payment.pk) in gift.payment_reference
+    assert gift.payment_reference.endswith(':day:1')
     assert gift.coins == GIFT

@@ -25,10 +25,12 @@ from api.tasks.media import (
     send_push_notification,
 )
 from api.tasks.sms import deliver_sms
+from api.tasks.subscription_gifts import grant_daily_subscription_gifts
 from api.tasks.subscription_renewal import renew_expired_subscription, sweep_expired_subscriptions
 
 __all__ = [
     'deliver_sms',
+    'grant_daily_subscription_gifts',
     'renew_expired_subscription',
     'sweep_expired_subscriptions',
     'expire_boost_campaigns',

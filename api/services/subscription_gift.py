@@ -147,8 +147,21 @@ def grant_for_payment(payment) -> int:
     if getattr(tier, 'duration_type', None) == ONDEMAND:
         return grant_ondemand_allocation(payment)
 
-    # Guard against duplicate grants: if this payment has already gifted coins,
-    # do not grant again. The payment id is the idempotency key.
+    # The charge pays the first day, not the whole period.
+    #
+    # A weekly plan is worth 25 coins and used to hand over all 25 here, which
+    # left the other six days of the subscription with nothing in them. The
+    # remaining days are paid by the daily sweep
+    # (api/services/subscription_daily_gift.py), which is also what makes this
+    # safe to call repeatedly: every day is keyed separately, so a webhook
+    # delivered twice still pays day one once.
+    from api.services import subscription_daily_gift as daily
+
+    if daily.plan_days(tier):
+        return daily.grant_due(payment)
+
+    # Nothing to spread across (a tier with no duration): fall back to the
+    # single grant this function has always made.
     if already_gifted(payment):
         return 0
 

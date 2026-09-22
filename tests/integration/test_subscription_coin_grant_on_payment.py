@@ -47,7 +47,9 @@ def disable_welcome_bonus():
     config.save()
 
 
-def make_tier(bonus_coins=0, charge_gift_coins=0, duration_type='monthly', duration_days=30, price_etb=100):
+def make_tier(
+    bonus_coins=0, charge_gift_coins=0, duration_type='monthly', duration_days=30, price_etb=100
+):
     global _tier_seq
     _tier_seq += 1
     n = _tier_seq
@@ -78,6 +80,20 @@ def bonus_balance(user):
         return UserCoinBalance.objects.get(user=user).bonus_balance
     except UserCoinBalance.DoesNotExist:
         return 0
+
+
+def first_day_gift(tier):
+    """What the charge grants now: the first day of the period.
+
+    The period's whole total used to land on the day of the charge. It is
+    spread across the days now (api/services/subscription_daily_gift.py), so
+    what a completed payment grants immediately is day one's share -- and the
+    days still add up to ``charge_gift_coins``.
+    """
+    from api.services.subscription_daily_gift import schedule_for
+
+    schedule = schedule_for(tier)
+    return schedule[0] if schedule else 0
 
 
 def earned_balance(user):
@@ -129,15 +145,18 @@ def test_telebirr_one_time_callback_grants_bonus_coins_immediately(rf, user, tie
 
     request = rf.post(
         '/api/telebirr/one-time/callback/',
-        data=json.dumps({
-            'merch_order_id': 'merch-123',
-            'trade_status': 'Completed',
-            'payment_order_id': 'order-456',
-        }),
+        data=json.dumps(
+            {
+                'merch_order_id': 'merch-123',
+                'trade_status': 'Completed',
+                'payment_order_id': 'order-456',
+            }
+        ),
         content_type='application/json',
     )
 
     from unittest.mock import patch
+
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
             'verified': True,
@@ -173,15 +192,18 @@ def test_telebirr_one_time_callback_grants_charge_gift_coins_immediately(rf, use
 
     request = rf.post(
         '/api/telebirr/one-time/callback/',
-        data=json.dumps({
-            'merch_order_id': 'merch-456',
-            'trade_status': 'Completed',
-            'payment_order_id': 'order-789',
-        }),
+        data=json.dumps(
+            {
+                'merch_order_id': 'merch-456',
+                'trade_status': 'Completed',
+                'payment_order_id': 'order-789',
+            }
+        ),
         content_type='application/json',
     )
 
     from unittest.mock import patch
+
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
             'verified': True,
@@ -197,9 +219,9 @@ def test_telebirr_one_time_callback_grants_charge_gift_coins_immediately(rf, use
     sub.refresh_from_db()
     assert sub.status == 'active'
 
-    # charge_gift_coins should be in earned balance (giftable)
-    assert earned_balance(user) == 100
-    assert total_balance(user) == 600  # bonus + earned
+    # The gift lands in the earned (giftable) bucket, a day at a time.
+    assert earned_balance(user) == first_day_gift(tier)
+    assert total_balance(user) == 500 + first_day_gift(tier)  # bonus + day one
 
 
 def test_telebirr_one_time_callback_failed_payment_grants_no_coins(rf, user, tier):
@@ -216,15 +238,18 @@ def test_telebirr_one_time_callback_failed_payment_grants_no_coins(rf, user, tie
 
     request = rf.post(
         '/api/telebirr/one-time/callback/',
-        data=json.dumps({
-            'merch_order_id': 'merch-789',
-            'trade_status': 'FAILED',
-            'payment_order_id': 'order-999',
-        }),
+        data=json.dumps(
+            {
+                'merch_order_id': 'merch-789',
+                'trade_status': 'FAILED',
+                'payment_order_id': 'order-999',
+            }
+        ),
         content_type='application/json',
     )
 
     from unittest.mock import patch
+
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
             'verified': True,
@@ -259,6 +284,7 @@ def test_telebirr_one_time_callback_duplicate_grants_only_once(rf, user, tier):
     )
 
     from unittest.mock import patch
+
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
             'verified': True,
@@ -270,11 +296,13 @@ def test_telebirr_one_time_callback_duplicate_grants_only_once(rf, user, tier):
         # First callback
         request1 = rf.post(
             '/api/telebirr/one-time/callback/',
-            data=json.dumps({
-                'merch_order_id': 'merch-dup',
-                'trade_status': 'Completed',
-                'payment_order_id': 'order-dup',
-            }),
+            data=json.dumps(
+                {
+                    'merch_order_id': 'merch-dup',
+                    'trade_status': 'Completed',
+                    'payment_order_id': 'order-dup',
+                }
+            ),
             content_type='application/json',
         )
         response1 = telebirr_one_time_callback(request1)
@@ -283,11 +311,13 @@ def test_telebirr_one_time_callback_duplicate_grants_only_once(rf, user, tier):
         # Second callback (duplicate) - create fresh request
         request2 = rf.post(
             '/api/telebirr/one-time/callback/',
-            data=json.dumps({
-                'merch_order_id': 'merch-dup',
-                'trade_status': 'Completed',
-                'payment_order_id': 'order-dup',
-            }),
+            data=json.dumps(
+                {
+                    'merch_order_id': 'merch-dup',
+                    'trade_status': 'Completed',
+                    'payment_order_id': 'order-dup',
+                }
+            ),
             content_type='application/json',
         )
         response2 = telebirr_one_time_callback(request2)
@@ -298,8 +328,8 @@ def test_telebirr_one_time_callback_duplicate_grants_only_once(rf, user, tier):
 
     # Coins granted only once
     assert bonus_balance(user) == 500
-    assert earned_balance(user) == 100
-    assert total_balance(user) == 600
+    assert earned_balance(user) == first_day_gift(tier)
+    assert total_balance(user) == 500 + first_day_gift(tier)
 
 
 def test_different_durations_receive_configured_allocation(rf):
@@ -307,9 +337,15 @@ def test_different_durations_receive_configured_allocation(rf):
     Different access durations (daily, weekly, monthly) must receive their
     configured bonus_coins and charge_gift_coins allocation.
     """
-    daily_tier = make_tier(bonus_coins=50, charge_gift_coins=10, duration_type='daily', duration_days=1)
-    weekly_tier = make_tier(bonus_coins=200, charge_gift_coins=50, duration_type='weekly', duration_days=7)
-    monthly_tier = make_tier(bonus_coins=500, charge_gift_coins=100, duration_type='monthly', duration_days=30)
+    daily_tier = make_tier(
+        bonus_coins=50, charge_gift_coins=10, duration_type='daily', duration_days=1
+    )
+    weekly_tier = make_tier(
+        bonus_coins=200, charge_gift_coins=50, duration_type='weekly', duration_days=7
+    )
+    monthly_tier = make_tier(
+        bonus_coins=500, charge_gift_coins=100, duration_type='monthly', duration_days=30
+    )
 
     for tier in [daily_tier, weekly_tier, monthly_tier]:
         # Create fresh user and subscription for each tier for isolation
@@ -324,15 +360,18 @@ def test_different_durations_receive_configured_allocation(rf):
 
         request = rf.post(
             '/api/telebirr/one-time/callback/',
-            data=json.dumps({
-                'merch_order_id': f'merch-{tier.slug}',
-                'trade_status': 'Completed',
-                'payment_order_id': f'order-{tier.slug}',
-            }),
+            data=json.dumps(
+                {
+                    'merch_order_id': f'merch-{tier.slug}',
+                    'trade_status': 'Completed',
+                    'payment_order_id': f'order-{tier.slug}',
+                }
+            ),
             content_type='application/json',
         )
 
         from unittest.mock import patch
+
         with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
             mock_verify.return_value = {
                 'verified': True,
@@ -347,7 +386,7 @@ def test_different_durations_receive_configured_allocation(rf):
 
         # Check configured allocation for this tier
         assert bonus_balance(user) == tier.bonus_coins
-        assert earned_balance(user) == tier.charge_gift_coins
+        assert earned_balance(user) == first_day_gift(tier)
 
 
 def test_wallet_balance_updated_atomically(rf, user, tier):
@@ -365,15 +404,18 @@ def test_wallet_balance_updated_atomically(rf, user, tier):
 
     request = rf.post(
         '/api/telebirr/one-time/callback/',
-        data=json.dumps({
-            'merch_order_id': 'merch-atomic',
-            'trade_status': 'Completed',
-            'payment_order_id': 'order-atomic',
-        }),
+        data=json.dumps(
+            {
+                'merch_order_id': 'merch-atomic',
+                'trade_status': 'Completed',
+                'payment_order_id': 'order-atomic',
+            }
+        ),
         content_type='application/json',
     )
 
     from unittest.mock import patch
+
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
             'verified': True,
@@ -392,8 +434,8 @@ def test_wallet_balance_updated_atomically(rf, user, tier):
     # Balance must reflect both grants atomically
     balance = UserCoinBalance.objects.get(user=user)
     assert balance.bonus_balance == 500
-    assert balance.earned_balance == 100
-    assert balance.balance == 600
+    assert balance.earned_balance == first_day_gift(tier)
+    assert balance.balance == 500 + first_day_gift(tier)
 
 
 # ---------------------------------------------------------------------------
@@ -477,7 +519,7 @@ def test_ussd_subscription_webhook_grants_charge_gift_coins_via_signal(user):
     assert payment.status == 'completed'
 
     # charge_gift_coins granted via signal
-    assert earned_balance(user) == 50
+    assert earned_balance(user) == first_day_gift(tier), 'day one of the period'
 
 
 def test_ussd_subscription_webhook_failed_payment_grants_no_coins(user):
@@ -554,7 +596,7 @@ def test_ussd_subscription_webhook_duplicate_grants_only_once(user):
 
     # Verify first grant
     assert bonus_balance(user) == 300
-    assert earned_balance(user) == 50
+    assert earned_balance(user) == first_day_gift(tier), 'day one of the period'
 
     # Second activation attempt (simulate duplicate webhook)
     # The webhook would find payment.status != 'pending' and return early.
@@ -564,8 +606,8 @@ def test_ussd_subscription_webhook_duplicate_grants_only_once(user):
 
     # Coins should still be granted only once total
     assert bonus_balance(user) == 300
-    assert earned_balance(user) == 50
-    assert total_balance(user) == 350
+    assert earned_balance(user) == first_day_gift(tier), 'day one of the period'
+    assert total_balance(user) == 300 + first_day_gift(tier), 'bonus plus day one'
 
 
 # ---------------------------------------------------------------------------
@@ -588,15 +630,18 @@ def test_coin_grants_create_audit_records(rf, user, tier):
 
     request = rf.post(
         '/api/telebirr/one-time/callback/',
-        data=json.dumps({
-            'merch_order_id': 'merch-audit',
-            'trade_status': 'Completed',
-            'payment_order_id': 'order-audit',
-        }),
+        data=json.dumps(
+            {
+                'merch_order_id': 'merch-audit',
+                'trade_status': 'Completed',
+                'payment_order_id': 'order-audit',
+            }
+        ),
         content_type='application/json',
     )
 
     from unittest.mock import patch
+
     with patch('api.views.subscription.telebirr_service.verify_notify') as mock_verify:
         mock_verify.return_value = {
             'verified': True,
@@ -623,7 +668,7 @@ def test_coin_grants_create_audit_records(rf, user, tier):
         transaction_type='subscription_gift',
     ).first()
     assert gift_tx is not None
-    assert gift_tx.coins == 100
+    assert gift_tx.coins == first_day_gift(tier), 'day one of the period'
     assert 'subscription gift' in gift_tx.description.lower()
 
     # Verify the payment reference is recorded for traceability

@@ -119,6 +119,16 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.generate_monthly_leaderboards',
         'schedule': 2592000.0,  # Run every 30 days
     },
+    # Subscription gift coins, paid a day at a time rather than all on the
+    # day of the charge. Hourly, not daily: the task pays only what each plan
+    # is owed and has already been paid nothing twice, so running it often
+    # costs one indexed query and means a subscriber whose day ticks over at
+    # 14:20 waits an hour rather than until tomorrow. It also catches up any
+    # day missed while the worker was down.
+    'grant-daily-subscription-gifts': {
+        'task': 'api.tasks.grant_daily_subscription_gifts',
+        'schedule': 3600.0,
+    },
     'auto-select-winners': {
         'task': 'api.tasks.auto_select_campaign_winners',
         'schedule': 3600.0,  # Run every hour to check for ended campaigns
