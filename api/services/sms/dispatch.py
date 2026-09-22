@@ -265,5 +265,3 @@ def record_delivery_receipt(receipt):
         message.masked_recipient,
     )
     return SmsMessage.objects.get(pk=message.pk)
-
-
