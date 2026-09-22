@@ -33,12 +33,15 @@ def disable_welcome_bonus():
     config.save()
 
 
-@pytest.mark.parametrize('slug,expected', [
-    ('daily', 3),
-    ('weekly', 25),
-    ('monthly', 120),
-    ('ondemand', 0),
-])
+@pytest.mark.parametrize(
+    'slug,expected',
+    [
+        ('daily', 3),
+        ('weekly', 25),
+        ('monthly', 120),
+        ('ondemand', 0),
+    ],
+)
 def test_the_per_charge_gift_amounts(slug, expected):
     tier = SubscriptionTier.objects.get(duration_type=slug)
     assert gift_coins_for(tier) == expected
@@ -106,3 +109,63 @@ def test_an_unconfirmed_charge_grants_nothing(subscriber, slug):
 
     assert gift_balance(subscriber) == 0
     assert not gifts(subscriber).exists()
+
+
+# ── the reported case: every plan still paying 3 ────────────────────────────
+
+
+def _migration_0128():
+    import importlib
+
+    return importlib.import_module('api.migrations.0128_charge_gift_amounts_by_plan_type')
+
+
+@pytest.fixture
+def renamed_tiers_all_paying_three():
+    """The database the report came from: tiers whose slugs are not the seed
+    ones, every one still at the 3 coins 0123 gave all of them. 0127 looked
+    for slug='weekly' / 'monthly', matched nothing and changed nothing."""
+    slugs = {
+        'daily': 'daily-premium-plan',
+        'weekly': 'weekly-premium-plan',
+        'monthly': 'monthly-premium-plan',
+    }
+    for duration_type, slug in slugs.items():
+        SubscriptionTier.objects.filter(duration_type=duration_type).update(
+            slug=slug, charge_gift_coins=3
+        )
+
+
+def test_tiers_with_other_slugs_get_their_plan_amounts(renamed_tiers_all_paying_three):
+    from django.apps import apps
+
+    _migration_0128().set_gifts(apps, None)
+
+    for duration_type, expected in (('daily', 3), ('weekly', 25), ('monthly', 120)):
+        tier = SubscriptionTier.objects.get(duration_type=duration_type)
+        assert tier.charge_gift_coins == expected, f'{tier.slug} pays {tier.charge_gift_coins}'
+
+
+def test_a_weekly_subscriber_is_then_paid_25_not_3(renamed_tiers_all_paying_three, subscriber):
+    """End to end, on the renamed tiers: the payout a subscriber actually sees."""
+    from django.apps import apps
+
+    _migration_0128().set_gifts(apps, None)
+    plan = SubscriptionPlan.objects.create(
+        user=subscriber, tier=SubscriptionTier.objects.get(duration_type='weekly'), status='active'
+    )
+
+    pay(plan)
+
+    assert gift_balance(subscriber) == 25
+
+
+def test_an_amount_set_in_the_admin_is_left_alone():
+    """Only tiers still at the seeded 3 are changed; a deliberate choice stays."""
+    from django.apps import apps
+
+    SubscriptionTier.objects.filter(duration_type='weekly').update(charge_gift_coins=40)
+
+    _migration_0128().set_gifts(apps, None)
+
+    assert SubscriptionTier.objects.get(duration_type='weekly').charge_gift_coins == 40
