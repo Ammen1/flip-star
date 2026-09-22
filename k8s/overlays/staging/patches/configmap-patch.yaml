@@ -145,3 +145,27 @@ data:
   CRYPTO_TEST_ENDPOINTS_ENABLED: "true"
   VAULT_ADDR: "http://vault.flipstar-staging.svc.cluster.local:8200"
   VAULT_SECRET_PATH: "flipstar/backend/staging"
+
+  # --- TIMWE Master Aggregator integration ---
+  #
+  # Enable the integration so syncOrderRelation events actually apply
+  # subscriptions rather than being recorded in observation mode. Without
+  # this flag every hit from TIMWE is received and answered 0 (success) but
+  # NO subscription is created, NO coin gift is granted, and NO SMS is sent.
+  # The flag defaults to False in code (api/views/timwe.py:197) so the pod
+  # silently no-ops every inbound event unless this is explicitly "true".
+  TIMWE_INTEGRATION_ENABLED: "true"
+
+  # IP allowlist for the TIMWE Master Aggregator. The MA reaches us over the
+  # IPsec tunnel from 10.175.206.0/24 (same subnet as the SMPP gateway at
+  # 10.175.206.42). Leave blank to accept from any IP with a warning -- set
+  # this to the MA's exact egress IP(s) once TIMWE confirms them. If you
+  # have seen requests arrive from partner-webserver679.phinfra.local (already
+  # in ALLOWED_HOSTS), add that IP here too.
+  # Example: TIMWE_ALLOWED_IPS: "10.175.206.1,10.175.206.2"
+  TIMWE_ALLOWED_IPS: ""
+
+  # Deep link base URL embedded in the welcome SMS. A subscriber who gets
+  # this URL taps it to open the app / register. Must match what the mobile
+  # team has registered. Defaults to https://uat.flipstar.et/register in code.
+  TIMWE_SUBSCRIPTION_LINK_BASE: "https://uat.flipstar.et/register"

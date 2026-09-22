@@ -900,8 +900,12 @@ class AdminSubscriptionViewSet(viewsets.ModelViewSet):
 @encrypted_endpoint
 def telebirr_one_time_initiate(request):
     """
-    Initiate a one-time Telebirr payment for subscription (no recurring mandate).
-    Mimics the coin purchase flow.
+    Initiate a one-time Telebirr H5/SuperApp payment for a subscription plan.
+
+    Only recurring plans (daily, weekly, monthly) are accepted here.
+    On-demand is a coin top-up product, not a subscription, and must NOT be
+    offered through this endpoint -- it has no duration_days, grants nothing
+    on its own, and would leave a subscriber charged with no service.
 
     Request body: {
         plan_type: 'daily' | 'weekly' | 'monthly',
@@ -917,6 +921,25 @@ def telebirr_one_time_initiate(request):
 
     if not plan_type:
         return Response({'error': 'plan_type is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # On-demand is a coin top-up, not a recurring subscription. It has no
+    # duration and cannot be activated through this H5/SuperApp flow.
+    if plan_type == 'ondemand':
+        return Response(
+            {'error': 'On-demand purchases are not available through this endpoint.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Only allow the three recurring plan types.
+    ALLOWED_PLAN_TYPES = ('daily', 'weekly', 'monthly')
+    if plan_type not in ALLOWED_PLAN_TYPES:
+        return Response(
+            {
+                'error': f'Invalid plan_type {plan_type!r}. Must be one of: '
+                + ', '.join(ALLOWED_PLAN_TYPES)
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     tier = SubscriptionTier.objects.filter(duration_type=plan_type, is_active=True).first()
     if not tier:
