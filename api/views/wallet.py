@@ -1339,35 +1339,74 @@ def telebirr_initiate_payment(request):
     """
     Create a Telebirr H5 (InApp) prepaid order for a coin purchase.
 
-    Body: { package_id }
+    Body: { package_id } or { amount_etb }
     Returns a signed `raw_request` string that the H5 page must hand to the
     SuperApp via window.consumerapp.evaluate(js_fun_start_pay) -- this is
     the real Telebirr H5/Fabric flow, not a browser redirect. See
     api/integrations/telebirr/checkout.py's module docstring.
+
+    `amount_etb` is priced here rather than by the client, exactly as
+    telebirr_ussd_purchase does: the server decides what an amount buys, and
+    credits its own figure. A buyer inside the SuperApp gets the same choice
+    of a typed amount as one on the web, and the same answer.
     """
+    from api.services.coin_pricing import CoinPricingError
+    from api.services.coin_pricing import quote as quote_coins
+
     # Same rule as the USSD path: refused before an order exists.
     refusal = coin_purchase_refusal(request.user)
     if refusal is not None:
         return Response(refusal, status=status.HTTP_403_FORBIDDEN)
 
     package_id = request.data.get('package_id')
+    raw_amount = request.data.get('amount_etb')
 
-    if not package_id:
-        return Response({'error': 'package_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    package = None
+    quoted_coins = None
+    amount_etb = None
 
-    try:
-        package = CoinPackage.objects.get(id=package_id, is_active=True)
-    except CoinPackage.DoesNotExist:
+    if package_id:
+        try:
+            package = CoinPackage.objects.get(id=package_id, is_active=True)
+        except CoinPackage.DoesNotExist:
+            return Response(
+                {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+            )
+    elif raw_amount is not None:
+        try:
+            priced = quote_coins(raw_amount)
+        except CoinPricingError as exc:
+            # The message is written for a buyer to read; `code` lets the
+            # client react without parsing prose.
+            return Response(
+                {'error': str(exc), 'code': exc.code}, status=status.HTTP_400_BAD_REQUEST
+            )
+        # quote() returns a package only when the amount is exactly its price,
+        # and then its coins are the package's own total -- so the two can
+        # never disagree about what was bought.
+        package = priced['package']
+        amount_etb = priced['amount_etb']
+        quoted_coins = priced['coins']
+    else:
         return Response(
-            {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+            {'error': 'package_id or amount_etb is required'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-    total_amount = f'{float(package.price_etb):.2f}'
+    if package:
+        total_amount = f'{float(package.price_etb):.2f}'
+        title = package.name
+        total_coins = package.get_total_coins()
+    else:
+        total_amount = f'{float(amount_etb):.2f}'
+        total_coins = quoted_coins
+        # What the buyer will see on the telebirr payment counter.
+        title = f'{total_coins} FlipStar coins'
 
     # create_order_ondemand: coin purchases have no payee fields (unlike
     # subscription mandates), matching Telebirr's on-demand order shape.
     result = telebirr_service.create_order_ondemand(
-        title=package.name,
+        title=title,
         amount=total_amount,
         trade_type='InApp',
     )
@@ -1393,7 +1432,12 @@ def telebirr_initiate_payment(request):
         payment_reference=merch_order_id,
         provider_conversation_id=merch_order_id,
         package=package,
-        description=f'Pending Telebirr H5 payment for {package.name}',
+        # Carried so _credit_telebirr_order knows what to credit for a custom
+        # amount: with no package there is nothing else to derive it from,
+        # and a purchase that credited nothing would look entirely successful.
+        quoted_coins=quoted_coins,
+        amount_etb=amount_etb,
+        description=f'Pending Telebirr H5 payment for {title}',
         is_successful=False,
         # The payment counter has only just opened. Until queryOrder or the
         # notify says otherwise this is PENDING, and PENDING grants nothing.
@@ -1407,13 +1451,20 @@ def telebirr_initiate_payment(request):
             'merch_order_id': merch_order_id,
             'prepay_id': result.get('prepay_id'),
             'amount': total_amount,
-            'package': {
-                'id': package.id,
-                'name': package.name,
-                'coin_amount': package.coin_amount,
-                'bonus_coins': package.bonus_coins,
-                'total_coins': package.get_total_coins(),
-            },
+            # Always present, package or not, so the client can show what was
+            # bought without having to know which shape it asked for.
+            'coins': total_coins,
+            'package': (
+                {
+                    'id': package.id,
+                    'name': package.name,
+                    'coin_amount': package.coin_amount,
+                    'bonus_coins': package.bonus_coins,
+                    'total_coins': package.get_total_coins(),
+                }
+                if package
+                else None
+            ),
             'message': 'Order created. Call js_fun_start_pay with raw_request.',
         }
     )

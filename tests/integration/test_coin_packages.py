@@ -158,15 +158,21 @@ def test_the_coin_figure_never_comes_from_the_request(view_name):
         )
 
 
-def test_the_h5_entry_point_still_takes_a_package_and_nothing_else():
-    """Custom amounts were added to the USSD path only. /wallet/telebirr/
-    initiate/ has no amount form, so it must keep refusing one."""
+def test_the_h5_entry_point_prices_the_amount_itself():
+    """Custom amounts reach the SuperApp too, and on the same terms.
+
+    This used to assert the opposite -- that /wallet/telebirr/initiate/ read
+    no amount at all -- because typed amounts were a web-only feature. Now
+    both entry points take one, so the property worth pinning is not "no
+    amount" but "no coin figure from the client": the amount is what a buyer
+    may name, and what it buys is decided here.
+    """
     source = _view_source('telebirr_initiate_payment')
 
-    assert 'package.price_etb' in source, 'amount must derive from the row'
-    assert (
-        "request.data.get('amount" not in source
-    ), 'the H5 entry point started reading an amount from the client'
+    assert 'package.price_etb' in source, 'a package amount must derive from the row'
+    assert "request.data.get('amount_etb')" in source, 'must accept a custom amount'
+    assert 'quote_coins(' in source, 'the amount must be priced by coin_pricing.quote'
+    assert "priced['coins']" in source, 'the coin figure must come from the quote'
 
 
 def test_the_ussd_entry_point_prices_the_amount_itself():
