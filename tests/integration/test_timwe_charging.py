@@ -1530,6 +1530,33 @@ def test_no_ondemand_tier_falls_back_to_the_default(user, airtime_package, setti
     assert '<v2:serviceId>30026300007334</v2:serviceId>' in charge_body(post)
 
 
+def test_the_check_command_says_which_service_each_product_uses(user, settings):
+    """A silent fallback is how this misconfiguration survives."""
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+    tier_with_service('30026300007331')
+    tier_with_service('', duration='daily', price=3)
+
+    with patch('socket.create_connection'):
+        output = run_command()
+
+    assert 'Service per product' in output
+    assert '30026300007331' in output, 'a tier with its own service is not shown'
+    assert '(default)' in output, 'a tier falling back is not marked as falling back'
+
+
+def test_the_check_command_warns_when_coin_purchases_have_no_service(user, settings):
+    from api.models import SubscriptionTier
+
+    SubscriptionTier.objects.filter(duration_type='ondemand').delete()
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+
+    with patch('socket.create_connection'):
+        output = run_command()
+
+    assert 'coin purchase' in output
+    assert 'no on-demand tier service_id set' in output
+
+
 def test_two_products_do_not_share_one_service(user):
     """The whole point: each charge names its own product's service."""
     daily = tier_with_service('30026300007330', duration='daily', price=3)

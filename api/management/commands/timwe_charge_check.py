@@ -186,6 +186,8 @@ class Command(BaseCommand):
             + ('tel:2519...' if TimweChargeService.uses_tel_prefix() else 'bare digits')
         )
 
+        self._products()
+
         try:
             timeout = TimweChargeService.get_timeout()
             self.stdout.write(f'  TIMWE_CHARGE_TIMEOUT   {timeout}s')
@@ -357,6 +359,45 @@ class Command(BaseCommand):
             self.stdout.write(f'  timwe error {code["error_code"]:8} {code["n"]}')
 
     # -- the one real charge -------------------------------------------------
+
+    def _products(self):
+        """Which MA service each product's charges will actually name.
+
+        TIMWE provision a price point per product, so a charge carries the
+        service its product belongs to. A tier with nothing set falls back to
+        the configured default -- which is correct behaviour and also the way
+        a misconfiguration stays invisible: charges go out under a service
+        that may have no price point for their amount, and the only symptom
+        is SVC0901 / INVALID_PRICEPOINT_ID at the gateway.
+
+        So the fallbacks are printed as fallbacks, not as settings.
+        """
+        from api.models import SubscriptionTier
+        from api.services.subscription_tiers import charging_service_id, ondemand_service_id
+
+        default = TimweChargeService.get_service_id()
+
+        self.stdout.write(self.style.MIGRATE_HEADING('Service per product'))
+        tiers = SubscriptionTier.objects.order_by('duration_type')
+        if not tiers.exists():
+            self.stdout.write(self.style.WARNING('  no SubscriptionTier rows at all'))
+        for tier in tiers:
+            own = charging_service_id(tier)
+            shown = own or f'{default} (default)'
+            self.stdout.write(f'  {tier.duration_type:<10} {tier.price_etb:>7} {shown}')
+
+        # Coin purchases are not a subscription; they are the on-demand
+        # product, and this is the line that says whether they know it.
+        coins = ondemand_service_id()
+        if coins:
+            self.stdout.write(f'  coin purchase        {coins}')
+        else:
+            self.stdout.write(
+                self.style.WARNING(
+                    f'  coin purchase        {default} (default -- no on-demand '
+                    'tier service_id set)'
+                )
+            )
 
     def _charge_once(self, options):
         from api.services.timwe_charging import ChargeRefused, request_charge, user_message
