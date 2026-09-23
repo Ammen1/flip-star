@@ -1473,6 +1473,109 @@ def test_a_fixed_timestamp_still_authenticates(settings):
 # readings so flipping the setting is a decision with a known effect.
 
 
+@pytest.mark.parametrize(
+    ('birr', 'provider'),
+    [(1, 100), (5, 500), (10, 1000), (20, 2000), (50, 5000)],
+)
+def test_birr_converts_to_timwe_units(birr, provider):
+    """The business rule, at the one place it is applied."""
+    assert TimweChargeService.etb_to_timwe_amount(birr) == provider
+
+
+def test_the_conversion_returns_an_integer():
+    result = TimweChargeService.etb_to_timwe_amount(10)
+
+    assert isinstance(result, int)
+    assert not isinstance(result, bool)
+
+
+@pytest.mark.parametrize('ten', [10, '10', Decimal('10'), Decimal('10.00')])
+def test_every_spelling_of_ten_birr_converts_the_same(ten):
+    """A Decimal from the ledger and a string from a form are one amount."""
+    assert TimweChargeService.etb_to_timwe_amount(ten) == 1000
+
+
+def test_the_conversion_is_exact_not_floating_point():
+    """10.00 * 100 in float arithmetic does not reliably give 1000.
+
+    Every amount here is money, so the conversion is Decimal and integer
+    arithmetic throughout and the result is compared exactly.
+    """
+    for birr in range(1, 100):
+        assert TimweChargeService.etb_to_timwe_amount(Decimal(birr)) == birr * 100
+
+
+@pytest.mark.parametrize('bad', [0, -1, -10, Decimal('-5')])
+def test_nothing_at_or_below_zero_converts(bad):
+    with pytest.raises(TimweAmountError):
+        TimweChargeService.etb_to_timwe_amount(bad)
+
+
+@pytest.mark.parametrize('bad', ['abc', '', None, '10abc'])
+def test_a_non_number_does_not_convert(bad):
+    with pytest.raises(TimweAmountError):
+        TimweChargeService.etb_to_timwe_amount(bad)
+
+
+def test_a_float_is_refused_rather_than_rounded():
+    """Float cannot hold money exactly, so it is refused at the door."""
+    with pytest.raises(TimweAmountError, match='never a float'):
+        TimweChargeService.etb_to_timwe_amount(10.0)
+
+
+@pytest.mark.parametrize('fractional', [Decimal('10.50'), '9.99', Decimal('0.01')])
+def test_a_fractional_birr_amount_is_refused_not_rounded(fractional):
+    """Rounding would either under-bill us or over-bill the subscriber."""
+    with pytest.raises(TimweAmountError):
+        TimweChargeService.etb_to_timwe_amount(fractional)
+
+
+def test_a_hundred_birr_exceeds_the_documented_field_width():
+    """10000 is five characters and the guide gives the field four (p.21).
+
+    So in minor units the ceiling is 99.99 Birr. Nothing charged through
+    TIMWE today approaches it -- airtime coin purchases are capped at 10 Birr
+    and the dearest plan is 70 -- but a price rise past 99 would start
+    failing here rather than being silently truncated by the MA.
+
+    Pinned so that raising MAX_AMOUNT_DIGITS is a deliberate act taken on
+    TIMWE's word about their real field width, not a quiet fix.
+    """
+    assert TimweChargeService.etb_to_timwe_amount(100) == 10000
+
+    with pytest.raises(TimweAmountError, match='exceeds'):
+        TimweChargeService.format_amount(100)
+
+
+def test_ten_birr_reaches_the_envelope_as_a_thousand(user):
+    """End to end: the business amount in, the provider amount on the wire."""
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        result = charge(user, amount=10, key='etb-to-timwe')
+
+    body = charge_body(post)
+    assert '<amount>1000</amount>' in body
+    assert '<amount>10</amount>' not in body
+    assert '<currency>Birr</currency>' in body or '<currency>ETB</currency>' in body
+    # And the ledger still knows what the customer agreed to pay.
+    assert int(result.transaction.amount) == 10
+
+
+def test_the_log_shows_both_amounts(user, caplog):
+    """A log with only one of them is how a unit mismatch stays invisible."""
+    with caplog.at_level('INFO'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        charge(user, amount=10, key='etb-log')
+
+    requested = next(
+        r for r in caplog.records if r.getMessage().startswith('TIMWE_CHARGE_REQUESTED')
+    )
+    line = rendered(requested)
+
+    assert 'amount_etb=10' in line
+    assert 'provider_amount=1000' in line
+    assert MSISDN not in line
+    assert CONFIG['TIMWE_SP_PASSWORD'] not in line
+
+
 def test_by_default_ten_birr_goes_out_as_a_thousand(user):
     """Minor units, confirmed against their gateway: 1000 bills 10 Birr."""
     with patch(POST, return_value=reply(SUCCESS_BODY)) as post:

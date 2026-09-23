@@ -427,48 +427,58 @@ class TimweChargeService:
     # -- field validation --------------------------------------------------
 
     @classmethod
-    def format_amount(cls, amount: Decimal | int | str) -> str:
+    def etb_to_timwe_amount(cls, amount_etb: Decimal | int | str) -> int:
+        """Birr in, TIMWE's own units out, as an integer.
+
+        The one place the conversion happens. TIMWE's <amount> is in minor
+        units -- confirmed against their gateway, where 1000 bills 10 Birr --
+        so a Flipstar price of 10 Birr becomes 1000 here and nowhere else.
+        Everything upstream (the wallet, the ledger, every displayed price)
+        stays in Birr.
+
+        Decimal and integer arithmetic throughout: a float multiplication
+        would make 10.00 * 100 land on 999.9999999999999 often enough to
+        matter when it is money.
+
+        Refuses anything that is not a positive whole number of Birr, for the
+        same reasons it always did -- the MA has no decimal point, and a
+        charge of nothing is a caller bug rather than a transaction.
         """
-        Render an amount for the wire, or refuse.
-
-        The MA has no decimal point and four characters of room, so anything
-        with a fractional part is unrepresentable.
-
-        ``amount`` is always whole Birr -- that is what the ledger, the wallet
-        and every displayed price use. TIMWE_CHARGE_AMOUNT_SCALE decides what
-        that becomes on the wire: 1 leaves it alone, 100 renders minor units. Rounding it silently would
-        either under-bill us or over-bill the subscriber, so this raises
-        instead and lets the caller decide.
-
-        Zero is refused too: the guide treats a blank amount as SVC0002, and a
-        charge of nothing is a bug in the caller rather than a transaction.
-        """
-        if isinstance(amount, bool) or isinstance(amount, float):
+        if isinstance(amount_etb, bool) or isinstance(amount_etb, float):
             # bool is an int subclass, and float cannot hold money exactly.
             # Both are refused before Decimal gets a chance to accept them.
             raise TimweAmountError(
                 'Amount must be an int, Decimal or numeric string -- never a float.'
             )
         try:
-            value = Decimal(str(amount).strip())
+            value = Decimal(str(amount_etb).strip())
         except (InvalidOperation, ValueError) as exc:
-            raise TimweAmountError(f'Amount {amount!r} is not a number.') from exc
+            raise TimweAmountError(f'Amount {amount_etb!r} is not a number.') from exc
         if not value.is_finite():
-            raise TimweAmountError(f'Amount {amount!r} is not a finite number.')
+            raise TimweAmountError(f'Amount {amount_etb!r} is not a finite number.')
         if value != value.to_integral_value():
             raise TimweAmountError(
                 f'Amount {value} has a fractional part and the MA does not accept '
                 'a decimal point (guide p.21). Charge an integer amount, or '
                 'confirm a minor-unit convention with TIMWE.'
             )
-        integral = int(value)
-        if integral <= 0:
+        birr = int(value)
+        if birr <= 0:
             raise TimweAmountError('Amount must be a positive whole number.')
-        # Scaled last, so the digit limit is checked against what actually
-        # goes on the wire: in minor units a 4-digit field stops at 99.99
-        # Birr, and a charge above that must be refused here rather than
-        # silently truncated by the MA.
-        rendered = str(integral * cls.get_amount_scale())
+        return birr * cls.get_amount_scale()
+
+    @classmethod
+    def format_amount(cls, amount: Decimal | int | str) -> str:
+        """The converted amount as the wire string, or a refusal.
+
+        ``amount`` is Birr -- what the ledger, the wallet and every displayed
+        price use. etb_to_timwe_amount turns it into TIMWE's units; this adds
+        the one rule that is about the field rather than the value: it holds
+        four characters (guide p.21), so in minor units the ceiling is 99.99
+        Birr. Refused here rather than letting the MA truncate it, which
+        would under-bill silently.
+        """
+        rendered = str(cls.etb_to_timwe_amount(amount))
         if len(rendered) > MAX_AMOUNT_DIGITS:
             raise TimweAmountError(
                 f'Amount {rendered} exceeds the {MAX_AMOUNT_DIGITS}-character '

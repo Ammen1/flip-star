@@ -240,11 +240,18 @@ def request_charge(
     #
     # None of them is a credential. spId and spPassword are deliberately
     # absent, in either auth mode, and the number is masked.
+    # Both amounts, because they differ by a factor of a hundred and only one
+    # of them is what the subscriber agreed to pay. amount_etb is the business
+    # figure -- the price on the page, the number in the ledger -- and
+    # provider_amount is what actually goes in <amount>. Reading a log with
+    # only one of them is how a unit mismatch stays invisible.
     logger.info(
-        'TIMWE_CHARGE_REQUESTED ref=%s to=%s amount=%s currency=%s service=%s code=%s',
+        'TIMWE_CHARGE_REQUESTED ref=%s to=%s amount_etb=%s provider_amount=%s '
+        'currency=%s service=%s code=%s',
         charge.reference_code,
         charge.masked_msisdn,
         int(charge.amount),
+        TimweChargeService.etb_to_timwe_amount(charge.amount),
         charge.currency,
         charge.service_id or TimweChargeService.get_service_id(),
         charge.charge_code or TimweChargeService.get_charge_code() or '(none)',
