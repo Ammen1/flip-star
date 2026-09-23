@@ -284,7 +284,7 @@ def test_request_contains_every_documented_header_field(charge_settings):
     for field in ('spId', 'spPassword', 'serviceId', 'timeStamp', 'OA', 'FA'):
         assert f'v2:{field}' in xml
     assert '<loc:endUserIdentifier>tel:251912345678</loc:endUserIdentifier>' in xml
-    assert '<amount>20</amount>' in xml
+    assert '<amount>2000</amount>' in xml  # 20 Birr in minor units
     assert '<currency>ETB</currency>' in xml
     assert '<loc:referenceCode>REF-1</loc:referenceCode>' in xml
 
@@ -329,7 +329,8 @@ def test_fractional_amount_is_refused(charge_settings):
 def test_whole_decimal_amount_is_accepted(charge_settings):
     from api.integrations.timwe.charge import TimweChargeService
 
-    assert TimweChargeService.format_amount(Decimal('20.00')) == '20'
+    # Birr in, minor units out: their gateway bills 10 Birr for 1000.
+    assert TimweChargeService.format_amount(Decimal('20.00')) == '2000'
 
 
 def test_amount_beyond_four_characters_is_refused(charge_settings):

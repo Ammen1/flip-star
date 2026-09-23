@@ -74,6 +74,8 @@ default is the guide**: an unconfigured deployment behaves exactly as before.
 | `currency` | ISO 4217, `ETB` | `Birr` | `TIMWE_CURRENCY`, now passed through as written |
 | `endUserIdentifier` | `tel:2519…` | `2519…` | `TIMWE_CHARGE_TEL_PREFIX` |
 | `code` | optional | `255` | `TIMWE_CHARGE_CODE` |
+| `amount` | whole Birr | **minor units** — `1000` bills 10 Birr (confirmed) | `TIMWE_CHARGE_AMOUNT_SCALE`, now 100 by default |
+| `timeStamp` value | real UTC `yyyyMMddHHmmss` | the constant `2700000000` | `TIMWE_CHARGE_TIMESTAMP` (blank = real) |
 | header order | spId, spPassword, serviceId, timeStamp, OA, FA | spId, spPassword, **timeStamp, serviceId**, OA, FA | — (we send theirs) |
 | `token` | an empty `<token/>` | absent | — (we send theirs) |
 
@@ -128,7 +130,7 @@ than the request changing to match.
 | `endUserIdentifier` | `tel:251XXXXXXXXX`, or bare digits with `TIMWE_CHARGE_TEL_PREFIX=false` | p.21 |
 | `description` | mandatory, ≤ 255 | p.21 |
 | `currency` | letters, as the MA spells them (`ETB`, `Birr`) | p.21 |
-| `amount` | positive integer, ≤ 4 digits, **no decimal point** | p.21–22 |
+| `amount` | positive integer, ≤ 4 digits, **no decimal point**, in **minor units** — so the ceiling is 99.99 Birr | p.21–22 |
 | `code` | optional, ≤ 30 | p.22 |
 | `referenceCode` | mandatory, unique, ≤ 30 | p.21 |
 

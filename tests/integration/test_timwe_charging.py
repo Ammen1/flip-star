@@ -384,7 +384,7 @@ def test_every_body_field_is_present():
     assert f'<loc:endUserIdentifier>tel:{MSISDN}</loc:endUserIdentifier>' in xml
     assert '<description>FlipStar Starter</description>' in xml
     assert '<currency>ETB</currency>' in xml
-    assert '<amount>10</amount>' in xml
+    assert '<amount>1000</amount>' in xml
     assert '<loc:referenceCode>FSREF0001</loc:referenceCode>' in xml
 
 
@@ -606,9 +606,23 @@ def test_the_transaction_stores_the_normalised_number(user):
 # ===========================================================================
 
 
-@pytest.mark.parametrize('amount', [1, 10, '10', Decimal('10'), Decimal('10.00'), 9999])
-def test_a_valid_whole_amount_is_accepted(amount):
-    assert TimweChargeService.format_amount(amount) == str(int(Decimal(str(amount))))
+@pytest.mark.parametrize(
+    ('amount', 'wire'),
+    [
+        (1, '100'),
+        (10, '1000'),
+        ('10', '1000'),
+        (Decimal('10'), '1000'),
+        (Decimal('10.00'), '1000'),
+        (99, '9900'),  # the largest that fits four characters in minor units
+    ],
+)
+def test_a_valid_whole_amount_is_accepted(amount, wire):
+    """Birr in, minor units out -- the MA's field is hundredths.
+
+    Confirmed against their gateway: <amount>1000</amount> bills 10 Birr.
+    """
+    assert TimweChargeService.format_amount(amount) == wire
 
 
 @pytest.mark.parametrize(
@@ -618,7 +632,7 @@ def test_a_valid_whole_amount_is_accepted(amount):
         -1,
         Decimal('10.50'),  # the MA has no decimal point (p.21)
         '9.99',
-        10000,  # five characters; the field holds four
+        100,  # 10000 in minor units: five characters, and the field holds four
         'abc',
         '',
         1.0,  # floats cannot hold money exactly and are refused outright
@@ -1044,7 +1058,8 @@ def test_the_price_comes_from_the_package(user, airtime_package):
     with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
         purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='buy-1')
 
-    assert '<amount>10</amount>' in post.call_args.kwargs['data'].decode()
+    # 10 Birr, as 1000 minor units.
+    assert '<amount>1000</amount>' in post.call_args.kwargs['data'].decode()
 
 
 def test_the_accounts_own_number_is_charged(user, airtime_package):
@@ -1458,31 +1473,30 @@ def test_a_fixed_timestamp_still_authenticates(settings):
 # readings so flipping the setting is a decision with a known effect.
 
 
-def test_by_default_ten_birr_goes_out_as_ten(user):
-    """The guide's reading, and what every deployment does today."""
-    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
-        charge(user, amount=10)
-
-    assert '<amount>10</amount>' in charge_body(post)
-
-
-def test_in_minor_units_ten_birr_goes_out_as_a_thousand(user, settings):
-    settings.TIMWE_CHARGE_AMOUNT_SCALE = 100
-
+def test_by_default_ten_birr_goes_out_as_a_thousand(user):
+    """Minor units, confirmed against their gateway: 1000 bills 10 Birr."""
     with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
         charge(user, amount=10)
 
     assert '<amount>1000</amount>' in charge_body(post)
 
 
+def test_whole_birr_can_still_be_configured(user, settings):
+    """The guide's reading, kept reachable in case TIMWE change."""
+    settings.TIMWE_CHARGE_AMOUNT_SCALE = 1
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user, amount=10)
+
+    assert '<amount>10</amount>' in charge_body(post)
+
+
 @pytest.mark.parametrize(
     ('birr', 'minor'),
     [(3, '300'), (10, '1000'), (20, '2000'), (70, '7000')],
 )
-def test_every_product_price_fits_the_field_in_minor_units(user, settings, birr, minor):
+def test_every_product_price_fits_the_field_in_minor_units(user, birr, minor):
     """3, 10, 20 and 70 Birr -- the four products, all inside four digits."""
-    settings.TIMWE_CHARGE_AMOUNT_SCALE = 100
-
     with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
         charge(user, amount=birr, key=f'scale-{birr}')
 
@@ -1521,11 +1535,15 @@ def test_a_nonsense_scale_is_refused_not_guessed(settings, bad):
         TimweChargeService.get_amount_scale()
 
 
-def test_the_scale_defaults_to_whole_birr():
-    """Pinned: changing this default bills every subscriber differently."""
+def test_the_scale_defaults_to_minor_units():
+    """Pinned: changing this default bills every subscriber 100x differently.
+
+    100 is not a preference. TIMWE's gateway bills 10 Birr for
+    <amount>1000</amount>, so this is what their field means.
+    """
     from django.conf import settings as django_settings
 
-    assert django_settings.TIMWE_CHARGE_AMOUNT_SCALE == 1
+    assert django_settings.TIMWE_CHARGE_AMOUNT_SCALE == 100
 
 
 # ===========================================================================
@@ -1768,15 +1786,18 @@ def test_the_request_carries_no_price_point_field(user):
     assert 'price_point' not in body
 
 
-def test_ten_birr_is_sent_as_ten(user, settings):
-    """The business rule, unchanged by any of this."""
+def test_ten_birr_is_sent_as_ten_birr(user, settings):
+    """The business rule is unchanged; only its spelling on the wire is.
+
+    10 Birr is 1000 minor units, which is what their gateway bills 10 Birr for.
+    """
     settings.TIMWE_CURRENCY = 'Birr'
 
     with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
         charge(user, amount=10)
 
     body = charge_body(post)
-    assert '<amount>10</amount>' in body
+    assert '<amount>1000</amount>' in body
     assert '<currency>Birr</currency>' in body
 
 
