@@ -1414,6 +1414,90 @@ def test_the_mas_own_text_stays_out_of_the_log(user, caplog):
 
 
 # ===========================================================================
+# What one unit of <amount> means
+# ===========================================================================
+#
+# TIMWE's accepted example charged <amount>1000</amount>; ours is refused at
+# <amount>10</amount> with INVALID_PRICEPOINT_ID. Either their field is minor
+# units -- 1000 == 10.00 Birr, and our 10 means 0.10, an amount with no price
+# point -- or it is whole Birr and their example billed 1000.
+#
+# The two differ by a factor of a hundred in what a subscriber pays, so the
+# default stays at 1 and nothing changes until TIMWE say which. These pin both
+# readings so flipping the setting is a decision with a known effect.
+
+
+def test_by_default_ten_birr_goes_out_as_ten(user):
+    """The guide's reading, and what every deployment does today."""
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user, amount=10)
+
+    assert '<amount>10</amount>' in charge_body(post)
+
+
+def test_in_minor_units_ten_birr_goes_out_as_a_thousand(user, settings):
+    settings.TIMWE_CHARGE_AMOUNT_SCALE = 100
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user, amount=10)
+
+    assert '<amount>1000</amount>' in charge_body(post)
+
+
+@pytest.mark.parametrize(
+    ('birr', 'minor'),
+    [(3, '300'), (10, '1000'), (20, '2000'), (70, '7000')],
+)
+def test_every_product_price_fits_the_field_in_minor_units(user, settings, birr, minor):
+    """3, 10, 20 and 70 Birr -- the four products, all inside four digits."""
+    settings.TIMWE_CHARGE_AMOUNT_SCALE = 100
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user, amount=birr, key=f'scale-{birr}')
+
+    assert f'<amount>{minor}</amount>' in charge_body(post)
+
+
+def test_the_digit_limit_applies_to_what_goes_on_the_wire(user, settings):
+    """In minor units the 4-digit field stops at 99.99 Birr.
+
+    Checked after scaling, so a charge the MA would truncate is refused here
+    instead of being silently mis-billed.
+    """
+    settings.TIMWE_CHARGE_AMOUNT_SCALE = 100
+
+    with pytest.raises(TimweAmountError, match='exceeds'):
+        TimweChargeService.format_amount(100)
+
+    assert TimweChargeService.format_amount(99) == '9900'
+
+
+def test_the_ledger_still_records_whole_birr(user, settings):
+    """Only the wire value scales. What we bill and show stays in Birr."""
+    settings.TIMWE_CHARGE_AMOUNT_SCALE = 100
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user, amount=10, key='scale-ledger')
+
+    assert int(result.transaction.amount) == 10
+
+
+@pytest.mark.parametrize('bad', [0, -1, 'abc', None])
+def test_a_nonsense_scale_is_refused_not_guessed(settings, bad):
+    settings.TIMWE_CHARGE_AMOUNT_SCALE = bad
+
+    with pytest.raises(TimweConfigurationError, match='TIMWE_CHARGE_AMOUNT_SCALE'):
+        TimweChargeService.get_amount_scale()
+
+
+def test_the_scale_defaults_to_whole_birr():
+    """Pinned: changing this default bills every subscriber differently."""
+    from django.conf import settings as django_settings
+
+    assert django_settings.TIMWE_CHARGE_AMOUNT_SCALE == 1
+
+
+# ===========================================================================
 # One service per product
 # ===========================================================================
 #

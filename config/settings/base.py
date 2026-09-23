@@ -503,6 +503,23 @@ TIMWE_CHARGE_TIMEOUT = config('TIMWE_CHARGE_TIMEOUT', default=60, cast=int)
 TIMWE_CHARGE_SERVICE_ID = config('TIMWE_CHARGE_SERVICE_ID', default='')
 # The MA's charging code, sent as <code>. Optional per the guide (p.21).
 TIMWE_CHARGE_CODE = config('TIMWE_CHARGE_CODE', default='')
+# What one unit of <amount> means to the MA.
+#
+# 1 (the guide's reading, and the default) sends whole Birr: a 10 Birr charge
+# goes out as <amount>10</amount>. 100 sends minor units, so the same charge
+# is <amount>1000</amount>.
+#
+# This is not cosmetic -- the two differ by a factor of a hundred in what a
+# subscriber is billed -- so it stays at 1 until TIMWE confirm which their
+# gateway means. The evidence pointing at 100: their own accepted example
+# charged 1000, ours is refused at 10 with INVALID_PRICEPOINT_ID, the four
+# products are 3/10/20/70 Birr (300/1000/2000/7000 in minor units, all inside
+# the 4-digit field), and a 4-digit cap suits "up to 99.99" far better than
+# "up to 9999 Birr".
+#
+# Only the wire value scales. The ledger, the wallet and every price a user
+# sees stay in whole Birr.
+TIMWE_CHARGE_AMOUNT_SCALE = config('TIMWE_CHARGE_AMOUNT_SCALE', default=1, cast=int)
 # endUserIdentifier as 'tel:2519...' (the guide's field table) or bare digits
 # (what TIMWE's example sends).
 TIMWE_CHARGE_TEL_PREFIX = config('TIMWE_CHARGE_TEL_PREFIX', default=True, cast=bool)

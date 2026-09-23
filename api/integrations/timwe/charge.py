@@ -196,6 +196,24 @@ class TimweChargeService:
         return getattr(settings, 'TIMWE_CURRENCY', '') or ''
 
     @classmethod
+    def get_amount_scale(cls) -> int:
+        """Units of <amount> per Birr: 1 for whole Birr, 100 for minor units."""
+        raw = getattr(settings, 'TIMWE_CHARGE_AMOUNT_SCALE', 1)
+        try:
+            scale = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise TimweConfigurationError(
+                'TIMWE_CHARGE_AMOUNT_SCALE must be a positive whole number '
+                '(1 for Birr, 100 for minor units).'
+            ) from exc
+        if scale < 1:
+            raise TimweConfigurationError(
+                'TIMWE_CHARGE_AMOUNT_SCALE must be a positive whole number '
+                '(1 for Birr, 100 for minor units).'
+            )
+        return scale
+
+    @classmethod
     def get_charge_code(cls) -> str:
         """The MA's charging code, sent as <code> when the caller names none."""
         return getattr(settings, 'TIMWE_CHARGE_CODE', '') or ''
@@ -406,7 +424,11 @@ class TimweChargeService:
         Render an amount for the wire, or refuse.
 
         The MA has no decimal point and four characters of room, so anything
-        with a fractional part is unrepresentable. Rounding it silently would
+        with a fractional part is unrepresentable.
+
+        ``amount`` is always whole Birr -- that is what the ledger, the wallet
+        and every displayed price use. TIMWE_CHARGE_AMOUNT_SCALE decides what
+        that becomes on the wire: 1 leaves it alone, 100 renders minor units. Rounding it silently would
         either under-bill us or over-bill the subscriber, so this raises
         instead and lets the caller decide.
 
@@ -434,7 +456,11 @@ class TimweChargeService:
         integral = int(value)
         if integral <= 0:
             raise TimweAmountError('Amount must be a positive whole number.')
-        rendered = str(integral)
+        # Scaled last, so the digit limit is checked against what actually
+        # goes on the wire: in minor units a 4-digit field stops at 99.99
+        # Birr, and a charge above that must be refused here rather than
+        # silently truncated by the MA.
+        rendered = str(integral * cls.get_amount_scale())
         if len(rendered) > MAX_AMOUNT_DIGITS:
             raise TimweAmountError(
                 f'Amount {rendered} exceeds the {MAX_AMOUNT_DIGITS}-character '
