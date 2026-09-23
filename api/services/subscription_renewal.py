@@ -60,6 +60,7 @@ from django.utils import timezone
 from api.models.subscription import SubscriptionHistory, SubscriptionPayment, SubscriptionPlan
 from api.models.timwe import TimweChargeTransaction
 from api.services.subscription_access import has_active_subscription
+from api.services.subscription_tiers import charging_service_id
 from common.validators.phone import normalize_ethiopian_phone
 
 logger = logging.getLogger(__name__)
@@ -356,6 +357,10 @@ def _renew(user, plan) -> RenewalStatus:
             renewal_period_end=plan.end_date,
             short_code=tier.short_code or '',
             product_id=tier.product_id or '',
+            # The service this plan's product is provisioned under. Empty
+            # falls back to the deployment default, so a tier with nothing
+            # set behaves exactly as it did before.
+            service_id=charging_service_id(tier),
         )
     except (ChargeRefused, TimweConfigurationError) as exc:
         # Refused before anything was sent -- unless a concurrent attempt owns

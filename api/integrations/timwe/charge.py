@@ -514,6 +514,7 @@ class TimweChargeService:
         description: str,
         reference_code: str,
         charge_code: str = '',
+        service_id: str = '',
         timestamp: str | None = None,
     ) -> str:
         """
@@ -553,6 +554,12 @@ class TimweChargeService:
         timestamp = timestamp or cls.build_timestamp()
         # The MA's charging code: the caller's, else the configured default.
         code = charge_code or cls.get_charge_code()
+        # The MA service this charge belongs to. TIMWE provision a price point
+        # per product, so a renewal for the weekly plan and a one-off coin
+        # purchase are different products and name different services. The
+        # caller passes the one that owns this charge; the configured default
+        # is what a caller with nothing to say falls back to.
+        service = service_id or cls.get_service_id()
         code_element = f'\n            <code>{escape(code)}</code>' if code else ''
 
         return f"""<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -563,7 +570,7 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
       <v2:spId>{escape(cls.get_sp_id())}</v2:spId>
       <v2:spPassword>{cls.build_sp_password(timestamp)}</v2:spPassword>
       <v2:timeStamp>{timestamp}</v2:timeStamp>
-      <v2:serviceId>{escape(cls.get_service_id())}</v2:serviceId>
+      <v2:serviceId>{escape(service)}</v2:serviceId>
       <v2:OA>{escape(subscriber)}</v2:OA>
       <v2:FA>{escape(subscriber)}</v2:FA>
     </v2:RequestSOAPHeader>
@@ -684,6 +691,7 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
         description: str,
         reference_code: str,
         charge_code: str = '',
+        service_id: str = '',
     ) -> ChargeOutcome:
         """Send one chargeAmount and classify what came back.
 
@@ -710,6 +718,7 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
             description=description,
             reference_code=reference_code,
             charge_code=charge_code,
+            service_id=service_id,
         )
         read_timeout = cls.get_timeout()
 

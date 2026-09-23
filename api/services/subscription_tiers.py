@@ -70,3 +70,31 @@ def resolve_tier(product_id: str = '', keyword: str = '') -> SubscriptionTier | 
         return SubscriptionTier.objects.filter(duration_type=duration, is_active=True).first()
 
     return None
+
+
+# ── which MA service a charge belongs to ────────────────────────────────────
+#
+# TIMWE provision a price point per product, not per account: 3 Birr daily,
+# 20 weekly, 70 monthly, 10 on demand. A chargeAmount names the service its
+# product belongs to, and charging an amount under a service that has no price
+# point for it is refused SVC0901 / INVALID_PRICEPOINT_ID.
+#
+# Both return '' when nothing is configured, and '' means "use the deployment
+# default" (TIMWE_CHARGE_SERVICE_ID, falling back to TIMWE_SERVICE_ID). So an
+# environment that has not filled these columns in behaves exactly as before.
+
+
+def charging_service_id(tier) -> str:
+    """The MA service a charge for `tier` belongs to, or '' for the default."""
+    return (getattr(tier, 'service_id', '') or '').strip()
+
+
+def ondemand_service_id() -> str:
+    """The MA service one-off purchases belong to, or '' for the default.
+
+    Buying coins is not a subscription, so it has no tier of its own to ask.
+    It is the on-demand product -- the fourth of the four, and the one priced
+    at 10 Birr, which is what an airtime coin purchase costs.
+    """
+    tier = SubscriptionTier.objects.filter(duration_type='ondemand').first()
+    return charging_service_id(tier) if tier else ''

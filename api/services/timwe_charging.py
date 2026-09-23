@@ -55,6 +55,7 @@ from api.integrations.timwe.errors import (
 )
 from api.models.timwe import TimweChargeTransaction
 from api.services.concurrency import claim_transition
+from api.services.subscription_tiers import ondemand_service_id
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,7 @@ def request_charge(
     coin_package=None,
     subscription_tier=None,
     charge_code='',
+    service_id='',
     purpose='',
     subscription=None,
     renewal_period_end=None,
@@ -195,7 +197,7 @@ def request_charge(
                 subscription=subscription,
                 renewal_period_end=renewal_period_end,
                 short_code=short_code or '',
-                service_id=TimweChargeService.get_service_id(),
+                service_id=service_id or TimweChargeService.get_service_id(),
                 product_id=product_id or '',
                 status='pending',
             )
@@ -244,7 +246,7 @@ def request_charge(
         charge.masked_msisdn,
         int(charge.amount),
         charge.currency,
-        TimweChargeService.get_service_id(),
+        charge.service_id or TimweChargeService.get_service_id(),
         charge.charge_code or TimweChargeService.get_charge_code() or '(none)',
         extra={'operation': 'timwe_charge', 'provider': 'timwe'},
     )
@@ -259,6 +261,7 @@ def request_charge(
             description=text,
             reference_code=charge.reference_code,
             charge_code=charge_code or '',
+            service_id=service_id or '',
         )
     except TimweChargingDisabled:
         # The client refused before building a request -- the switch went off
@@ -445,6 +448,10 @@ def purchase_coins_with_airtime(*, user, package, idempotency_key):
         idempotency_key=idempotency_key,
         coin_package=package,
         purpose=TimweChargeTransaction.PURPOSE_COIN_PURCHASE,
+        # A coin purchase is the on-demand product, not a subscription, so it
+        # is charged under that product's service. Empty falls back to the
+        # deployment default.
+        service_id=ondemand_service_id(),
     )
 
     coin_transaction = None

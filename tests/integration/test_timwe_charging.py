@@ -1414,6 +1414,133 @@ def test_the_mas_own_text_stays_out_of_the_log(user, caplog):
 
 
 # ===========================================================================
+# One service per product
+# ===========================================================================
+#
+# TIMWE provision a price point per product, not per account: 3 Birr daily,
+# 20 weekly, 70 monthly, 10 on demand. A charge names the service its product
+# belongs to, so a renewal for the weekly plan and a one-off coin purchase are
+# different services -- and charging an amount under a service with no price
+# point for it is what SVC0901 / INVALID_PRICEPOINT_ID means.
+#
+# Empty means "use the deployment default", so an environment that has not
+# filled SubscriptionTier.service_id in behaves exactly as it did before.
+
+
+def tier_with_service(service_id, *, duration='weekly', price=20):
+    from api.models import SubscriptionTier
+
+    return SubscriptionTier.objects.create(
+        name=f'{duration.title()} {service_id or "default"}',
+        slug=f'{duration}-{service_id or "default"}',
+        duration_type=duration,
+        duration_days=None if duration == 'ondemand' else 7,
+        price_etb=Decimal(price),
+        onevas_code=service_id[-1:] or 'Z',
+        spid='300263',
+        service_id=service_id,
+        product_id=f'P{service_id}',
+        is_active=True,
+    )
+
+
+def test_a_charge_names_the_service_it_is_given(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        request_charge(
+            user=user,
+            msisdn=MSISDN,
+            amount=20,
+            description='weekly renewal',
+            idempotency_key='svc-weekly',
+            service_id='30026300007331',
+        )
+
+    assert '<v2:serviceId>30026300007331</v2:serviceId>' in charge_body(post)
+
+
+def test_no_service_given_falls_back_to_the_configured_one(user, settings):
+    """So a deployment that has set nothing keeps working unchanged."""
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert '<v2:serviceId>30026300007334</v2:serviceId>' in charge_body(post)
+
+
+def test_the_service_used_is_recorded_on_the_charge(user):
+    """Not the configured default -- what this charge actually named."""
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = request_charge(
+            user=user,
+            msisdn=MSISDN,
+            amount=20,
+            description='weekly renewal',
+            idempotency_key='svc-recorded',
+            service_id='30026300007331',
+        )
+
+    assert result.transaction.service_id == '30026300007331'
+
+
+def test_a_renewal_charges_under_its_own_tiers_service(user):
+    from api.services.subscription_tiers import charging_service_id
+
+    weekly = tier_with_service('30026300007331')
+
+    assert charging_service_id(weekly) == '30026300007331'
+
+
+def test_a_tier_with_no_service_asks_for_the_default(user):
+    from api.services.subscription_tiers import charging_service_id
+
+    plain = tier_with_service('')
+
+    assert charging_service_id(plain) == ''
+
+
+def test_a_coin_purchase_charges_under_the_ondemand_service(user, airtime_package):
+    """10 Birr is the on-demand product, not any subscription's."""
+    from api.services.subscription_tiers import ondemand_service_id
+
+    tier_with_service('30026300007334', duration='ondemand', price=10)
+
+    assert ondemand_service_id() == '30026300007334'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        purchase_coins_with_airtime(user=user, package=airtime_package, idempotency_key='svc-coins')
+
+    assert '<v2:serviceId>30026300007334</v2:serviceId>' in charge_body(post)
+
+
+def test_no_ondemand_tier_falls_back_to_the_default(user, airtime_package, settings):
+    from api.models import SubscriptionTier
+    from api.services.subscription_tiers import ondemand_service_id
+
+    SubscriptionTier.objects.filter(duration_type='ondemand').delete()
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+
+    assert ondemand_service_id() == ''
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        purchase_coins_with_airtime(
+            user=user, package=airtime_package, idempotency_key='svc-coins-default'
+        )
+
+    assert '<v2:serviceId>30026300007334</v2:serviceId>' in charge_body(post)
+
+
+def test_two_products_do_not_share_one_service(user):
+    """The whole point: each charge names its own product's service."""
+    daily = tier_with_service('30026300007330', duration='daily', price=3)
+    weekly = tier_with_service('30026300007331')
+
+    from api.services.subscription_tiers import charging_service_id
+
+    assert charging_service_id(daily) != charging_service_id(weekly)
+
+
+# ===========================================================================
 # The charging identifiers, and SVC0901 / INVALID_PRICEPOINT_ID
 # ===========================================================================
 #
