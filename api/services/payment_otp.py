@@ -256,11 +256,20 @@ def _send_code(*, phone_number, code, session):
     """Hand the message to the existing SMS queue. The only way out to a handset."""
     from api.services.sms.dispatch import queue_sms
 
+    # Kept short deliberately, and measured by tests.
+    #
+    # The first wording was 99 characters -- one GSM-7 segment, well inside
+    # the 160 the spec allows -- and TIMWE's SMPP gateway refused every one
+    # with ESME_RINVMSGLEN (status 1) while accepting a 92-character message
+    # on the same bind, same encoding, same source address. So their limit is
+    # lower than the standard's, somewhere between the two, and they report
+    # exceeding it as a length error.
+    #
+    # tests/integration/test_subscription_and_withdrawal_sms.py holds every
+    # outbound message to one segment; this one is additionally held under the
+    # shortest length TIMWE have been observed to accept.
     minutes = OTP_TTL_SECONDS // 60
-    text = (
-        f'Your Flipstar payment verification code is {code}. '
-        f'It expires in {minutes} minutes. Do not share this code.'
-    )
+    text = f'FlipStar payment code: {code}. Expires in {minutes} min. Do not share.'
     queue_sms(
         phone_number=phone_number,
         text=text,

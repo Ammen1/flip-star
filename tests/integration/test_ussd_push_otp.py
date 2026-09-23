@@ -247,8 +247,43 @@ def test_the_code_goes_out_through_the_existing_sms_queue(request_otp, subscribe
     message = SmsMessage.objects.get()
     assert message.purpose == 'otp_payment_verification'
     assert message.recipient == PHONE
-    assert 'payment verification code' in message.body
+    assert 'payment code' in message.body
     assert 'Do not share' in message.body
+
+
+def test_the_message_is_short_enough_for_the_gateway(request_otp, subscriber, package):
+    """TIMWE refuse longer messages than the SMS standard does.
+
+    The first version of this text was 99 characters -- a single GSM-7
+    segment, nowhere near the 160 the spec permits -- and their SMPP gateway
+    rejected every one with ESME_RINVMSGLEN while accepting a 92-character
+    message over the same bind. Their real ceiling is below the standard's, so
+    "one segment" is not a sufficient test for this message.
+
+    90 is the ceiling asserted here: under the shortest length they have been
+    observed to refuse, with room for a longer code or a changed expiry.
+    """
+    from api.services.sms.segments import is_gsm7, segments
+
+    request_otp({'purpose': COIN, 'package_id': package.id}, subscriber)
+
+    body = SmsMessage.objects.get().body
+    assert len(body) <= 90, f'{len(body)} characters: {body!r}'
+    assert segments(body) == 1
+    # A single non-GSM-7 character would switch the whole message to UCS-2,
+    # where 90 characters really is two segments.
+    assert is_gsm7(body), f'not GSM-7: {body!r}'
+
+
+def test_the_message_still_says_what_it_is_for(request_otp, subscriber, package):
+    """Short is not an excuse for a code that arrives unexplained."""
+    request_otp({'purpose': COIN, 'package_id': package.id}, subscriber)
+
+    body = SmsMessage.objects.get().body
+    assert 'FlipStar' in body
+    assert 'payment' in body
+    assert 'Do not share' in body
+    assert '5 min' in body
 
 
 def test_the_code_is_never_in_the_response(request_otp, subscriber, package):
@@ -650,9 +685,9 @@ def test_a_refusal_that_is_not_about_the_code_keeps_the_verification(
     assert status_code == 409, 'the duplicate guard no longer runs first'
     service.initiate_ussd_push_payment.assert_not_called()
     still_good = PaymentVerificationSession.objects.get(id=second)
-    assert still_good.status == PaymentVerificationSession.STATUS_VERIFIED, (
-        'the verification was spent on a refusal that was not about the code'
-    )
+    assert (
+        still_good.status == PaymentVerificationSession.STATUS_VERIFIED
+    ), 'the verification was spent on a refusal that was not about the code'
 
 
 def test_the_subscription_push_needs_verification_too(push_subscription, tier):
