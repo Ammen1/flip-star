@@ -74,6 +74,8 @@ default is the guide**: an unconfigured deployment behaves exactly as before.
 | `currency` | ISO 4217, `ETB` | `Birr` | `TIMWE_CURRENCY`, now passed through as written |
 | `endUserIdentifier` | `tel:2519…` | `2519…` | `TIMWE_CHARGE_TEL_PREFIX` |
 | `code` | optional | `255` | `TIMWE_CHARGE_CODE` |
+| header order | spId, spPassword, serviceId, timeStamp, OA, FA | spId, spPassword, **timeStamp, serviceId**, OA, FA | — (we send theirs) |
+| `token` | an empty `<token/>` | absent | — (we send theirs) |
 
 `timwe_charge_check` prints the dialect in force before anything is sent.
 

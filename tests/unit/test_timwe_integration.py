@@ -281,7 +281,7 @@ def test_request_contains_every_documented_header_field(charge_settings):
         reference_code='REF-1',
         timestamp='20100731064245',
     )
-    for field in ('spId', 'spPassword', 'serviceId', 'timeStamp', 'OA', 'FA', 'token'):
+    for field in ('spId', 'spPassword', 'serviceId', 'timeStamp', 'OA', 'FA'):
         assert f'v2:{field}' in xml
     assert '<loc:endUserIdentifier>tel:251912345678</loc:endUserIdentifier>' in xml
     assert '<amount>20</amount>' in xml

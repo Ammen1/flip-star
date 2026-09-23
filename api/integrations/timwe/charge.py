@@ -525,6 +525,16 @@ class TimweChargeService:
         MA's, and parse_soap_response tolerates it rather than this changing
         the request to match.
 
+        Header field ORDER, and the absence of ``token``, follow TIMWE's own
+        accepted request rather than the guide. The guide's example puts
+        serviceId before timeStamp and carries an empty ``<token/>``; the
+        request their gateway actually answers 200 to has timeStamp first and
+        no token at all. A SOAP sequence is order-sensitive and an undeclared
+        element fails validation, so this is not cosmetic -- charges built the
+        guide's way were refused SVC0901 while the same charge in their shape
+        was accepted. ``tests/integration/test_timwe_charging.py`` pins the
+        order against their example.
+
         ``OA`` and ``FA`` are both the charged subscriber: the guide requires
         FA to equal OA (p.21), and FlipStar only ever charges the account that
         owns the purchase -- never a third-party gift payer.
@@ -552,11 +562,10 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
     <v2:RequestSOAPHeader>
       <v2:spId>{escape(cls.get_sp_id())}</v2:spId>
       <v2:spPassword>{cls.build_sp_password(timestamp)}</v2:spPassword>
-      <v2:serviceId>{escape(cls.get_service_id())}</v2:serviceId>
       <v2:timeStamp>{timestamp}</v2:timeStamp>
+      <v2:serviceId>{escape(cls.get_service_id())}</v2:serviceId>
       <v2:OA>{escape(subscriber)}</v2:OA>
       <v2:FA>{escape(subscriber)}</v2:FA>
-      <v2:token/>
     </v2:RequestSOAPHeader>
   </soapenv:Header>
   <soapenv:Body>

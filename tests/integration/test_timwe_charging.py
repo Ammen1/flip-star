@@ -348,9 +348,34 @@ def test_every_header_field_is_present():
 
     for field in ('spId', 'spPassword', 'serviceId', 'timeStamp', 'OA', 'FA'):
         assert re.search(rf'<v2:{field}>[^<]+</v2:{field}>', xml), field
-    assert '<v2:token/>' in xml
     assert '<v2:spId>000201</v2:spId>' in xml
     assert '<v2:serviceId>3500001000012</v2:serviceId>' in xml
+
+
+def test_the_header_is_shaped_like_the_request_timwe_accept():
+    """Their gateway's shape, not the guide's.
+
+    The guide's example puts serviceId before timeStamp and carries an empty
+    <token/>. TIMWE's own working request -- the one their endpoint answers
+    200 to -- has timeStamp first and no token. A SOAP sequence is
+    order-sensitive and an undeclared element fails validation, so building
+    it the guide's way was refused SVC0901.
+
+    Pinned as an ordered list rather than a set: "all six are present" was
+    true of the refused envelope too.
+    """
+    xml = build()
+
+    assert re.findall(r'<v2:(\w+)[/>]', xml)[:7] == [
+        'RequestSOAPHeader',
+        'spId',
+        'spPassword',
+        'timeStamp',
+        'serviceId',
+        'OA',
+        'FA',
+    ]
+    assert 'token' not in xml, "the guide's empty <token/> is not in their accepted request"
 
 
 def test_every_body_field_is_present():
