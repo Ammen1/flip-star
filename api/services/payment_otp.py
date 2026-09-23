@@ -88,7 +88,7 @@ def generate_code() -> str:
     return ''.join(secrets.choice('0123456789') for _ in range(OTP_LENGTH))
 
 
-def fingerprint(*, purpose, user_id, phone_number, package_id=None, tier_id=None, amount_etb=None):
+def fingerprint(*, purpose, user_id, phone_number, tier_id=None):
     """Everything a verification is allowed to authorise, as one digest.
 
     Recomputed at push time from the request actually being made. Any
@@ -96,28 +96,16 @@ def fingerprint(*, purpose, user_id, phone_number, package_id=None, tier_id=None
     yields a different digest, so a session verified for one payment cannot
     authorise another.
 
-    ``None`` and ``''`` deliberately collapse to the same empty field: a
-    missing package_id is a missing package_id however the client spelled it.
+    ``None`` and ``''`` deliberately collapse to the same empty field, so a
+    missing tier is a missing tier however the client spelled it.
     """
     parts = [
         str(purpose or ''),
         str(user_id or ''),
         str(phone_number or ''),
-        str(package_id or ''),
         str(tier_id or ''),
-        # Normalised so '10' and '10.00' are one amount rather than two.
-        _normalise_amount(amount_etb),
     ]
     return hashlib.sha256('|'.join(parts).encode('utf-8')).hexdigest()
-
-
-def _normalise_amount(amount) -> str:
-    if amount in (None, ''):
-        return ''
-    try:
-        return f'{float(amount):.2f}'
-    except (TypeError, ValueError):
-        return str(amount)
 
 
 def _phone_hour_key(phone_number: str) -> str:
@@ -145,9 +133,7 @@ def request_otp(
     purpose,
     phone_number,
     user=None,
-    package_id=None,
     tier_id=None,
-    amount_etb=None,
     session_id=None,
 ):
     """Open (or resend on) a verification session. Returns the session.
@@ -161,9 +147,7 @@ def request_otp(
         purpose=purpose,
         user_id=getattr(user, 'id', None),
         phone_number=phone_number,
-        package_id=package_id,
         tier_id=tier_id,
-        amount_etb=amount_etb,
     )
 
     session = None
@@ -396,9 +380,7 @@ def consume_verified_session(
     purpose,
     phone_number,
     user=None,
-    package_id=None,
     tier_id=None,
-    amount_etb=None,
 ):
     """Spend a verified session to authorise one push. Returns the session.
 
@@ -420,9 +402,7 @@ def consume_verified_session(
         purpose=purpose,
         user_id=getattr(user, 'id', None),
         phone_number=phone_number,
-        package_id=package_id,
         tier_id=tier_id,
-        amount_etb=amount_etb,
     )
 
     # One conditional UPDATE does the claiming. Filtering on the fingerprint

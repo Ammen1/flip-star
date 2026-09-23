@@ -165,22 +165,18 @@ def hermetic_config(monkeypatch):
     return provider
 
 
-def verified_push_session(
-    *,
-    purpose,
-    phone_number,
-    user=None,
-    package_id=None,
-    tier_id=None,
-    amount_etb=None,
-):
-    """A payment verification that has already passed the SMS check.
+def verified_push_session(*, tier_id, phone_number=None, user=None):
+    """A subscription verification that has already passed the SMS check.
 
-    Every USSD Push endpoint now refuses without one -- see
+    The subscription USSD Push endpoint refuses without one -- see
     ``api/services/payment_otp.consume_verified_session``. Tests that are
     about something else (the duplicate guard, what a pending payment looks
     like) need a verified session to reach the behaviour they cover, and
     walking the whole OTP flow in each of them would bury the point.
+
+    Coin purchases need nothing of the kind and must not use this: that buyer
+    is already signed in, and ``telebirr_ussd_purchase`` has no verification
+    step to satisfy.
 
     So this builds the row directly, with the same fingerprint the push
     endpoint will recompute. The OTP flow itself -- sending, checking,
@@ -195,6 +191,7 @@ def verified_push_session(
     from api.services import payment_otp
     from api.views.core import _normalize_ethiopian_phone
 
+    purpose = PaymentVerificationSession.PURPOSE_SUBSCRIPTION
     raw = phone_number or (getattr(user, 'profile', None) and user.profile.phone_number)
     phone = _normalize_ethiopian_phone(raw) or raw
     now = timezone.now()
@@ -207,9 +204,7 @@ def verified_push_session(
             purpose=purpose,
             user_id=getattr(user, 'id', None),
             phone_number=phone,
-            package_id=package_id,
             tier_id=tier_id,
-            amount_etb=amount_etb,
         ),
         # Already spent doing its job; a verified row carries no hash.
         otp_hash='',

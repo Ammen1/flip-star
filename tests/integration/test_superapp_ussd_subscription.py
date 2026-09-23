@@ -179,9 +179,7 @@ def test_initiate_creates_pending_subscription_not_active(
                 # A USSD Push now needs a verified number behind it.
                 'verification_session_id': str(
                     verified_push_session(
-                        purpose='subscription',
-                        phone_number='0911223344',
-                        tier_id=str(monthly_tier.id),
+                        phone_number='0911223344', tier_id=str(monthly_tier.id)
                     ).id
                 ),
             },
@@ -235,9 +233,7 @@ def test_initiate_returns_error_when_telebirr_call_fails(
                 # A USSD Push now needs a verified number behind it.
                 'verification_session_id': str(
                     verified_push_session(
-                        purpose='subscription',
-                        phone_number='0911223344',
-                        tier_id=str(monthly_tier.id),
+                        phone_number='0911223344', tier_id=str(monthly_tier.id)
                     ).id
                 ),
             },

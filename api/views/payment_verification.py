@@ -1,8 +1,14 @@
 """
-The SMS check in front of a USSD Push.
+The SMS check in front of a subscription USSD Push.
 
     POST /charging/ussd-push/request-otp/   send a code to the payer's number
     POST /charging/ussd-push/verify-otp/    check it, and open the payment
+
+Subscriptions only. Buying coins does not come through here: that buyer is
+already signed in and the charge goes to the number on their own account, so a
+second proof of the same handset asks them to do work that establishes
+nothing. Subscribing is the flow with no account behind it -- a number typed
+into a form -- and that is what needs proving.
 
 Neither endpoint moves money, and neither returns the code. What a successful
 verification produces is a session id the push endpoints will accept once --
@@ -43,23 +49,17 @@ from common.throttling import (
 
 logger = logging.getLogger(__name__)
 
-PURPOSES = (
-    PaymentVerificationSession.PURPOSE_COIN_PURCHASE,
-    PaymentVerificationSession.PURPOSE_SUBSCRIPTION,
-)
+PURPOSES = (PaymentVerificationSession.PURPOSE_SUBSCRIPTION,)
 
 
-def phone_for_payment(*, user, provided, purpose):
-    """The number a payment of this kind will actually be sent to.
+def phone_for_payment(*, user, provided):
+    """The number the subscription push will actually be charged.
 
-    This MUST match how the push endpoints resolve it, or a code goes to one
-    number while the push goes to another and every payment is refused on a
-    fingerprint mismatch. The rules are theirs, restated:
-
-    * coin purchase -- the account's own profile number, never the client's.
-      ``telebirr_ussd_purchase`` ignores any number in the body.
-    * subscription -- the number in the body when there is one (the payer may
-      have no account yet), otherwise the profile's.
+    This MUST match how ``telebirr_ussd_subscription_initiate`` resolves it,
+    or the code goes to one handset while the push goes to another and every
+    payment is refused on a fingerprint mismatch. That view's rule, restated:
+    the number in the body when there is one -- the payer may have no account
+    yet -- otherwise the profile's.
 
     ``tests/integration/test_ussd_push_otp.py`` pins the agreement.
     """
@@ -67,25 +67,11 @@ def phone_for_payment(*, user, provided, purpose):
 
     authenticated = bool(user and user.is_authenticated)
     profile = getattr(user, 'profile', None) if authenticated else None
-    profile_phone = getattr(profile, 'phone_number', None)
-
-    if purpose == PaymentVerificationSession.PURPOSE_COIN_PURCHASE:
-        raw = profile_phone
-    else:
-        raw = provided or profile_phone
+    raw = provided or (getattr(profile, 'phone_number', None) if authenticated else None)
 
     if not raw:
         return None
     return _normalize_ethiopian_phone(raw) or raw
-
-
-def _payment_reference(data):
-    """The three fields that say which payment this is."""
-    return {
-        'package_id': data.get('package_id'),
-        'tier_id': data.get('tier_id'),
-        'amount_etb': data.get('amount_etb'),
-    }
 
 
 @api_view(['POST'])
@@ -105,28 +91,14 @@ def request_ussd_push_otp(request):
 
     user = request.user if request.user.is_authenticated else None
 
-    # Buying coins is an account action; subscribing is not, yet.
-    if purpose == PaymentVerificationSession.PURPOSE_COIN_PURCHASE and user is None:
-        return Response(
-            {'error': 'Please sign in to buy coins.', 'code': 'AUTHENTICATION_REQUIRED'},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
-
-    reference = _payment_reference(data)
-    if purpose == PaymentVerificationSession.PURPOSE_SUBSCRIPTION and not reference['tier_id']:
+    tier_id = data.get('tier_id')
+    if not tier_id:
         return Response(
             {'error': 'tier_id is required', 'code': 'TIER_REQUIRED'},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if purpose == PaymentVerificationSession.PURPOSE_COIN_PURCHASE and not (
-        reference['package_id'] or reference['amount_etb']
-    ):
-        return Response(
-            {'error': 'package_id or amount_etb is required', 'code': 'PACKAGE_REQUIRED'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
 
-    phone_number = phone_for_payment(user=user, provided=data.get('phone_number'), purpose=purpose)
+    phone_number = phone_for_payment(user=user, provided=data.get('phone_number'))
     if not phone_number:
         return Response(
             {'error': 'A phone number is required.', 'code': 'PHONE_REQUIRED'},
@@ -138,8 +110,8 @@ def request_ussd_push_otp(request):
             purpose=purpose,
             phone_number=phone_number,
             user=user,
+            tier_id=tier_id,
             session_id=data.get('session_id'),
-            **reference,
         )
     except OtpRequestRefused as refused:
         body = {'error': refused.message, 'code': refused.code}
@@ -185,12 +157,7 @@ def verify_ussd_push_otp(request):
         )
 
     user = request.user if request.user.is_authenticated else None
-    purpose = (data.get('purpose') or '').strip()
-    phone_number = phone_for_payment(
-        user=user,
-        provided=data.get('phone_number'),
-        purpose=purpose if purpose in PURPOSES else PaymentVerificationSession.PURPOSE_SUBSCRIPTION,
-    )
+    phone_number = phone_for_payment(user=user, provided=data.get('phone_number'))
 
     try:
         session = payment_otp.verify_otp(

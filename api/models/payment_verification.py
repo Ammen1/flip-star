@@ -17,10 +17,10 @@ What a session is bound to
 --------------------------
 A verified session authorises ONE payment: the one whose details were known
 when the code was sent. ``request_fingerprint`` is a digest of the caller, the
-number, and what is being bought, recomputed at push time from the actual
-request and compared. Changing the user, the number, the package, the tier or
-the amount after verifying produces a different digest and the push is
-refused, so a verification can never be carried across to a different payment.
+number, and the tier being subscribed to, recomputed at push time from the
+actual request and compared. Changing the user, the number or the tier after
+verifying produces a different digest and the push is refused, so a
+verification can never be carried across to a different payment.
 
 What is stored
 --------------
@@ -49,10 +49,14 @@ from django.utils import timezone
 class PaymentVerificationSession(models.Model):
     """One SMS verification standing in front of one USSD Push."""
 
-    PURPOSE_COIN_PURCHASE = 'coin_purchase'
+    #: The only flow that needs this. Buying coins does not: the buyer is
+    #: already signed in, the number charged is the one on their own account,
+    #: and making them re-prove a handset they have already authenticated with
+    #: buys nothing. Subscribing does, because it is reachable with no account
+    #: at all -- a phone number typed into a form is the only identity there
+    #: is, and without a check anyone could raise a PIN prompt on any handset.
     PURPOSE_SUBSCRIPTION = 'subscription'
     PURPOSE_CHOICES = [
-        (PURPOSE_COIN_PURCHASE, 'Coin purchase'),
         (PURPOSE_SUBSCRIPTION, 'Subscription'),
     ]
 

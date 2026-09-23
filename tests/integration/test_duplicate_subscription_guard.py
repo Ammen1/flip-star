@@ -150,12 +150,7 @@ def call_initiate(client_public, tier_id, phone_number=None, user=None):
         # Every push now needs one. A test that omitted it would be refused
         # before reaching the behaviour it is about.
         'verification_session_id': str(
-            verified_push_session(
-                purpose='subscription',
-                phone_number=phone_number,
-                user=user,
-                tier_id=str(tier_id),
-            ).id
+            verified_push_session(phone_number=phone_number, user=user, tier_id=str(tier_id)).id
         ),
     }
     if phone_number:
