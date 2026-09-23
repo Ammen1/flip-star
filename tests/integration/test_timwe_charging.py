@@ -1413,6 +1413,37 @@ def test_the_mas_own_text_stays_out_of_the_log(user, caplog):
     assert MSISDN in TimweChargeTransaction.objects.get().error_message
 
 
+def test_the_timestamp_is_the_real_one_by_default(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert re.search(r'<v2:timeStamp>\d{14}</v2:timeStamp>', charge_body(post))
+
+
+def test_a_fixed_timestamp_is_sent_when_configured(user, settings):
+    """TIMWE's accepted request sends 2700000000, which is not a date."""
+    settings.TIMWE_CHARGE_TIMESTAMP = '2700000000'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert '<v2:timeStamp>2700000000</v2:timeStamp>' in charge_body(post)
+
+
+def test_a_fixed_timestamp_still_authenticates(settings):
+    """The digest is over whatever is sent, so a constant is still valid."""
+    settings.TIMWE_CHARGE_TIMESTAMP = '2700000000'
+    settings.TIMWE_CHARGE_AUTH_MODE = 'md5'
+
+    stamp = TimweChargeService.build_timestamp()
+    expected = hashlib.md5(  # noqa: S324 - the MA's choice of authenticator, not ours
+        f'{CONFIG["TIMWE_SP_ID"]}{CONFIG["TIMWE_SP_PASSWORD"]}{stamp}'.encode()
+    ).hexdigest()
+
+    assert stamp == '2700000000'
+    assert TimweChargeService.build_sp_password(stamp) == expected
+
+
 # ===========================================================================
 # What one unit of <amount> means
 # ===========================================================================

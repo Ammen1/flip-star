@@ -520,6 +520,18 @@ TIMWE_CHARGE_CODE = config('TIMWE_CHARGE_CODE', default='')
 # Only the wire value scales. The ledger, the wallet and every price a user
 # sees stay in whole Birr.
 TIMWE_CHARGE_AMOUNT_SCALE = config('TIMWE_CHARGE_AMOUNT_SCALE', default=1, cast=int)
+# A fixed timeStamp, instead of the real UTC one the guide specifies.
+#
+# Blank (the default) sends the real time. TIMWE's own accepted example sends
+# the constant 2700000000 -- not a date at all -- which suggests their gateway
+# either ignores the field or compares it against something we cannot see. A
+# clock skew on their side would make a correct timestamp fail while a
+# constant passes.
+#
+# Safe in either auth mode: the md5 digest is computed over whatever value is
+# sent, so a fixed one still authenticates. Set it only to match what TIMWE
+# accept, and prefer removing it once they confirm the real thing works.
+TIMWE_CHARGE_TIMESTAMP = config('TIMWE_CHARGE_TIMESTAMP', default='')
 # endUserIdentifier as 'tel:2519...' (the guide's field table) or bare digits
 # (what TIMWE's example sends).
 TIMWE_CHARGE_TEL_PREFIX = config('TIMWE_CHARGE_TEL_PREFIX', default=True, cast=bool)

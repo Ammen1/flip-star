@@ -393,7 +393,15 @@ class TimweChargeService:
 
     @classmethod
     def build_timestamp(cls) -> str:
-        """UTC ``yyyyMMddHHmmss`` (guide p.20)."""
+        """UTC ``yyyyMMddHHmmss`` (guide p.20), or the configured constant.
+
+        TIMWE_CHARGE_TIMESTAMP exists because their own accepted request sends
+        ``2700000000``, which is not a date. Whatever is sent is what the md5
+        digest is computed over, so a fixed value still authenticates.
+        """
+        fixed = (getattr(settings, 'TIMWE_CHARGE_TIMESTAMP', '') or '').strip()
+        if fixed:
+            return fixed
         return timezone.now().astimezone(UTC).strftime('%Y%m%d%H%M%S')
 
     @classmethod
