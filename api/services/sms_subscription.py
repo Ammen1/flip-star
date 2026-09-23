@@ -29,6 +29,7 @@ channel that reaches it.
 
 import logging
 import uuid
+from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -206,7 +207,11 @@ def subscribe(*, phone_number, tier, payment_method, metadata=None, user=None):
         existing.tier = tier
         existing.duration_type = tier.duration_type
         existing.setup_otp = otp
-        existing.save(update_fields=['tier', 'duration_type', 'setup_otp'])
+        # Every issued code gets an expiry, because login_with_subscription_otp
+        # now enforces one -- and a code that resets a PIN must not live for
+        # ever. 30 minutes matches the other two places that issue one.
+        existing.setup_otp_expires_at = timezone.now() + timedelta(minutes=30)
+        existing.save(update_fields=['tier', 'duration_type', 'setup_otp', 'setup_otp_expires_at'])
         existing.activate()
         _record_payment(existing, tier, payment_method)
         SubscriptionHistory.objects.create(

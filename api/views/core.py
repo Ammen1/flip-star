@@ -964,6 +964,9 @@ def register_with_phone(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+# A six-digit code that sets an account's PIN must not be guessable at speed.
+# This endpoint had no throttle at all while the code never expired.
+@throttle_classes([OtpVerifyAnonThrottle, OtpVerifyUserThrottle])
 @encrypted_endpoint
 def login_with_subscription_otp(request):
     """Login with subscription OTP and create user account with password"""
@@ -999,11 +1002,23 @@ def login_with_subscription_otp(request):
     # Find subscription with matching OTP (works for both SMS and app subscriptions)
     print(f'[SUBSCRIPTION LOGIN DEBUG] Searching for subscription with phone: {phone}, otp: {otp}')
     phone_values = lookup_variants(phone)
+    # The expiry is enforced here, not just written.
+    #
+    # setup_otp_expires_at has been set for 30 minutes by every path that
+    # issues a code, and checked by none of them -- so a code stayed valid for
+    # ever until it was used. That matters more now than it did: below, a
+    # valid code SETS the account's PIN, so an old one left in a subscription
+    # row would be a standing reset token.
+    #
+    # A null expiry counts as expired rather than as "no limit". Those are
+    # legacy rows, and the screen offers Resend, so the cost is one more SMS
+    # rather than a locked-out subscriber.
     subscription = (
         UserSubscription.objects.filter(
             Q(onevas_phone_number__in=phone_values) | Q(telebirr_phone_number__in=phone_values),
             setup_otp=otp,
             status='active',
+            setup_otp_expires_at__gt=timezone.now(),
         )
         .order_by('-start_date')
         .first()
@@ -1036,20 +1051,27 @@ def login_with_subscription_otp(request):
         )
 
         user = subscription.user
-        if user.has_usable_password():
-            # Existing PIN: this path is a login, so the submitted PIN must
-            # match. First-time SuperApp/USSD accounts have no usable password
-            # and fall through to set their PIN after OTP verification.
-            if not user.check_password(password):
-                return Response({'error': 'Invalid password'}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            user.set_password(password)
-            user.save(update_fields=['password'])
 
-            profile, _created = UserProfile.objects.get_or_create(user=user)
-            if not profile.phone_number:
-                profile.phone_number = phone
-                profile.save(update_fields=['phone_number'])
+        # The PIN is SET here, not checked -- whether or not the account
+        # already has one.
+        #
+        # The screen that posts here says "Verify & Set Your PIN" and "Set New
+        # PIN", and it was answering "Invalid password" to anyone who did
+        # exactly that: an existing subscriber returning from the SuperApp
+        # typed a new PIN, and the endpoint compared it against their old one.
+        # There was no way to proceed without remembering a PIN the screen had
+        # just invited them to replace.
+        #
+        # What authorises it is the code, which went by SMS to the number on
+        # this subscription and is single-use and time-limited (above). That
+        # is the same proof every password reset in this system runs on.
+        user.set_password(password)
+        user.save(update_fields=['password'])
+
+        profile, _created = UserProfile.objects.get_or_create(user=user)
+        if not profile.phone_number:
+            profile.phone_number = phone
+            profile.save(update_fields=['phone_number'])
 
         # Clear OTP after successful login
         subscription.setup_otp = None

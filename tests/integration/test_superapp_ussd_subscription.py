@@ -74,6 +74,21 @@ def client_keys():
     return generate_keypair()
 
 
+@pytest.fixture(autouse=True)
+def _clear_throttles():
+    """Throttle counters live in the cache and are keyed by IP.
+
+    login_with_subscription_otp is rate limited now, and every test here calls
+    it from the same address, so without this the fifth test in a run starts
+    getting 429s that have nothing to do with what it is testing.
+    """
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
+
+
 def _post_encrypted(url, body, *, server_public_key, client_keys, view):
     """Seal `body` for the server and invoke `view`, as the client does."""
     client_public_key, client_private_key = client_keys
@@ -541,6 +556,8 @@ def test_subscription_otp_creates_web_account_for_superapp_phone(
         payment_method='telebirr',
         telebirr_phone_number='251988990011',
         setup_otp='123456',
+        # Issued codes carry an expiry, and the login endpoint enforces it.
+        setup_otp_expires_at=now + timezone.timedelta(minutes=30),
         auto_renew=False,
     )
     try:
@@ -583,6 +600,8 @@ def test_subscription_otp_sets_first_pin_for_existing_superapp_user(
         payment_method='telebirr',
         telebirr_phone_number='251988990011',
         setup_otp='123456',
+        # Issued codes carry an expiry, and the login endpoint enforces it.
+        setup_otp_expires_at=now + timezone.timedelta(minutes=30),
         auto_renew=False,
     )
     try:
@@ -648,3 +667,184 @@ def test_validate_subscription_token_rejects_unknown_token(db, _server_keys, cli
     )
 
     assert response.status_code == 400
+
+
+# ── "Set New PIN" actually sets it ──────────────────────────────────────────
+#
+# The screen a returning SuperApp subscriber lands on says "Verify & Set Your
+# PIN", with a "Set New PIN" field. It was answering "Invalid password" to
+# anyone who did exactly that: the endpoint compared the new PIN against the
+# account's existing one, so the only way through was to remember the PIN the
+# screen had just invited them to replace.
+#
+# What authorises the change is the SMS code -- sent to the number on this
+# subscription, single-use, and now time-limited. The same proof every
+# password reset runs on.
+
+
+def _subscription_with_otp(
+    user, tier, *, otp='123456', expires_in_minutes=30, phone='251988990011'
+):
+    now = timezone.now()
+    return SubscriptionPlan.objects.create(
+        user=user,
+        tier=tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number=phone,
+        setup_otp=otp,
+        setup_otp_expires_at=(
+            now + timezone.timedelta(minutes=expires_in_minutes)
+            if expires_in_minutes is not None
+            else None
+        ),
+        auto_renew=False,
+    )
+
+
+def _set_pin(pin, *, server_keys, client_keys, otp='123456'):
+    return _post_encrypted(
+        '/auth/login-with-subscription-otp/',
+        {'phone': '+251988990011', 'otp': otp, 'password': pin},
+        server_public_key=server_keys,
+        client_keys=client_keys,
+        view=login_with_subscription_otp,
+    )
+
+
+def test_an_existing_pin_is_replaced_not_checked(db, monthly_tier, _server_keys, client_keys):
+    """The reported bug, directly."""
+    user = User.objects.create_user(username='has_a_pin', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier)
+    try:
+        response = _set_pin('739284', server_keys=_server_keys, client_keys=client_keys)
+
+        assert response.status_code == 200, response.data
+        user.refresh_from_db()
+        assert user.check_password('739284'), 'the new PIN was not set'
+        assert not user.check_password('111111'), 'the old PIN still works'
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_the_new_pin_signs_them_in(db, monthly_tier, _server_keys, client_keys):
+    user = User.objects.create_user(username='signs_in', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier)
+    try:
+        response = _set_pin('739284', server_keys=_server_keys, client_keys=client_keys)
+
+        assert response.data['token']
+        assert response.data['user']['id'] == user.id
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_an_account_with_no_pin_still_gets_one(db, monthly_tier, _server_keys, client_keys):
+    """The path that already worked must keep working."""
+    user = User.objects.create_user(username='no_pin_yet', password=None)
+    subscription = _subscription_with_otp(user, monthly_tier)
+    try:
+        response = _set_pin('739284', server_keys=_server_keys, client_keys=client_keys)
+
+        assert response.status_code == 200, response.data
+        user.refresh_from_db()
+        assert user.check_password('739284')
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_the_code_is_spent_so_the_pin_cannot_be_set_twice(
+    db, monthly_tier, _server_keys, client_keys
+):
+    """Otherwise the code is a standing reset token for that account."""
+    user = User.objects.create_user(username='spent_code', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier)
+    try:
+        _set_pin('739284', server_keys=_server_keys, client_keys=client_keys)
+        subscription.refresh_from_db()
+        assert subscription.setup_otp is None
+
+        second = _set_pin('000999', server_keys=_server_keys, client_keys=client_keys)
+
+        assert second.status_code == 400
+        user.refresh_from_db()
+        assert user.check_password('739284'), 'a spent code changed the PIN again'
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_an_expired_code_cannot_set_a_pin(db, monthly_tier, _server_keys, client_keys):
+    """The 30-minute expiry was written by three paths and checked by none."""
+    user = User.objects.create_user(username='expired_code', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier, expires_in_minutes=-1)
+    try:
+        response = _set_pin('739284', server_keys=_server_keys, client_keys=client_keys)
+
+        assert response.status_code == 400
+        user.refresh_from_db()
+        assert user.check_password('111111'), 'an expired code reset the PIN'
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_a_code_with_no_expiry_is_treated_as_expired(db, monthly_tier, _server_keys, client_keys):
+    """Legacy rows. Resend issues a fresh one, so nobody is locked out."""
+    user = User.objects.create_user(username='legacy_code', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier, expires_in_minutes=None)
+    try:
+        response = _set_pin('739284', server_keys=_server_keys, client_keys=client_keys)
+
+        assert response.status_code == 400
+        user.refresh_from_db()
+        assert user.check_password('111111')
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_a_wrong_code_cannot_set_a_pin(db, monthly_tier, _server_keys, client_keys):
+    user = User.objects.create_user(username='wrong_code', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier)
+    try:
+        response = _set_pin(
+            '739284', server_keys=_server_keys, client_keys=client_keys, otp='999999'
+        )
+
+        assert response.status_code == 400
+        user.refresh_from_db()
+        assert user.check_password('111111')
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_a_weak_pin_is_still_refused(db, monthly_tier, _server_keys, client_keys):
+    """Setting a PIN does not bypass the strength rule."""
+    user = User.objects.create_user(username='weak_pin', password='111111')
+    subscription = _subscription_with_otp(user, monthly_tier)
+    try:
+        response = _set_pin('123456', server_keys=_server_keys, client_keys=client_keys)
+
+        assert response.status_code == 400
+        user.refresh_from_db()
+        assert user.check_password('111111')
+    finally:
+        subscription.delete()
+        user.delete()
+
+
+def test_the_endpoint_is_rate_limited():
+    """A six-digit code that sets a PIN must not be guessable at speed."""
+    from api.views.core import login_with_subscription_otp as view
+
+    scopes = {getattr(t, 'scope', None) for t in getattr(view.cls, 'throttle_classes', [])}
+
+    assert 'otp_verify' in scopes, 'the PIN-setting endpoint has no throttle'
