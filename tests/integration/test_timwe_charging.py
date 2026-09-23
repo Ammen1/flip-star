@@ -1388,6 +1388,195 @@ def test_the_mas_own_text_stays_out_of_the_log(user, caplog):
     assert MSISDN in TimweChargeTransaction.objects.get().error_message
 
 
+# ===========================================================================
+# The charging identifiers, and SVC0901 / INVALID_PRICEPOINT_ID
+# ===========================================================================
+#
+# chargeAmount carries NO price point field. Nothing in this codebase sends
+# one, and the guide defines none: TIMWE resolve a price point on their side
+# from the serviceId, the amount and the charging code. So when staging saw
+#
+#     outcome=rejected error_code='SVC0901'
+#     error_message='INVALID_PRICEPOINT_ID' http_status=500
+#
+# the request was well-formed and the credentials were accepted. What is not
+# provisioned is the combination TIMWE were asked to bill under.
+#
+# These pin the three values that make up that combination, so a change to any
+# of them is deliberate, and pin that the MA's own code and message survive
+# into the transaction rather than being flattened into a generic failure.
+
+
+def charge_body(post):
+    """The SOAP envelope actually sent, as text. It goes out as UTF-8 bytes."""
+    sent = post.call_args.kwargs.get('data')
+    if sent is None:
+        sent = post.call_args.args[1]
+    return sent.decode('utf-8') if isinstance(sent, bytes) else sent
+
+
+def test_the_configured_service_id_is_in_the_request(user, settings):
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert '<v2:serviceId>30026300007334</v2:serviceId>' in charge_body(post)
+
+
+def test_charging_falls_back_to_the_subscription_service_id(user, settings):
+    """Documented fallback -- and a thing to check when TIMWE reject an id.
+
+    TIMWE's charge example quotes ...7334 where subscriptions carry ...7331.
+    If TIMWE_CHARGE_SERVICE_ID is unset, charges go out under the
+    subscription service, which is a different thing to be provisioned for.
+    """
+    settings.TIMWE_CHARGE_SERVICE_ID = ''
+    settings.TIMWE_SERVICE_ID = '30026300007331'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert '<v2:serviceId>30026300007331</v2:serviceId>' in charge_body(post)
+
+
+def test_the_configured_charge_code_is_in_the_request(user, settings):
+    settings.TIMWE_CHARGE_CODE = '255'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert '<code>255</code>' in charge_body(post)
+
+
+def test_no_charge_code_sends_no_code_element(user, settings):
+    """Optional per the guide (p.21): absent, not empty."""
+    settings.TIMWE_CHARGE_CODE = ''
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    assert '<code>' not in charge_body(post)
+
+
+def test_the_request_carries_no_price_point_field(user):
+    """There is none to carry. Pinned so a guessed one cannot be slipped in.
+
+    If TIMWE ever supply a price point identifier and a field to put it in,
+    this test should fail and be rewritten deliberately -- not deleted to make
+    room for a value nobody confirmed.
+    """
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user)
+
+    body = charge_body(post).lower()
+    assert 'pricepoint' not in body
+    assert 'price_point' not in body
+
+
+def test_ten_birr_is_sent_as_ten(user, settings):
+    """The business rule, unchanged by any of this."""
+    settings.TIMWE_CURRENCY = 'Birr'
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as post:
+        charge(user, amount=10)
+
+    body = charge_body(post)
+    assert '<amount>10</amount>' in body
+    assert '<currency>Birr</currency>' in body
+
+
+def test_the_mas_price_point_code_and_message_are_kept(user):
+    """The row must say what TIMWE said, not a paraphrase of it."""
+    with patch(
+        POST, return_value=reply(fault_body('SVC0901', text='INVALID_PRICEPOINT_ID'), status=500)
+    ):
+        result = charge(user)
+
+    row = result.transaction
+    assert row.outcome == OUTCOME_REJECTED
+    assert row.error_code == 'SVC0901'
+    assert 'INVALID_PRICEPOINT_ID' in row.error_message
+    assert row.http_status == 500
+
+
+def test_an_unprovisioned_price_point_is_not_retried(user):
+    """SVC0901 is permanent: retrying cannot provision anything."""
+    with patch(POST, return_value=reply(fault_body('SVC0901', text='INVALID_PRICEPOINT_ID'))):
+        result = charge(user)
+
+    assert result.transaction.retryable is False
+
+
+def test_the_subscriber_is_not_told_the_mas_text(user):
+    """INVALID_PRICEPOINT_ID is our configuration problem, not theirs."""
+    with patch(POST, return_value=reply(fault_body('SVC0901', text='INVALID_PRICEPOINT_ID'))):
+        result = charge(user)
+
+    shown = user_message(result)
+    assert 'INVALID_PRICEPOINT_ID' not in shown
+    assert 'SVC0901' not in shown
+
+
+def test_the_request_log_names_the_identifiers_a_price_point_comes_from(user, settings, caplog):
+    """So INVALID_PRICEPOINT_ID can be diagnosed from the log alone."""
+    settings.TIMWE_CHARGE_SERVICE_ID = '30026300007334'
+    settings.TIMWE_CHARGE_CODE = '255'
+
+    with caplog.at_level('INFO'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        charge(user)
+
+    requested = next(
+        r for r in caplog.records if r.getMessage().startswith('TIMWE_CHARGE_REQUESTED')
+    )
+    line = rendered(requested)
+
+    assert '30026300007334' in line
+    assert 'code=255' in line
+    assert 'amount=10' in line
+    assert '25191****678' in line
+
+
+def test_the_request_log_carries_no_credentials(user, settings, caplog):
+    # 'plain' is the mode staging runs in, and the worst case for this: the
+    # account password is inside the envelope being sent. It is refused over
+    # http, so the https endpoint goes with it.
+    settings.TIMWE_CHARGE_AUTH_MODE = 'plain'
+    settings.TIMWE_CHARGE_URL = (
+        'https://ma.test:443/soap-payment-api/ws/AmountChargingService/services/chargeAmount'
+    )
+
+    with caplog.at_level('INFO'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        charge(user)
+
+    everything = ' '.join(rendered(r) for r in caplog.records)
+
+    assert CONFIG['TIMWE_SP_PASSWORD'] not in everything
+    assert CONFIG['TIMWE_SP_ID'] not in everything
+    assert MSISDN not in everything
+
+
+def test_a_rejected_price_point_does_not_disturb_idempotency(user):
+    """The same key still returns the same row rather than charging again."""
+    with patch(POST, return_value=reply(fault_body('SVC0901', text='INVALID_PRICEPOINT_ID'))):
+        first = charge(user, key='pricepoint-1')
+
+    with patch(POST, return_value=reply(SUCCESS_BODY)) as second_post:
+        second = charge(user, key='pricepoint-1')
+
+    assert second.transaction.pk == first.transaction.pk
+    assert TimweChargeTransaction.objects.count() == 1
+    second_post.assert_not_called(), 'a replay reached the MA'
+
+
+def test_a_success_still_completes_after_all_this(user):
+    with patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user, key='still-works')
+
+    assert result.transaction.outcome == OUTCOME_SUCCESS
+    assert result.transaction.status == 'success'
+
+
 # Keep the module's reference to UTC honest -- it documents the guide's zone.
 assert UTC is not None
 assert errors.CHARGE_FAILED == 'SVC0270'

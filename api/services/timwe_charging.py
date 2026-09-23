@@ -229,13 +229,23 @@ def request_charge(
     # The reference code is what pairs this line with its outcome, and with
     # what TIMWE recorded; without it a busy log has no way to tell two
     # concurrent charges apart.
+    #
+    # service and code are here because chargeAmount carries no price point
+    # field of its own: TIMWE resolve one from the serviceId, the amount and
+    # the charging code. When they answer INVALID_PRICEPOINT_ID, these three
+    # values are the whole question, and without them in the log the only way
+    # to find out what was sent is a shell against production.
+    #
+    # None of them is a credential. spId and spPassword are deliberately
+    # absent, in either auth mode, and the number is masked.
     logger.info(
-        'TIMWE_CHARGE_REQUESTED ref=%s to=%s %s %s service=%s',
+        'TIMWE_CHARGE_REQUESTED ref=%s to=%s amount=%s currency=%s service=%s code=%s',
         charge.reference_code,
         charge.masked_msisdn,
         int(charge.amount),
         charge.currency,
         TimweChargeService.get_service_id(),
+        charge.charge_code or TimweChargeService.get_charge_code() or '(none)',
         extra={'operation': 'timwe_charge', 'provider': 'timwe'},
     )
 

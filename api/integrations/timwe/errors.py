@@ -47,7 +47,21 @@ CHARGE_AMOUNT_OUT_OF_RANGE = 'POL0910'
 CHARGE_AMOUNT_ERRORS = {
     CHARGE_TIMEOUT: 'Waiting for response timed out; an internal MA service is abnormal.',
     CHARGE_INVALID_INPUT: 'A required charging field is blank or invalid.',
-    CHARGE_AUTH_FAILED: 'Authentication or authorisation failed at the MA.',
+    # The guide calls SVC0901 authentication/authorisation, and it was
+    # described as only that here. TIMWE's gateway also returns it for
+    # provisioning: staging saw SVC0901 with the message
+    # INVALID_PRICEPOINT_ID, which is not a credential problem at all -- the
+    # credentials were accepted and the request was understood. Reading it as
+    # "check the password" sends an operator to the wrong setting entirely.
+    #
+    # The MA's own text is what distinguishes them, and it is kept verbatim in
+    # TimweChargeTransaction.error_message. Always read that before acting on
+    # this description.
+    CHARGE_AUTH_FAILED: (
+        'The MA refused the request: authentication, authorisation, or a '
+        'service/price point that is not provisioned for this account. '
+        'Read error_message for which.'
+    ),
     CHARGE_FAILED: 'MDSP charge failed; an internal MA service is abnormal.',
     CHARGE_AMOUNT_OUT_OF_RANGE: 'Amount is outside the permitted transaction range.',
 }
