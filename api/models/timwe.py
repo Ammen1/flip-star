@@ -130,7 +130,14 @@ class TimweChargeTransaction(models.Model):
         decimal_places=0,
         help_text='Whole currency units; the MA rejects a decimal point',
     )
-    currency = models.CharField(max_length=3)
+    # Wide enough for what TimweChargeService.validate_currency accepts, which
+    # is CURRENCY_PATTERN's 2-10 letters rather than an ISO 4217 code. TIMWE's
+    # gateway accepted 'Birr' where the guide promised 'ETB', and the value is
+    # sent exactly as configured, so it is stored exactly as sent. At
+    # max_length=3 a configured 'Birr' passed validation and then died in the
+    # INSERT -- an unhandled 500 on the purchase endpoint, before the charge
+    # was sent.
+    currency = models.CharField(max_length=10)
     description = models.CharField(max_length=255, blank=True)
     charge_code = models.CharField(max_length=30, blank=True)
 

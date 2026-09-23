@@ -448,7 +448,12 @@ class SubscriptionPayment(models.Model):
 
     # Payment details
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default='ETB')
+    # Defaults to ETB, but a renewal copies TimweChargeTransaction.currency in
+    # here verbatim (api/services/subscription_renewal.py) and TIMWE's gateway
+    # takes 'Birr'. Kept the same width as that column: this row is written
+    # after the subscriber has already been charged, so a value that does not
+    # fit would lose the record of money that has actually moved.
+    currency = models.CharField(max_length=10, default='ETB')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     payment_method = models.CharField(
         max_length=20, choices=PAYMENT_METHOD_CHOICES, default='onevas'

@@ -34,6 +34,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from api.integrations.timwe import errors
 from api.integrations.timwe.charge import (
+    CURRENCY_PATTERN,
     OUTCOME_REJECTED,
     OUTCOME_SUCCESS,
     OUTCOME_TIMEOUT,
@@ -42,6 +43,7 @@ from api.integrations.timwe.charge import (
     TimweChargeService,
 )
 from api.integrations.timwe.errors import TimweAmountError, TimweConfigurationError, TimweError
+from api.models.subscription import SubscriptionPayment
 from api.models.timwe import TimweChargeTransaction
 from api.services.timwe_charging import (
     AirtimePurchaseRefused,
@@ -1451,3 +1453,60 @@ def test_an_ambiguous_staging_charge_warns_not_to_retry(user):
         )
 
     assert 'do not charge again' in output
+
+
+# ===========================================================================
+# The currency, spelled as TIMWE spell it
+# ===========================================================================
+#
+# Staging is configured TIMWE_CURRENCY='Birr' -- four letters, which is what
+# TIMWE's gateway accepted where the guide promised 'ETB', and which
+# validate_currency deliberately passes through unchanged rather than
+# normalising to ISO 4217. TimweChargeTransaction.currency was varchar(3).
+#
+# So a 10 ETB airtime purchase validated, reached the INSERT, and raised
+# DataError: value too long -- an unhandled 500 on
+# POST /charging/coin-purchase/, thrown before anything reached the MA.
+#
+# Two things had to line up for this to reach staging. CONFIG at the top of
+# this file spells the currency 'ETB', so no test ever inserted anything
+# longer; and these tests run on SQLite by default, which ignores a CharField's
+# width entirely. Staging runs Postgres, which does not.
+#
+# That makes the two insert tests below weaker than they look: on SQLite they
+# would pass against the varchar(3) column too. Run them against Postgres
+# (TEST_DB_ENGINE=postgresql, see config/settings/testing.py) to get the real
+# assurance. The column-width test underneath is the one that holds either
+# way, because it reads max_length rather than trusting the database.
+
+
+def test_a_charge_records_the_currency_as_configured(user):
+    with override_settings(TIMWE_CURRENCY='Birr'), patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user, key='birr-1')
+
+    assert result.transaction.currency == 'Birr'
+
+
+@pytest.mark.parametrize('spelling', ['ETB', 'Birr', 'A' * 10])
+def test_any_accepted_spelling_survives_the_insert(user, spelling):
+    with override_settings(TIMWE_CURRENCY=spelling), patch(POST, return_value=reply(SUCCESS_BODY)):
+        result = charge(user, key=f'spelling-{spelling}')
+
+    assert result.transaction.currency == spelling
+
+
+def test_the_columns_hold_every_currency_the_client_accepts():
+    """The validator and the columns must agree, whatever is configured.
+
+    SubscriptionPayment is in here because a renewal copies the charge's
+    currency into it verbatim, and that row is written *after* the subscriber
+    has been charged -- a value that did not fit would lose the record of
+    money that had already moved.
+    """
+    longest = 'A' * 10
+    assert CURRENCY_PATTERN.match(longest), 'the client no longer accepts 10 letters'
+    assert not CURRENCY_PATTERN.match('A' * 11), 'the client widened past these columns'
+
+    for model in (TimweChargeTransaction, SubscriptionPayment):
+        width = model._meta.get_field('currency').max_length
+        assert width >= len(longest), f'{model.__name__}.currency holds only {width}'
