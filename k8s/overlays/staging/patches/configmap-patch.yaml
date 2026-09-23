@@ -182,6 +182,22 @@ data:
   # Airtime button rather than one that answers 403.
   TIMWE_AIRTIME_PURCHASE_ENABLED: "true"
 
+  # The master switch on chargeAmount. STAGING ONLY.
+  #
+  # While this is off nothing is sent to the MA by anyone, so the airtime flag
+  # above has no effect on its own -- /wallet/config/ keeps reporting
+  # allows_airtime false and the Buy Coins page keeps hiding the button. Both
+  # are needed, which is why they are turned on together.
+  #
+  # This does NOT start charging subscription renewals. That flow needs this
+  # AND TIMWE_SUBSCRIPTION_RENEWAL_ENABLED, which stays off (see
+  # api/services/subscription_renewal.py:125) until TIMWE confirm that
+  # renewals on this service are ours to charge rather than theirs -- charging
+  # from here while TIMWE also renew would bill a subscriber twice.
+  #
+  # Production inherits the default False from config/settings/base.py.
+  TIMWE_CHARGING_ENABLED: "true"
+
   # Deep link base URL embedded in the welcome SMS. A subscriber who gets
   # this URL taps it to open the app / register. Must match what the mobile
   # team has registered. Defaults to https://uat.flipstar.et/register in code.

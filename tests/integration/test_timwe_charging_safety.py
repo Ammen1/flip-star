@@ -96,22 +96,29 @@ def test_every_charging_switch_defaults_off(name):
     assert _declared_default(name) is False
 
 
-#: The one file allowed to switch anything on, and the one switch it may set.
+#: The one file allowed to switch anything on, and the switches it may set.
 #: Buying coins with airtime is wanted on staging and nowhere else, so the
-#: rail was narrowed rather than removed: every other file, and both master
-#: switches anywhere at all, still fail the test below.
+#: rail was narrowed rather than removed: every other file, and the renewal
+#: switch anywhere at all, still fail the test below.
+#:
+#: TIMWE_CHARGING_ENABLED joined this list once staging's charging credentials
+#: were confirmed present in Vault and the endpoint confirmed reachable.
+#: Airtime purchase does not work without it -- the two are only useful
+#: together -- and it is the narrower of the two ways to get there, because
+#: the renewal flow stays off behind its own switch either way.
 STAGING_OVERLAY = Path('k8s/overlays/staging/patches/configmap-patch.yaml')
-STAGING_MAY_ENABLE = {'TIMWE_AIRTIME_PURCHASE_ENABLED'}
+STAGING_MAY_ENABLE = {'TIMWE_AIRTIME_PURCHASE_ENABLED', 'TIMWE_CHARGING_ENABLED'}
 
 
 def test_nothing_in_the_deployment_turns_charging_on():
     """A deploy picks these files up. None of them may flip a switch.
 
-    One exception: TIMWE_AIRTIME_PURCHASE_ENABLED in the staging overlay. It
-    starts no charging by itself -- the master switch still has to be on and
-    the charging credentials present before api/services/airtime_purchase.py
-    calls the feature available -- so permitting it does not weaken what this
-    test exists for.
+    Two exceptions, both in the staging overlay and both listed in
+    STAGING_MAY_ENABLE. What this test still guarantees with them in place:
+    production and k8s/base turn nothing on, and
+    TIMWE_SUBSCRIPTION_RENEWAL_ENABLED is on nowhere -- so no deploy can start
+    charging subscribers for renewals, which is the double-billing risk this
+    file was written for.
     """
     enabling = re.compile(
         r'(TIMWE_(?:CHARGING|SUBSCRIPTION_RENEWAL|AIRTIME_PURCHASE)_ENABLED)\s*[:=]\s*["\']?(true|1|yes|on)\b',
@@ -139,14 +146,25 @@ def test_nothing_in_the_deployment_turns_charging_on():
     assert not offenders, 'A deployment file enables TIMWE charging:\n  ' + '\n  '.join(offenders)
 
 
-def test_the_staging_exception_is_only_the_airtime_switch():
+def test_the_staging_exception_is_only_the_airtime_pair():
     """Pinned so the exception cannot quietly widen."""
-    assert STAGING_MAY_ENABLE == {'TIMWE_AIRTIME_PURCHASE_ENABLED'}
+    assert STAGING_MAY_ENABLE == {'TIMWE_AIRTIME_PURCHASE_ENABLED', 'TIMWE_CHARGING_ENABLED'}
 
     overlay = (BACKEND / STAGING_OVERLAY).read_text(encoding='utf-8')
-    assert 'TIMWE_AIRTIME_PURCHASE_ENABLED: "true"' in overlay, 'staging no longer enables it'
-    for master in ('TIMWE_CHARGING_ENABLED', 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED'):
-        assert f'{master}: "true"' not in overlay, f'staging turned on {master}'
+    for switch in sorted(STAGING_MAY_ENABLE):
+        assert f'{switch}: "true"' in overlay, f'staging no longer enables {switch}'
+
+
+def test_staging_does_not_charge_for_renewals():
+    """The one switch that bills a subscriber unprompted stays off.
+
+    TIMWE may renew short-code subscriptions themselves. Renewing from here as
+    well charges twice for the same period, and the subscriber has asked for
+    neither. Unlike a coin purchase, nobody pressed a button for it.
+    """
+    overlay = (BACKEND / STAGING_OVERLAY).read_text(encoding='utf-8')
+    assert 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED: "true"' not in overlay
+    assert 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED' not in STAGING_MAY_ENABLE
 
 
 def test_nowhere_else_enables_airtime_purchase():
