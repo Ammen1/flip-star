@@ -235,8 +235,7 @@ def purchase_coins_on_demand(request):
     putting the check here means the constraint holds whichever way the flag
     is set, rather than being something a future change has to remember.
     """
-    from django.conf import settings
-
+    from api.services import airtime_purchase
     from api.services.subscription_access import coin_purchase_refusal
 
     # The same rule the telebirr paths enforce: coins are a subscriber
@@ -256,7 +255,7 @@ def purchase_coins_on_demand(request):
         # price; the DRF exception handler renders it.
         validate_pay_method(AIRTIME, price_etb)
 
-    if not getattr(settings, 'TIMWE_AIRTIME_PURCHASE_ENABLED', False):
+    if not airtime_purchase.policy_enabled():
         return Response(
             {
                 'error': 'Coin purchase via airtime charging is disabled. Ethio Telecom SIM cards are only accessible for SMS OTP verification.'

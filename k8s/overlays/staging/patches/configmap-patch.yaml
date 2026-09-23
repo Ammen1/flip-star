@@ -165,6 +165,23 @@ data:
   # Example: TIMWE_ALLOWED_IPS: "10.175.206.1,10.175.206.2"
   TIMWE_ALLOWED_IPS: ""
 
+  # Buying coins with airtime. STAGING ONLY.
+  #
+  # Off by default in code (config/settings/base.py) and deliberately so: the
+  # policy was that Ethio Telecom SIM cards are used solely for SMS OTP
+  # verification, and charging airtime for coins reverses that. Production
+  # inherits the default and stays off until somebody decides otherwise --
+  # which is why this lives here, in the staging overlay, and not in
+  # k8s/base.
+  #
+  # The flag alone does not make the feature work: the charging credentials
+  # (TIMWE_CHARGE_URL, TIMWE_SP_ID, TIMWE_SP_PASSWORD, TIMWE_SERVICE_ID,
+  # TIMWE_CURRENCY) come from Vault, and TIMWE_CHARGING_ENABLED must be on.
+  # api/services/airtime_purchase.py requires all of it before /wallet/config/
+  # advertises airtime to the app, so a half-configured environment shows no
+  # Airtime button rather than one that answers 403.
+  TIMWE_AIRTIME_PURCHASE_ENABLED: "true"
+
   # Deep link base URL embedded in the welcome SMS. A subscriber who gets
   # this URL taps it to open the app / register. Must match what the mobile
   # team has registered. Defaults to https://uat.flipstar.et/register in code.

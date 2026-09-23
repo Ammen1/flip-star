@@ -32,7 +32,7 @@ from api.models.contest import CoinPackage, CoinTransaction, UserCoinBalance
 from api.models.core import UserProfile
 from api.models.wallet import WalletConfig, WithdrawalRequest
 from api.serializers.core import UserSerializer
-from api.services import payment_status, post_pricing
+from api.services import airtime_purchase, payment_status, post_pricing
 from api.services.coin_packages import (
     fallback_payload,
     pending_coin_purchase,
@@ -686,6 +686,12 @@ def public_wallet_config(request):
             # fields below say which column a number came from; this says what
             # a person will be charged, which is what the create screen shows.
             # api/services/post_pricing.py owns the bands.
+            # Whether coins can be paid for with airtime right now: the
+            # policy flag AND the charging credentials being present
+            # (api/services/airtime_purchase.py). The same answer the purchase
+            # endpoint gives, so the page never offers a button that 403s.
+            # A boolean only -- no credential, and no reason, reaches a client.
+            'allows_airtime': airtime_purchase.is_available(),
             'post_costs': post_pricing.quote(config, is_campaign_post=False),
             'campaign_post_costs': post_pricing.quote(config, is_campaign_post=True),
             'costs': {

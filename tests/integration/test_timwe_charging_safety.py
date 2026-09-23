@@ -96,8 +96,23 @@ def test_every_charging_switch_defaults_off(name):
     assert _declared_default(name) is False
 
 
+#: The one file allowed to switch anything on, and the one switch it may set.
+#: Buying coins with airtime is wanted on staging and nowhere else, so the
+#: rail was narrowed rather than removed: every other file, and both master
+#: switches anywhere at all, still fail the test below.
+STAGING_OVERLAY = Path('k8s/overlays/staging/patches/configmap-patch.yaml')
+STAGING_MAY_ENABLE = {'TIMWE_AIRTIME_PURCHASE_ENABLED'}
+
+
 def test_nothing_in_the_deployment_turns_charging_on():
-    """A deploy picks these files up. None of them may flip a switch."""
+    """A deploy picks these files up. None of them may flip a switch.
+
+    One exception: TIMWE_AIRTIME_PURCHASE_ENABLED in the staging overlay. It
+    starts no charging by itself -- the master switch still has to be on and
+    the charging credentials present before api/services/airtime_purchase.py
+    calls the feature available -- so permitting it does not weaken what this
+    test exists for.
+    """
     enabling = re.compile(
         r'(TIMWE_(?:CHARGING|SUBSCRIPTION_RENEWAL|AIRTIME_PURCHASE)_ENABLED)\s*[:=]\s*["\']?(true|1|yes|on)\b',
         re.IGNORECASE,
@@ -117,8 +132,33 @@ def test_nothing_in_the_deployment_turns_charging_on():
             continue
         text = path.read_text(encoding='utf-8', errors='replace')
         for match in enabling.finditer(text):
-            offenders.append(f'{path.relative_to(BACKEND)}: {match.group(0)}')
+            relative = path.relative_to(BACKEND)
+            if relative == STAGING_OVERLAY and match.group(1).upper() in STAGING_MAY_ENABLE:
+                continue
+            offenders.append(f'{relative}: {match.group(0)}')
     assert not offenders, 'A deployment file enables TIMWE charging:\n  ' + '\n  '.join(offenders)
+
+
+def test_the_staging_exception_is_only_the_airtime_switch():
+    """Pinned so the exception cannot quietly widen."""
+    assert STAGING_MAY_ENABLE == {'TIMWE_AIRTIME_PURCHASE_ENABLED'}
+
+    overlay = (BACKEND / STAGING_OVERLAY).read_text(encoding='utf-8')
+    assert 'TIMWE_AIRTIME_PURCHASE_ENABLED: "true"' in overlay, 'staging no longer enables it'
+    for master in ('TIMWE_CHARGING_ENABLED', 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED'):
+        assert f'{master}: "true"' not in overlay, f'staging turned on {master}'
+
+
+def test_nowhere_else_enables_airtime_purchase():
+    """Production inherits the default, which is off."""
+    for folder in ('k8s/base', 'k8s/overlays/production', 'argocd'):
+        root = BACKEND / folder
+        if not root.exists():
+            continue
+        for path in root.rglob('*'):
+            if path.is_file() and path.suffix in ('.yaml', '.yml'):
+                text = path.read_text(encoding='utf-8', errors='replace')
+                assert 'TIMWE_AIRTIME_PURCHASE_ENABLED' not in text, f'{path} sets it'
 
 
 # ─── the master switch, at the lowest level ──────────────────────────────────
