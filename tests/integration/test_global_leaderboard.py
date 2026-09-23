@@ -26,8 +26,13 @@ factory = RequestFactory()
 @pytest.fixture
 def daily_campaign(db):
     campaign = Campaign.objects.create(
-        title='Daily Leaderboard Campaign', description='x', campaign_type='daily',
-        prize_title='p', prize_description='x', status='active', start_date=timezone.now(),
+        title='Daily Leaderboard Campaign',
+        description='x',
+        campaign_type='daily',
+        prize_title='p',
+        prize_description='x',
+        status='active',
+        start_date=timezone.now(),
     )
     yield campaign
     campaign.delete()
@@ -60,14 +65,17 @@ def two_scored_users(db, daily_campaign):
 
 def test_daily_leaderboard_ranks_by_score(daily_campaign, two_scored_users):
     u1, u2 = two_scored_users
-    today = timezone.now().strftime('%Y-%m-%d')
+    # The subscriber's day, which is what the view now windows on.
+    today = timezone.localtime(timezone.now()).strftime('%Y-%m-%d')
     request = factory.get(f'/leaderboard/global/?period=daily&date={today}')
 
     response = global_leaderboard(request)
 
     assert response.status_code == 200, response.data
     assert response.data['period'] == 'daily'
-    campaign_block = next(c for c in response.data['campaigns'] if c['campaign_id'] == daily_campaign.id)
+    campaign_block = next(
+        c for c in response.data['campaigns'] if c['campaign_id'] == daily_campaign.id
+    )
     leaders = campaign_block['leaders']
     assert [entry['username'] for entry in leaders] == ['glb_leader_u1', 'glb_leader_u2']
     assert leaders[0]['rank'] == 1
@@ -78,9 +86,12 @@ def test_daily_leaderboard_ranks_by_score(daily_campaign, two_scored_users):
 def test_daily_leaderboard_excludes_rejected_posts(db, daily_campaign):
     u = User.objects.create_user(username='glb_rejected_user', password='x')
     reel = Reel.objects.create(user=u, caption='rejected post')
-    PostScore.objects.create(reel=reel, campaign=daily_campaign, user=u, moderation_status='rejected')
+    PostScore.objects.create(
+        reel=reel, campaign=daily_campaign, user=u, moderation_status='rejected'
+    )
     try:
-        today = timezone.now().strftime('%Y-%m-%d')
+        # The subscriber's day, which is what the view now windows on.
+        today = timezone.localtime(timezone.now()).strftime('%Y-%m-%d')
         request = factory.get(f'/leaderboard/global/?period=daily&date={today}')
 
         response = global_leaderboard(request)
@@ -138,3 +149,100 @@ def test_unknown_master_campaign_id_returns_404(db):
     response = global_leaderboard(request)
 
     assert response.status_code == 404
+
+
+# ── the day is the subscriber's day, not UTC's ──────────────────────────────
+#
+# TIME_ZONE is Africa/Addis_Ababa, three hours ahead of UTC, and
+# timezone.now() is UTC. The view took its default date off `now` and built
+# the window with `tzinfo=now.tzinfo`, so "today" ran 03:00 to 03:00 local.
+#
+# Between midnight and 3am that had two effects at once: the board defaulted
+# to yesterday's date, and anything posted since local midnight fell into a
+# window nobody was looking at yet. At 02:00 the daily leaderboard was simply
+# empty of the night's posts -- which is what "the leaderboard is not working"
+# looks like from the app.
+
+
+def _post_at(campaign, when, username):
+    """A scored post at a given instant."""
+    user = User.objects.create_user(username=username, password='x')
+    reel = Reel.objects.create(user=user, caption='r')
+    score = PostScore.objects.create(reel=reel, campaign=campaign, user=user)
+    # created_at is auto_now_add, so it has to be set after the fact.
+    PostScore.objects.filter(pk=score.pk).update(created_at=when)
+    return user, reel
+
+
+def test_a_post_just_after_local_midnight_is_on_todays_board(db, daily_campaign):
+    """The exact case that was invisible: 00:30 local, today."""
+    from datetime import datetime, timedelta
+
+    local_today = timezone.localtime(timezone.now()).date()
+    just_after_midnight = timezone.make_aware(
+        datetime.combine(local_today, datetime.min.time())
+    ) + timedelta(minutes=30)
+
+    user, reel = _post_at(daily_campaign, just_after_midnight, 'glb_midnight_u1')
+    try:
+        request = factory.get(f'/leaderboard/global/?period=daily&date={local_today}')
+
+        response = global_leaderboard(request)
+
+        assert response.status_code == 200, response.data
+        block = next(c for c in response.data['campaigns'] if c['campaign_id'] == daily_campaign.id)
+        assert 'glb_midnight_u1' in [e['username'] for e in block['leaders']]
+    finally:
+        reel.delete()
+        user.delete()
+
+
+def test_the_window_is_local_midnight_to_local_midnight(db, daily_campaign):
+    """A post at 23:30 local belongs to that day, not the next one."""
+    from datetime import datetime, timedelta
+
+    local_today = timezone.localtime(timezone.now()).date()
+    late_last_night = timezone.make_aware(
+        datetime.combine(local_today, datetime.min.time())
+    ) - timedelta(minutes=30)
+
+    user, reel = _post_at(daily_campaign, late_last_night, 'glb_late_u1')
+    try:
+        today = factory.get(f'/leaderboard/global/?period=daily&date={local_today}')
+        yesterday_date = local_today - timedelta(days=1)
+        yesterday = factory.get(f'/leaderboard/global/?period=daily&date={yesterday_date}')
+
+        on_today = [
+            e['username']
+            for c in global_leaderboard(today).data['campaigns']
+            if c['campaign_id'] == daily_campaign.id
+            for e in c['leaders']
+        ]
+        on_yesterday = [
+            e['username']
+            for c in global_leaderboard(yesterday).data['campaigns']
+            if c['campaign_id'] == daily_campaign.id
+            for e in c['leaders']
+        ]
+
+        assert 'glb_late_u1' not in on_today, "23:30 landed on the following day's board"
+        assert 'glb_late_u1' in on_yesterday
+    finally:
+        reel.delete()
+        user.delete()
+
+
+def test_the_default_date_is_the_local_day(db, daily_campaign):
+    """With no ?date, the board must be the day the subscriber is living in.
+
+    Between midnight and 3am local this returned the previous date, because
+    it came from a UTC clock.
+    """
+    local_today = timezone.localtime(timezone.now()).strftime('%Y-%m-%d')
+
+    response = global_leaderboard(factory.get('/leaderboard/global/?period=daily'))
+
+    assert response.status_code == 200, response.data
+    assert (
+        response.data.get('date') == local_today
+    ), f'defaulted to {response.data.get("date")}, local today is {local_today}'

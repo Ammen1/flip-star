@@ -839,13 +839,23 @@ def global_leaderboard(request):
             return Response({'error': 'Master campaign not found'}, status=404)
 
     if period == 'daily':
-        date_str = request.GET.get('date', now.strftime('%Y-%m-%d'))
+        # The day is the subscriber's day, not UTC's.
+        #
+        # timezone.now() is UTC; TIME_ZONE is Africa/Addis_Ababa, three hours
+        # ahead. Taking the date off `now` and building the window with
+        # `tzinfo=now.tzinfo` made "today" run 03:00 to 03:00 local, and
+        # between midnight and 3am it defaulted to yesterday's date outright.
+        # So in those three hours the daily board showed the previous day and
+        # nothing posted since midnight appeared on any board at all.
+        local_now = timezone.localtime(now)
+        date_str = request.GET.get('date', local_now.strftime('%Y-%m-%d'))
         try:
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         except ValueError:
-            target_date = now.date()
+            target_date = local_now.date()
 
-        target_start = datetime.combine(target_date, datetime.min.time(), tzinfo=now.tzinfo)
+        # make_aware uses the active timezone, so this is local midnight.
+        target_start = timezone.make_aware(datetime.combine(target_date, datetime.min.time()))
         target_end = target_start + timedelta(days=1)
 
         if master_campaign:
