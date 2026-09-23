@@ -163,3 +163,58 @@ def hermetic_config(monkeypatch):
     monkeypatch.setattr(provider_module, 'default_provider', provider)
 
     return provider
+
+
+def verified_push_session(
+    *,
+    purpose,
+    phone_number,
+    user=None,
+    package_id=None,
+    tier_id=None,
+    amount_etb=None,
+):
+    """A payment verification that has already passed the SMS check.
+
+    Every USSD Push endpoint now refuses without one -- see
+    ``api/services/payment_otp.consume_verified_session``. Tests that are
+    about something else (the duplicate guard, what a pending payment looks
+    like) need a verified session to reach the behaviour they cover, and
+    walking the whole OTP flow in each of them would bury the point.
+
+    So this builds the row directly, with the same fingerprint the push
+    endpoint will recompute. The OTP flow itself -- sending, checking,
+    expiring, the attempt ceiling -- is covered end to end in
+    ``tests/integration/test_ussd_push_otp.py``, which does NOT use this.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from api.models.payment_verification import PaymentVerificationSession
+    from api.services import payment_otp
+    from api.views.core import _normalize_ethiopian_phone
+
+    raw = phone_number or (getattr(user, 'profile', None) and user.profile.phone_number)
+    phone = _normalize_ethiopian_phone(raw) or raw
+    now = timezone.now()
+
+    return PaymentVerificationSession.objects.create(
+        user=user,
+        phone_number=phone,
+        purpose=purpose,
+        request_fingerprint=payment_otp.fingerprint(
+            purpose=purpose,
+            user_id=getattr(user, 'id', None),
+            phone_number=phone,
+            package_id=package_id,
+            tier_id=tier_id,
+            amount_etb=amount_etb,
+        ),
+        # Already spent doing its job; a verified row carries no hash.
+        otp_hash='',
+        otp_expires_at=now + timedelta(minutes=5),
+        status=PaymentVerificationSession.STATUS_VERIFIED,
+        verified_at=now,
+        session_expires_at=now + timedelta(minutes=10),
+    )

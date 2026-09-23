@@ -40,6 +40,7 @@ from api.views.subscription import (
 )
 from common.security.e2e_encryption import encrypt_payload, generate_keypair
 from infrastructure.keys import redis_store
+from tests.conftest import verified_push_session
 
 pytestmark = pytest.mark.integration
 
@@ -172,7 +173,18 @@ def test_initiate_creates_pending_subscription_not_active(
         },
     ):
         response = _post_initiate(
-            {'tier_id': str(monthly_tier.id), 'phone_number': '0911223344'},
+            {
+                'tier_id': str(monthly_tier.id),
+                'phone_number': '0911223344',
+                # A USSD Push now needs a verified number behind it.
+                'verification_session_id': str(
+                    verified_push_session(
+                        purpose='subscription',
+                        phone_number='0911223344',
+                        tier_id=str(monthly_tier.id),
+                    ).id
+                ),
+            },
             server_public_key=_server_keys,
             client_keys=client_keys,
         )
@@ -217,7 +229,18 @@ def test_initiate_returns_error_when_telebirr_call_fails(
         return_value={'success': False, 'error': 'upstream down'},
     ):
         response = _post_initiate(
-            {'tier_id': str(monthly_tier.id), 'phone_number': '0911223344'},
+            {
+                'tier_id': str(monthly_tier.id),
+                'phone_number': '0911223344',
+                # A USSD Push now needs a verified number behind it.
+                'verification_session_id': str(
+                    verified_push_session(
+                        purpose='subscription',
+                        phone_number='0911223344',
+                        tier_id=str(monthly_tier.id),
+                    ).id
+                ),
+            },
             server_public_key=_server_keys,
             client_keys=client_keys,
         )

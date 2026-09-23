@@ -262,7 +262,9 @@ def test_total_route_count_is_stable():
     """
     from api.urls import urlpatterns
 
-    assert len(urlpatterns) == 332, (
+    # 334 since the two USSD Push verification endpoints
+    # (charging/ussd-push/request-otp/ and .../verify-otp/).
+    assert len(urlpatterns) == 334, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'
     )

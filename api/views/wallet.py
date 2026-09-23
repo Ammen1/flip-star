@@ -30,9 +30,10 @@ from api.integrations.telebirr.checkout import telebirr_service
 from api.integrations.telebirr.direct_debit import telebirr_direct_debit_service
 from api.models.contest import CoinPackage, CoinTransaction, UserCoinBalance
 from api.models.core import UserProfile
+from api.models.payment_verification import PaymentVerificationSession
 from api.models.wallet import WalletConfig, WithdrawalRequest
 from api.serializers.core import UserSerializer
-from api.services import airtime_purchase, payment_status, post_pricing
+from api.services import airtime_purchase, payment_otp, payment_status, post_pricing
 from api.services.coin_packages import (
     fallback_payload,
     pending_coin_purchase,
@@ -40,6 +41,7 @@ from api.services.coin_packages import (
 )
 from api.services.coin_pricing import public_pricing as custom_purchase_pricing
 from api.services.media_pipeline import served_url
+from api.services.payment_otp import OtpVerificationFailed
 from api.services.subscription_access import active_subscription_for, coin_purchase_refusal
 from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
@@ -1814,6 +1816,37 @@ def telebirr_ussd_purchase(request):
     else:
         amount = f'{float(amount_etb):.2f}'
         coins = quoted_coins
+
+    # The last thing before the push, and the reason it can be sent at all.
+    #
+    # A USSD Push puts a PIN prompt on the subscriber's handset. Before this
+    # check, reaching this endpoint was enough to raise that prompt, so the
+    # only thing standing between a session token and an unprompted payment
+    # request was the caller's goodwill. Now the payer has to have answered a
+    # code sent to the number being charged, for this exact purchase.
+    #
+    # consume_verified_session claims the session in one conditional UPDATE:
+    # it must be verified, unspent, unexpired, and its fingerprint must match
+    # this user, this number and this package or amount. A second push against
+    # the same verification finds nothing left to claim.
+    #
+    # Deliberately after the duplicate guard above rather than before it: the
+    # session is SPENT here, so checking it first would burn a verification on
+    # a purchase that was going to be refused anyway.
+    try:
+        payment_otp.consume_verified_session(
+            session_id=request.data.get('verification_session_id'),
+            purpose=PaymentVerificationSession.PURPOSE_COIN_PURCHASE,
+            phone_number=phone_number,
+            user=request.user,
+            package_id=request.data.get('package_id'),
+            amount_etb=request.data.get('amount_etb'),
+        )
+    except OtpVerificationFailed as refused:
+        return Response(
+            {'error': refused.message, 'code': refused.code},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     result = telebirr_direct_debit_service.initiate_ussd_push_payment(
         amount=amount,

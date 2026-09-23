@@ -225,16 +225,18 @@ def request_charge(
                 raise
         return _replay(existing, msisdn=normalized, amount=amount, currency=currency)
 
+    # In the message, not extra -- see TIMWE_CHARGE_COMPLETED below for why.
+    # The reference code is what pairs this line with its outcome, and with
+    # what TIMWE recorded; without it a busy log has no way to tell two
+    # concurrent charges apart.
     logger.info(
-        'TIMWE_CHARGE_REQUESTED',
-        extra={
-            'operation': 'timwe_charge',
-            'reference_code': charge.reference_code,
-            'service_id': TimweChargeService.get_service_id(),
-            'amount': int(charge.amount),
-            'currency': charge.currency,
-            'masked_msisdn': charge.masked_msisdn,
-        },
+        'TIMWE_CHARGE_REQUESTED ref=%s to=%s %s %s service=%s',
+        charge.reference_code,
+        charge.masked_msisdn,
+        int(charge.amount),
+        charge.currency,
+        TimweChargeService.get_service_id(),
+        extra={'operation': 'timwe_charge', 'provider': 'timwe'},
     )
 
     # Deliberately outside any database transaction: the MA may take a full
@@ -328,19 +330,33 @@ def _record(charge, outcome):
         return
 
     log = logger.info if outcome.success else logger.warning
+    # The detail goes in the MESSAGE, not extra={}.
+    #
+    # common/middleware/logging.py emits a fixed whitelist -- transaction_id,
+    # operation, duration_ms, provider, result -- and silently drops every
+    # other key. So this line used to say "result: rejected" and nothing
+    # whatsoever about why: the error code the MA returned, which is the one
+    # thing needed to tell a declined card from a rejected request, went into
+    # extra and was thrown away before it reached a log.
+    #
+    # The MA's own error TEXT stays out of here deliberately. It echoes
+    # request fields back, which can include the full MSISDN; it is on the
+    # TimweChargeTransaction row for anyone investigating one charge, which is
+    # the right place for something that identifies a subscriber.
     log(
-        'TIMWE_CHARGE_COMPLETED',
+        'TIMWE_CHARGE_COMPLETED %s code=%r http=%s ref=%s to=%s %s %s',
+        outcome.outcome,
+        outcome.error_code or '',
+        outcome.http_status,
+        charge.reference_code,
+        charge.masked_msisdn,
+        int(charge.amount),
+        charge.currency,
         extra={
             'operation': 'timwe_charge',
-            'reference_code': charge.reference_code,
-            'service_id': TimweChargeService.get_service_id(),
-            'amount': int(charge.amount),
-            'currency': charge.currency,
-            'masked_msisdn': charge.masked_msisdn,
             'result': outcome.outcome,
-            'timwe_error_code': outcome.error_code or '',
-            'http_status': outcome.http_status,
             'duration_ms': outcome.duration_ms,
+            'provider': 'timwe',
         },
     )
 

@@ -106,8 +106,13 @@ def test_model_count_is_stable():
     missing per-organization axis and leave all three alone.
 
     Update it deliberately when the model set genuinely changes.
+
+    115 since PaymentVerificationSession: the SMS check a payer passes before
+    a USSD Push is sent (api/models/payment_verification.py). It is a row
+    rather than a cache entry because it has to be bound to one payment and
+    spent exactly once.
     """
-    assert len(list(_api_models())) == 114
+    assert len(list(_api_models())) == 115
 
 
 @pytest.mark.parametrize(

@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from api.integrations.telebirr.checkout import telebirr_service
 from api.integrations.telebirr.direct_debit import telebirr_direct_debit_service
 from api.models import UserProfile
+from api.models.payment_verification import PaymentVerificationSession
 from api.models.subscription import (
     SubscriptionCoinTransaction as CoinTransaction,
 )
@@ -26,7 +27,8 @@ from api.models.subscription import (
 from api.models.subscription import (
     SubscriptionPlan as UserSubscription,
 )
-from api.services import payment_status
+from api.services import payment_otp, payment_status
+from api.services.payment_otp import OtpVerificationFailed
 from api.services.subscription_access import (
     active_subscription_for,
     already_subscribed_payload,
@@ -1637,6 +1639,35 @@ def telebirr_ussd_subscription_initiate(request):
         is not None
     ):
         return Response(payment_pending_payload(), status=status.HTTP_409_CONFLICT)
+
+    # The last thing before the push, and the reason it can be sent at all.
+    #
+    # A USSD Push puts a PIN prompt on the subscriber's handset. Before this,
+    # reaching this endpoint was enough to raise that prompt for any number a
+    # caller named. Now the payer must have answered a code sent to that
+    # number, for this tier.
+    #
+    # Deliberately after the refusals above rather than before them: the
+    # session is SPENT by this call, so checking it first would burn a
+    # verification on a request that was going to be refused anyway, and send
+    # the payer back for another code they did not need.
+    #
+    # The session carries no user when the payer has no account yet, which is
+    # the ordinary case here -- the number is the identity, and
+    # consume_verified_session binds to it either way.
+    try:
+        payment_otp.consume_verified_session(
+            session_id=request.data.get('verification_session_id'),
+            purpose=PaymentVerificationSession.PURPOSE_SUBSCRIPTION,
+            phone_number=phone_number,
+            user=request.user if request.user.is_authenticated else None,
+            tier_id=tier_id,
+        )
+    except OtpVerificationFailed as refused:
+        return Response(
+            {'error': refused.message, 'code': refused.code},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     amount = f'{float(tier.price_etb):.2f}'
 

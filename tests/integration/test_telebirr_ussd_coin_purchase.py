@@ -41,6 +41,7 @@ from api.views.wallet import (
 )
 from common.security.e2e_encryption import decrypt_payload, encrypt_payload, generate_keypair
 from infrastructure.keys import redis_store
+from tests.conftest import verified_push_session
 
 pytestmark = pytest.mark.integration
 
@@ -166,7 +167,18 @@ def test_telebirr_ussd_purchase_creates_pending_transaction(
         },
     ) as mock_initiate:
         envelope = encrypt_payload(
-            {'package_id': package.id},
+            {
+                'package_id': package.id,
+                # A USSD Push now needs a verified number behind it.
+                'verification_session_id': str(
+                    verified_push_session(
+                        purpose='coin_purchase',
+                        phone_number=user_with_phone.profile.phone_number,
+                        user=user_with_phone,
+                        package_id=package.id,
+                    ).id
+                ),
+            },
             receiver_public_key_b64=server_public_key,
             sender_private_key_b64=client_private_key,
         ).to_dict()

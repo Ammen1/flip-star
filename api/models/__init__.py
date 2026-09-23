@@ -125,6 +125,7 @@ from .timwe import (
 
 # --- Payments ---------------------------------------------------------------
 from .direct_debit import B2CPaymentTransaction, DirectDebitMandate, DirectDebitTransaction
+from .payment_verification import PaymentVerificationSession
 
 # --- Advertising ------------------------------------------------------------
 from .boost import (
@@ -279,6 +280,7 @@ __all__ = [
     'B2CPaymentTransaction',
     'DirectDebitMandate',
     'DirectDebitTransaction',
+    'PaymentVerificationSession',
     # advertising
     'BoostCampaign',
     'BoostConfig',

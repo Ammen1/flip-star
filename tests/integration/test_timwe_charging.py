@@ -1321,16 +1321,71 @@ def test_no_credential_or_full_number_is_logged(user, caplog):
     assert '25191****678' in everything
 
 
+def completed_record(caplog):
+    return next(r for r in caplog.records if r.getMessage().startswith('TIMWE_CHARGE_COMPLETED'))
+
+
+def rendered(record):
+    """The line as it actually reaches a log, through the real formatter.
+
+    This matters more than the LogRecord. common/middleware/logging.py emits a
+    fixed whitelist of extra keys and silently drops the rest, so a detail
+    passed in extra={} can be asserted on here and still be invisible in
+    production. Rendering it is the only assertion that means anything.
+    """
+    from common.middleware.logging import JsonFormatter
+
+    return JsonFormatter().format(record)
+
+
 def test_the_lifecycle_is_logged_with_safe_identifiers(user, caplog):
     with caplog.at_level('INFO'), patch(POST, return_value=reply(SUCCESS_BODY)):
         charge(user)
 
-    completed = next(r for r in caplog.records if r.getMessage() == 'TIMWE_CHARGE_COMPLETED')
+    completed = completed_record(caplog)
     assert completed.operation == 'timwe_charge'
     assert completed.result == OUTCOME_SUCCESS
-    assert completed.amount == 10
-    assert completed.currency == 'ETB'
     assert completed.duration_ms is not None
+
+    line = rendered(completed)
+    assert OUTCOME_SUCCESS in line
+    assert '10' in line
+    assert 'ETB' in line
+    assert '25191****678' in line
+    assert MSISDN not in line, 'the full number reached the log'
+
+
+def test_a_rejection_says_why_in_the_line_itself(user, caplog):
+    """Without the code, "rejected" is unactionable.
+
+    This line reported result=rejected and nothing else for every failed
+    charge: the MA's error code went into extra={}, which the formatter drops.
+    Telling a declined payment from a malformed request meant opening a Django
+    shell against production.
+    """
+    with caplog.at_level('INFO'), patch(POST, return_value=reply(fault_body('SVC0270'))):
+        charge(user)
+
+    line = rendered(completed_record(caplog))
+
+    assert 'SVC0270' in line, f'no error code in the log line: {line}'
+    assert OUTCOME_REJECTED in line
+
+
+def test_the_mas_own_text_stays_out_of_the_log(user, caplog):
+    """It echoes request fields back, which can include the full MSISDN."""
+    with (
+        caplog.at_level('INFO'),
+        patch(POST, return_value=reply(fault_body('SVC0270', text=f'No such subscriber {MSISDN}'))),
+    ):
+        charge(user)
+
+    line = rendered(completed_record(caplog))
+
+    assert MSISDN not in line
+    assert 'No such subscriber' not in line
+    # ...but it is kept where one charge can be investigated.
+    assert MSISDN in TimweChargeTransaction.objects.get().error_message
 
 
 # Keep the module's reference to UTC honest -- it documents the guide's zone.

@@ -25,6 +25,7 @@ from api.services.subscription_access import (
     already_subscribed_payload,
     subscription_summary,
 )
+from tests.conftest import verified_push_session
 
 pytestmark = pytest.mark.integration
 
@@ -144,7 +145,19 @@ def call_initiate(client_public, tier_id, phone_number=None, user=None):
 
     from common.security.e2e_encryption import encrypt_payload
 
-    body = {'tier_id': str(tier_id)}
+    body = {
+        'tier_id': str(tier_id),
+        # Every push now needs one. A test that omitted it would be refused
+        # before reaching the behaviour it is about.
+        'verification_session_id': str(
+            verified_push_session(
+                purpose='subscription',
+                phone_number=phone_number,
+                user=user,
+                tier_id=str(tier_id),
+            ).id
+        ),
+    }
     if phone_number:
         body['phone_number'] = phone_number
 

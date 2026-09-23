@@ -130,6 +130,10 @@ from api.views.messaging import (
     search_users_for_dm,
     unread_dm_count,
 )
+from api.views.payment_verification import (
+    request_ussd_push_otp,
+    verify_ussd_push_otp,
+)
 from api.views.privacy import (
     get_consent_history,
     get_consent_status,
@@ -1366,6 +1370,18 @@ urlpatterns = [
     path('charging/on-demand/search/', search_charging_transactions, name='charging-search'),
     path('charging/on-demand/analytics/', get_charging_analytics, name='charging-analytics'),
     path('charging/coin-purchase/', purchase_coins_on_demand, name='coin-purchase-on-demand'),
+    # The SMS check in front of USSD Push. Neither endpoint moves money; the
+    # push endpoints refuse without a session verified through them.
+    path(
+        'charging/ussd-push/request-otp/',
+        request_ussd_push_otp,
+        name='ussd-push-request-otp',
+    ),
+    path(
+        'charging/ussd-push/verify-otp/',
+        verify_ussd_push_otp,
+        name='ussd-push-verify-otp',
+    ),
     # Legal Documents - Public/User
     path('legal/', get_all_legal_documents, name='legal-all'),
     path('legal/<str:document_type>/', get_legal_document, name='legal-document'),
