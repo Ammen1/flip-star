@@ -963,3 +963,217 @@ def test_that_code_then_sets_the_pin(db, monthly_tier, _server_keys, client_keys
         payment.delete()
         plan.delete()
         user.delete()
+
+
+# ── the web flow's first screen actually saves what it asks for ────────────
+#
+# The page collects a username and a PIN, validates both, and used to send
+# neither. A subscriber chose credentials, paid, and arrived at a login that
+# had never heard of them. Now they are written before the push, so the screen
+# after payment can be an ordinary login.
+#
+# Safe on an AllowAny endpoint only because the verification session is
+# consumed first: that proves the caller holds the number. Without it, a
+# posted phone and PIN would be an account takeover, so the tests below pin
+# that a push with no verification writes nothing at all.
+
+
+def _initiate(tier, phone, *, client_public, username=None, pin=None, session=None):
+    from rest_framework.test import APIClient
+
+    from common.security.e2e_encryption import encrypt_payload
+
+    body = {'tier_id': str(tier.id), 'phone_number': phone}
+    if session is not None:
+        body['verification_session_id'] = str(session)
+    if username is not None:
+        body['username'] = username
+    if pin is not None:
+        body['pin'] = pin
+
+    server_public, client_pub, client_private = client_public
+    sealed = encrypt_payload(body, server_public, client_private)
+    api = APIClient()
+    return api.post(
+        '/api/v1/subscription/telebirr/ussd/initiate/',
+        sealed.to_dict(),
+        format='json',
+        HTTP_X_CLIENT_PUBLIC_KEY=client_pub,
+    )
+
+
+@pytest.fixture
+def _accepted_push():
+    from unittest.mock import patch
+
+    with patch('api.views.subscription.telebirr_direct_debit_service') as service:
+        service.initiate_ussd_push_payment.return_value = {
+            'success': True,
+            'originator_conversation_id': 'OCID-ACC-1',
+            'response_code': '0',
+            'message': 'accepted',
+        }
+        yield service
+
+
+def test_a_new_subscriber_gets_the_account_they_asked_for(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    from tests.conftest import verified_push_session
+
+    phone = '251988770011'
+    session = verified_push_session(phone_number=phone, tier_id=str(monthly_tier.id))
+
+    response = _initiate(
+        monthly_tier,
+        phone,
+        client_public=encrypted_client_keys,
+        username='chosen_name',
+        pin='739284',
+        session=session.id,
+    )
+
+    assert response.status_code == 200, response.data
+    user = User.objects.get(username='chosen_name')
+    assert user.check_password('739284')
+    assert user.profile.phone_number == phone
+
+
+def test_an_existing_subscriber_has_both_updated(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    """The reported bug: already having an account meant neither was applied."""
+    from tests.conftest import verified_push_session
+
+    phone = '251988770022'
+    user = User.objects.create_user(username='old_name', password='111111')
+    user.profile.phone_number = phone
+    user.profile.save(update_fields=['phone_number'])
+    session = verified_push_session(phone_number=phone, tier_id=str(monthly_tier.id))
+
+    response = _initiate(
+        monthly_tier,
+        phone,
+        client_public=encrypted_client_keys,
+        username='new_name',
+        pin='739284',
+        session=session.id,
+    )
+
+    assert response.status_code == 200, response.data
+    user.refresh_from_db()
+    assert user.username == 'new_name'
+    assert user.check_password('739284')
+    assert not user.check_password('111111')
+
+
+def test_the_account_exists_before_the_push_is_sent(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    """So a payment that never completes still leaves a usable login."""
+    from tests.conftest import verified_push_session
+
+    phone = '251988770033'
+    session = verified_push_session(phone_number=phone, tier_id=str(monthly_tier.id))
+
+    _accepted_push.initiate_ussd_push_payment.side_effect = (
+        lambda **kwargs: AssertionError('push sent before the account was written')
+        if not User.objects.filter(username='before_push').exists()
+        else {'success': True, 'originator_conversation_id': 'OCID-ACC-2', 'response_code': '0'}
+    )
+
+    response = _initiate(
+        monthly_tier,
+        phone,
+        client_public=encrypted_client_keys,
+        username='before_push',
+        pin='739284',
+        session=session.id,
+    )
+
+    assert response.status_code == 200, response.data
+    assert User.objects.filter(username='before_push').exists()
+
+
+def test_a_taken_username_is_refused_and_nothing_is_charged(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    from tests.conftest import verified_push_session
+
+    User.objects.create_user(username='already_mine', password='x')
+    phone = '251988770044'
+    session = verified_push_session(phone_number=phone, tier_id=str(monthly_tier.id))
+
+    response = _initiate(
+        monthly_tier,
+        phone,
+        client_public=encrypted_client_keys,
+        username='already_mine',
+        pin='739284',
+        session=session.id,
+    )
+
+    assert response.status_code == 409
+    assert response.data['code'] == 'USERNAME_TAKEN'
+    _accepted_push.initiate_ussd_push_payment.assert_not_called()
+    # And the verification survives, so retrying costs no extra SMS.
+    session.refresh_from_db()
+    assert session.status == 'verified'
+
+
+def test_a_weak_pin_is_refused_before_anything_happens(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    from tests.conftest import verified_push_session
+
+    phone = '251988770055'
+    session = verified_push_session(phone_number=phone, tier_id=str(monthly_tier.id))
+
+    response = _initiate(
+        monthly_tier,
+        phone,
+        client_public=encrypted_client_keys,
+        username='weak_pin_user',
+        pin='123456',
+        session=session.id,
+    )
+
+    assert response.status_code == 400
+    assert not User.objects.filter(username='weak_pin_user').exists()
+    _accepted_push.initiate_ussd_push_payment.assert_not_called()
+
+
+def test_credentials_without_a_verified_number_write_nothing(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    """The guard that makes this safe on an AllowAny endpoint."""
+    phone = '251988770066'
+
+    response = _initiate(
+        monthly_tier,
+        phone,
+        client_public=encrypted_client_keys,
+        username='no_proof',
+        pin='739284',
+    )
+
+    assert response.status_code == 403
+    assert not User.objects.filter(username='no_proof').exists()
+    _accepted_push.initiate_ussd_push_payment.assert_not_called()
+
+
+def test_a_flow_that_sends_no_credentials_is_unchanged(
+    db, monthly_tier, encrypted_client_keys, _accepted_push
+):
+    """The SuperApp sends neither, and must keep working exactly as before."""
+    from tests.conftest import verified_push_session
+
+    phone = '251988770077'
+    session = verified_push_session(phone_number=phone, tier_id=str(monthly_tier.id))
+
+    response = _initiate(
+        monthly_tier, phone, client_public=encrypted_client_keys, session=session.id
+    )
+
+    assert response.status_code == 200, response.data
+    _accepted_push.initiate_ussd_push_payment.assert_called_once()

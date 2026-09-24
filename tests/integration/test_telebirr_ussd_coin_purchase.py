@@ -433,3 +433,65 @@ def test_telebirr_auth_rejects_failed_telebirr_exchange(db):
         response = telebirr_auth(request)
 
     assert response.status_code == 400
+
+
+# ── buying coins is not a registration ──────────────────────────────────────
+#
+# The subscription USSD flow writes a username and PIN before its push,
+# because its first screen asks for them and the screen after payment is a
+# login. Buying coins has neither: the buyer is already signed in, the charge
+# goes to the number on their own profile, and there are no credentials to
+# set.
+#
+# Structural rather than behavioural, because the failure being guarded
+# against is the code appearing here at all -- a behavioural test would pass
+# against an endpoint that read the fields and happened not to be sent them.
+
+
+def _coin_purchase_source():
+    from pathlib import Path
+
+    import api.views.wallet as wallet_module
+
+    lines = Path(wallet_module.__file__).read_text(encoding='utf-8').splitlines()
+    start = next(
+        i for i, line in enumerate(lines) if line.startswith('def telebirr_ussd_purchase(')
+    )
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].startswith(('def ', '@'))),
+        len(lines),
+    )
+    return chr(10).join(lines[start:end])
+
+
+def test_the_coin_purchase_reads_no_credentials_from_the_client():
+    source = _coin_purchase_source()
+
+    for field in ('username', 'pin', 'password'):
+        assert (
+            f"request.data.get('{field}')" not in source
+        ), f'the coin purchase endpoint started reading {field!r} from the client'
+
+
+def test_the_coin_purchase_creates_no_account():
+    """It must never write credentials -- that belongs to the subscription flow."""
+    source = _coin_purchase_source()
+
+    assert '_apply_subscriber_account' not in source
+    assert 'set_password' not in source
+    assert 'create_user' not in source
+
+
+def test_only_the_subscription_flow_writes_subscriber_credentials():
+    """One caller, and it is the subscription initiate view."""
+    from pathlib import Path
+
+    import api.views.subscription as subscription_module
+    import api.views.wallet as wallet_module
+
+    wallet_source = Path(wallet_module.__file__).read_text(encoding='utf-8')
+    subscription_source = Path(subscription_module.__file__).read_text(encoding='utf-8')
+
+    assert '_apply_subscriber_account' not in wallet_source
+    # Defined once and called once, both in the subscription module.
+    assert subscription_source.count('_apply_subscriber_account') == 2

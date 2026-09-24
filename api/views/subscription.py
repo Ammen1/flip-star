@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -27,7 +28,7 @@ from api.models.subscription import (
 from api.models.subscription import (
     SubscriptionPlan as UserSubscription,
 )
-from api.services import payment_otp, payment_status
+from api.services import payment_otp, payment_status, usernames
 from api.services.payment_otp import OtpVerificationFailed
 from api.services.subscription_access import (
     active_subscription_for,
@@ -41,7 +42,7 @@ from api.services.telebirr_subscription_sms import USSD as TELEBIRR_SMS_USSD
 from api.services.telebirr_subscription_sms import (
     notify_activated as notify_telebirr_subscription_activated,
 )
-from common.security import EncryptedPayloadMixin, encrypted_endpoint
+from common.security import EncryptedPayloadMixin, encrypted_endpoint, is_pin_too_weak
 from common.throttling import PhoneLookupAnonThrottle, PhoneLookupUserThrottle
 
 logger = logging.getLogger(__name__)
@@ -1608,6 +1609,41 @@ def telebirr_ussd_subscription_initiate(request):
     if normalized_phone:
         phone_number = normalized_phone
 
+    # The account details the web flow collects on its first screen.
+    #
+    # They were asked for, validated on the page, and then never sent -- so a
+    # subscriber chose a username and a PIN, paid, and arrived at a login they
+    # had no credentials for. Optional here because only the web USSD flow
+    # collects them: the SuperApp authenticates its own visitor and sends
+    # neither, and that path is unchanged.
+    #
+    # Validated now, applied later. Everything below can still refuse the
+    # request, and a name rejected after the verification was spent would cost
+    # the subscriber another SMS round trip for a mistake we could see here.
+    requested_username = (request.data.get('username') or '').strip()
+    requested_pin = (request.data.get('pin') or '').strip()
+    wants_account_setup = bool(requested_username or requested_pin)
+
+    if wants_account_setup:
+        if not re.fullmatch(r'[A-Za-z0-9_]{3,30}', requested_username):
+            return Response(
+                {
+                    'error': 'Username must be 3-30 letters, numbers or underscores.',
+                    'field': 'username',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        too_weak, reason = is_pin_too_weak(requested_pin)
+        if too_weak:
+            return Response({'error': reason, 'field': 'pin'}, status=status.HTTP_400_BAD_REQUEST)
+
+        claimant = UserProfile.objects.filter(phone_number=phone_number).first()
+        if usernames.is_taken(
+            requested_username,
+            exclude_user_id=claimant.user_id if claimant else None,
+        ):
+            return Response(usernames.taken_payload(), status=status.HTTP_409_CONFLICT)
+
     # Refuse a second subscription before any money moves.
     #
     # The page checks too, but it cannot be relied on: in the telebirr
@@ -1668,6 +1704,17 @@ def telebirr_ussd_subscription_initiate(request):
             {'error': refused.message, 'code': refused.code},
             status=status.HTTP_403_FORBIDDEN,
         )
+
+    # Written before the push, so the subscriber can sign in with what they
+    # chose whatever happens next. A payment that never completes leaves an
+    # account with no subscription, which is recoverable; a completed payment
+    # with no credentials is what this flow did before, and is not.
+    #
+    # Safe on this AllowAny endpoint because consume_verified_session above
+    # has just proved the caller controls this number: without that, a posted
+    # phone number and PIN would be an account takeover.
+    if wants_account_setup:
+        _apply_subscriber_account(phone_number, requested_username, requested_pin)
 
     amount = f'{float(tier.price_etb):.2f}'
 
@@ -1758,6 +1805,28 @@ def telebirr_ussd_subscription_initiate(request):
             'payment_id': str(payment.id),
         }
     )
+
+
+def _apply_subscriber_account(phone_number, username, pin):
+    """Create or update the account for `phone_number` with what they chose.
+
+    An existing subscriber keeps their account and gets the new username and
+    PIN; a new one is created with both. Either way the credentials are real
+    before the payment prompt appears, which is the point: the screen after
+    payment is a login.
+    """
+    profile = UserProfile.objects.filter(phone_number=phone_number).first()
+
+    if profile is not None:
+        user = profile.user
+        user.username = username
+        user.set_password(pin)
+        user.save(update_fields=['username', 'password'])
+        return user
+
+    user = User.objects.create_user(username=username, password=pin)
+    UserProfile.objects.update_or_create(user=user, defaults={'phone_number': phone_number})
+    return user
 
 
 def _send_ussd_access_sms(payment, tier, phone_number):
