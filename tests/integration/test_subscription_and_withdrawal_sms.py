@@ -550,3 +550,44 @@ def test_two_withdrawals_are_not_confused_for_each_other(subscriber, withdrawal)
         f'withdrawal:{withdrawal.id}:paid',
         f'withdrawal:{second.id}:paid',
     }
+
+
+# ── the web app's address is configuration, and the link is well formed ────
+#
+# WEB_APP_LINK was a module constant carrying its own query string, including
+# an unformatted "{masked_phone}" placeholder, and the resend-OTP caller
+# appended a second query string to it. What went out was
+#
+#   .../register?subscription_tp=true&phone={masked_phone}?subscription_tp=true&token=...
+#
+# -- two '?', and a phone parameter whose value was the literal text
+# "{masked_phone}". Anyone following it landed on a broken page. It also could
+# not be pointed at another domain without editing Python.
+
+
+def test_the_register_url_follows_the_configured_base():
+    from django.test import override_settings
+
+    from api.views.subscription import web_app_register_url
+
+    with override_settings(WEB_APP_BASE_URL='https://flipstar.et'):
+        assert web_app_register_url() == 'https://flipstar.et/register'
+
+
+def test_a_trailing_slash_does_not_double_up():
+    from django.test import override_settings
+
+    from api.views.subscription import web_app_register_url
+
+    with override_settings(WEB_APP_BASE_URL='https://flipstar.et/'):
+        assert web_app_register_url() == 'https://flipstar.et/register'
+
+
+def test_the_register_url_carries_no_query_string_of_its_own():
+    """The caller owns the query string; two of them make a broken URL."""
+    from api.views.subscription import web_app_register_url
+
+    url = web_app_register_url()
+
+    assert '?' not in url
+    assert '{' not in url, 'an unformatted placeholder is still in the URL'

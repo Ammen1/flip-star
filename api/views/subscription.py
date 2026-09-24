@@ -53,9 +53,21 @@ logger = logging.getLogger(__name__)
 # endpoint, api/views/timwe.py, is the subscription channel now. Subscriptions
 # OneVAS created are still ordinary SubscriptionPlan rows and keep working.
 
+
 # App Links (placeholders - update with actual URLs)
-# WEB_APP_LINK = "https://api.uat.flipstar.et?subscription_tp=true"
-WEB_APP_LINK = 'https://uat.flipstar.et/register?subscription_tp=true&phone={masked_phone}'
+def web_app_register_url():
+    """The registration page a subscriber is sent to, without a query string.
+
+    Read from settings so the domain is configuration. This was a module
+    constant that already carried its own query string -- including an
+    unformatted ``{masked_phone}`` placeholder -- and the one caller appended
+    a second one, producing a URL with two '?' and a literal '{masked_phone}'
+    as the phone. Anyone following it landed on a broken page.
+    """
+    base = (getattr(settings, 'WEB_APP_BASE_URL', '') or '').rstrip('/')
+    return f'{base}/register'
+
+
 MOBILE_APP_LINK = 'https://play.google.com/store/apps/details?id=com.postworq.mobile'
 
 
@@ -1763,6 +1775,14 @@ def telebirr_ussd_subscription_initiate(request):
     end_date = start_date + timedelta(days=tier.duration_days or 30)
     user_for_subscription = request.user if request.user.is_authenticated else None
 
+    # An account created a moment ago from the details on the first screen is
+    # this subscription's owner, even though the request itself is anonymous.
+    # Linking it now is what stops the plan starting life orphaned.
+    if user_for_subscription is None:
+        owner = UserProfile.objects.filter(phone_number=phone_number).first()
+        if owner is not None:
+            user_for_subscription = owner.user
+
     subscription = UserSubscription.objects.create(
         user=user_for_subscription,
         tier=tier,
@@ -1771,10 +1791,16 @@ def telebirr_ussd_subscription_initiate(request):
         start_date=start_date,
         end_date=end_date,
         payment_method='telebirr',
+        # Recorded on the plan, not only in the payment's metadata. Without it
+        # an unlinked plan cannot be matched back to anybody at all.
+        telebirr_phone_number=phone_number,
         auto_renew=False,
     )
 
-    payment_metadata = {} if user_for_subscription else {'phone_number': phone_number}
+    # Always carries the number: the activation path resolves the owner from
+    # it when the plan was created before anyone signed in, and it is the only
+    # record of who paid when that resolution fails.
+    payment_metadata = {'phone_number': phone_number}
     payment = SubscriptionPayment.objects.create(
         user=user_for_subscription,
         subscription=subscription,
@@ -1881,10 +1907,61 @@ def _send_ussd_access_sms(payment, tier, phone_number):
     )
 
 
+def _resolve_payment_user(payment):
+    """The account behind a payment made before anybody signed in.
+
+    An anonymous subscriber pays with a phone number and nothing else, so the
+    number in the payment metadata is the only identity there is. Finds the
+    profile that owns it, or creates the account, exactly as
+    telebirr_ussd_subscription_webhook has always done -- lifted out of that
+    view so every activation path gets it.
+
+    Returns None when there is no number to go on, which leaves the caller's
+    existing behaviour unchanged.
+    """
+    from api.views.core import _normalize_ethiopian_phone
+
+    raw = (payment.metadata or {}).get('phone_number')
+    if not raw:
+        return None
+
+    phone = _normalize_ethiopian_phone(raw) or raw
+    profile = UserProfile.objects.filter(phone_number=phone).first()
+
+    if profile is not None:
+        user = profile.user
+        is_new = False
+    else:
+        user = User.objects.create_user(username=f'user_{phone[-8:]}', password=None)
+        UserProfile.objects.update_or_create(user=user, defaults={'phone_number': phone})
+        is_new = True
+
+    metadata = payment.metadata or {}
+    metadata['is_new_user'] = is_new
+    payment.user = user
+    payment.metadata = metadata
+    payment.save(update_fields=['user', 'metadata'])
+    return user
+
+
 def _activate_ussd_subscription_payment(payment, tier):
     """Activate the subscription linked to a USSD Push payment. Called only
     from inside telebirr_ussd_subscription_webhook's row lock on `payment`."""
-    user = payment.user
+    # Resolve the owner HERE, not at one entry point.
+    #
+    # This function is the only place a USSD subscription is activated, but it
+    # is reached from two: telebirr_ussd_subscription_webhook, which resolved
+    # the user from the payment metadata first, and api/views/wallet.py's coin
+    # webhook, which called straight through. Telebirr registers one Result
+    # Address per merchant and sends every confirmation to the coin one, so in
+    # practice the resolving path never ran.
+    #
+    # The result was an active subscription with user=None: paid for,
+    # activated, and belonging to nobody. active_subscription_for() filters on
+    # user, so the subscriber who paid was shown the subscribe page, and the
+    # plan stayed orphaned. Doing it here means it happens however activation
+    # is reached.
+    user = payment.user or _resolve_payment_user(payment)
     subscription = payment.subscription
 
     if subscription and subscription.status == 'pending':
@@ -1893,6 +1970,11 @@ def _activate_ussd_subscription_payment(payment, tier):
         subscription.payment_method = 'telebirr'
         if not subscription.user:
             subscription.user = user
+        # The plan carried no phone number at all -- both columns were null,
+        # with the number only in the payment's metadata -- so an orphaned
+        # plan could not even be matched back to its subscriber by hand.
+        if not subscription.telebirr_phone_number:
+            subscription.telebirr_phone_number = (payment.metadata or {}).get('phone_number')
         subscription.save()
         # Activate the subscription to grant the tier's bonus coins immediately.
         # activate() handles idempotency: it grants bonus_coins only once per period.

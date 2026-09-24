@@ -1177,3 +1177,126 @@ def test_a_flow_that_sends_no_credentials_is_unchanged(
 
     assert response.status_code == 200, response.data
     _accepted_push.initiate_ussd_push_payment.assert_called_once()
+
+
+# ── a paid subscription must belong to somebody ─────────────────────────────
+#
+# Five active subscriptions on staging had user=None: paid for, activated, and
+# owned by nobody. active_subscription_for() filters on user, so the person
+# who paid was shown the subscribe page on their own profile.
+#
+# The cause was an entry point, not the logic. _activate_ussd_subscription_
+# payment is the only place a USSD subscription activates, but it is reached
+# from two places: the subscription webhook, which resolved the owner from the
+# payment metadata first, and api/views/wallet.py's coin webhook, which called
+# straight through. Telebirr registers ONE Result Address per merchant and
+# sends every confirmation to the coin one -- so the resolving path never ran.
+
+
+def _pending_ussd_payment(tier, phone, *, txn='S_X-ORPHAN-1'):
+    """A plan and payment exactly as an anonymous web subscriber leaves them."""
+    now = timezone.now()
+    plan = SubscriptionPlan.objects.create(
+        user=None,
+        tier=tier,
+        status='pending',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        auto_renew=False,
+    )
+    payment = SubscriptionPayment.objects.create(
+        subscription=plan,
+        user=None,
+        amount=tier.price_etb,
+        currency='ETB',
+        status='pending',
+        payment_method='telebirr',
+        duration_type='monthly',
+        period_start=now,
+        period_end=plan.end_date,
+        onevas_transaction_id=txn,
+        metadata={'phone_number': phone},
+    )
+    return plan, payment
+
+
+def test_activation_through_the_coin_webhook_still_finds_the_owner(db, monthly_tier):
+    """The path Telebirr actually uses."""
+    from api.views.subscription import _activate_ussd_subscription_payment
+
+    phone = '251911528271'
+    user = User.objects.create_user(username='orphan_owner', password='x')
+    user.profile.phone_number = phone
+    user.profile.save(update_fields=['phone_number'])
+    plan, payment = _pending_ussd_payment(monthly_tier, phone)
+
+    _activate_ussd_subscription_payment(payment, monthly_tier)
+
+    plan.refresh_from_db()
+    payment.refresh_from_db()
+    assert plan.user_id == user.id, 'the activated plan belongs to nobody'
+    assert payment.user_id == user.id
+    assert plan.status == 'active'
+
+
+def test_the_subscriber_can_then_see_their_own_subscription(db, monthly_tier):
+    """The symptom: the paywall on your own profile after paying."""
+    from api.services.subscription_access import active_subscription_for
+    from api.views.subscription import _activate_ussd_subscription_payment
+
+    phone = '251911528272'
+    user = User.objects.create_user(username='sees_own_sub', password='x')
+    user.profile.phone_number = phone
+    user.profile.save(update_fields=['phone_number'])
+    plan, payment = _pending_ussd_payment(monthly_tier, phone, txn='S_X-ORPHAN-2')
+
+    assert active_subscription_for(user=user) is None
+
+    _activate_ussd_subscription_payment(payment, monthly_tier)
+
+    assert active_subscription_for(user=user) is not None
+
+
+def test_an_account_is_created_when_the_number_is_new(db, monthly_tier):
+    """A first-time subscriber has no profile to find."""
+    from api.views.subscription import _activate_ussd_subscription_payment
+
+    phone = '251911528273'
+    plan, payment = _pending_ussd_payment(monthly_tier, phone, txn='S_X-ORPHAN-3')
+
+    _activate_ussd_subscription_payment(payment, monthly_tier)
+
+    plan.refresh_from_db()
+    assert plan.user is not None
+    assert plan.user.profile.phone_number == phone
+    assert payment.metadata.get('is_new_user') is True
+
+
+def test_the_activated_plan_records_the_phone_number(db, monthly_tier):
+    """Both columns were null, so an orphan could not be matched back by hand."""
+    from api.views.subscription import _activate_ussd_subscription_payment
+
+    phone = '251911528274'
+    plan, payment = _pending_ussd_payment(monthly_tier, phone, txn='S_X-ORPHAN-4')
+
+    _activate_ussd_subscription_payment(payment, monthly_tier)
+
+    plan.refresh_from_db()
+    assert plan.telebirr_phone_number == phone
+
+
+def test_a_payment_with_no_number_activates_as_before(db, monthly_tier):
+    """No number to resolve from is not an error -- behaviour is unchanged."""
+    from api.views.subscription import _activate_ussd_subscription_payment
+
+    plan, payment = _pending_ussd_payment(monthly_tier, '251911528275', txn='S_X-ORPHAN-5')
+    SubscriptionPayment.objects.filter(pk=payment.pk).update(metadata={})
+    payment.refresh_from_db()
+
+    _activate_ussd_subscription_payment(payment, monthly_tier)
+
+    plan.refresh_from_db()
+    assert plan.status == 'active'
+    assert plan.user is None

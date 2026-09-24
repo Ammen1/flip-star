@@ -24,7 +24,7 @@ data:
   # partner-webserver679.phinfra.local:7890 is TIMWE's infrastructure probing
   # the backend (it also hits /api/v1/timwe/sync-order-relation); without it
   # here Django answers 400 DisallowedHost and logs an ERROR for every probe.
-  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,172.16.170.2,10.0.0.93,partner-webserver679.phinfra.local"
+  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,flipstar.et,172.16.170.2,10.0.0.93,partner-webserver679.phinfra.local"
 
   # The pod CIDR, so X-Forwarded-For from ingress-nginx is honoured.
   # common/security/client_ip.py only trusts that header when the immediate
@@ -133,8 +133,8 @@ data:
   # Without the localhost entries every browser request from a
   # developer machine fails CORS -- reported as an opaque network
   # error, and invisible in Postman, which ignores CORS entirely.
-  CORS_ALLOWED_ORIGINS: "https://api.uat.flipstar.et,https://uat.flipstar.et,https://www.uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
-  CSRF_TRUSTED_ORIGINS: "https://api.uat.flipstar.et,https://uat.flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
+  CORS_ALLOWED_ORIGINS: "https://api.uat.flipstar.et,https://uat.flipstar.et,https://www.uat.flipstar.et,https://flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
+  CSRF_TRUSTED_ORIGINS: "https://api.uat.flipstar.et,https://uat.flipstar.et,https://flipstar.et,http://localhost:3000,http://localhost:5173,http://localhost:5174"
   BACKEND_URL: "https://api.uat.flipstar.et"
   LOG_LEVEL: "DEBUG"
   # Serves /api/v1/crypto/test/* so the encrypted endpoints can be driven
@@ -201,4 +201,11 @@ data:
   # Deep link base URL embedded in the welcome SMS. A subscriber who gets
   # this URL taps it to open the app / register. Must match what the mobile
   # team has registered. Defaults to https://uat.flipstar.et/register in code.
-  TIMWE_SUBSCRIPTION_LINK_BASE: "https://uat.flipstar.et/register"
+  TIMWE_SUBSCRIPTION_LINK_BASE: "https://flipstar.et/register"
+
+  # The web app's own address, used by every SMS that offers a way in.
+  #
+  # Separate from BACKEND_URL, which stays on api.uat.flipstar.et: the SPA
+  # calls the API cross-origin, which is why flipstar.et is in both
+  # CORS_ALLOWED_ORIGINS and CSRF_TRUSTED_ORIGINS above.
+  WEB_APP_BASE_URL: "https://flipstar.et"

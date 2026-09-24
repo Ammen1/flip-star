@@ -1162,7 +1162,7 @@ def resend_subscription_otp(request):
     from api.models.subscription import SubscriptionPlan as UserSubscription
     from api.services.otp import OTPService
     from api.services.sms.dispatch import SmsNotQueued, queue_sms
-    from api.views.subscription import WEB_APP_LINK, mask_phone_number
+    from api.views.subscription import mask_phone_number, web_app_register_url
 
     phone_raw = request.data.get('phone', '').strip()
     if not phone_raw:
@@ -1215,7 +1215,8 @@ def resend_subscription_otp(request):
     message = (
         f'Dear valued customer, here is your new OTP for your {tier.name} Flipstar '
         f'subscription: {otp_code}. To access your premium service, please click on '
-        f'{WEB_APP_LINK}?subscription_tp=true&token={token}{existing_user} and enter this OTP. '
+        f'{web_app_register_url()}?subscription_tp=true&token={token}{existing_user} '
+        'and enter this OTP. '
         f'To cancel your subscription at any time, please send {stop_keyword} to {tier.short_code}.'
     )
 

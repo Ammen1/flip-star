@@ -223,6 +223,13 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Absolute base used by serializers when building media URLs in API responses.
 BACKEND_URL = config('BACKEND_URL', default='https://api.uat.flipstar.et')
 
+# Where the web app lives -- the address put in front of a subscriber, not the
+# API's. Every SMS that offers a way in builds on this, so changing domain is
+# a config change rather than a code one. Was hard-coded in
+# api/views/subscription.py, which meant it could not be changed per
+# environment at all.
+WEB_APP_BASE_URL = config('WEB_APP_BASE_URL', default='https://uat.flipstar.et')
+
 # Object storage (S3 / MinIO). Resolved centrally so the same values are used
 # by Django's storage backend and by the Celery upload helpers.
 from infrastructure.storage.config import apply_storage_settings  # noqa: E402

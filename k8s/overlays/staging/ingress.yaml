@@ -2,7 +2,7 @@
 #
 #   api.uat.flipstar.et -> flipstar-backend  (Django/Daphne API)
 #   uat.flipstar.et     -> flipstar-web      (React SPA)
-#   flipstar.et         -> flipstar-backend  (unchanged)
+#   flipstar.et         -> flipstar-web      (SPA at the root, /api to the backend)
 #
 # The SPA calls the API cross-origin, from https://uat.flipstar.et to
 # https://api.uat.flipstar.et. That already works without a CORS change:
@@ -124,10 +124,35 @@ spec:
     - host: flipstar.et
       http:
         paths:
-          - path: /
+          # The API stays on this host.
+          #
+          # flipstar.et pointed everything at the backend, from before the web
+          # split. Anything already calling https://flipstar.et/api/... keeps
+          # working -- moving the whole host to the SPA would have turned
+          # those into 405s from static nginx, the same way the webhook path
+          # on uat.flipstar.et did.
+          - path: /api
             pathType: Prefix
             backend:
               service:
                 name: flipstar-backend
+                port:
+                  name: http
+          - path: /api/webhooks
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+          # Everything else is the app. This is the address subscribers are
+          # given -- WEB_APP_BASE_URL and TIMWE_SUBSCRIPTION_LINK_BASE both
+          # point here -- so the root has to serve the SPA rather than the
+          # API's 404.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-web
                 port:
                   name: http
