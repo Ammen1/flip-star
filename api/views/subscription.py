@@ -1760,6 +1760,58 @@ def telebirr_ussd_subscription_initiate(request):
     )
 
 
+def _send_ussd_access_sms(payment, tier, phone_number):
+    """The way in, after a USSD Push payment: a durable code and a link.
+
+    This used to call OTPService.send_otp, which writes a code to the cache
+    for five minutes and is read back only by /auth/login-with-otp/. Two
+    things went wrong with that.
+
+    The code did not outlive the wait. Five minutes has to cover the SMPP
+    queue, the handset, and the subscriber typing -- and a backend restart
+    wiped it outright, because it lived in a cache rather than a row. What
+    they saw was "OTP expired or not found" for a subscription they had just
+    paid for.
+
+    And it was the wrong code for the screen they are sent to. An existing
+    subscriber is handed to "Verify & Set Your PIN", which checks
+    ``subscription.setup_otp`` -- a different store entirely. The cache code
+    could never have satisfied it.
+
+    So this issues the code that screen actually reads: on the row, good for
+    30 minutes, and carried in the same message as the access link, exactly
+    as the MA-driven renewal path does (api/views/timwe.py).
+    """
+    from datetime import timedelta
+
+    from api.services import sms_subscription
+    from api.services.otp import OTPService
+
+    plan = getattr(payment, 'subscription', None)
+    if plan is None:
+        return
+
+    otp_code = OTPService.generate_otp()
+    plan.setup_otp = otp_code
+    plan.setup_otp_expires_at = timezone.now() + timedelta(minutes=30)
+    plan.save(update_fields=['setup_otp', 'setup_otp_expires_at'])
+
+    message = sms_subscription.build_renewal_message(
+        tier=tier,
+        plan=plan,
+        phone_number=phone_number,
+        base_url=getattr(settings, 'TIMWE_SUBSCRIPTION_LINK_BASE', ''),
+        otp=otp_code,
+    )
+    sms_subscription.send_subscription_sms(
+        phone_number,
+        message,
+        tier,
+        purpose='subscription_ussd_access',
+        idempotency_key=f'ussd-access:{payment.pk}',
+    )
+
+
 def _activate_ussd_subscription_payment(payment, tier):
     """Activate the subscription linked to a USSD Push payment. Called only
     from inside telebirr_ussd_subscription_webhook's row lock on `payment`."""
@@ -1979,9 +2031,7 @@ def telebirr_ussd_subscription_webhook(request):
                     getattr(activated_user, 'profile', None), 'phone_number', None
                 )
                 if phone_number:
-                    from api.services.otp import OTPService
-
-                    OTPService.send_otp(phone_number, action='subscription_login')
+                    _send_ussd_access_sms(payment, tier, phone_number)
             except Exception as otp_error:
                 logger.error('[USSD SUBSCRIPTION WEBHOOK] Error sending login OTP: %s', otp_error)
 

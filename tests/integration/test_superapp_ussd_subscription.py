@@ -848,3 +848,118 @@ def test_the_endpoint_is_rate_limited():
     scopes = {getattr(t, 'scope', None) for t in getattr(view.cls, 'throttle_classes', [])}
 
     assert 'otp_verify' in scopes, 'the PIN-setting endpoint has no throttle'
+
+
+# ── after a USSD Push payment, the code has to fit the screen ───────────────
+#
+# The webhook sent an OTPService code: five minutes, in the cache, readable
+# only by /auth/login-with-otp/. An existing subscriber is handed to "Verify &
+# Set Your PIN", which reads subscription.setup_otp instead -- so the code
+# they were sent could never have satisfied the screen they were sent to, and
+# five minutes rarely outlived the SMS queue anyway. "OTP expired or not
+# found", on a subscription they had just paid for.
+
+
+def test_the_ussd_webhook_issues_the_code_the_set_pin_screen_reads(db, monthly_tier):
+    """A durable setup_otp on the row, not a five-minute cache entry."""
+    from unittest.mock import patch
+
+    from api.views.subscription import _send_ussd_access_sms
+
+    user = User.objects.create_user(username='ussd_access_user', password=None)
+    now = timezone.now()
+    plan = SubscriptionPlan.objects.create(
+        user=user,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='251988990011',
+        auto_renew=False,
+    )
+    payment = SubscriptionPayment.objects.create(
+        subscription=plan,
+        user=user,
+        amount=monthly_tier.price_etb,
+        currency='ETB',
+        status='completed',
+        payment_method='telebirr',
+        duration_type='monthly',
+        period_start=now,
+        period_end=plan.end_date,
+        onevas_transaction_id='OCID-ACCESS-1',
+    )
+    try:
+        with patch('api.services.sms_subscription.send_subscription_sms') as send:
+            _send_ussd_access_sms(payment, monthly_tier, '251988990011')
+
+        plan.refresh_from_db()
+        assert plan.setup_otp, 'no setup_otp was issued'
+        assert plan.setup_otp_expires_at > timezone.now()
+        # 30 minutes, not the cache service's five.
+        assert (plan.setup_otp_expires_at - timezone.now()).total_seconds() > 20 * 60
+
+        send.assert_called_once()
+        message = send.call_args.args[1]
+        assert plan.setup_otp in message, 'the SMS does not carry the code'
+        assert 'subscription_tp=true' in message, 'the SMS does not carry the way in'
+        assert 'existing_user=true' in message, 'an account holder was sent to registration'
+    finally:
+        payment.delete()
+        plan.delete()
+        user.delete()
+
+
+def test_that_code_then_sets_the_pin(db, monthly_tier, _server_keys, client_keys):
+    """End to end: the code the webhook issues works on the screen it links to."""
+    from unittest.mock import patch
+
+    from api.views.subscription import _send_ussd_access_sms
+
+    user = User.objects.create_user(username='ussd_pin_user', password='111111')
+    now = timezone.now()
+    plan = SubscriptionPlan.objects.create(
+        user=user,
+        tier=monthly_tier,
+        status='active',
+        duration_type='monthly',
+        start_date=now,
+        end_date=now + timezone.timedelta(days=30),
+        payment_method='telebirr',
+        telebirr_phone_number='251988990011',
+        auto_renew=False,
+    )
+    payment = SubscriptionPayment.objects.create(
+        subscription=plan,
+        user=user,
+        amount=monthly_tier.price_etb,
+        currency='ETB',
+        status='completed',
+        payment_method='telebirr',
+        duration_type='monthly',
+        period_start=now,
+        period_end=plan.end_date,
+        onevas_transaction_id='OCID-ACCESS-2',
+    )
+    try:
+        with patch('api.services.sms_subscription.send_subscription_sms'):
+            _send_ussd_access_sms(payment, monthly_tier, '251988990011')
+        plan.refresh_from_db()
+
+        response = _post_encrypted(
+            '/auth/login-with-subscription-otp/',
+            {'phone': '+251988990011', 'otp': plan.setup_otp, 'password': '739284'},
+            server_public_key=_server_keys,
+            client_keys=client_keys,
+            view=login_with_subscription_otp,
+        )
+
+        assert response.status_code == 200, response.data
+        user.refresh_from_db()
+        assert user.check_password('739284'), 'the PIN was not set'
+    finally:
+        payment.delete()
+        plan.delete()
+        user.delete()
