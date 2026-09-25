@@ -4,9 +4,11 @@ API endpoints for tiered subscriptions, coin economy, scoring, and leaderboards
 """
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction as db_transaction
 from django.db.models import Count, Sum
 from django.utils import timezone
 from rest_framework import status
@@ -15,6 +17,7 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from api.models import Reel
+from api.models.boost import BoostCampaign, BoostConfig
 from api.models.contest import (
     AntiCheatLog,
     CoinPackage,
@@ -26,11 +29,12 @@ from api.models.contest import (
     ExtraEntryPurchase,
     GiftToCreator,
     GrandFinaleEntry,
-    PostBoost,
     UserCoinBalance,
     UserSubscription,
     UserTier,
 )
+from api.services import boost_tiers, contribution_limits
+from api.services.subscription_access import subscriber_action_refusal
 from common.security import encrypted_endpoint
 
 # ==================== USER TIER & SUBSCRIPTION ====================
@@ -228,6 +232,10 @@ def send_gift(request):
     """Send gift to a user by username (simple gift endpoint)"""
     from api.models import Notification, UserCoinBalance
 
+    refusal = subscriber_action_refusal(request.user, 'gift')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     sender = request.user
     recipient_username = request.data.get('recipient_username')
     amount = request.data.get('amount')
@@ -248,37 +256,49 @@ def send_gift(request):
     except User.DoesNotExist:
         return Response({'error': 'Recipient not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Deduct coins from sender
-    try:
-        sender_balance = sender.coin_balance
-        sender_balance.spend_coins(
-            amount, 'gift', recipient=recipient, description=f'Gift to {recipient.username}'
+    # One contributor may give one creator 500 coins in a rolling 24 hours.
+    # Decided inside a transaction holding the sender's balance row, so two
+    # requests arriving together cannot both read the same total and both
+    # pass -- see api/services/contribution_limits.py.
+    with db_transaction.atomic():
+        contribution_limits.lock_sender(sender)
+        over_limit = contribution_limits.refusal(sender, recipient, amount)
+        if over_limit is not None:
+            return Response(over_limit, status=status.HTTP_400_BAD_REQUEST)
+
+        # Deduct coins from sender
+        try:
+            sender_balance = sender.coin_balance
+            sender_balance.spend_coins(
+                amount, 'gift', recipient=recipient, description=f'Gift to {recipient.username}'
+            )
+        except (UserCoinBalance.DoesNotExist, ValueError) as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Add coins to recipient
+        recipient_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
+        recipient_balance.add_coins(
+            amount, 'gift', sender=sender, description=f'Gift from {sender.username}'
         )
-    except (UserCoinBalance.DoesNotExist, ValueError) as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Add coins to recipient
-    recipient_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
-    recipient_balance.add_coins(
-        amount, 'gift', sender=sender, description=f'Gift from {sender.username}'
-    )
+        # The record the limit is counted from, written in the same
+        # transaction as the spend -- a gift that took coins but left no
+        # GiftToCreator row would be invisible to the next check.
+        GiftToCreator.objects.create(
+            sender=sender, recipient=recipient, coins=amount, bonus_points=5, message=message
+        )
 
-    # Create gift record
-    GiftToCreator.objects.create(
-        sender=sender, recipient=recipient, coins=amount, bonus_points=5, message=message
-    )
+        # Update recipient's gift counters
+        recipient_profile = recipient.profile
+        recipient_profile.gifts_received_total += 1
+        recipient_profile.gifts_received_today += 1
+        recipient_profile.save()
 
-    # Update recipient's gift counters
-    recipient_profile = recipient.profile
-    recipient_profile.gifts_received_total += 1
-    recipient_profile.gifts_received_today += 1
-    recipient_profile.save()
-
-    # Update sender's gift counters
-    sender_profile = sender.profile
-    sender_profile.gifts_sent_total += 1
-    sender_profile.gifts_sent_today += 1
-    sender_profile.save()
+        # Update sender's gift counters
+        sender_profile = sender.profile
+        sender_profile.gifts_sent_total += 1
+        sender_profile.gifts_sent_today += 1
+        sender_profile.save()
 
     # Create notification for recipient
     notification_message = f'{sender.username} sent you {amount} coins'
@@ -304,6 +324,10 @@ def send_gift(request):
 @encrypted_endpoint
 def gift_creator(request):
     """Gift coins to a creator (+5 bonus points to recipient)"""
+    refusal = subscriber_action_refusal(request.user, 'gift')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     sender = request.user
     recipient_id = request.data.get('recipient_id')
     coins = request.data.get('coins', 100)
@@ -314,32 +338,40 @@ def gift_creator(request):
     except User.DoesNotExist:
         return Response({'error': 'Recipient not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Deduct from sender
-    try:
-        sender_balance = sender.coin_balance
-        sender_balance.spend_coins(
-            coins,
-            'gift',
-            recipient=recipient,
-            reel_id=reel_id,
-            description=f'Gift to {recipient.username}',
+    # One contributor may give one creator 500 coins in a rolling 24 hours.
+    # Decided inside a transaction holding the sender's balance row, so two
+    # requests arriving together cannot both read the same total and both
+    # pass -- see api/services/contribution_limits.py.
+    with db_transaction.atomic():
+        contribution_limits.lock_sender(sender)
+        over_limit = contribution_limits.refusal(sender, recipient, coins)
+        if over_limit is not None:
+            return Response(over_limit, status=status.HTTP_400_BAD_REQUEST)
+
+        # Deduct from sender
+        try:
+            sender_balance = sender.coin_balance
+            sender_balance.spend_coins(
+                coins,
+                'gift',
+                recipient=recipient,
+                reel_id=reel_id,
+                description=f'Gift to {recipient.username}',
+            )
+        except (UserCoinBalance.DoesNotExist, ValueError) as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Add to recipient
+        recipient_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
+        recipient_balance.add_coins(
+            coins, 'gift', sender=sender, description=f'Gift from {sender.username}'
         )
-    except (UserCoinBalance.DoesNotExist, ValueError) as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Add to recipient
-    recipient_balance, _ = UserCoinBalance.objects.get_or_create(user=recipient)
-    recipient_balance.add_coins(
-        coins, 'gift', sender=sender, description=f'Gift from {sender.username}'
-    )
-
-    # Add bonus points to recipient's score
-    # This would be implemented in the scoring system
-
-    # Create gift record
-    GiftToCreator.objects.create(
-        sender=sender, recipient=recipient, reel_id=reel_id, coins=coins, bonus_points=5
-    )
+        # The record the limit is counted from, written in the same
+        # transaction as the spend.
+        GiftToCreator.objects.create(
+            sender=sender, recipient=recipient, reel_id=reel_id, coins=coins, bonus_points=5
+        )
 
     return Response(
         {
@@ -349,11 +381,38 @@ def gift_creator(request):
     )
 
 
+#: What POST /boost-post/ has always advertised: 200 coins for two hours.
+#:
+#: Worse value than the Standard tier (50 coins for twelve hours,
+#: api/services/boost_tiers.py), which is a pricing question for the
+#: business rather than something to quietly correct here.
+BOOST_POST_COINS = 200
+BOOST_POST_HOURS = 2
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @encrypted_endpoint
 def boost_post(request):
-    """Boost a post for 200 coins (2 hours featured)"""
+    """Boost a post for 200 coins (2 hours in Trending).
+
+    This used to take the coins and then fail. It charged 200 coins, wrote a
+    ``PostBoost`` row that nothing read, and then called
+    ``reel.save(update_fields=['is_featured'])`` -- a field ``Reel`` does not
+    have, which raises ValueError. ``spend_coins`` commits in its own
+    transaction, so the coins were already gone when the view 500'd: the
+    caller paid 200 coins and received a server error, every time.
+
+    It now creates a real ``BoostCampaign``, which is the one thing the feeds
+    read (api/views/core.py) and the one thing the expiry sweep retires
+    (api/tasks/boost.py). The price and the two-hour window are unchanged --
+    those are advertised figures, not mine to alter -- but the money now buys
+    the placement it always claimed to.
+    """
+    refusal = subscriber_action_refusal(request.user, 'boost')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     user = request.user
     reel_id = request.data.get('reel_id')
 
@@ -362,29 +421,65 @@ def boost_post(request):
     except Reel.DoesNotExist:
         return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Check if already boosted
-    if hasattr(reel, 'boost') and reel.boost.is_boost_active():
-        return Response({'error': 'Post is already boosted'}, status=status.HTTP_400_BAD_REQUEST)
+    if getattr(reel, 'is_hidden', False):
+        return Response(
+            {'error': 'This post is not eligible for boosting.', 'code': 'reel_not_boostable'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    # Deduct coins
-    cost = 200
+    now = timezone.now()
+
+    # The same question every other boost surface asks: does this post
+    # already have a live campaign? The old `reel.boost` check looked at
+    # PostBoost, which no feed consulted, so a post could be "boosted" twice
+    # over and lifted neither time.
+    if BoostCampaign.objects.filter(reel=reel, status='active', end_time__gt=now).exists():
+        return Response(
+            {'error': 'This post already has an active boost.', 'code': 'already_boosted'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    cost = BOOST_POST_COINS
+    end_time = now + timedelta(hours=BOOST_POST_HOURS)
+
+    # One transaction around the charge and the campaign. Previously the
+    # spend committed on its own and anything failing afterwards left the
+    # caller charged with nothing to show.
     try:
-        balance = user.coin_balance
-        balance.spend_coins(cost, 'boost', reel=reel, description='Post boost')
+        with db_transaction.atomic():
+            balance = user.coin_balance
+            balance.spend_coins(cost, 'boost', reel=reel, description='Post boost')
+
+            campaign = BoostCampaign.objects.create(
+                user=user,
+                reel=reel,
+                # 'custom' rather than one of the named tiers: this is the
+                # older hourly product at its own price, and calling it
+                # Standard would misreport what was sold.
+                boost_type='custom',
+                placement=boost_tiers.TRENDING,
+                duration_hours=BOOST_POST_HOURS,
+                coins_spent=cost,
+                coins_remaining=cost,
+                end_time=end_time,
+                expected_impressions=BoostConfig.objects.first().get_expected_impressions(cost)
+                if BoostConfig.objects.exists()
+                else 0,
+                hourly_budget=Decimal(cost) / BOOST_POST_HOURS,
+                target_location='',
+            )
+
+            reel.is_boosted = True
+            reel.active_boost_campaign = campaign
+            reel.save(update_fields=['is_boosted', 'active_boost_campaign'])
     except (UserCoinBalance.DoesNotExist, ValueError) as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    # Create boost
-    boost = PostBoost.objects.create(reel=reel, user=user, cost_coins=cost)
-
-    # Mark reel as featured
-    reel.is_featured = True
-    reel.save(update_fields=['is_featured'])
 
     return Response(
         {
             'message': 'Post boosted successfully',
-            'boosted_until': boost.expires_at,
+            'campaign_id': campaign.id,
+            'boosted_until': campaign.end_time,
             'cost': cost,
         }
     )
@@ -395,6 +490,10 @@ def boost_post(request):
 @encrypted_endpoint
 def purchase_extra_entry(request):
     """Purchase extra post entry beyond daily limit (100 coins)"""
+    refusal = subscriber_action_refusal(request.user, 'post')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     user = request.user
 
     today = timezone.now().date()
@@ -980,6 +1079,10 @@ def get_grand_finale(request):
 @encrypted_endpoint
 def vote_grand_finale(request):
     """Vote in Grand Finale with coins"""
+    refusal = subscriber_action_refusal(request.user, 'like')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     user = request.user
     entry_id = request.data.get('entry_id')
     coins = request.data.get('coins', 10)

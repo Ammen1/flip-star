@@ -126,12 +126,35 @@ def _send(withdrawal, message, *, purpose, event):
 
 
 def notify_paid(withdrawal):
-    """The money has been sent. Safe to call twice; the second is suppressed."""
+    """The money has been sent. Safe to call twice; the second is suppressed.
+
+    Sends the SMS and raises the in-app notification. Both live here because
+    this is the one place every payout path passes through -- the admin
+    approval in views/wallet.py and both Telebirr B2C callback handlers in
+    views/direct_debit.py -- and splitting them would mean a future payout
+    path could pick up one and miss the other.
+
+    What stops a duplicate is the caller: each flips the withdrawal out of
+    'processing' while holding its row lock, so a repeated callback returns
+    before reaching this. ``_send`` dedupes the SMS independently.
+    """
+    _notify_paid_in_app(withdrawal)
     return _send(
         withdrawal,
         build_paid_message(withdrawal),
         purpose='withdrawal_paid',
         event='paid',
+    )
+
+
+def _notify_paid_in_app(withdrawal):
+    """In-app counterpart to the paid SMS. Never raises."""
+    from api.services.notifications import notify_system
+
+    notify_system(
+        withdrawal.user,
+        'withdrawal_paid',
+        f'Your withdrawal of {withdrawal.net_birr} ETB has been paid.',
     )
 
 

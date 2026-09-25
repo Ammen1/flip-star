@@ -198,6 +198,21 @@ TRUSTED_PROXY_IPS = [
     if ip.strip()
 ]
 
+# IPs/CIDR ranges permitted to deliver the three unsigned Telebirr SOAP
+# webhooks (B2C result, direct-debit result, USSD purchase result). Those
+# envelopes carry no signature, so the only thing that can establish who sent
+# one is where it came from -- see api/services/webhook_allowlist.py.
+#
+# Empty by default, and empty means allow everything: that is the behaviour
+# these endpoints have today, and populating it with guessed addresses would
+# silently drop real payout confirmations. Set it once Telebirr's egress
+# addresses are confirmed, and allow-list the same range at the ingress.
+TELEBIRR_WEBHOOK_ALLOWED_IPS = [
+    ip.strip()
+    for ip in config('TELEBIRR_WEBHOOK_ALLOWED_IPS', default='').split(',')
+    if ip.strip()
+]
+
 
 # ---------------------------------------------------------------------------
 # Internationalisation
@@ -284,7 +299,17 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
 # Media pipeline: api/services/media_pipeline.py (upload intake) and
 # api/tasks/media.py (processing). Documented in infrastructure/config/schema.py.
 MEDIA_MAX_UPLOAD_BYTES = config('MEDIA_MAX_UPLOAD_BYTES', default=50 * 1024 * 1024, cast=int)
+# The ceiling no entitlement exceeds. Per-user limits live in
+# api/services/video_limits.py -- 60 seconds on a subscription, 120 once coins
+# have been bought -- and are capped to this, so lowering it here lowers it for
+# everybody.
 MEDIA_MAX_VIDEO_SECONDS = config('MEDIA_MAX_VIDEO_SECONDS', default=120, cast=int)
+# Coins that must have been bought to unlock the 120-second limit. 0 means any
+# completed purchase qualifies, which is the plain reading of "coin buyer";
+# raise it to require a particular spend without a deploy.
+VIDEO_EXTENDED_MIN_PURCHASED_COINS = config(
+    'VIDEO_EXTENDED_MIN_PURCHASED_COINS', default=0, cast=int
+)
 MEDIA_MAX_IMAGE_PIXELS = config('MEDIA_MAX_IMAGE_PIXELS', default=40_000_000, cast=int)
 # 0 keeps originals indefinitely -- the current behaviour, and the safe default
 # until someone decides re-processing from source is no longer needed.
@@ -472,6 +497,16 @@ CRM_TENANT_ID = config('CRM_TENANT_ID', default='')
 CRM_CURRENCY_ID = config('CRM_CURRENCY_ID', default='1048')  # ETB currency ID -- not a secret
 CRM_CHARGE_CODE = config('CRM_CHARGE_CODE', default='CC_GIFT_ONCE_OFF_FEE')  # not a secret
 CRM_OFFERING_ID = config('CRM_OFFERING_ID', default='')
+
+# Daily Sprint winners receive a 1 GB weekly data package, provisioned from
+# the number the business requirement names. Not a secret -- it is the
+# originating (service number A) side of the CRM gift, i.e. who the bundle
+# comes from -- but it is configurable because a provisioning number is an
+# operational detail that can change without a code release.
+DATA_PRIZE_PROVISIONING_NUMBER = config('DATA_PRIZE_PROVISIONING_NUMBER', default='0911227833')
+# The 1 GB package's OfferingId. Falls back to CRM_OFFERING_ID when unset so
+# an environment with a single configured package keeps working.
+DATA_PRIZE_OFFERING_ID = config('DATA_PRIZE_OFFERING_ID', default='')
 
 # Telebirr H5 / SuperApp Web Checkout (Fabric Payment Gateway). Used by
 # TelebirrService (api/integrations/telebirr/checkout.py) for the H5 InApp

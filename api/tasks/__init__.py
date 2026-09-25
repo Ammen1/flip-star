@@ -24,6 +24,9 @@ from api.tasks.media import (
     redrive_stuck_media,
     send_push_notification,
 )
+from api.tasks.moderation import report_moderation_backlog
+from api.tasks.points import expire_inactive_points
+from api.tasks.prizes import deliver_pending_prizes, report_prize_delivery_problems
 from api.tasks.sms import deliver_sms
 from api.tasks.subscription_gifts import grant_daily_subscription_gifts
 from api.tasks.subscription_renewal import renew_expired_subscription, sweep_expired_subscriptions
@@ -46,4 +49,8 @@ __all__ = [
     'purge_processed_sources',
     'redrive_stuck_media',
     'send_push_notification',
+    'expire_inactive_points',
+    'deliver_pending_prizes',
+    'report_prize_delivery_problems',
+    'report_moderation_backlog',
 ]

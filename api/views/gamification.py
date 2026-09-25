@@ -12,6 +12,7 @@ from rest_framework.response import Response
 
 from api.models import UserProfile
 from api.models.campaign_extended import GamificationActivity
+from api.services.subscription_access import subscriber_action_refusal
 from api.models.contest import UserCoinBalance
 from common.security import encrypted_endpoint
 
@@ -192,6 +193,12 @@ def claim_login_bonus(request):
 @encrypted_endpoint
 def send_coin_gift(request):
     """Send coin gift to another user"""
+    # A third gift path, alongside the two in api/views/contest.py and the
+    # one in api/views/gift.py. All four answer to the same rule.
+    refusal = subscriber_action_refusal(request.user, 'gift')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     recipient_username = request.data.get('recipient_username') or request.data.get('recipient_id')
     amount = request.data.get('amount', 10)
     message = request.data.get('message', '')

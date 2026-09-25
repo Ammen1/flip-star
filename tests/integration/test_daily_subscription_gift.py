@@ -4,7 +4,7 @@ Gift coins arrive a day at a time, and add up to what the plan promised.
 The product rule:
 
     daily    (1 day)    3                      -> 3
-    weekly   (7 days)   4 4 4 4 3 3 3          -> 25
+    weekly   (7 days)   4 4 3 3 3 3 3          -> 23
     monthly  (30 days)  4 every day            -> 120
 
 The whole total used to land on the day of the charge, which left the rest of
@@ -108,13 +108,13 @@ def gifts(user):
 
 def test_the_shapes_the_product_asked_for():
     assert daily_schedule(3, 1) == [3]
-    assert daily_schedule(25, 7) == [4, 4, 4, 4, 3, 3, 3]
+    assert daily_schedule(23, 7) == [4, 4, 3, 3, 3, 3, 3]
     assert daily_schedule(120, 30) == [4] * 30
 
 
 @pytest.mark.parametrize(
     ('duration_type', 'expected'),
-    [('daily', [3]), ('weekly', [4, 4, 4, 4, 3, 3, 3]), ('monthly', [4] * 30)],
+    [('daily', [3]), ('weekly', [4, 4, 3, 3, 3, 3, 3]), ('monthly', [4] * 30)],
 )
 def test_each_plan_spreads_its_own_total(duration_type, expected):
     assert schedule_for(tier(duration_type)) == expected
@@ -122,7 +122,7 @@ def test_each_plan_spreads_its_own_total(duration_type, expected):
 
 @pytest.mark.parametrize(
     ('total', 'days'),
-    [(25, 7), (120, 30), (3, 1), (1, 7), (100, 30), (7, 3), (0, 7), (13, 4)],
+    [(23, 7), (25, 7), (120, 30), (3, 1), (1, 7), (100, 30), (7, 3), (0, 7), (13, 4)],
 )
 def test_the_days_always_add_up_to_the_total(total, days):
     """The property that matters more than any particular shape: a spread that
@@ -131,8 +131,8 @@ def test_the_days_always_add_up_to_the_total(total, days):
 
 
 def test_the_extra_coins_land_on_the_earliest_days():
-    """Front-loaded on purpose -- 4,4,4,4,3,3,3, not 3,3,3,3,3,3,7."""
-    week = daily_schedule(25, 7)
+    """Front-loaded on purpose -- 4,4,3,3,3,3,3, not 3,3,3,3,3,4,4."""
+    week = daily_schedule(23, 7)
 
     assert week == sorted(week, reverse=True)
     assert week[0] == 4
@@ -145,10 +145,13 @@ def test_a_total_smaller_than_the_period_still_pays_something():
 
 def test_nothing_to_spread_pays_nothing():
     assert daily_schedule(0, 7) == []
-    assert daily_schedule(25, 0) == []
+    assert daily_schedule(23, 0) == []
 
 
-@pytest.mark.parametrize(('day', 'expected'), [(1, 4), (4, 4), (5, 3), (7, 3), (8, 0), (0, 0)])
+@pytest.mark.parametrize(
+    ('day', 'expected'),
+    [(1, 4), (2, 4), (3, 3), (5, 3), (7, 3), (8, 0), (0, 0)],
+)
 def test_what_a_given_day_of_a_week_pays(day, expected):
     assert coins_for_day(tier('weekly'), day) == expected
 
@@ -185,12 +188,12 @@ def test_a_weekly_subscriber_receives_the_week_a_day_at_a_time(subscriber):
     charge = period(plan_for(subscriber, 'weekly'), status='pending')
 
     running = 0
-    for day, expected in enumerate([4, 4, 4, 4, 3, 3, 3], start=1):
+    for day, expected in enumerate([4, 4, 3, 3, 3, 3, 3], start=1):
         assert grant_for_day(charge, day) == expected, f'day {day}'
         running += expected
         assert earned(subscriber) == running
 
-    assert earned(subscriber) == 25
+    assert earned(subscriber) == 23
     assert gifts(subscriber).count() == 7
 
 
@@ -292,7 +295,7 @@ def test_days_missed_while_nothing_was_running_are_caught_up(subscriber):
 
     granted = grant_due(charge)
 
-    assert granted == 16, 'days 1-4 at 4 each'
+    assert granted == 14, 'days 1-4: 4 + 4 + 3 + 3'
     assert gifts(subscriber).count() == 4
 
 
@@ -304,8 +307,8 @@ def test_catching_up_does_not_repay_a_day_that_landed(subscriber):
 
     granted = grant_due(charge)
 
-    assert granted == 12, 'days 1, 3 and 4 -- not day 2 again'
-    assert earned(subscriber) == 16, 'four days, paid once each'
+    assert granted == 10, 'days 1, 3 and 4 (4 + 3 + 3) -- not day 2 again'
+    assert earned(subscriber) == 14, 'four days (4+4+3+3), paid once each'
     assert gifts(subscriber).count() == 4
 
 
@@ -388,7 +391,7 @@ def test_the_week_completes_over_its_days(subscriber):
     for day in range(2, 8):
         sweep(now=start + timezone.timedelta(days=day - 1))
 
-    assert earned(subscriber) == 25
+    assert earned(subscriber) == 23
     assert gifts(subscriber).count() == 7
 
 
@@ -402,11 +405,11 @@ def test_a_period_already_paid_in_full_the_old_way_is_not_paid_again(subscriber)
     charge.refresh_from_db()
     balance, _ = UserCoinBalance.objects.get_or_create(user=subscriber)
     balance.add_earned(
-        25,
+        23,
         transaction_type='subscription_gift',
         payment_reference=str(charge.pk),
         description='paid the old way',
     )
 
     assert grant_due(charge) == 0
-    assert earned(subscriber) == 25, 'still just the 25 they already had'
+    assert earned(subscriber) == 23, 'still just the 23 they already had'

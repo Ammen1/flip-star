@@ -5,4 +5,5 @@ class ApiConfig(AppConfig):
     name = 'api'
     
     def ready(self):
-        import api.signals
+        import api.signals  # noqa: F401
+        import api.checks  # noqa: F401  -- registers deployment config checks

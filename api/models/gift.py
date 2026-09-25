@@ -223,6 +223,17 @@ class WinnerGiftTransaction(models.Model):
     winner_type = models.CharField(max_length=20)  # daily, weekly, monthly, grand
     gift_package = models.ForeignKey(WinnerGiftPackage, on_delete=models.PROTECT, null=True, blank=True)
 
+    # Which competition this prize was won in. Nullable because rows predating
+    # the prize-management work belong to no recorded campaign, and inventing
+    # one for them would misreport what was paid and when.
+    campaign = models.ForeignKey(
+        'api.Campaign',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='prize_deliveries',
+    )
+
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_method = models.CharField(max_length=20)
 
@@ -234,6 +245,33 @@ class WinnerGiftTransaction(models.Model):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     error_message = models.TextField(blank=True)
+
+    # What stops a winner being paid twice.
+    #
+    # The database enforces it rather than the code remembering to: one prize
+    # per winner, per tier, per campaign, as a UNIQUE column. Two callers
+    # racing to award the same prize -- a retried bulk payout, an admin
+    # pressing send while the scheduled job runs -- both build the same key
+    # and the second INSERT is refused by Postgres, not by a check that might
+    # have read stale state a millisecond earlier.
+    #
+    # Nullable because existing rows have no key and a UNIQUE column permits
+    # many NULLs; they are simply outside the guarantee, which is honest.
+    idempotency_key = models.CharField(max_length=200, unique=True, null=True, blank=True)
+
+    #: Delivery attempts made. A retry increments this rather than creating a
+    #: second row, so "paid once, tried four times" stays distinguishable
+    #: from "paid four times".
+    attempt_count = models.PositiveIntegerField(default=0)
+
+    #: When the prize must be delivered by, from the competition's close --
+    #: 10 days for Weekly and Monthly, 20 for the Grand Final.
+    deadline_at = models.DateTimeField(null=True, blank=True)
+
+    #: When it actually reached the winner. Set only by a confirmed delivery,
+    #: never by initiating one: a Telebirr payout is not delivered until the
+    #: B2C webhook says so.
+    delivered_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -247,16 +285,91 @@ class WinnerGiftTransaction(models.Model):
             models.Index(fields=['winner_type', '-created_at']),
             models.Index(fields=['status']),
             models.Index(fields=['originator_conversation_id']),
+            models.Index(fields=['campaign', 'winner_type']),
+            models.Index(fields=['status', 'deadline_at']),
         ]
 
     def __str__(self):
         return f'{self.winner.username} - {self.winner_type} gift ({self.status})'
 
+    @property
+    def is_settled(self):
+        """Delivered, or deliberately not being delivered.
+
+        A settled prize is never re-sent. Everything that could pay a winner
+        checks this first.
+        """
+        return self.status in ('success', 'skipped')
+
+    @property
+    def is_overdue(self):
+        """Past its delivery deadline and still not delivered."""
+        if self.deadline_at is None or self.status == 'success':
+            return False
+        return timezone.now() > self.deadline_at
+
+    @property
+    def is_owed(self):
+        """Won, and the winner still does not have it.
+
+        True for a skipped prize as well as a pending one. A prize this
+        system cannot deliver is still a debt to the person who won it --
+        treating 'we could not send it' as closed is how a winner ends up
+        owed something nobody is looking for.
+        """
+        return self.status != 'success'
+
+    def mark_skipped(self, reason=''):
+        """Not being delivered by this system, and why.
+
+        Distinct from failed: failing means the attempt went wrong and
+        retrying might work, skipping means there is no route at all -- most
+        often a cash prize for somebody with no Telebirr account. The row
+        exists so the debt stays visible and somebody can settle it another
+        way, which is the whole difference between this and dropping the
+        winner from the list.
+        """
+        self.status = 'skipped'
+        self.error_message = reason
+        self.save(update_fields=['status', 'error_message', 'updated_at'])
+
     def mark_success(self, telebirr_transaction_id=''):
+        # Read before the write: only a genuine transition should notify.
+        # This method is reached from a retry and from a provider callback
+        # that may arrive more than once, and neither should tell the winner
+        # their prize arrived a second time.
+        was_already_delivered = self.status == 'success'
+
         self.status = 'success'
         if telebirr_transaction_id:
             self.telebirr_transaction_id = telebirr_transaction_id
-        self.save(update_fields=['status', 'telebirr_transaction_id', 'updated_at'])
+        self.delivered_at = timezone.now()
+        self.save(
+            update_fields=[
+                'status',
+                'telebirr_transaction_id',
+                'delivered_at',
+                'updated_at',
+            ]
+        )
+
+        if not was_already_delivered:
+            self._notify_delivered()
+
+    def _notify_delivered(self):
+        """Tell the winner their prize has actually arrived.
+
+        Best-effort: notify_system swallows its own errors, because a prize
+        that has been paid must stay marked as paid whatever happens here.
+        """
+        from api.services.notifications import notify_system
+
+        if self.payment_method == 'crm':
+            what = 'Your data prize has been added to your line.'
+        else:
+            what = f'Your {self.amount} ETB prize has been paid out.'
+
+        notify_system(self.winner, 'prize_delivered', what)
 
     def mark_failed(self, error_message=''):
         self.status = 'failed'

@@ -96,7 +96,7 @@ from .contest import (
 )
 
 # --- Wallet -----------------------------------------------------------------
-from .wallet import WalletConfig, WithdrawalRequest
+from .wallet import PointTransaction, WalletConfig, WithdrawalRequest
 
 # --- Subscriptions ----------------------------------------------------------
 from .subscription import (
@@ -258,6 +258,7 @@ __all__ = [
     'UserSubscription',
     'UserTier',
     # wallet
+    'PointTransaction',
     'WalletConfig',
     'WithdrawalRequest',
     # subscriptions

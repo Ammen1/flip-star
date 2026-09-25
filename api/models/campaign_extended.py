@@ -972,11 +972,30 @@ class WinnerFrequencyRecord(models.Model):
         campaign_name = self.campaign.title if self.campaign else 'General'
         return f'{self.user.username} - {self.winner_type} winner ({campaign_name}) - {self.won_at.date()}'
 
+    #: The restriction window. Thirty days back from now, always -- not the
+    #: calendar month this happens to fall in.
+    #:
+    #: The calendar month was the bug: a win on 31 January and another on
+    #: 1 February are one day apart and sat in different months, so both
+    #: passed a "one win per month" cap. Someone could take two prizes in
+    #: consecutive days twelve times a year and never trip it. Counting back
+    #: thirty days from the moment of the check has no such seam.
+    RESTRICTION_DAYS = 30
+
     @classmethod
     def check_frequency_eligibility(cls, user, winner_type, campaign=None):
-        """Check if user is eligible to win based on frequency restrictions.
+        """Whether `user` may win `winner_type` again yet.
 
-        Returns (is_eligible, current_wins, limit).
+        Two independent restrictions, both of which must pass:
+
+        * **the cap** -- how many wins of this tier are allowed inside the
+          trailing thirty days; and
+        * **the cooldown** -- the minimum spacing between two wins of the
+          same tier, which is a different rule from the cap and was declared
+          on the config but never read by anything.
+
+        Returns (is_eligible, current_wins, limit), the shape callers in
+        api/views/crm.py and the scoring engine already expect.
         """
         now = timezone.now()
 
@@ -984,57 +1003,46 @@ class WinnerFrequencyRecord(models.Model):
         if campaign:
             config = CampaignScoringConfig.objects.filter(campaign=campaign).first()
 
-        if winner_type == 'daily':
-            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            month_end = (month_start + timedelta(days=32)).replace(day=1)
-
-            recent_wins = cls.objects.filter(
-                user=user,
-                winner_type='daily',
-                won_at__gte=month_start,
-                won_at__lt=month_end,
-            ).count()
-
-            limit = config.daily_win_limit_per_month if config else 1
-            return recent_wins < limit, recent_wins, limit
-
-        elif winner_type == 'weekly':
-            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            month_end = (month_start + timedelta(days=32)).replace(day=1)
-
-            recent_wins = cls.objects.filter(
-                user=user,
-                winner_type='weekly',
-                won_at__gte=month_start,
-                won_at__lt=month_end,
-            ).count()
-
-            limit = config.weekly_win_limit_per_month if config else 1
-            return recent_wins < limit, recent_wins, limit
-
-        elif winner_type == 'monthly':
+        # Grand is per campaign, not per 30 days: a grand final happens once
+        # in a campaign's life, so a rolling window would say nothing.
+        if winner_type == 'grand':
+            wins = cls.objects.filter(user=user, winner_type='grand')
             if campaign:
-                recent_wins = cls.objects.filter(
-                    user=user, winner_type='monthly', campaign=campaign
-                ).count()
-            else:
-                recent_wins = cls.objects.filter(user=user, winner_type='monthly').count()
-
-            limit = config.monthly_win_limit_per_period if config else 1
-            return recent_wins < limit, recent_wins, limit
-
-        elif winner_type == 'grand':
-            if campaign:
-                recent_wins = cls.objects.filter(
-                    user=user, winner_type='grand', campaign=campaign
-                ).count()
-            else:
-                recent_wins = cls.objects.filter(user=user, winner_type='grand').count()
-
+                wins = wins.filter(campaign=campaign)
+            count = wins.count()
             limit = config.grand_win_limit_per_campaign if config else 1
-            return recent_wins < limit, recent_wins, limit
+            return count < limit, count, limit
 
-        return True, 0, 1
+        limits = {
+            'daily': 'daily_win_limit_per_month',
+            'weekly': 'weekly_win_limit_per_month',
+            'monthly': 'monthly_win_limit_per_period',
+        }
+        if winner_type not in limits:
+            return True, 0, 1
+
+        limit = getattr(config, limits[winner_type], 1) if config else 1
+
+        window_start = now - timedelta(days=cls.RESTRICTION_DAYS)
+        recent = cls.objects.filter(user=user, winner_type=winner_type, won_at__gte=window_start)
+        count = recent.count()
+
+        if count >= limit:
+            return False, count, limit
+
+        # The cooldown, which the cap cannot express. With a cap of 2 per
+        # thirty days and a cooldown of 7, a second win is allowed -- but not
+        # tomorrow. Only the daily tier carries a configured cooldown; the
+        # others are spaced by their own period already.
+        cooldown_days = getattr(config, 'daily_win_cooldown_days', 0) if config else 0
+        if winner_type == 'daily' and cooldown_days:
+            last_win = (
+                cls.objects.filter(user=user, winner_type='daily').order_by('-won_at').first()
+            )
+            if last_win and last_win.won_at > now - timedelta(days=cooldown_days):
+                return False, count, limit
+
+        return True, count, limit
 
     @classmethod
     def record_win(

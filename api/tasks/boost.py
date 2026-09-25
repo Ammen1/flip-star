@@ -75,8 +75,33 @@ def expire_boost_campaigns():
                 continue
 
             unspent = locked.coins_remaining or 0
-            locked.status = 'completed'
+
+            # A guaranteed campaign that ran out of window before it ran out
+            # of impressions did not deliver what it sold. Recording that as
+            # 'completed' would make the ledger say the guarantee was
+            # honoured -- the one thing this product must not claim falsely.
+            shortfall = 0
+            if locked.guaranteed_impressions:
+                shortfall = max(0, locked.guaranteed_impressions - locked.impressions_served)
+
+            locked.status = 'undelivered' if shortfall else 'completed'
             locked.save(update_fields=['status'])
+
+            if shortfall:
+                # Logged, not refunded: what is owed for an undelivered
+                # guarantee is a commercial decision (BoostConfig carries a
+                # refund_threshold_percent that nothing reads yet), and
+                # moving coins on a guess is worse than leaving an accurate
+                # record for somebody to act on.
+                logger.warning(
+                    '[BOOST EXPIRY] Campaign %s ended %s impressions short of its '
+                    'guarantee of %s (served %s) on reel %s',
+                    locked.pk,
+                    shortfall,
+                    locked.guaranteed_impressions,
+                    locked.impressions_served,
+                    locked.reel_id,
+                )
 
             reel = locked.reel
             # Only clear the post's flags if THIS campaign is the one it

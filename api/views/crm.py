@@ -12,6 +12,13 @@ Two distinct gift rails, both admin-triggered:
   once Telebirr's own async result callback arrives -- see that webhook's
   docstring and WinnerGiftTransaction's for why marking it done here (as
   master's own code does) would be crediting a payout before it happened.
+
+Cash prizes go through api/services/prize_delivery.py rather than being
+built here. That is what makes them idempotent -- the prize is recorded
+under a UNIQUE key before anything is sent, so a re-run reuses the row
+instead of paying twice -- and it is where the amount comes from. These
+endpoints used to read the payout amount from the request body, so what a
+winner received depended on what the caller asked for.
 """
 from decimal import Decimal
 
@@ -22,7 +29,6 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from api.integrations.telebirr.direct_debit import telebirr_direct_debit_service
 from api.models.campaign_extended import (
     Campaign,
     Leaderboard,
@@ -32,14 +38,16 @@ from api.models.campaign_extended import (
     WinnerSelection,
 )
 from api.models.crm import CRMGiftAuditLog, CRMGiftPackage, CRMGiftTransaction
-from api.models.gift import GiftTransaction, WinnerGiftPackage, WinnerGiftTransaction
+from api.models.gift import GiftTransaction
 from api.serializers.crm import (
     AwardCRMGiftSerializer,
     CRMGiftAuditLogSerializer,
     CRMGiftPackageSerializer,
     CRMGiftTransactionSerializer,
 )
+from api.services import prize_delivery
 from api.services.crm_service import CRMService
+from api.services.prize_structure import PRIZES, amount_for
 from common.permissions import HasAdminPermission
 
 
@@ -339,7 +347,18 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         if not winners:
             return Response({'error': f'No winners found for selection_type={selection_type}'}, status=status.HTTP_404_NOT_FOUND)
 
-        results = {'total_winners': len(winners), 'successful': 0, 'failed': 0, 'skipped': 0, 'errors': []}
+        results = {
+            'total_winners': len(winners),
+            'successful': 0,
+            'failed': 0,
+            'skipped': 0,
+            'already_delivered': 0,
+            'errors': [],
+        }
+
+        campaign = getattr(latest_selection, 'campaign', None)
+        if campaign is None and campaign_id:
+            campaign = Campaign.objects.filter(pk=campaign_id).first()
 
         for winner in winners:
             user = winner.user
@@ -348,7 +367,6 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
                 results['skipped'] += 1
                 results['errors'].append({'user': user.username, 'reason': 'No phone number'})
                 continue
-            phone_number = _normalize_local_phone(phone_number)
 
             if user.profile.level < package.min_level:
                 results['skipped'] += 1
@@ -356,7 +374,7 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
                 continue
 
             is_eligible, current_wins, max_wins = WinnerFrequencyRecord.check_frequency_eligibility(
-                user, selection_type, latest_selection.campaign if latest_selection else None,
+                user, selection_type, campaign,
             )
             if not is_eligible:
                 results['skipped'] += 1
@@ -366,86 +384,125 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
                 })
                 continue
 
-            transaction, error = self._check_and_create_crm_transaction(
-                user=user, phone_number=phone_number, package=package,
-                trigger_source=f'campaign_{selection_type}',
-                campaign_id=campaign_id or (latest_selection.campaign_id if latest_selection else None),
+            if package.max_awards_per_user > 0:
+                awards_count = CRMGiftTransaction.objects.filter(
+                    user=user, package=package, status='success'
+                ).count()
+                if awards_count >= package.max_awards_per_user:
+                    results['skipped'] += 1
+                    results['errors'].append({
+                        'user': user.username,
+                        'reason': f'User has already received this package {awards_count} times (max: {package.max_awards_per_user})',
+                    })
+                    continue
+
+            # The prize is recorded before the CRM is called, under the same
+            # unique key the cash rail uses -- so a data prize is visible in
+            # the prize views, carries its attempt count, and cannot be
+            # provisioned twice by a re-run of this endpoint.
+            prize, _created = prize_delivery.award(
+                campaign,
+                user,
+                selection_type,
+                closed_at=getattr(campaign, 'entry_deadline', None),
             )
-            if error:
-                results['skipped'] += 1
-                results['errors'].append({'user': user.username, 'reason': error})
+
+            if prize.is_settled:
+                results['already_delivered'] += 1
                 continue
 
-            success, message, response_data = CRMService.send_gift(
-                service_number_b=phone_number, offering_id=package.offering_id,
-                charge_amount=float(package.charge_amount),
-                access_user=getattr(settings, 'CRM_ACCESS_USER', ''),
-                access_pwd=getattr(settings, 'CRM_ACCESS_PASSWORD', ''),
-            )
+            success, message = prize_delivery.deliver(prize, package=package)
 
             if success:
-                transaction.mark_success(response_data.get('ret_code', '0'), message)
                 results['successful'] += 1
                 WinnerFrequencyRecord.record_win(
                     user=user, winner_type=selection_type,
-                    campaign=latest_selection.campaign if latest_selection else None, selection=latest_selection,
+                    campaign=campaign, selection=latest_selection,
                 )
             else:
-                transaction.mark_failed(response_data.get('ret_code', 'ERROR'), message)
                 results['failed'] += 1
                 results['errors'].append({'user': user.username, 'reason': message})
 
-            CRMGiftAuditLog.objects.create(
-                transaction=transaction, action='award', performed_by=request.user,
-                details=f'Campaign winner award ({selection_type}): {message}', ip_address=_get_client_ip(request),
-            )
+            crm_transaction = CRMGiftTransaction.objects.filter(user=user).order_by('-created_at').first()
+            if crm_transaction is not None:
+                CRMGiftAuditLog.objects.create(
+                    transaction=crm_transaction, action='award', performed_by=request.user,
+                    details=f'Campaign winner award ({selection_type}): {message}', ip_address=_get_client_ip(request),
+                )
 
         return Response(results)
 
-    def _initiate_b2c_winner_gift(self, *, user, winner_type, amount, gift_package):
-        """Create a WinnerGiftTransaction and initiate its B2C payment.
-        Left 'processing' on a successful initiation -- see module
-        docstring for why 'success' is only ever set by the webhook."""
-        phone_number = getattr(getattr(user, 'profile', None), 'phone_number', None)
-        if not phone_number:
-            return None, 'No phone number'
-        phone_number = _normalize_local_phone(phone_number)
+    def _requested_amount_conflict(self, winner_type, requested):
+        """Refuse a caller-supplied amount that is not what the tier pays.
 
-        transaction = WinnerGiftTransaction.objects.create(
-            winner=user, winner_type=winner_type, gift_package=gift_package, amount=amount,
-            payment_method='telebirr_b2c', receiver_msisdn=phone_number, status='processing',
-        )
+        These endpoints used to take the payout amount straight from the
+        request body (``amount = request.data.get('amount', 1000)``), so a
+        winner was paid whatever the caller asked for. The figures are
+        contractual, so they come from api/services/prize_structure.py now.
+
+        A request that names the correct amount is accepted unchanged -- that
+        is what existing callers send -- and one that names a different
+        amount is refused loudly rather than silently overridden, so nobody
+        is left believing they paid a figure they did not.
+        """
+        if requested is None:
+            return None
 
         try:
-            result = telebirr_direct_debit_service.initiate_b2c_payment(
-                receiver_msisdn=phone_number, amount=amount, currency='ETB',
-                reason_type='Winner gift payout', remark=f'{winner_type.capitalize()} Winner Gift',
-                reference_data={'winner_gift_transaction_id': str(transaction.id)},
-                initiator_type='org_operator',
-            )
-        except Exception as e:
-            transaction.mark_failed(str(e))
-            return transaction, str(e)
+            asked = Decimal(str(requested))
+        except (TypeError, ArithmeticError, ValueError):
+            return {'error': f'Invalid amount: {requested!r}'}
 
-        if result.get('success'):
-            transaction.originator_conversation_id = result.get('originator_conversation_id') or ''
-            transaction.conversation_id = result.get('conversation_id') or ''
-            transaction.save(update_fields=['originator_conversation_id', 'conversation_id', 'updated_at'])
-            return transaction, None
+        documented = amount_for(winner_type)
+        if asked == documented:
+            return None
 
-        transaction.mark_failed(result.get('error', 'Unknown error'))
-        return transaction, result.get('error', 'Unknown error')
+        return {
+            'error': (
+                f'{winner_type} prizes pay {documented} ETB. '
+                'The amount is set by the published prize structure and '
+                'cannot be overridden per request.'
+            ),
+            'requested_amount': str(asked),
+            'prize_amount': str(documented),
+        }
+
+    def _payout_response(self, prize, ok, message):
+        return {
+            'success': bool(ok),
+            'transaction_id': str(prize.id),
+            'status': prize.status,
+            'amount': str(prize.amount),
+            'attempt_count': prize.attempt_count,
+            'deadline_at': prize.deadline_at,
+            'message': message,
+        }
 
     @action(detail=False, methods=['post'])
     def send_b2c_gift(self, request):
-        """Initiate a Telebirr B2C cash gift to a single winner. Only
-        initiates the payout -- telebirr_b2c_webhook confirms completion."""
+        """Initiate a Telebirr B2C cash prize to a single winner.
+
+        Goes through api/services/prize_delivery.py, so the prize is
+        recorded before anything is sent, the amount comes from the prize
+        structure, and a repeated call reuses the same row instead of paying
+        again. Only initiates -- telebirr_b2c_webhook confirms completion.
+        """
         user_id = request.data.get('user_id')
-        amount = request.data.get('amount', 1000)
         winner_type = request.data.get('winner_type', 'weekly')
+        campaign_id = request.data.get('campaign_id')
 
         if not user_id:
             return Response({'error': 'user_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if winner_type not in PRIZES:
+            return Response(
+                {'error': f'Invalid winner_type. Must be one of: {", ".join(PRIZES)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        conflict = self._requested_amount_conflict(winner_type, request.data.get('amount'))
+        if conflict:
+            return Response(conflict, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(id=user_id)
@@ -455,60 +512,92 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         if not user.profile.is_telebirr_user():
             return Response({'error': 'User is not a Telebirr user'}, status=status.HTTP_400_BAD_REQUEST)
 
-        gift_package, _created = WinnerGiftPackage.objects.get_or_create(
-            winner_type=winner_type,
-            defaults={'gift_type': 'cash', 'payment_method': 'telebirr_b2c', 'amount': Decimal(str(amount)), 'is_active': True},
-        )
+        campaign = Campaign.objects.filter(pk=campaign_id).first() if campaign_id else None
 
-        transaction, error = self._initiate_b2c_winner_gift(
-            user=user, winner_type=winner_type, amount=Decimal(str(amount)), gift_package=gift_package,
-        )
-        if transaction is None:
-            return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
-        if error:
-            return Response({'success': False, 'error': error}, status=status.HTTP_400_BAD_REQUEST)
+        prize, _created = prize_delivery.award(campaign, user, winner_type)
+        ok, message = prize_delivery.deliver(prize)
+        prize.refresh_from_db()
 
-        return Response({
-            'success': True,
-            'transaction_id': str(transaction.id),
-            'status': transaction.status,
-            'message': 'B2C gift payout initiated -- awaiting Telebirr confirmation',
-        })
+        payload = self._payout_response(prize, ok, message)
+        if not ok:
+            return Response(payload, status=status.HTTP_400_BAD_REQUEST)
+        return Response(payload)
 
     @action(detail=False, methods=['post'])
     def send_b2c_bulk(self, request):
-        """Initiate Telebirr B2C cash gifts to all winners of a type."""
+        """Initiate Telebirr B2C cash prizes to all winners of a type.
+
+        Capped at the tier's documented winner count, and idempotent: running
+        it twice does not pay anybody twice, because awarding reuses the
+        existing prize row and delivery refuses one already settled or in
+        flight. That is what makes this safe to re-run after a partial
+        failure, which the previous version was not.
+        """
         winner_type = request.data.get('winner_type', 'weekly')
-        amount = request.data.get('amount', 1000)
+        campaign_id = request.data.get('campaign_id')
 
-        valid_types = ['daily', 'weekly', 'monthly', 'grand']
-        if winner_type not in valid_types:
-            return Response({'error': f'Invalid winner_type. Must be one of: {", ".join(valid_types)}'}, status=status.HTTP_400_BAD_REQUEST)
+        if winner_type not in PRIZES:
+            return Response(
+                {'error': f'Invalid winner_type. Must be one of: {", ".join(PRIZES)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        winners, _latest_selection = self._resolve_current_winners(winner_type, None)
+        conflict = self._requested_amount_conflict(winner_type, request.data.get('amount'))
+        if conflict:
+            return Response(conflict, status=status.HTTP_400_BAD_REQUEST)
 
-        results = {'total_winners': len(winners), 'initiated': 0, 'failed': 0, 'skipped': 0, 'errors': []}
+        winners, latest_selection = self._resolve_current_winners(winner_type, campaign_id)
+        campaign = getattr(latest_selection, 'campaign', None)
+        if campaign is None and campaign_id:
+            campaign = Campaign.objects.filter(pk=campaign_id).first()
 
-        gift_package, _created = WinnerGiftPackage.objects.get_or_create(
-            winner_type=winner_type,
-            defaults={'gift_type': 'cash', 'payment_method': 'telebirr_b2c', 'amount': Decimal(str(amount)), 'is_active': True},
+        results = {
+            'total_winners': len(winners),
+            'prize_amount': str(amount_for(winner_type)),
+            'initiated': 0,
+            'failed': 0,
+            'skipped': 0,
+            'already_paid': 0,
+            'errors': [],
+        }
+
+        # Every winner gets a prize row, including those with no Telebirr
+        # account. They used to be filtered out before awarding, so a winner
+        # without Telebirr had no record anywhere that they were owed
+        # anything -- delivery marks them 'skipped' with a reason instead,
+        # and they stay on the books until somebody settles them.
+        prizes = prize_delivery.award_all(
+            campaign,
+            [winner.user for winner in winners],
+            winner_type,
+            closed_at=getattr(campaign, 'entry_deadline', None),
         )
 
-        for winner in winners:
-            user = winner.user
-            if not user.profile.is_telebirr_user():
-                results['skipped'] += 1
-                results['errors'].append({'user': user.username, 'reason': 'Not a Telebirr user'})
+        for prize in prizes:
+            if prize.status == 'success':
+                results['already_paid'] += 1
                 continue
 
-            transaction, error = self._initiate_b2c_winner_gift(
-                user=user, winner_type=winner_type, amount=Decimal(str(amount)), gift_package=gift_package,
-            )
-            if transaction is None or error:
-                results['failed'] += 1
-                results['errors'].append({'user': user.username, 'reason': error})
+            if prize.status == 'skipped':
+                results['skipped'] += 1
+                results['errors'].append(
+                    {'user': prize.winner.username, 'reason': prize.error_message}
+                )
                 continue
-            results['initiated'] += 1
+
+            ok, message = prize_delivery.deliver(prize)
+            prize.refresh_from_db()
+
+            if ok:
+                results['initiated'] += 1
+            elif prize.status == 'skipped':
+                results['skipped'] += 1
+                results['errors'].append({'user': prize.winner.username, 'reason': message})
+            elif 'already' in message or 'in progress' in message:
+                results['already_paid'] += 1
+            else:
+                results['failed'] += 1
+                results['errors'].append({'user': prize.winner.username, 'reason': message})
 
         return Response(results)
 

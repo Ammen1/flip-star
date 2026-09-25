@@ -21,6 +21,7 @@ Uses the real `db` fixture -- see tests/conftest.py's MIGRATIONS_ARE_REPLAYABLE.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import patch
 
 import pytest
@@ -168,16 +169,28 @@ def test_award_rejects_when_max_awards_per_user_reached(admin_with_gift_permissi
 # send_b2c_gift: must never mark 'success' before the webhook confirms
 # ---------------------------------------------------------------------------
 
+#
+# The payout itself now lives in api/services/prize_delivery.py, so the
+# Telebirr call is patched where it actually happens rather than on this
+# module. The amount is no longer sent in the request either: it comes from
+# the published prize structure, and a request naming a different figure is
+# refused rather than honoured.
+
+B2C_PAYMENT = (
+    'api.integrations.telebirr.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment'
+)
+
+
 def test_send_b2c_gift_leaves_transaction_processing_not_success(admin_with_gift_permission, user):
     with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        'api.views.crm.telebirr_direct_debit_service.initiate_b2c_payment',
+        B2C_PAYMENT,
         return_value={
             'success': True,
             'originator_conversation_id': 'S_X20260820WINGIFT1',
             'conversation_id': 'AG_20260820WINGIFT1',
         },
     ):
-        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 500, 'winner_type': 'weekly'}, format='json')
+        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'winner_type': 'weekly'}, format='json')
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
@@ -188,28 +201,93 @@ def test_send_b2c_gift_leaves_transaction_processing_not_success(admin_with_gift
     assert txn.originator_conversation_id == 'S_X20260820WINGIFT1'
 
 
+def test_send_b2c_gift_pays_the_documented_amount(admin_with_gift_permission, user):
+    """Not whatever the caller asked for -- a weekly prize is 1,000 ETB."""
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'O1', 'conversation_id': 'C1'},
+    ) as initiate:
+        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
+
+    assert initiate.call_args.kwargs['amount'] == Decimal('1000.00')
+    assert WinnerGiftTransaction.objects.get(winner=user).amount == Decimal('1000.00')
+
+
+def test_b2c_gift_refuses_a_caller_supplied_amount(admin_with_gift_permission, user):
+    """The vulnerability this closed.
+
+    The payout amount used to be read straight from the request body, so a
+    winner was paid whatever was asked for. A mismatch is now refused loudly
+    rather than silently overridden, so nobody is left believing they paid a
+    figure they did not.
+    """
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT
+    ) as initiate:
+        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 500, 'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
+
+    assert response.status_code == 400
+    assert response.data['prize_amount'] == '1000.00'
+    assert not initiate.called
+    assert not WinnerGiftTransaction.objects.filter(winner=user).exists()
+
+
+def test_b2c_gift_accepts_a_request_naming_the_correct_amount(admin_with_gift_permission, user):
+    """Existing callers send the right figure; they keep working."""
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'O2', 'conversation_id': 'C2'},
+    ):
+        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 1000, 'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
+
+    assert response.status_code == 200, response.data
+
+
+def test_send_b2c_gift_is_idempotent(admin_with_gift_permission, user):
+    """Pressing send twice must not pay twice."""
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'O3', 'conversation_id': 'C3'},
+    ) as initiate:
+        for _ in range(2):
+            request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'winner_type': 'weekly'}, format='json')
+            force_authenticate(request, user=admin_with_gift_permission)
+            CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
+
+    assert WinnerGiftTransaction.objects.filter(winner=user).count() == 1
+    assert initiate.call_count == 1, 'the second request sent a second payout'
+
+
 def test_send_b2c_gift_rejects_non_telebirr_user(admin_with_gift_permission, user):
-    request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 500}, format='json')
+    request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id}, format='json')
     force_authenticate(request, user=admin_with_gift_permission)
 
     response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
     assert response.status_code == 400
+    assert 'Telebirr' in response.data['error'], 'refused for the wrong reason'
     assert not WinnerGiftTransaction.objects.filter(winner=user).exists()
 
 
 def test_send_b2c_gift_marks_failed_on_initiation_failure(admin_with_gift_permission, user):
     with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        'api.views.crm.telebirr_direct_debit_service.initiate_b2c_payment',
+        B2C_PAYMENT,
         return_value={'success': False, 'error': 'upstream error'},
     ):
-        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 500}, format='json')
+        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id}, format='json')
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
     assert response.status_code == 400
     txn = WinnerGiftTransaction.objects.get(winner=user)
     assert txn.status == 'failed'
+    assert txn.attempt_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -316,3 +394,195 @@ def test_record_win_is_idempotent_for_the_same_period(user):
     assert created2 is False
     assert record1.pk == record2.pk
     assert WinnerFrequencyRecord.objects.filter(user=user, winner_type='daily').count() == 1
+
+
+# ---------------------------------------------------------------------------
+# send_b2c_bulk: the path that could pay a whole cohort twice
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def selected_weekly_winners(db):
+    """A finalised weekly selection with three winners."""
+    from datetime import timedelta
+
+    from api.models.campaign_extended import Leaderboard, SelectedWinner, WinnerSelection
+
+    start = timezone.now() - timedelta(days=7)
+    campaign = Campaign.objects.create(
+        title='Weekly Battle',
+        campaign_type='weekly',
+        status='active',
+        start_date=start,
+        entry_deadline=timezone.now(),
+    )
+    leaderboard = Leaderboard.objects.create(
+        campaign=campaign,
+        period_type='weekly',
+        period_start=start,
+        period_end=timezone.now(),
+    )
+    selection = WinnerSelection.objects.create(
+        campaign=campaign,
+        selection_type='weekly',
+        leaderboard=leaderboard,
+        is_finalized=True,
+    )
+
+    winners = []
+    for index in range(3):
+        winner = User.objects.create_user(username=f'bulk_winner_{index}', password='x')
+        winner.profile.phone_number = f'09115{index:05d}'
+        winner.profile.save()
+        SelectedWinner.objects.create(
+            selection=selection, user=winner, rank=index + 1, final_score=100 - index
+        )
+        winners.append(winner)
+
+    return campaign, winners
+
+
+def test_bulk_payout_pays_each_winner_once(admin_with_gift_permission, selected_weekly_winners):
+    _campaign, winners = selected_weekly_winners
+
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    ) as initiate:
+        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    assert response.status_code == 200, response.data
+    assert response.data['initiated'] == 3
+    assert initiate.call_count == 3
+    assert WinnerGiftTransaction.objects.filter(winner__in=winners).count() == 3
+
+
+def test_rerunning_the_bulk_payout_does_not_pay_twice(
+    admin_with_gift_permission, selected_weekly_winners
+):
+    """The reason this endpoint was worth migrating.
+
+    It used to create a fresh transaction per call, so re-running it after a
+    partial failure paid everybody who had already been paid a second time.
+    """
+    _campaign, winners = selected_weekly_winners
+
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    ) as initiate:
+        for _ in range(2):
+            request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+            force_authenticate(request, user=admin_with_gift_permission)
+            response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    assert WinnerGiftTransaction.objects.filter(winner__in=winners).count() == 3
+    assert initiate.call_count == 3, 'the second run sent a second round of payouts'
+    assert response.data['already_paid'] == 3
+    assert response.data['initiated'] == 0
+
+
+def test_bulk_payout_reports_the_prize_amount(admin_with_gift_permission, selected_weekly_winners):
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    ):
+        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    assert response.data['prize_amount'] == '1000.00'
+
+
+def test_bulk_payout_refuses_a_caller_supplied_amount(
+    admin_with_gift_permission, selected_weekly_winners
+):
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT
+    ) as initiate:
+        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly', 'amount': 5}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    assert response.status_code == 400
+    assert not initiate.called
+
+
+def test_bulk_payout_records_the_campaign_and_deadline(
+    admin_with_gift_permission, selected_weekly_winners
+):
+    """A bulk payout still gets its delivery deadline, so the 10-day promise
+    is trackable for winners paid this way."""
+    campaign, winners = selected_weekly_winners
+
+    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    ):
+        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    prize = WinnerGiftTransaction.objects.filter(winner=winners[0]).first()
+    assert prize.campaign == campaign
+    assert prize.deadline_at is not None
+
+
+def test_bulk_payout_skips_non_telebirr_winners(
+    admin_with_gift_permission, selected_weekly_winners
+):
+    _campaign, winners = selected_weekly_winners
+
+    def only_first_is_telebirr(self):
+        return self.user_id == winners[0].id
+
+    with patch('api.models.core.UserProfile.is_telebirr_user', only_first_is_telebirr), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    ) as initiate:
+        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    assert response.data['initiated'] == 1
+    assert response.data['skipped'] == 2
+    assert initiate.call_count == 1
+
+
+def test_a_skipped_winner_still_gets_a_prize_row(
+    admin_with_gift_permission, selected_weekly_winners
+):
+    """The gap this closed.
+
+    Winners without Telebirr used to be filtered out before any prize was
+    awarded, so nothing recorded that they were owed 1,000 ETB. Now each one
+    has a row marked skipped, with the reason, still counted as owed.
+    """
+    from api.services import prize_delivery
+
+    _campaign, winners = selected_weekly_winners
+
+    def only_first_is_telebirr(self):
+        return self.user_id == winners[0].id
+
+    with patch('api.models.core.UserProfile.is_telebirr_user', only_first_is_telebirr), patch(
+        B2C_PAYMENT,
+        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    ):
+        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        force_authenticate(request, user=admin_with_gift_permission)
+        CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
+
+    # All three won; none is missing from the books.
+    assert WinnerGiftTransaction.objects.filter(winner__in=winners).count() == 3
+
+    unpaid = WinnerGiftTransaction.objects.filter(winner__in=winners[1:])
+    assert {prize.status for prize in unpaid} == {'skipped'}
+    for prize in unpaid:
+        assert prize.amount == Decimal('1000.00')
+        assert 'Telebirr' in prize.error_message
+        assert prize.is_owed
+
+    assert prize_delivery.owed_deliveries().filter(winner__in=winners[1:]).count() == 2

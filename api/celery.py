@@ -133,6 +133,44 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.auto_select_campaign_winners',
         'schedule': 3600.0,  # Run every hour to check for ended campaigns
     },
+    # Winner selection records what each winner is owed; this is what sends
+    # it. Without this nothing ever delivered a prize on its own -- every
+    # one sat 'pending' until somebody opened the admin -- while the
+    # requirement promises delivery within 10 days (20 for the Grand Final).
+    #
+    # Every guard is in the delivery service, so running it often cannot pay
+    # anybody twice: a settled or in-flight prize is refused there. Every 15
+    # minutes, because a winner waiting on 300,000 ETB notices the
+    # difference between minutes and hours, and the query is one indexed
+    # filter that finds nothing on most runs.
+    # Points not withdrawn or converted within 180 days of inactivity are
+    # lost. Daily: the rule is measured in days, so a shorter period would
+    # only re-examine the same accounts. Coins are never touched.
+    'expire-inactive-points': {
+        'task': 'api.tasks.expire_inactive_points',
+        'schedule': 86400.0,
+    },
+    'deliver-pending-prizes': {
+        'task': 'api.tasks.deliver_pending_prizes',
+        'schedule': 900.0,
+    },
+    # What delivery cannot fix by itself: prizes past their deadline,
+    # payouts Telebirr accepted and never confirmed, and deliveries that
+    # have failed as often as the scheduler will try. Reported hourly so the
+    # gap between "this broke" and "somebody knows" is an hour, not however
+    # long until the next time a person looks.
+    # Campaign entries queue as 'pending' and only a person clears them,
+    # while eligibility counts them towards a prize. Reported every two
+    # hours so a neglected campaign is noticed while there is still time to
+    # moderate it, rather than after it has decided a winner.
+    'report-moderation-backlog': {
+        'task': 'api.tasks.report_moderation_backlog',
+        'schedule': 7200.0,
+    },
+    'report-prize-delivery-problems': {
+        'task': 'api.tasks.report_prize_delivery_problems',
+        'schedule': 3600.0,
+    },
     # Nothing retired finished boost campaigns, so they stayed status='active'
     # indefinitely -- leaving Reel.is_boosted set and any consumer that trusts
     # status alone treating a finished boost as live. Every 5 minutes because

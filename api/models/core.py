@@ -225,7 +225,7 @@ class UserProfile(models.Model):
             user=self.user, payment_method='telebirr'
         ).exists()
 
-    def _apply_delta(self, field, delta, *, total_field=None):
+    def _apply_delta(self, field, delta, *, total_field=None, reason=None, description=''):
         """
         Atomically add (delta > 0) or deduct (delta < 0) `field` (`points` or
         `coins`), row-locked for the duration of a short transaction.
@@ -244,6 +244,13 @@ class UserProfile(models.Model):
         lifetime-total counter (e.g. `points_earned_total`,
         `coins_spent_total`) incremented by `abs(delta)` in the same locked
         transaction.
+
+        For `points`, a PointTransaction row is written here, inside the
+        same transaction -- see that model for why the ledger is written
+        one level below the callers rather than by each of them. `reason`
+        is its transaction_type; a caller that does not name one is
+        recorded as an admin adjustment, which is what an unattributed
+        movement is.
         """
         if delta == 0:
             raise ValueError('delta must not be zero')
@@ -261,20 +268,41 @@ class UserProfile(models.Model):
                 update_fields.append(total_field)
             locked.save(update_fields=update_fields)
 
+            if field == 'points':
+                # Same transaction as the balance change: a ledger that
+                # can be missing a row for a movement that happened is
+                # not a ledger. new_value is the locked row's value, not
+                # this instance's, which may be stale.
+                from .wallet import PointTransaction
+
+                PointTransaction.objects.create(
+                    user_id=locked.user_id,
+                    transaction_type=reason or 'admin_adjustment',
+                    points=delta,
+                    balance_after=new_value,
+                    description=description,
+                )
+
         setattr(self, field, getattr(locked, field))
         if total_field:
             setattr(self, total_field, getattr(locked, total_field))
 
-    def add_points(self, amount, total_field='points_earned_total'):
+    def add_points(
+        self, amount, total_field='points_earned_total', *, reason=None, description=''
+    ):
         if amount <= 0:
             raise ValueError('Amount must be positive')
-        self._apply_delta('points', amount, total_field=total_field)
+        self._apply_delta(
+            'points', amount, total_field=total_field, reason=reason, description=description
+        )
 
-    def deduct_points(self, amount, total_field=None):
+    def deduct_points(self, amount, total_field=None, *, reason=None, description=''):
         """Raises ValueError (no partial write) if points would go negative."""
         if amount <= 0:
             raise ValueError('Amount must be positive')
-        self._apply_delta('points', -amount, total_field=total_field)
+        self._apply_delta(
+            'points', -amount, total_field=total_field, reason=reason, description=description
+        )
 
     def add_coins(self, amount, total_field='coins_earned_total'):
         if amount <= 0:
@@ -730,12 +758,19 @@ class NotificationPreference(models.Model):
     push_notifications = models.BooleanField(default=True)
     sms_notifications = models.BooleanField(default=False)
     phone = models.CharField(max_length=20, blank=True)
-    # Specific notification type preferences
+    # Specific notification type preferences. Every Notification type maps to
+    # one of these, or to nothing -- see PREFERENCE_FIELD in
+    # api/services/notifications.py, which is what actually reads them.
     likes = models.BooleanField(default=True)
     comments = models.BooleanField(default=True)
     follows = models.BooleanField(default=True)
     messages = models.BooleanField(default=True)
     mentions = models.BooleanField(default=True)
+    gifts = models.BooleanField(default=True)
+    system = models.BooleanField(
+        default=True,
+        help_text='Subscription, prize and withdrawal notices about your own account.',
+    )
 
     def __str__(self):
         return f'Notifications for {self.user.username}'
@@ -900,6 +935,10 @@ class Block(models.Model):
 class Notification(models.Model):
     """General notifications for user activities (likes, comments, follows, etc.)"""
 
+    # Types split in two. The first six are raised by another user acting on
+    # you and carry a `sender`. The rest are raised by the platform itself --
+    # a subscription renewing, a prize landing -- and have no sender at all,
+    # which is why `sender` below is nullable.
     NOTIFICATION_TYPES = [
         ('like', 'Like'),
         ('comment', 'Comment'),
@@ -907,11 +946,36 @@ class Notification(models.Model):
         ('mention', 'Mention'),
         ('gift', 'Gift'),
         ('moderation', 'Moderation Action'),
+        ('subscription_activated', 'Subscription Activated'),
+        ('subscription_renewed', 'Subscription Renewed'),
+        ('subscription_expired', 'Subscription Expired'),
+        ('prize_won', 'Prize Won'),
+        ('prize_delivered', 'Prize Delivered'),
+        ('withdrawal_paid', 'Withdrawal Paid'),
     ]
 
+    # Types the platform raises about the user's own account. Kept as a set
+    # so `is_system` stays true even if someone adds a type above without
+    # reading this far.
+    SYSTEM_TYPES = frozenset(
+        {
+            'subscription_activated',
+            'subscription_renewed',
+            'subscription_expired',
+            'prize_won',
+            'prize_delivered',
+            'withdrawal_paid',
+        }
+    )
+
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications_sent')
-    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
+    # Null for the system types above: nobody sent them. Still CASCADE, so
+    # deleting a user takes the notifications they caused with them.
+    sender = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='notifications_sent', null=True, blank=True
+    )
+    # 32, not 20: 'subscription_activated' is 22 characters.
+    notification_type = models.CharField(max_length=32, choices=NOTIFICATION_TYPES)
     reel = models.ForeignKey(
         Reel, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications'
     )
@@ -928,6 +992,11 @@ class Notification(models.Model):
             models.Index(fields=['recipient', '-created_at']),
             models.Index(fields=['recipient', 'is_read']),
         ]
+
+    @property
+    def is_system(self):
+        """Raised by the platform rather than by another user."""
+        return self.notification_type in self.SYSTEM_TYPES
 
     def __str__(self):
         return f'{self.notification_type} notification for {self.recipient.username}'

@@ -49,6 +49,51 @@ def has_active_subscription(user):
     return Subscription.objects.filter(user=user, expires_at__gt=now).exists()
 
 
+#: What each subscriber-only action is called when refusing it.
+#:
+#: Non-subscribers may sign up, sign in, browse and view. Everything that
+#: *contributes* -- posting, liking, sharing, commenting, entering a campaign
+#: -- needs a plan. Spelled out per action because "an active subscription is
+#: required to post videos" shown to somebody who tapped Like is the kind of
+#: message that makes people think the app is broken.
+SUBSCRIBER_ACTIONS = {
+    'post': 'An active subscription is required to post.',
+    'video': SUBSCRIPTION_REQUIRED_MESSAGE,
+    'like': 'An active subscription is required to like posts.',
+    'share': 'An active subscription is required to share posts.',
+    'comment': 'An active subscription is required to comment.',
+    'campaign': 'An active subscription is required to enter campaigns.',
+    'gift': 'An active subscription is required to send gifts.',
+    'boost': 'An active subscription is required to boost posts.',
+}
+
+
+def subscriber_action_refusal(user, action):
+    """The refusal body for a subscriber-only action, or None if allowed.
+
+    Coins are not the gate. A new account is given a welcome bonus
+    (WalletConfig.welcome_bonus, 100 by default), so a non-subscriber has
+    coins to spend and the engagement charge alone let them like, share and
+    comment freely -- the charge prices an action, it does not decide who may
+    take it.
+
+    Deliberately not a boolean: the caller should not be inventing its own
+    wording for a rule defined here, and the ``code`` is what the client
+    branches on to open the subscribe prompt instead of showing a generic
+    failure.
+    """
+    if has_active_subscription(user):
+        return None
+
+    return {
+        'success': False,
+        'code': SUBSCRIPTION_REQUIRED_CODE,
+        'message': SUBSCRIBER_ACTIONS.get(action, SUBSCRIBER_ACTIONS['post']),
+        'error': SUBSCRIBER_ACTIONS.get(action, SUBSCRIBER_ACTIONS['post']),
+        'action': action,
+    }
+
+
 def subscription_required_payload(message=None):
     """The body every endpoint returns when it refuses for want of a subscription.
 

@@ -213,3 +213,28 @@ def verified_push_session(*, tier_id, phone_number=None, user=None):
         verified_at=now,
         session_expires_at=now + timedelta(minutes=10),
     )
+
+
+def grant_subscription(user, *, days=30):
+    """Give `user` an active subscription.
+
+    Posting, liking, sharing, commenting and entering a campaign are all
+    subscriber-only (api/services/subscription_access.py). Tests that are
+    about something else -- what a post costs, how media is processed -- need
+    their author to hold a plan so the gate is not what they end up
+    measuring.
+
+    Subscription.user is a OneToOne and a row already exists for every user,
+    so this updates rather than creates.
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from api.models.core import Subscription
+
+    obj, _ = Subscription.objects.update_or_create(
+        user=user,
+        defaults={'plan': 'pro', 'expires_at': timezone.now() + timedelta(days=days)},
+    )
+    return obj

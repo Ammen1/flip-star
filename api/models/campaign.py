@@ -115,7 +115,16 @@ class Campaign(models.Model):
     voting_end = models.DateTimeField(null=True, blank=True, help_text='When voting ends')
 
     # Winner information
-    winner_count = models.IntegerField(default=1, help_text='Number of winners')
+    winner_count = models.IntegerField(
+        default=1,
+        help_text=(
+            'Number of winners. Ignored for the four standard tiers -- Daily '
+            'Sprint pays 20, Weekly Battle 10, Monthly Star 5 and the Grand '
+            'Final 1, from api/services/prize_structure.py, because those '
+            'counts are advertised and not an admin setting. Used only by a '
+            'campaign whose type is not one of those.'
+        ),
+    )
     winners_announced = models.BooleanField(default=False)
 
     # Metadata

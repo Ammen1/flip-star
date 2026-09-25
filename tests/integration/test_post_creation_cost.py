@@ -36,6 +36,7 @@ from api.models.contest import CoinTransaction, UserCoinBalance
 from api.models.wallet import WalletConfig
 from api.services import post_pricing
 from api.tasks import media as media_tasks
+from tests.conftest import grant_subscription
 
 pytestmark = pytest.mark.django_db
 
@@ -62,8 +63,10 @@ def no_welcome_bonus():
 
 
 @pytest.fixture
-def author():
-    return User.objects.create_user(username='cost_author', password='x')
+def author(db):
+    user = User.objects.create_user(username='cost_author', password='x')
+    grant_subscription(user)
+    return user
 
 
 @pytest.fixture

@@ -24,13 +24,16 @@ from rest_framework.test import APIClient
 
 from api.models import Reel
 from api.models.messaging import Conversation, Message
+from tests.conftest import grant_subscription
 
 pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture
 def sender():
-    return User.objects.create_user(username='sender', password='123456')
+    user = User.objects.create_user(username='sender', password='123456')
+    grant_subscription(user)
+    return user
 
 
 @pytest.fixture

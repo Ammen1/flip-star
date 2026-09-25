@@ -26,6 +26,7 @@ from api.models.gift import Gift, GiftTransaction
 from api.views.gift import PublicGiftViewSet
 from common.security.e2e_encryption import decrypt_payload, encrypt_payload, generate_keypair
 from infrastructure.keys import redis_store
+from tests.conftest import grant_subscription
 
 pytestmark = pytest.mark.django_db
 
@@ -72,7 +73,9 @@ def _decrypt(response, server_public_key, client_private_key):
 
 @pytest.fixture
 def sender():
-    return User.objects.create_user(username='sender', password='123456')
+    user = User.objects.create_user(username='sender', password='123456')
+    grant_subscription(user)
+    return user
 
 
 @pytest.fixture

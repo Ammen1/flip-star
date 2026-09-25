@@ -6,11 +6,13 @@ from django.shortcuts import get_object_or_404
 from django.db.models import Count
 from django.utils import timezone
 from django.db import DatabaseError
+from django.db import transaction as db_transaction
 import re
 from api.models import Comment, CommentLike, CommentReply, SavedPost, Reel, UserProfile, Mention
 from api.serializers.extended import CommentSerializer, CommentLikeSerializer, CommentReplySerializer, SavedPostSerializer
 from common.security import EncryptedPayloadMixin
 from common.permissions import IsOwnerOrStaffOrReadOnly
+from api.services.coin_purchase import insufficient_coins_payload
 
 def parse_mentions(text, mentioner, comment=None, reply=None):
     """Parse @username mentions from text and create Mention records"""
@@ -119,7 +121,42 @@ class CommentViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 return Comment.objects.none()
             raise
     
+    def create(self, request, *args, **kwargs):
+        """Commenting is subscriber-only, and costs what a comment costs.
+
+        This viewset is a second way in to the same Comment row the reel's
+        own `comments` action writes. That action gates and charges; this
+        one did neither, so a non-subscriber could comment here for free
+        and a subscriber could comment without paying. The gate was added
+        first; the charge is here.
+
+        Both routes now go through `charge_engagement`, which is the only
+        thing that knows the price -- so the two cannot drift apart again
+        the way they did. See the note in
+        api/services/subscription_access.py on why coins are not the gate.
+        """
+        from api.services.campaign_charges import InsufficientCoins
+        from api.services.subscription_access import subscriber_action_refusal
+
+        refusal = subscriber_action_refusal(request.user, 'comment')
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
+        # The comment and its charge commit together. The reel action
+        # learned this the hard way: charging outside a transaction left
+        # users paying for comments that were never written.
+        try:
+            with db_transaction.atomic():
+                return super().create(request, *args, **kwargs)
+        except InsufficientCoins as exc:
+            return Response(
+                insufficient_coins_payload(exc.required, exc.available, message=exc.message),
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     def perform_create(self, serializer):
+        from api.services.campaign_charges import charge_engagement
+
         try:
             comment = serializer.save(user=self.request.user)
             # Parse mentions from comment text
@@ -132,6 +169,12 @@ class CommentViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 parse_mentions(comment.text, self.request.user, comment=comment)
             else:
                 raise
+
+        # After the row exists, inside create()'s transaction. Raises
+        # InsufficientCoins, which create() turns into a 400 and which
+        # rolls the comment back -- an unpaid comment is not written.
+        if comment.reel_id:
+            charge_engagement(self.request.user, comment.reel, 'comment')
     
     def update(self, request, *args, **kwargs):
         comment = self.get_object()
@@ -236,6 +279,21 @@ class CommentReplyViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
             self.permission_classes = [IsAuthenticated]
         return super().get_permissions()
     
+    def create(self, request, *args, **kwargs):
+        """Replying to a comment is subscriber-only.
+
+        This viewset is a second way in: the reel's own `comments` action
+        gates and charges, and these routes did neither -- a non-subscriber
+        could reply here for free. See the note in
+        api/services/subscription_access.py on why coins are not the gate.
+        """
+        from api.services.subscription_access import subscriber_action_refusal
+
+        refusal = subscriber_action_refusal(request.user, 'comment')
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         reply = serializer.save(user=self.request.user)
         # Parse mentions from reply text

@@ -141,7 +141,9 @@ class TelebirrService:
     def apply_fabric_token(self):
         """Fetch a fabric token. Returns the response dict (contains 'token')."""
         url = f'{self.base_url}/payment/v1/token'
-        logger.info(f'[TELEBIRR] Applying fabric token. URL: {url}, X-APP-Key: {self.fabric_app_id}')
+        # The app key is a credential and does not belong in a log line; the
+        # URL alone says which environment was called.
+        logger.info('[TELEBIRR] Applying fabric token. URL: %s', url)
         resp = requests.post(
             url,
             headers={
@@ -152,8 +154,16 @@ class TelebirrService:
             timeout=self.timeout,
             verify=self.verify_ssl,
         )
-        logger.info(f'[TELEBIRR] Fabric token response status: {resp.status_code}')
-        logger.info(f'[TELEBIRR] Fabric token response body: {resp.text[:500]}')
+        # Status only. This response *is* the fabric token -- see this
+        # method's own docstring -- so logging its body wrote a live
+        # credential into the log on every H5 checkout. What is useful when
+        # this fails is the status and whether a token came back, and both
+        # survive without printing it.
+        logger.info(
+            '[TELEBIRR] Fabric token response status=%s has_token=%s',
+            resp.status_code,
+            bool(resp.text and 'token' in resp.text),
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -271,7 +281,11 @@ class TelebirrService:
                 verify=self.verify_ssl,
             )
             logger.info(f'[TELEBIRR] preOrder response status: {resp.status_code}')
-            logger.info(f'[TELEBIRR] preOrder response body: {resp.text}')
+            # Body withheld: this exchange carries the fabric token in its
+            # Authorization header, and a failing response commonly echoes
+            # the request back. The status and the parsed outcome below are
+            # what diagnosing this actually needs.
+            logger.info('[TELEBIRR] preOrder response body withheld (status %s)', resp.status_code)
             resp.raise_for_status()
             result = resp.json()
 
@@ -331,7 +345,11 @@ class TelebirrService:
                 verify=self.verify_ssl,
             )
             logger.info(f'[TELEBIRR] preOrder response status (ondemand): {resp.status_code}')
-            logger.info(f'[TELEBIRR] preOrder response body (ondemand): {resp.text}')
+            # Body withheld: this exchange carries the fabric token in its
+            # Authorization header, and a failing response commonly echoes
+            # the request back. The status and the parsed outcome below are
+            # what diagnosing this actually needs.
+            logger.info('[TELEBIRR] preOrder response body (ondemand) withheld (status %s)', resp.status_code)
             resp.raise_for_status()
             result = resp.json()
 

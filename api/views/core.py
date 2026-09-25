@@ -55,9 +55,11 @@ from api.serializers.core import (
 )
 from api.services.coin_purchase import insufficient_coins_payload
 from api.services.subscription_access import (
+    SUBSCRIBER_ACTIONS,
     SUBSCRIPTION_REQUIRED_CODE,
     has_active_subscription,
     payment_pending_payload,
+    subscriber_action_refusal,
     subscription_required_payload,
 )
 from api.services.usernames import (
@@ -1620,6 +1622,10 @@ def processing_posts(request):
             'processing_status': post.processing_status,
             'processing_progress': describe.get_processing_progress(post),
             'processing_error': post.processing_error or None,
+            # The code says which rule refused it; this says it in words, so
+            # the client does not have to hold its own copy of the limit and
+            # get it wrong for somebody whose limit is different.
+            'processing_error_message': _processing_error_message(post, request.user),
             'media_type': describe.get_media_type(post),
             'queued': post.processing_status == MediaStatus.PROCESSING
             and post.processing_started_at is None,
@@ -1628,6 +1634,24 @@ def processing_posts(request):
         for post in posts
     ]
     return Response({'posts': rows})
+
+
+def _processing_error_message(post, user):
+    """A sentence for a failed post, or None while nothing has failed.
+
+    Only video_too_long is spelled out here: it is the one failure that is
+    the person's own doing and that they can act on, and the limit it refers
+    to differs between users. Everything else stays a code -- a storage
+    fault is not something to explain to whoever happened to upload during
+    it.
+    """
+    code = getattr(post, 'processing_error', '') or ''
+    if code != 'video_too_long':
+        return None
+
+    from api.services import video_limits
+
+    return video_limits.too_long_message(user)
 
 
 def moderation_visible(queryset, user):
@@ -1805,12 +1829,17 @@ def _remove_replaced_media(reel_id, source_keys):
     transaction.on_commit(_send, robust=True)
 
 
-def _video_subscription_refusal(user):
-    """The 403 for a video from someone without a subscription, or None.
+def _video_subscription_refusal(user, action='video'):
+    """The 403 for a post from someone without a subscription, or None.
 
-    Posting a video is subscriber-only. The client checks too, but that check
-    is a courtesy: the status can lapse between opening the page and pressing
-    Publish, and the endpoint is reachable directly.
+    Posting is subscriber-only -- every kind of post, not only video. This
+    used to be reached under ``if is_video``, so a non-subscriber could
+    publish an image: the requirement allows them to browse and view, not to
+    contribute.
+
+    The client checks too, but that check is a courtesy: the status can lapse
+    between opening the page and pressing Publish, and the endpoint is
+    reachable directly.
 
     403 with a machine-readable `code` rather than a generic error, so the
     client can tell this apart from a real failure and keep the user's video
@@ -1838,7 +1867,10 @@ def _video_subscription_refusal(user):
             ),
             status=status.HTTP_403_FORBIDDEN,
         )
-    return Response(subscription_required_payload(), status=status.HTTP_403_FORBIDDEN)
+    return Response(
+        subscription_required_payload(SUBSCRIBER_ACTIONS.get(action)),
+        status=status.HTTP_403_FORBIDDEN,
+    )
 
 
 def _create_post_from_upload(request, upload_file, overlay_text=None):
@@ -1897,10 +1929,12 @@ def _create_post_from_upload(request, upload_file, overlay_text=None):
     except InvalidCategory as exc:
         return invalid_category_response(exc.value)
 
-    if is_video:
-        refusal = _video_subscription_refusal(user)
-        if refusal is not None:
-            return refusal
+    # Every post, not only video. A non-subscriber may browse and view; they
+    # may not contribute. The renewal path inside handles a short-code
+    # subscriber whose period has just run out.
+    refusal = _video_subscription_refusal(user, action='video' if is_video else 'post')
+    if refusal is not None:
+        return refusal
 
     campaign = None
     is_campaign_post = False
@@ -2293,14 +2327,31 @@ class ReelViewSet(viewsets.ModelViewSet):
                 to_attr='prefetched_comments',
             )
 
+            # A Premium boost places at the top of this feed -- the
+            # personalised surface the product calls "For You"; there is no
+            # separate tab by that name. Before this, only Trending read the
+            # boost state, so a Premium boost was sold a placement that no
+            # feed honoured.
+            from api.models.boost import BoostCampaign
+            from api.services import boost_tiers
+
+            feed_boost = BoostCampaign.objects.filter(
+                reel=OuterRef('pk'),
+                status='active',
+                end_time__gt=timezone.now(),
+                coins_remaining__gt=0,
+                placement__in=boost_tiers.placements_for_feed(boost_tiers.FEED),
+            )
+
             queryset = (
                 Reel.objects.select_related('user', 'user__profile')
                 .prefetch_related(recent_comments_prefetch, 'gifts_received')
                 .annotate(
                     comment_count_db=Count('comments', distinct=True),
                     votes_count_db=Count('reel_votes', distinct=True),
+                    has_feed_boost=Exists(feed_boost),
                 )
-                .order_by('-created_at')
+                .order_by('-has_feed_boost', '-created_at')
             )
 
             # Filter out hidden/banned content (moderation)
@@ -2446,6 +2497,13 @@ class ReelViewSet(viewsets.ModelViewSet):
         from api.models import Notification
         from api.services.campaign_charges import InsufficientCoins, charge_engagement
 
+        # Liking is subscriber-only. The engagement charge below is a price,
+        # not a gate: a new account is given welcome-bonus coins, so charging
+        # alone let a non-subscriber like, share and comment freely.
+        refusal = subscriber_action_refusal(request.user, 'like')
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
         reel = self.get_object()
 
         # The vote and the charge commit together or not at all. Previously the
@@ -2517,6 +2575,10 @@ class ReelViewSet(viewsets.ModelViewSet):
         """Increment share count for a reel"""
         from api.services.campaign_charges import InsufficientCoins, charge_engagement
 
+        refusal = subscriber_action_refusal(request.user, 'share')
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
         reel = self.get_object()
 
         # once=True: sharing has no uniqueness constraint of its own, so every
@@ -2560,6 +2622,14 @@ class ReelViewSet(viewsets.ModelViewSet):
         """
         from api.models.messaging import Conversation, Message
         from api.services.campaign_charges import InsufficientCoins, charge_engagement
+
+        # Sharing, by another route. This charges the same `share` price as
+        # the action above and was missed when that one was gated, so picking
+        # recipients was a way round the subscription check that tapping
+        # Share ran into.
+        refusal = subscriber_action_refusal(request.user, 'share')
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_403_FORBIDDEN)
 
         reel = self.get_object()
 
@@ -2682,6 +2752,10 @@ class ReelViewSet(viewsets.ModelViewSet):
                 return Response(
                     {'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED
                 )
+
+            refusal = subscriber_action_refusal(request.user, 'comment')
+            if refusal is not None:
+                return Response(refusal, status=status.HTTP_403_FORBIDDEN)
 
             text = request.data.get('text', '').strip()
             if not text:
@@ -3993,6 +4067,7 @@ def get_trending_reels(request):
     import logging
 
     from api.models.boost import BoostCampaign
+    from api.services import boost_tiers
     from api.serializers.core import build_feed_context
     from api.services.feed_filters import (
         InvalidCategory,
@@ -4033,11 +4108,16 @@ def get_trending_reels(request):
         # restating it -- status, an end time in the future, and budget left --
         # so "boosted" cannot come to mean two different things depending on
         # which code path asks.
+        # Only boosts bought for this surface. A Premium boost places in the
+        # home feed and a Standard one in Trending, so lifting every active
+        # campaign here would give both tiers the same placement and make the
+        # difference between them nothing but the price.
         active_boost = BoostCampaign.objects.filter(
             reel=OuterRef('pk'),
             status='active',
             end_time__gt=timezone.now(),
             coins_remaining__gt=0,
+            placement__in=boost_tiers.placements_for_feed(boost_tiers.TRENDING),
         )
 
         queryset = queryset.select_related('user', 'user__profile').annotate(
@@ -4259,12 +4339,18 @@ def get_notification_settings(request):
             },
         )
 
+        # Every switch the push gate reads -- see PREFERENCE_FIELD in
+        # api/services/notifications.py. A switch absent here cannot be
+        # changed by the user however correctly the gate reads it.
         return Response(
             {
                 'likes': notification_prefs.likes,
                 'comments': notification_prefs.comments,
                 'follows': notification_prefs.follows,
                 'messages': notification_prefs.messages,
+                'mentions': notification_prefs.mentions,
+                'gifts': notification_prefs.gifts,
+                'system': notification_prefs.system,
                 'email_notifications': notification_prefs.email_notifications,
                 'push_notifications': notification_prefs.push_notifications,
             }
@@ -4290,6 +4376,9 @@ def update_notification_settings(request):
             'comments',
             'follows',
             'messages',
+            'mentions',
+            'gifts',
+            'system',
             'email_notifications',
             'push_notifications',
         ]

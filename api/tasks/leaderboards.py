@@ -107,20 +107,50 @@ def generate_monthly_leaderboards():
         return f'Error generating monthly leaderboards: {str(e)}'
 
 
+def _leaderboard_for(campaign):
+    """The leaderboard a campaign's winners should be read from.
+
+    This used to look only for period_type='overall', and nothing in this
+    codebase creates one -- generate_{daily,weekly,monthly}_leaderboards
+    above write 'daily', 'weekly' and 'monthly'. So the lookup never matched
+    and the task below selected a winner for no campaign, ever.
+
+    A campaign's own type names the period it runs over, so that is what is
+    read, with 'overall' still accepted in case one is ever created and the
+    most recent of any type as a last resort. Grand campaigns have no
+    period of their own and fall through to that.
+    """
+    period_types = []
+    if campaign.campaign_type in ('daily', 'weekly', 'monthly'):
+        period_types.append(campaign.campaign_type)
+    period_types.append('overall')
+
+    for period_type in period_types:
+        leaderboard = (
+            Leaderboard.objects.filter(campaign=campaign, period_type=period_type)
+            .order_by('-period_start')
+            .first()
+        )
+        if leaderboard:
+            return leaderboard
+
+    return Leaderboard.objects.filter(campaign=campaign).order_by('-period_start').first()
+
+
 @shared_task
 def auto_select_campaign_winners():
     """Automatically select winners for campaigns that have ended.
 
-    Ported as-is from master, including a real gap there: this only looks
-    at Leaderboard rows with period_type='overall', but nothing in this
-    codebase -- not generate_{daily,weekly,monthly}_leaderboards above, not
-    anything else searched for in master -- ever creates one. In practice
-    the `if not leaderboard: continue` below always fires, so this task
-    currently never selects a winner for any campaign. Left matching
-    master's actual (non-)behavior rather than guessing at which leaderboard
-    period_type it was meant to read, since master gives no signal either
-    way and inventing one risks picking wrong winners.
+    Winners are chosen through CampaignScoringEngine rather than by reading
+    ranks straight off the leaderboard, so the participation rules (5 of 7,
+    20 of 30) and the 30-day win restriction apply here exactly as they do
+    to an admin selecting winners by hand. Taking the top three by score
+    alone, as this did, would hand prizes to subscribers who never qualified.
     """
+    from api.services.concurrency import claim_transition
+    from api.services.prize_delivery import award_all
+    from api.services.scoring.engine import CampaignScoringEngine
+
     try:
         now = timezone.now()
 
@@ -130,29 +160,46 @@ def auto_select_campaign_winners():
 
         count = 0
         for campaign in ended_campaigns:
-            leaderboard = Leaderboard.objects.filter(
-                campaign=campaign, period_type='overall',
-            ).order_by('-period_start').first()
+            leaderboard = _leaderboard_for(campaign)
 
             if not leaderboard:
                 continue
 
             selection_type = campaign.campaign_type if campaign.campaign_type in ('daily', 'weekly', 'monthly') else 'grand'
 
+            # One runner completes a campaign. Two overlapping beats -- or a
+            # retried task -- would otherwise both pass the filter above and
+            # announce two sets of winners.
+            if not claim_transition(
+                Campaign, campaign.pk, expect='active', to='completed', winners_announced=True
+            ):
+                continue
+
+            entries = list(leaderboard.entries.order_by('rank'))
+            winners = CampaignScoringEngine(campaign).select_winners(entries)
+
             winner_selection = WinnerSelection.objects.create(
                 campaign=campaign, selection_type=selection_type, leaderboard=leaderboard,
                 is_finalized=True, finalized_at=now,
             )
 
-            for entry in leaderboard.entries.order_by('rank')[:3]:
+            for winner in winners:
                 SelectedWinner.objects.create(
-                    selection=winner_selection, user=entry.user, rank=entry.rank,
-                    final_score=entry.score, selection_method='top_scorer',
+                    selection=winner_selection, user=winner['user'], rank=winner['rank'],
+                    final_score=winner.get('score', winner.get('final_score', 0)),
+                    selection_method=winner.get('method', 'top_scorer'),
                 )
 
-            campaign.status = 'completed'
-            campaign.winners_announced = True
-            campaign.save(update_fields=['status', 'winners_announced'])
+            # Record what each winner is owed, with its delivery deadline,
+            # before anything is sent. Awarding is idempotent, so a re-run
+            # reuses the existing prize rows rather than creating a second
+            # set to pay.
+            award_all(
+                campaign,
+                [winner['user'] for winner in winners],
+                selection_type,
+                closed_at=campaign.entry_deadline,
+            )
 
             count += 1
 

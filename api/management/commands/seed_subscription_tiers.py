@@ -70,7 +70,7 @@ class Command(BaseCommand):
                 'duration_days': 7,
                 'price_etb': 20.00,
                 'price_coins': None,
-                'charge_gift_coins': 25,
+                'charge_gift_coins': 23,
                 'onevas_code': 'B',
                 'short_code': '9286',
                 'features': ['View all content', 'Extended interactions', 'HD quality'],

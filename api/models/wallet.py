@@ -3,6 +3,7 @@ Wallet System Models
 
 - WalletConfig: Admin-configurable singleton for coin economy settings
 - WithdrawalRequest: Users requesting to convert coins -> Ethiopian Birr (ETB)
+- PointTransaction: The creator-points ledger, mirroring CoinTransaction
 
 Note: UserCoinBalance, CoinTransaction, CoinPackage already exist in models.contest.py
 This module extends the wallet ecosystem.
@@ -79,13 +80,13 @@ class WalletConfig(models.Model):
         default=2, help_text='Cost to create a post (0 = free)'
     )
     cost_like = models.PositiveIntegerField(
-        default=0, help_text='Coins charged when liking a campaign post (0 = free)'
+        default=1, help_text='Coins charged when liking a campaign post (0 = free)'
     )
     cost_comment = models.PositiveIntegerField(
-        default=0, help_text='Coins charged when commenting on a campaign post (0 = free)'
+        default=2, help_text='Coins charged when commenting on a campaign post (0 = free)'
     )
     cost_share = models.PositiveIntegerField(
-        default=0, help_text='Coins charged when sharing a campaign post (0 = free)'
+        default=5, help_text='Coins charged when sharing a campaign post (0 = free)'
     )
     cost_gift = models.PositiveIntegerField(
         default=0,
@@ -117,13 +118,13 @@ class WalletConfig(models.Model):
         default=2, help_text='Cost to create a non-campaign post (0 = free)'
     )
     cost_like_non_campaign = models.PositiveIntegerField(
-        default=0, help_text='Coins charged when liking a non-campaign post (0 = free)'
+        default=1, help_text='Coins charged when liking a non-campaign post (0 = free)'
     )
     cost_comment_non_campaign = models.PositiveIntegerField(
-        default=0, help_text='Coins charged when commenting on a non-campaign post (0 = free)'
+        default=2, help_text='Coins charged when commenting on a non-campaign post (0 = free)'
     )
     cost_share_non_campaign = models.PositiveIntegerField(
-        default=0, help_text='Coins charged when sharing a non-campaign post (0 = free)'
+        default=5, help_text='Coins charged when sharing a non-campaign post (0 = free)'
     )
     cost_gift_non_campaign = models.PositiveIntegerField(
         default=0,
@@ -457,7 +458,12 @@ class WithdrawalRequest(models.Model):
         if self.point_amount:
             profile = self.user.profile
             # total_field is omitted on purpose: see the note above.
-            profile.add_points(self.point_amount, total_field=None)
+            profile.add_points(
+                self.point_amount,
+                total_field=None,
+                reason='withdrawal_refund',
+                description=f'Refund for {reason} withdrawal #{self.pk}',
+            )
             refunded['points'] = self.point_amount
 
         if self.coin_amount:
@@ -486,3 +492,73 @@ class WithdrawalRequest(models.Model):
         self.save()
 
         return self.refund_to_user(reason='rejected')
+
+
+class PointTransaction(models.Model):
+    """Every movement of a user's creator points, one row each.
+
+    Why this exists
+    ---------------
+    Coins have had a ledger since the first release -- ``CoinTransaction`` --
+    and points had none. ``UserProfile.points`` was a bare integer that every
+    credit and debit overwrote in place, so a disputed balance could not be
+    reconstructed: there was no record of what had been added, spent,
+    withdrawn or expired, only the number left at the end. The 180-day
+    expiry made that worse, because expiry is the one movement a user is
+    most likely to query and the one least likely to be remembered.
+
+    How it stays complete
+    ---------------------
+    Rows are written by ``UserProfile._apply_delta``, inside the same locked
+    transaction that changes the balance -- not by the call sites. That is
+    deliberate. Every credit and debit in the app already funnels through
+    ``add_points``/``deduct_points``, so writing the row one level below them
+    means a movement cannot be recorded incorrectly by a caller that forgot,
+    and ``balance_after`` is read from the locked row rather than from a
+    caller's stale copy.
+
+    The one path that does not go through ``_apply_delta`` is the expiry
+    sweep, which zeroes the balance with a direct UPDATE while holding the
+    row lock; it writes its own row in the same transaction. See
+    ``api/services/points_expiry.py``.
+
+    Signed, like CoinTransaction
+    ----------------------------
+    ``points`` is positive for a credit and negative for a debit, so the
+    ledger sums to the balance. ``balance_after`` is stored as well, so a
+    single row is readable on its own without summing everything before it.
+    """
+
+    TRANSACTION_TYPES = [
+        ('gift_received', 'Gift Received'),
+        ('campaign_reward', 'Campaign Reward'),
+        ('withdrawal', 'Withdrawal to Birr'),
+        ('withdrawal_refund', 'Withdrawal Refund'),
+        ('swap', 'Swapped to Coins'),
+        ('expiry', 'Expired After Inactivity'),
+        ('admin_adjustment', 'Admin Adjustment'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='point_transactions')
+    transaction_type = models.CharField(max_length=32, choices=TRANSACTION_TYPES)
+
+    #: Positive for a credit, negative for a debit.
+    points = models.IntegerField()
+
+    #: The balance immediately after this movement, read under the same row
+    #: lock that applied it.
+    balance_after = models.IntegerField()
+
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['transaction_type', '-created_at']),
+        ]
+
+    def __str__(self):
+        sign = '+' if self.points >= 0 else ''
+        return f'{self.user.username}: {sign}{self.points} points ({self.transaction_type})'

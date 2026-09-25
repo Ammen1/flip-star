@@ -6,7 +6,8 @@ lives on the tier (`SubscriptionTier.charge_gift_coins`) and is paid out by
 the post_save signal on SubscriptionPayment (api/services/subscription_gift.py).
 
 The daily plan already rewarded every charge this way (3, what the login bonus
-used to pay). Migration 0127 gives weekly 25 and monthly 120 per charge and
+used to pay). Migration 0127 gives weekly 25 and monthly 120 per charge (0135 later
+corrects weekly to 23, the 4/4/3/3/3/3/3 the plan promises) and
 zeros on-demand, whose package pays its coins outright instead (`test_ondemand_allocation`). These tests pin the shipped amounts and the
 charging-side payout so the numbers cannot drift.
 
@@ -42,7 +43,7 @@ def disable_welcome_bonus():
     'slug,expected',
     [
         ('daily', 3),
-        ('weekly', 25),
+        ('weekly', 23),
         ('monthly', 120),
         ('ondemand', 0),
     ],
@@ -85,7 +86,7 @@ def gifts(user):
     return CoinTransaction.objects.filter(user=user, transaction_type=GIFT_TRANSACTION_TYPE)
 
 
-@pytest.mark.parametrize('slug,first_day,total', [('weekly', 4, 25), ('monthly', 4, 120)])
+@pytest.mark.parametrize('slug,first_day,total', [('weekly', 4, 23), ('monthly', 4, 120)])
 def test_each_charge_starts_paying_its_plan_gift(subscriber, slug, first_day, total):
     """A completed payment pays the period's **first day**, not the whole
     period. The rest arrive daily (api/services/subscription_daily_gift.py,
@@ -147,6 +148,13 @@ def renamed_tiers_all_paying_three():
 
 
 def test_tiers_with_other_slugs_get_their_plan_amounts(renamed_tiers_all_paying_three):
+    """0128's own output, which is what this test is about.
+
+    Weekly is 25 here and not the shipped 23: this drives 0128 in isolation to
+    prove it finds tiers by duration_type rather than by slug. Migration 0135
+    corrects weekly afterwards, and the shipped figure is asserted by
+    test_the_per_charge_gift_amounts above.
+    """
     from django.apps import apps
 
     _migration_0128().set_gifts(apps, None)
@@ -157,8 +165,12 @@ def test_tiers_with_other_slugs_get_their_plan_amounts(renamed_tiers_all_paying_
 
 
 def test_a_weekly_subscriber_is_then_paid_from_25_not_3(renamed_tiers_all_paying_three, subscriber):
-    """End to end on the renamed tiers: the week is worth 25, and its first
-    day pays 4 -- where before migration 0128 the whole week was worth 3."""
+    """End to end on the renamed tiers: the week is worth more than 3, and its
+    first day pays 4 -- where before migration 0128 the whole week was 3.
+
+    Drives 0128 alone, so the total here is its 25 rather than the shipped 23
+    that 0135 settles on. The shape assertion is what this is really about.
+    """
     from django.apps import apps
 
     from api.services.subscription_daily_gift import schedule_for

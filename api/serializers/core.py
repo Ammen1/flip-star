@@ -728,6 +728,11 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationPreference
+        # Every switch the push gate reads has to be here, or a user cannot
+        # change it. 'mentions' was already on the model and already absent
+        # from this list, so the mentions toggle has never been reachable
+        # through the API; it is included now for the same reason as the two
+        # new ones. See PREFERENCE_FIELD in api/services/notifications.py.
         fields = [
             'id',
             'email_notifications',
@@ -738,6 +743,9 @@ class NotificationPreferenceSerializer(serializers.ModelSerializer):
             'comments',
             'follows',
             'messages',
+            'mentions',
+            'gifts',
+            'system',
         ]
 
 

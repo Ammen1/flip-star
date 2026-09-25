@@ -143,12 +143,43 @@ class BoostCampaign(models.Model):
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
         ('exhausted', 'Budget Exhausted'),
+        # A guaranteed campaign whose window closed before its guarantee was
+        # met. Distinct from 'completed' on purpose: Viral sells 5,000
+        # impressions, and a campaign that served 2,000 must not be
+        # indistinguishable from one that served all of them. What is owed
+        # is decided by a person; what happened is recorded here.
+        ('undelivered', 'Ended Below Guarantee'),
     ]
     
+    BOOST_TYPE_CHOICES = [
+        ('standard', 'Standard'),
+        ('premium', 'Premium'),
+        ('viral', 'Viral'),
+        ('custom', 'Custom (hourly)'),
+    ]
+
+    PLACEMENT_CHOICES = [
+        ('trending', 'Top of Trending'),
+        ('feed', 'Top of the feed'),
+        ('everywhere', 'Trending and the feed'),
+    ]
+
     # Core relationships
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='boost_campaigns')
     reel = models.ForeignKey('Reel', on_delete=models.CASCADE, related_name='boost_campaigns')
-    
+
+    # Which product was bought. 'custom' is what every campaign predating the
+    # three named tiers was: priced by the hour from BoostConfig rather than
+    # from a fixed tier, and placed in Trending because that was the only
+    # feed reading the boost state at the time.
+    boost_type = models.CharField(max_length=20, choices=BOOST_TYPE_CHOICES, default='custom')
+    placement = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default='trending')
+
+    # Only Viral carries one. NULL rather than 0 for the others, so nothing
+    # can render "0 guaranteed impressions" or treat an absent guarantee as a
+    # promise of none -- see api/services/boost_tiers.py.
+    guaranteed_impressions = models.PositiveIntegerField(null=True, blank=True)
+
     # Budget & Duration
     duration_hours = models.IntegerField(choices=DURATION_CHOICES)
     coins_spent = models.DecimalField(max_digits=10, decimal_places=2)
@@ -200,6 +231,28 @@ class BoostCampaign(models.Model):
             models.Index(fields=['reel', '-created_at']),
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['end_time']),
+        ]
+        constraints = [
+            # One live tier boost per post, enforced by the database.
+            #
+            # The view checks too, but a check is a race: two concurrent
+            # requests both read "no active boost" and both create one, and
+            # both are charged -- 2,000 coins for a single Viral placement.
+            # A partial unique index is what actually makes it impossible;
+            # the check just turns the second request into a friendly 400
+            # instead of an IntegrityError.
+            #
+            # Scoped to the named tiers. The older hourly form has always
+            # allowed several concurrent boosts on a post
+            # (BoostConfig.max_active_boosts_per_post, default 3), and
+            # narrowing that retroactively would cancel behaviour people
+            # already rely on -- and would fail this migration against any
+            # post that currently has two.
+            models.UniqueConstraint(
+                fields=['reel'],
+                condition=models.Q(status='active') & ~models.Q(boost_type='custom'),
+                name='one_active_tier_boost_per_reel',
+            ),
         ]
     
     def __str__(self):

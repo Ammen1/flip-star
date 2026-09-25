@@ -115,15 +115,35 @@ def delete_like_notification(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Notification)
 def push_notification_on_create(sender, instance, created, **kwargs):
-    """Fan out a new Notification row to FCM (mobile) and Web Push (browser)."""
+    """Fan out a new Notification row to FCM (mobile) and Web Push (browser).
+
+    Gated on the recipient's NotificationPreference. Until this check existed
+    the preference model was read by no code at all, so switching push off in
+    settings changed nothing -- the row was still written and still pushed.
+
+    Only the push is suppressed. The Notification row stays, because the
+    in-app list is the user's record of what happened to their account.
+    """
     if not created:
         return
+
+    from .services.notifications import push_allowed
+
+    if not push_allowed(instance.recipient, instance.notification_type):
+        return
+
     type_titles = {
         'like': 'New Like',
         'comment': 'New Comment',
         'follow': 'New Follower',
         'mention': 'You were mentioned',
         'gift': 'You received a gift!',
+        'subscription_activated': 'Subscription active',
+        'subscription_renewed': 'Subscription renewed',
+        'subscription_expired': 'Subscription ended',
+        'prize_won': 'You won!',
+        'prize_delivered': 'Prize delivered',
+        'withdrawal_paid': 'Withdrawal paid',
     }
     title = type_titles.get(instance.notification_type, 'FlipStar')
     payload = {

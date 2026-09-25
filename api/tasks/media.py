@@ -919,23 +919,38 @@ def _claim(reel_id, task_id, force):
     return reel, None
 
 
-def _video_too_long(duration) -> bool:
-    """Is a measured duration beyond what may be posted?
+def _video_too_long(duration, user=None) -> bool:
+    """Is a measured duration beyond what this poster may post?
 
-    ``settings.MEDIA_MAX_VIDEO_SECONDS`` is the one limit that decides -- the
-    same number the recorder stops at and the top of the long-video price
-    band. Inclusive of the limit itself: a 120.0-second video is accepted and
-    charged as a long video, 120.01 is rejected.
+    The limit is now per-user: 60 seconds on a subscription alone, 120 once
+    coins have been bought (api/services/video_limits.py). It used to be
+    ``settings.MEDIA_MAX_VIDEO_SECONDS`` for everybody, so a standard
+    subscriber could post the full two minutes.
+
+    That setting is still the ceiling nobody exceeds -- video_limits caps
+    every entitlement to it -- so a deployment that lowers it still lowers
+    it for all. Passing no user falls back to it, which is what a backfill
+    of old posts wants: the rule that applied when they were published.
+
+    Inclusive of the limit: 60.0 seconds is accepted for a standard
+    subscriber and 60.01 is not, matching the pricing boundary so that "60
+    seconds" means one thing across the product.
 
     Named rather than written twice inline, because it is checked before and
     after encoding and those two must not drift apart.
     """
     if not duration:
         return False
-    try:
-        return float(duration) > settings.MEDIA_MAX_VIDEO_SECONDS
-    except (TypeError, ValueError):
-        return False
+
+    if user is None:
+        try:
+            return float(duration) > settings.MEDIA_MAX_VIDEO_SECONDS
+        except (TypeError, ValueError):
+            return False
+
+    from api.services import video_limits
+
+    return video_limits.exceeds_limit(duration, user)
 
 
 def _charge_long_video(reel, duration):
@@ -1033,7 +1048,7 @@ def _run_video(reel, version, workdir, live, progress=_NO_PROGRESS):
 
     # Rules that apply to a new upload, never to a post already published
     # (a backfill of old posts must not re-charge or reject them).
-    if not live and _video_too_long(info['duration']):
+    if not live and _video_too_long(info['duration'], reel.user):
         raise _Permanent('video_too_long')
 
     out_video, out_thumb, duration, variants = _process_video(
@@ -1041,7 +1056,7 @@ def _run_video(reel, version, workdir, live, progress=_NO_PROGRESS):
     )
 
     if not live:
-        if _video_too_long(duration):
+        if _video_too_long(duration, reel.user):
             raise _Permanent('video_too_long')
         _charge_long_video(reel, duration)
 

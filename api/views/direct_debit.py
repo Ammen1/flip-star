@@ -37,6 +37,7 @@ from api.services.withdrawal_sms import (
 )
 from common.permissions.roles import HasAdminPermission
 from common.security import encrypted_endpoint
+from api.services.webhook_allowlist import refuse as webhook_refuse
 
 logger = logging.getLogger(__name__)
 
@@ -541,6 +542,14 @@ def telebirr_direct_debit_webhook(request):
     sequential -- from re-crediting coins or re-running a transition that
     already ran.
     """
+    # This envelope carries no signature -- see
+    # api/services/webhook_allowlist.py. Refused here as well as at the
+    # ingress, so the rule is visible to anyone reading the handler.
+    # No-op until TELEBIRR_WEBHOOK_ALLOWED_IPS is set.
+    denied = webhook_refuse(request, webhook='telebirrDirectDebit')
+    if denied is not None:
+        return denied
+
     raw_body = request.body or b''
     logger.warning(
         'Telebirr webhook hit: ct=%s len=%d body=%s',
@@ -1544,6 +1553,14 @@ def telebirr_b2c_webhook(request):
     double-crediting a payout or double-refunding points. We always return
     200 so Telebirr does not retry-storm us.
     """
+    # This envelope carries no signature -- see
+    # api/services/webhook_allowlist.py. Refused here as well as at the
+    # ingress, so the rule is visible to anyone reading the handler.
+    # No-op until TELEBIRR_WEBHOOK_ALLOWED_IPS is set.
+    denied = webhook_refuse(request, webhook='telebirrB2C')
+    if denied is not None:
+        return denied
+
     from api.models.wallet import WithdrawalRequest
 
     raw_body = request.body or b''

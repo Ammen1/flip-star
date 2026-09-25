@@ -32,7 +32,7 @@ from api.models.contest import CoinPackage, CoinTransaction, UserCoinBalance
 from api.models.core import UserProfile
 from api.models.wallet import WalletConfig, WithdrawalRequest
 from api.serializers.core import UserSerializer
-from api.services import airtime_purchase, payment_status, post_pricing
+from api.services import airtime_purchase, payment_status, post_pricing, video_limits
 from api.services.coin_packages import (
     fallback_payload,
     pending_coin_purchase,
@@ -53,6 +53,7 @@ from api.services.withdrawal_sms import (
 )
 from api.views.core import _normalize_ethiopian_phone
 from common.security import encrypted_endpoint
+from api.services.webhook_allowlist import refuse as webhook_refuse
 
 logger = logging.getLogger(__name__)
 
@@ -381,7 +382,11 @@ def request_withdrawal(request):
     # request together -- if either half fails the other must not stick.
     try:
         with db_transaction.atomic():
-            user_profile.deduct_points(point_amount, total_field='points_withdrawn_total')
+            user_profile.deduct_points(
+                point_amount,
+                total_field='points_withdrawn_total',
+                reason='withdrawal',
+            )
             withdrawal = WithdrawalRequest.objects.create(
                 user=request.user,
                 point_amount=point_amount,
@@ -518,7 +523,7 @@ def reinvest_points(request):
     # with neither the points nor the coins.
     try:
         with db_transaction.atomic():
-            user_profile.deduct_points(points_amount)
+            user_profile.deduct_points(points_amount, reason='swap')
             # 1 point = 1 coin. Also creates the CoinTransaction record.
             coin_balance.add_earned(
                 points_amount,
@@ -694,6 +699,13 @@ def public_wallet_config(request):
             'allows_airtime': airtime_purchase.is_available(),
             'post_costs': post_pricing.quote(config, is_campaign_post=False),
             'campaign_post_costs': post_pricing.quote(config, is_campaign_post=True),
+            # How long a video this user may post: 60 seconds on a
+            # subscription, 120 once they have bought coins. Published so the
+            # create screen can show the limit and refuse a too-long file
+            # before an upload, rather than the person waiting for processing
+            # to be told. The backend measures the file and decides; this is
+            # what the page displays.
+            'video_limits': video_limits.limits_for(request.user),
             'costs': {
                 'post_create': config.cost_post_create,
                 'like': config.cost_like,
@@ -1284,9 +1296,13 @@ def admin_adjust_balance(request):
         profile = user.profile
         try:
             if amount >= 0:
-                profile.add_points(amount)
+                profile.add_points(amount, reason='admin_adjustment')
             else:
-                profile.deduct_points(abs(amount), total_field='points_withdrawn_total')
+                profile.deduct_points(
+                    abs(amount),
+                    total_field='points_withdrawn_total',
+                    reason='admin_adjustment',
+                )
         except ValueError as exc:
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2099,6 +2115,14 @@ def _credit_telebirr_ussd_order(originator_conversation_id, transaction_id=None)
 @permission_classes([AllowAny])  # Telebirr calls this without authentication
 def telebirr_ussd_webhook(request):
     """Handle the USSD Push payment result webhook (SOAP Result envelope)."""
+    # This envelope carries no signature -- see
+    # api/services/webhook_allowlist.py. Refused here as well as at the
+    # ingress, so the rule is visible to anyone reading the handler.
+    # No-op until TELEBIRR_WEBHOOK_ALLOWED_IPS is set.
+    denied = webhook_refuse(request, webhook='telebirrUssdPurchase')
+    if denied is not None:
+        return denied
+
     from api.views.direct_debit import _parse_telebirr_soap_result
 
     raw_body = request.body or b''

@@ -744,6 +744,19 @@ class UserCoinBalance(models.Model):
 
 
 class PostBoost(models.Model):
+    """Legacy. Written by nothing since boost_post was fixed.
+
+    This was the record the old /boost-post/ endpoint wrote after charging
+    200 coins. No feed ever read it and nothing expired it, and the view
+    raised immediately afterwards on a field Reel does not have -- so every
+    row here is a caller who was charged and got a 500.
+
+    Kept rather than dropped: the rows are the only evidence of those
+    charges, and whoever decides whether to refund them needs to be able to
+    find them. Boosting now goes through BoostCampaign
+    (api/models/boost.py), which the feeds read and the sweep retires.
+    """
+
     """
     Boosted posts (200 coins for 2 hours featured)
     """

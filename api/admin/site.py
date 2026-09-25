@@ -47,7 +47,15 @@ from api.models.campaign_extended import (
     UserCampaignStats,
     WinnerSelection,
 )
-from api.models.gift import Gift, GiftCombo, GiftTransaction, UserGiftStats
+from api.models.crm import CRMGiftPackage, CRMGiftTransaction
+from api.models.gift import (
+    Gift,
+    GiftCombo,
+    GiftTransaction,
+    UserGiftStats,
+    WinnerGiftPackage,
+    WinnerGiftTransaction,
+)
 from api.models.legal import LegalDocument, LegalDocumentVersion, UserLegalAcceptance
 from api.models.support import SupportRequest
 from api.models.wallet import WalletConfig, WithdrawalRequest
@@ -1183,3 +1191,199 @@ class OrganizationAdmin(admin.ModelAdmin):
 
     campaign_count.short_description = 'Campaigns'
     campaign_count.admin_order_field = '_campaigns'
+
+
+# ============================================================================
+# PRIZE MANAGEMENT AND DELIVERY
+# ============================================================================
+#
+# What a prize is owed, whether it has been delivered, and what to do about
+# it when it has not. None of these models had an admin registration at all,
+# so the only way to answer "has the Grand Final winner been paid?" was a
+# database query.
+
+
+class PrizeStatusFilter(admin.SimpleListFilter):
+    """The four questions an operator actually asks of this table."""
+
+    title = 'delivery state'
+    parameter_name = 'delivery_state'
+
+    def lookups(self, request, model_admin):
+        return [
+            ('owed', 'Still owed (anything undelivered)'),
+            ('pending', 'Awaiting delivery'),
+            ('failed', 'Failed'),
+            ('skipped', 'Undeliverable (no Telebirr account)'),
+            ('success', 'Delivered'),
+            ('overdue', 'Overdue (past deadline)'),
+        ]
+
+    def queryset(self, request, queryset):
+        from api.services.prize_delivery import (
+            failed_deliveries,
+            overdue_deliveries,
+            owed_deliveries,
+            pending_deliveries,
+            skipped_deliveries,
+            successful_deliveries,
+        )
+
+        views = {
+            'owed': owed_deliveries,
+            'pending': pending_deliveries,
+            'failed': failed_deliveries,
+            'skipped': skipped_deliveries,
+            'success': successful_deliveries,
+            'overdue': overdue_deliveries,
+        }
+        view = views.get(self.value())
+        if view is None:
+            return queryset
+        return queryset.filter(pk__in=view().values('pk'))
+
+
+@admin.register(WinnerGiftPackage, site=admin_site)
+class WinnerGiftPackageAdmin(admin.ModelAdmin):
+    """What each tier pays.
+
+    Read-only on the figures: the amounts are contractual and come from
+    api/services/prize_structure.py, which writes over this row on every
+    award. Editing them here would not change what a winner is paid, so the
+    fields are not offered as if it would.
+    """
+
+    list_display = ['winner_type', 'gift_type', 'payment_method', 'amount', 'is_active']
+    list_filter = ['gift_type', 'payment_method', 'is_active']
+    readonly_fields = [
+        'winner_type',
+        'gift_type',
+        'payment_method',
+        'amount',
+        'created_at',
+        'updated_at',
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(WinnerGiftTransaction, site=admin_site)
+class WinnerGiftTransactionAdmin(admin.ModelAdmin):
+    """Every prize owed, and where its delivery got to."""
+
+    list_display = [
+        'winner',
+        'winner_type',
+        'amount',
+        'payment_method',
+        'delivery_state',
+        'attempt_count',
+        'deadline_display',
+        'delivered_at',
+    ]
+    list_filter = [PrizeStatusFilter, 'winner_type', 'payment_method', 'status', 'created_at']
+    search_fields = [
+        'winner__username',
+        'receiver_msisdn',
+        'telebirr_transaction_id',
+        'conversation_id',
+        'originator_conversation_id',
+        'idempotency_key',
+    ]
+    readonly_fields = [
+        'id',
+        'idempotency_key',
+        'originator_conversation_id',
+        'conversation_id',
+        'telebirr_transaction_id',
+        'attempt_count',
+        'delivered_at',
+        'created_at',
+        'updated_at',
+    ]
+    list_select_related = ['winner', 'campaign']
+    actions = ['retry_failed_deliveries']
+
+    def delivery_state(self, obj):
+        """Status, with overdue called out -- a 'processing' prize three days
+        past its deadline is not the same as one sent this morning."""
+        colours = {
+            'success': 'green',
+            'failed': 'red',
+            'processing': 'orange',
+            'pending': 'gray',
+            'skipped': 'gray',
+        }
+        label = obj.get_status_display()
+        if obj.is_overdue:
+            return format_html(
+                '<span style="color:red;font-weight:bold">{} (OVERDUE)</span>', label
+            )
+        return format_html(
+            '<span style="color:{}">{}</span>', colours.get(obj.status, 'black'), label
+        )
+
+    delivery_state.short_description = 'Delivery'
+
+    def deadline_display(self, obj):
+        if not obj.deadline_at:
+            return '--'
+        return obj.deadline_at.strftime('%Y-%m-%d')
+
+    deadline_display.short_description = 'Deliver by'
+    deadline_display.admin_order_field = 'deadline_at'
+
+    @admin.action(description='Retry failed deliveries')
+    def retry_failed_deliveries(self, request, queryset):
+        """Re-attempt on the same rows.
+
+        Goes through the delivery service, so a prize that is already
+        delivered or in flight is refused rather than paid again -- selecting
+        the whole page and pressing retry cannot double-pay anybody.
+        """
+        from api.services.prize_delivery import retry
+
+        retried = skipped = failed = 0
+        for prize in queryset:
+            ok, message = retry(prize)
+            if ok:
+                retried += 1
+            elif 'already' in message:
+                skipped += 1
+            else:
+                failed += 1
+
+        self.message_user(
+            request,
+            f'{retried} re-attempted, {failed} failed again, '
+            f'{skipped} skipped (already delivered or in flight).',
+        )
+
+
+@admin.register(CRMGiftPackage, site=admin_site)
+class CRMGiftPackageAdmin(admin.ModelAdmin):
+    """The data bundles available to provision, by OfferingId."""
+
+    list_display = ['name', 'offering_id', 'charge_amount', 'trigger_condition', 'is_active']
+    list_filter = ['is_active', 'trigger_condition']
+    search_fields = ['name', 'offering_id']
+
+
+@admin.register(CRMGiftTransaction, site=admin_site)
+class CRMGiftTransactionAdmin(admin.ModelAdmin):
+    """Data provisioning attempts, successful and otherwise."""
+
+    list_display = [
+        'phone_number',
+        'offering_id',
+        'status',
+        'trigger_source',
+        'campaign_id',
+        'created_at',
+        'completed_at',
+    ]
+    list_filter = ['status', 'trigger_source', 'created_at']
+    search_fields = ['phone_number', 'transaction_id', 'offering_id', 'user__username']
+    readonly_fields = ['transaction_id', 'created_at', 'completed_at']
+    list_select_related = ['user', 'package']

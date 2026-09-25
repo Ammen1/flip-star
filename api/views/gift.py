@@ -265,6 +265,16 @@ class GiftTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def send_gift(self, request, data):
+        # Gifting is subscriber-only. Checked here rather than in `create`
+        # so the rule holds for every caller of this method, not only the
+        # one route that happens to reach it today.
+        from api.services import contribution_limits
+        from api.services.subscription_access import subscriber_action_refusal
+
+        refusal = subscriber_action_refusal(request.user, 'gift')
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
         gift_id = data['gift_id']
         recipient_id = data['recipient_id']
         reel_id = data.get('reel_id')
@@ -452,6 +462,17 @@ class GiftTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
         # record that the gift ever happened.
         try:
             with db_transaction.atomic():
+                # One contributor may give one creator 500 coins in a
+                # rolling 24 hours. Inside the transaction, with the
+                # sender's balance row locked first, so two gifts arriving
+                # together cannot both read the same total and both pass.
+                contribution_limits.lock_sender(request.user)
+                over_limit = contribution_limits.refusal(
+                    request.user, recipient, total_cost
+                )
+                if over_limit is not None:
+                    return Response(over_limit, status=status.HTTP_400_BAD_REQUEST)
+
                 sender_coin_balance.spend_coins(
                     amount=total_cost,
                     transaction_type='gift_sent',
@@ -480,7 +501,9 @@ class GiftTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 # see UserProfile._apply_delta's docstring: two gifts landing on the
                 # same recipient at once must not lose one of the credits.
                 recipient_profile = recipient.profile
-                recipient_profile.add_points(points_received)
+                recipient_profile.add_points(
+                    points_received, reason='gift_received'
+                )
                 UserProfile.objects.filter(pk=recipient_profile.pk).update(
                     gifts_received_total=F('gifts_received_total') + 1
                 )

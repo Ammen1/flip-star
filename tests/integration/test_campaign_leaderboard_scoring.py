@@ -40,6 +40,7 @@ from api.services.scoring.leaderboard import (
     rank,
     reel_engagement,
 )
+from tests.conftest import grant_subscription
 
 pytestmark = pytest.mark.django_db
 
@@ -81,7 +82,9 @@ def bob():
 
 @pytest.fixture
 def fan():
-    return User.objects.create_user(username='fan', password='123456')
+    user = User.objects.create_user(username='fan', password='123456')
+    grant_subscription(user)
+    return user
 
 
 def campaign_post(user, campaign, **kwargs):

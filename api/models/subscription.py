@@ -307,6 +307,11 @@ class SubscriptionPlan(models.Model):
         # read before the fields below are overwritten.
         already_running = self.status == 'active' and self.end_date and self.end_date > now
 
+        # Whether this plan has ever run before, read before end_date is
+        # overwritten below. It is what separates a first activation from a
+        # renewal, and there is no other record of it afterwards.
+        had_previous_period = self.end_date is not None
+
         self.status = 'active'
         self.start_date = now
         if self.tier and self.tier.duration_days:
@@ -318,6 +323,38 @@ class SubscriptionPlan(models.Model):
 
         if not already_running:
             self._grant_bonus_coins()
+            # Same condition as the bonus grant, and for the same reason: a
+            # provider may deliver the activation webhook more than once, and
+            # the user should be told a period began exactly as often as one
+            # actually began.
+            self._notify_period_started(renewed=had_previous_period)
+
+    def _notify_period_started(self, *, renewed):
+        """Tell the user in-app that their subscription period began.
+
+        Best-effort by way of notify_system, which swallows its own errors:
+        a subscription must never fail to activate because a notification
+        could not be written.
+        """
+        if not self.user_id:
+            # SMS subscriptions exist before a user claims them.
+            return
+
+        from api.services.notifications import notify_system
+
+        tier_name = self.tier.name if self.tier else 'FlipStar'
+        if renewed:
+            message = f'Your {tier_name} subscription has been renewed.'
+        else:
+            message = f'Your {tier_name} subscription is now active.'
+        if self.end_date:
+            message += f' It runs until {self.end_date.date().isoformat()}.'
+
+        notify_system(
+            self.user,
+            'subscription_renewed' if renewed else 'subscription_activated',
+            message,
+        )
 
     def _grant_bonus_coins(self):
         """Credit the tier's bonus coins for this subscription period.

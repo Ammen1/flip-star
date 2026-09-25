@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -17,6 +17,7 @@ from api.models.boost import (
     BoostImpression,
 )
 from api.models.contest import UserCoinBalance
+from api.services import boost_tiers
 from api.services.concurrency import claim_transition
 from common.security import encrypted_endpoint
 
@@ -31,8 +32,17 @@ def get_boost_config(request):
         if not config:
             config = BoostConfig.objects.create()
 
+        balance, _ = UserCoinBalance.objects.get_or_create(user=request.user)
+
         return Response(
             {
+                # The three products, with what each costs, how long it runs
+                # and where it places. The sheet shows these; the hourly
+                # figures below still serve the older custom form.
+                'tiers': boost_tiers.tier_list(),
+                # So the sheet can mark a tier unaffordable rather than
+                # letting somebody pick it and be refused.
+                'coin_balance': balance.balance,
                 'base_hourly_rate': float(config.base_hourly_rate),
                 'discounts': {
                     '6hr': config.discount_6hr,
@@ -135,14 +145,46 @@ def create_boost_campaign(request):
     try:
         user = request.user
         reel_id = request.data.get('reel_id')
-        duration_hours = int(request.data.get('duration_hours'))
         target_gender = request.data.get('target_gender', 'all')
         target_age_min = request.data.get('target_age_min')
         target_age_max = request.data.get('target_age_max')
         target_location = request.data.get('target_location', '')
 
-        # Validate reel exists and belongs to user
+        # One of the three named tiers, or the older hourly form. A tier
+        # fixes cost, duration, placement and any guarantee; `duration_hours`
+        # on its own keeps every existing client working unchanged.
+        raw_type = request.data.get('boost_type')
+        tier = None
+        if raw_type:
+            try:
+                tier = boost_tiers.tier_for(raw_type)
+            except ValueError as exc:
+                return Response({'error': str(exc)}, status=400)
+            duration_hours = tier.duration_hours
+        else:
+            raw_duration = request.data.get('duration_hours')
+            if raw_duration is None:
+                return Response(
+                    {'error': 'boost_type or duration_hours is required'}, status=400
+                )
+            duration_hours = int(raw_duration)
+
+        # Validate reel exists and belongs to user. The owner filter is what
+        # stops anybody boosting somebody else's post -- a 404 rather than a
+        # 403, so it does not confirm the post exists to a stranger.
         reel = get_object_or_404(Reel, id=reel_id, user=user)
+
+        # Content taken down by moderation cannot be promoted. Without this
+        # a post could be hidden from every feed and still be sold a boost,
+        # taking coins for placement it can never receive.
+        if getattr(reel, 'is_hidden', False):
+            return Response(
+                {
+                    'error': 'This post is not eligible for boosting.',
+                    'code': 'reel_not_boostable',
+                },
+                status=400,
+            )
 
         # Get or create config
         config = BoostConfig.objects.first()
@@ -174,6 +216,27 @@ def create_boost_campaign(request):
                 status=400,
             )
 
+        # A tier boost is a product, and buying the same one twice for one
+        # post is a double purchase rather than twice the reach: the feeds
+        # read whether a post has *an* active boost, not how many. Refused
+        # with its own code so the client can say "already boosted" instead
+        # of a generic failure.
+        #
+        # This check is the friendly path, not the guarantee. Two requests
+        # arriving together can both pass it; what stops them both creating a
+        # campaign is the partial unique index on BoostCampaign, whose
+        # IntegrityError is caught below and answered the same way.
+        if tier is not None and BoostCampaign.objects.filter(
+            reel=reel, status='active', end_time__gt=timezone.now()
+        ).exists():
+            return Response(
+                {
+                    'error': 'This post already has an active boost.',
+                    'code': 'already_boosted',
+                },
+                status=400,
+            )
+
         # Check if premium targeting is used
         has_premium_targeting = bool(
             target_gender
@@ -183,9 +246,19 @@ def create_boost_campaign(request):
             or target_location
         )
 
-        # Calculate cost
-        cost = config.calculate_cost(duration_hours, has_premium_targeting)
-        expected_impressions = config.get_expected_impressions(cost)
+        # A tier's price is the price. The hourly model still prices the
+        # older form, and a tier deliberately ignores the premium-targeting
+        # surcharge: what was advertised is what is charged.
+        if tier is not None:
+            cost = Decimal(tier.coins)
+            expected_impressions = (
+                tier.guaranteed_impressions
+                if tier.has_guarantee
+                else config.get_expected_impressions(cost)
+            )
+        else:
+            cost = config.calculate_cost(duration_hours, has_premium_targeting)
+            expected_impressions = config.get_expected_impressions(cost)
 
         # Check user has enough coins. This is a soft pre-check for a fast,
         # friendly 400 -- the authoritative guard is the locked balance
@@ -209,73 +282,134 @@ def create_boost_campaign(request):
         hourly_budget = cost / duration_hours
 
         # Use transaction to ensure atomicity
-        with transaction.atomic():
-            # Route the spend through the wallet ledger (UserCoinBalance +
-            # a CoinTransaction row) instead of decrementing profile.coins
-            # directly -- previously this only touched profile.coins, so
-            # the purchase never appeared in wallet/transactions/ and
-            # UserCoinBalance.balance (what wallet_summary actually shows)
-            # silently drifted out of sync with it.
-            try:
-                coin_balance.spend_coins(
-                    cost_int,
-                    transaction_type='boost_campaign',
-                    description=f'Boost campaign for reel #{reel.id}',
-                )
-            except ValueError:
-                return Response(
-                    {
-                        'error': 'Insufficient coins',
-                        'required': cost_int,
-                        'available': coin_balance.balance,
-                    },
-                    status=400,
-                )
-            profile.coins = coin_balance.balance
-            profile.coins_spent_total += cost_int
-            profile.save(update_fields=['coins', 'coins_spent_total'])
-
-            # Create campaign
-            campaign = BoostCampaign.objects.create(
+        try:
+            return _charge_and_create(
                 user=user,
                 reel=reel,
+                tier=tier,
+                config=config,
+                cost=cost,
+                cost_int=cost_int,
+                coin_balance=coin_balance,
+                profile=profile,
                 duration_hours=duration_hours,
-                coins_spent=cost,
-                coins_remaining=cost,
-                end_time=timezone.now() + timedelta(hours=duration_hours),
                 expected_impressions=expected_impressions,
                 hourly_budget=hourly_budget,
-                target_gender=target_gender if target_gender != 'all' else None,
-                target_age_min=int(target_age_min) if target_age_min else None,
-                target_age_max=int(target_age_max) if target_age_max else None,
-                # target_location has no null=True (a CharField, by Django's
-                # own convention -- 'no value' is '', not None); unlike
-                # target_gender/target_age_*, which do allow null, passing
-                # None here violates the NOT NULL constraint and 500s every
-                # boost campaign with no location filter. Present in master
-                # too -- this was never exercised until this codebase's real
-                # DB-backed tests actually ran (see tests/conftest.py's
-                # MIGRATIONS_ARE_REPLAYABLE history).
-                target_location=target_location or '',
+                target_gender=target_gender,
+                target_age_min=target_age_min,
+                target_age_max=target_age_max,
+                target_location=target_location,
             )
-
-            # Update reel
-            reel.is_boosted = True
-            reel.active_boost_campaign = campaign
-            reel.save()
-
-        return Response(
-            {
-                'success': True,
-                'campaign_id': campaign.id,
-                'cost': float(cost),
-                'expected_impressions': expected_impressions,
-                'end_time': campaign.end_time.isoformat(),
-                'remaining_coins': profile.coins,
-            }
-        )
+        except IntegrityError:
+            # Lost the race: another request created this post's boost
+            # between the check above and the insert. The whole block rolled
+            # back, so nothing was charged.
+            return Response(
+                {
+                    'error': 'This post already has an active boost.',
+                    'code': 'already_boosted',
+                },
+                status=400,
+            )
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+
+
+def _charge_and_create(
+    *,
+    user,
+    reel,
+    tier,
+    config,
+    cost,
+    cost_int,
+    coin_balance,
+    profile,
+    duration_hours,
+    expected_impressions,
+    hourly_budget,
+    target_gender,
+    target_age_min,
+    target_age_max,
+    target_location,
+):
+    """Take the coins and record the campaign, together or not at all.
+
+    Split out so the IntegrityError from the one-active-boost constraint can
+    be caught around the whole transaction: caught inside it, the rollback
+    would already have happened and the coins would still read as spent.
+    """
+    with transaction.atomic():
+        # Route the spend through the wallet ledger (UserCoinBalance +
+        # a CoinTransaction row) instead of decrementing profile.coins
+        # directly -- previously this only touched profile.coins, so
+        # the purchase never appeared in wallet/transactions/ and
+        # UserCoinBalance.balance (what wallet_summary actually shows)
+        # silently drifted out of sync with it.
+        try:
+            coin_balance.spend_coins(
+                cost_int,
+                transaction_type='boost_campaign',
+                description=f'Boost campaign for reel #{reel.id}',
+            )
+        except ValueError:
+            return Response(
+                {
+                    'error': 'Insufficient coins',
+                    'required': cost_int,
+                    'available': coin_balance.balance,
+                },
+                status=400,
+            )
+        profile.coins = coin_balance.balance
+        profile.coins_spent_total += cost_int
+        profile.save(update_fields=['coins', 'coins_spent_total'])
+
+        # Create campaign
+        campaign = BoostCampaign.objects.create(
+            user=user,
+            reel=reel,
+            boost_type=tier.key if tier else 'custom',
+            placement=tier.placement if tier else boost_tiers.TRENDING,
+            guaranteed_impressions=tier.guaranteed_impressions if tier else None,
+            duration_hours=duration_hours,
+            coins_spent=cost,
+            coins_remaining=cost,
+            end_time=timezone.now() + timedelta(hours=duration_hours),
+            expected_impressions=expected_impressions,
+            hourly_budget=hourly_budget,
+            target_gender=target_gender if target_gender != 'all' else None,
+            target_age_min=int(target_age_min) if target_age_min else None,
+            target_age_max=int(target_age_max) if target_age_max else None,
+            # target_location has no null=True (a CharField, by Django's
+            # own convention -- 'no value' is '', not None); unlike
+            # target_gender/target_age_*, which do allow null, passing
+            # None here violates the NOT NULL constraint and 500s every
+            # boost campaign with no location filter. Present in master
+            # too -- this was never exercised until this codebase's real
+            # DB-backed tests actually ran (see tests/conftest.py's
+            # MIGRATIONS_ARE_REPLAYABLE history).
+            target_location=target_location or '',
+        )
+
+        # Update reel
+        reel.is_boosted = True
+        reel.active_boost_campaign = campaign
+        reel.save()
+
+    return Response(
+        {
+            'success': True,
+            'campaign_id': campaign.id,
+            'boost_type': campaign.boost_type,
+            'placement': campaign.placement,
+            'guaranteed_impressions': campaign.guaranteed_impressions,
+            'cost': float(cost),
+            'expected_impressions': expected_impressions,
+            'end_time': campaign.end_time.isoformat(),
+            'remaining_coins': profile.coins,
+        }
+    )
 
 
 @api_view(['GET'])
@@ -633,6 +767,19 @@ def record_boost_impression(request):
             else:
                 campaign.coins_remaining = Decimal('0')
                 campaign.status = 'exhausted'
+
+            # A guaranteed campaign is finished when its guarantee is met,
+            # not when its budget runs out -- Viral sells 5,000 impressions,
+            # and stopping short of them while the window is still open
+            # would be selling a number the platform did not deliver.
+            # Counted from BoostImpression rows, which is what makes the
+            # guarantee real rather than a figure printed on a product.
+            if (
+                campaign.guaranteed_impressions
+                and campaign.impressions_served >= campaign.guaranteed_impressions
+            ):
+                campaign.status = 'completed'
+                campaign.coins_remaining = Decimal('0')
 
             campaign.save()
 

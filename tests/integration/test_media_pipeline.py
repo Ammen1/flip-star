@@ -44,6 +44,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 
 from api.models import Category, MediaStatus, Reel
 from api.tasks import media as media_tasks
+from tests.conftest import grant_subscription
 
 pytestmark = [pytest.mark.integration, pytest.mark.django_db]
 
@@ -67,13 +68,17 @@ def media_root(tmp_path, settings):
 
 
 @pytest.fixture
-def author():
-    return User.objects.create_user(username='pipeline_author', password='x')
+def author(db):
+    user = User.objects.create_user(username='pipeline_author', password='x')
+    grant_subscription(user)
+    return user
 
 
 @pytest.fixture
-def stranger():
-    return User.objects.create_user(username='pipeline_stranger', password='x')
+def stranger(db):
+    user = User.objects.create_user(username='pipeline_stranger', password='x')
+    grant_subscription(user)
+    return user
 
 
 @pytest.fixture

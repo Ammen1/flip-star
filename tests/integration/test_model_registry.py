@@ -111,8 +111,18 @@ def test_model_count_is_stable():
     a USSD Push is sent (api/models/payment_verification.py). It is a row
     rather than a cache entry because it has to be bound to one payment and
     spent exactly once.
+
+    116 adds PointTransaction (api/models/wallet.py), the creator-points
+    ledger. Coins have had CoinTransaction since the first release and points
+    had nothing: UserProfile.points was a bare integer that every credit and
+    debit overwrote in place, so a disputed balance could not be
+    reconstructed. It is a separate model rather than a transaction_type on
+    CoinTransaction because points and coins are different currencies with
+    different rules -- points expire after 180 days of inactivity and coins
+    never do -- and merging them would make every coin query filter on a
+    currency it does not have.
     """
-    assert len(list(_api_models())) == 115
+    assert len(list(_api_models())) == 116
 
 
 @pytest.mark.parametrize(

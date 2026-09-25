@@ -8,6 +8,7 @@ data-package gifts.
 """
 
 import logging
+import secrets
 
 import requests
 from django.conf import settings
@@ -27,7 +28,17 @@ class CRMService:
 
     @classmethod
     def get_service_number_a(cls):
-        return getattr(settings, 'CRM_SERVICE_NUMBER_A', '')
+        """The number a gift is provisioned *from*.
+
+        Falls back to the provisioning number the business requirement names
+        for campaign data prizes when no CRM_SERVICE_NUMBER_A is configured.
+        Without the fallback the envelope renders an empty ServiceNumberA and
+        every gift fails identically -- which is how staging ran, since
+        CRM_SERVICE_NUMBER_A has never been set there.
+        """
+        return getattr(settings, 'CRM_SERVICE_NUMBER_A', '') or getattr(
+            settings, 'DATA_PRIZE_PROVISIONING_NUMBER', ''
+        )
 
     @classmethod
     def get_channel_id(cls):
@@ -55,8 +66,20 @@ class CRMService:
 
     @classmethod
     def generate_transaction_id(cls) -> str:
-        """Generate unique transaction ID in format YYYYMMDDHHMMSS"""
-        return timezone.now().strftime('%Y%m%d%H%M%S')
+        """A transaction id that is actually unique.
+
+        This used to be ``strftime('%Y%m%d%H%M%S')`` -- one second of
+        resolution -- while CRMGiftTransaction.transaction_id is a UNIQUE
+        column. Awarding a data prize to the twenty Daily Sprint winners in a
+        loop takes well under a second, so every winner after the first
+        collided on the same id: an IntegrityError on the old award path, and
+        on the new one an update_or_create that quietly overwrote the
+        previous winner's ledger row.
+
+        Microseconds plus a random tail, kept numeric so the shape the CRM
+        has always been sent does not change.
+        """
+        return f'{timezone.now().strftime("%Y%m%d%H%M%S%f")}{secrets.randbelow(10_000):04d}'
 
     @classmethod
     def build_soap_request(
@@ -72,7 +95,7 @@ class CRMService:
         if transaction_id is None:
             transaction_id = cls.generate_transaction_id()
 
-        return f'''<?xml version="1.0" encoding="UTF-8"?>
+        return f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:han="http://soaif.huawei.com/mvas/handle/" xmlns:bas="http://crm.huawei.com/basetype/">
    <soapenv:Header/>
    <soapenv:Body>
@@ -110,7 +133,7 @@ class CRMService:
          </han:PresentServiceGiftBody>
       </han:PresentServiceGiftRequest>
    </soapenv:Body>
-</soapenv:Envelope>'''
+</soapenv:Envelope>"""
 
     @classmethod
     def parse_soap_response(cls, response_text: str) -> tuple[bool, str, dict]:
@@ -149,7 +172,11 @@ class CRMService:
                     transaction_id = trans_id_elem.text
 
             success = code == '0'
-            return success, message, {'ret_code': code, 'ret_msg': message, 'transaction_id': transaction_id}
+            return (
+                success,
+                message,
+                {'ret_code': code, 'ret_msg': message, 'transaction_id': transaction_id},
+            )
 
         except ET.ParseError as e:
             logger.error('Failed to parse CRM SOAP response: %s', e)
@@ -170,13 +197,19 @@ class CRMService:
         """Send a gift package to a user via the CRM PresentServiceGift API."""
         transaction_id = cls.generate_transaction_id()
         soap_request = cls.build_soap_request(
-            service_number_b=service_number_b, offering_id=offering_id, charge_amount=charge_amount,
-            access_user=access_user, access_pwd=access_pwd, transaction_id=transaction_id,
+            service_number_b=service_number_b,
+            offering_id=offering_id,
+            charge_amount=charge_amount,
+            access_user=access_user,
+            access_pwd=access_pwd,
+            transaction_id=transaction_id,
         )
 
         logger.info(
             'Sending CRM gift request: transaction_id=%s, service_number_b=%s, offering_id=%s',
-            transaction_id, service_number_b, offering_id,
+            transaction_id,
+            service_number_b,
+            offering_id,
         )
 
         try:
@@ -184,17 +217,25 @@ class CRMService:
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'http://soaif.huawei.com/mvas/handle/PresentServiceGift',
             }
-            response = requests.post(cls.get_endpoint(), data=soap_request, headers=headers, timeout=30)
+            response = requests.post(
+                cls.get_endpoint(), data=soap_request, headers=headers, timeout=30
+            )
 
             if response.status_code != 200:
-                logger.error('CRM request failed with status %s: %s', response.status_code, response.text[:500])
+                logger.error(
+                    'CRM request failed with status %s: %s',
+                    response.status_code,
+                    response.text[:500],
+                )
                 return False, f'HTTP {response.status_code}: {response.text[:200]}', {}
 
             success, message, response_data = cls.parse_soap_response(response.text)
             if success:
                 logger.info('CRM gift successful: transaction_id=%s', transaction_id)
             else:
-                logger.error('CRM gift failed: transaction_id=%s, message=%s', transaction_id, message)
+                logger.error(
+                    'CRM gift failed: transaction_id=%s, message=%s', transaction_id, message
+                )
 
             response_data['transaction_id'] = transaction_id
             response_data['service_number_b'] = service_number_b

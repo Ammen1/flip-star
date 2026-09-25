@@ -18,7 +18,13 @@ from api.models.campaign_extended import (
 )
 from api.serializers.core import reel_media_payload
 from api.services.campaign_charges import InsufficientCoins, charge_engagement
+from api.services.campaign_eligibility import (
+    campaign_eligibility,
+    can_enter_today,
+    daily_entry_refusal,
+)
 from api.services.coin_purchase import insufficient_coins_payload
+from api.services.subscription_access import subscriber_action_refusal
 from common.security import encrypted_endpoint
 
 logger = logging.getLogger(__name__)
@@ -203,6 +209,19 @@ def get_campaign_detail_extended(request, campaign_id):
             }
             if user_stats
             else None,
+            # Computed here from the subscriber's own post records. The client
+            # displays it and never derives it: eligibility a client decides
+            # is eligibility anybody can grant themselves. Present even with
+            # no stats row yet, so somebody who has not posted still sees what
+            # the tier asks of them.
+            'eligibility': (
+                campaign_eligibility(request.user, campaign).as_dict()
+                if request.user.is_authenticated
+                else None
+            ),
+            'can_post_today': (
+                can_enter_today(request.user, campaign) if request.user.is_authenticated else None
+            ),
             'user_posts': user_posts_data,
         }
     )
@@ -215,6 +234,14 @@ def get_campaign_detail_extended(request, campaign_id):
 @permission_classes([IsAuthenticated])
 def create_campaign_post(request):
     """Create a post for a campaign"""
+    # Entering a campaign is posting, so the same rule applies: a
+    # non-subscriber may browse the campaign and view its entries, not add
+    # one. This endpoint charged coins but asked for no subscription, so it
+    # was a way round the gate on /posts/create/.
+    refusal = subscriber_action_refusal(request.user, 'campaign')
+    if refusal is not None:
+        return Response(refusal, status=status.HTTP_403_FORBIDDEN)
+
     campaign_id = request.data.get('campaign_id')
     theme_id = request.data.get('theme_id')
 
@@ -291,6 +318,16 @@ def create_campaign_post(request):
         already = existing_post(request.user, client_upload_id)
         if already is not None:
             return entry_response(already, status.HTTP_200_OK)
+
+        # One post or video a day counts towards the competition. Checked
+        # after the retry lookup above -- a reconnecting client resending
+        # today's entry must get that entry back rather than a refusal -- and
+        # before the upload is stored or charged, so a refused second entry
+        # costs the subscriber nothing.
+        refusal = daily_entry_refusal(request.user, campaign)
+        if refusal is not None:
+            return Response(refusal, status=status.HTTP_400_BAD_REQUEST)
+
         intake = validate_upload(upload)
     except MediaRejected as exc:
         return exc.response()
