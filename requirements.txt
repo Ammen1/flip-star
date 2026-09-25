@@ -6,52 +6,52 @@
 # 4.2.26 is a patch release on the same 4.2 LTS line, so it carries no
 # breaking changes by Django policy. Verified against the full test suite.
 Django==4.2.26
-djangorestframework==3.14.0
-django-cors-headers==4.3.1
+djangorestframework==3.18.1
+django-cors-headers==4.9.0
 python-decouple==3.8
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.13
 dj-database-url==2.1.0
 Pillow==10.2.0
-daphne==4.0.0
-whitenoise==6.6.0
+daphne==4.2.3
+whitenoise==6.12.0
 cryptography==42.0.5
-requests==2.31.0
+requests==2.34.2
 defusedxml==0.7.1
 
 # Django Channels for real-time WebSocket
-channels==4.0.0
-channels_redis==4.2.0
+channels==4.3.2
+channels_redis==4.3.0
 
 # Celery for async task processing
-celery==5.3.4
-django-celery-beat==2.5.0
+celery==5.6.3
+django-celery-beat==2.9.0
 redis==5.0.1
 
 # S3 storage
-django-storages==1.14.2
-boto3==1.34.49
+django-storages==1.14.6
+boto3==1.43.99
 
 # Media processing
-blurhash==1.1.4
+blurhash==1.1.5
 ffmpeg-python==0.2.0
 
 # Web Push notifications (VAPID)
-pywebpush==2.0.0
+pywebpush==2.5.0
 
 # Telebirr Direct Debit SOAP client
-zeep==4.2.1
+zeep==4.3.3
 
 # HashiCorp Vault client for secret resolution.
 # Optional at runtime: with VAULT_ADDR unset, settings fall back to the
 # environment and .env exactly as before. See docs/secrets.md.
-hvac==2.3.0
+hvac==2.4.0
 
 # X25519 + XSalsa20-Poly1305 authenticated encryption (nacl.box), used for
 # end-to-end encryption of sensitive payloads. See common/security/.
-PyNaCl==1.5.0
+PyNaCl==1.6.2
 
 # SMPP client for the TIMWE SMS gateway. TIMWE replaced OneVAS as the SMS
 # transport; SMPP is a persistent TCP protocol, so delivery runs in a
 # dedicated single-owner Celery worker rather than in a request. See
 # api/integrations/smpp/ and docs/sms-smpp.md.
-smpplib==2.2.3
+smpplib==2.2.4
