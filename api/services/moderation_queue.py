@@ -75,9 +75,7 @@ def queue_report(*, now=None, campaign=None):
     a campaign nobody is moderating.
     """
     now = now or timezone.now()
-    pending = list(
-        pending_entries(campaign=campaign).select_related('campaign', 'user')
-    )
+    pending = list(pending_entries(campaign=campaign).select_related('campaign', 'user'))
 
     stale = [e for e in pending if age_hours(e, now=now) >= STALE_AFTER_HOURS]
     critical = [e for e in pending if age_hours(e, now=now) >= CRITICAL_AFTER_HOURS]
@@ -111,9 +109,9 @@ def per_campaign_report(*, now=None):
     reports = {}
     for campaign_id in campaign_ids:
         entries = list(
-            PostScore.objects.filter(
-                moderation_status='pending', campaign_id=campaign_id
-            ).order_by('created_at')
+            PostScore.objects.filter(moderation_status='pending', campaign_id=campaign_id).order_by(
+                'created_at'
+            )
         )
         if not entries:
             continue

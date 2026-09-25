@@ -4067,8 +4067,8 @@ def get_trending_reels(request):
     import logging
 
     from api.models.boost import BoostCampaign
-    from api.services import boost_tiers
     from api.serializers.core import build_feed_context
+    from api.services import boost_tiers
     from api.services.feed_filters import (
         InvalidCategory,
         bounded_int,

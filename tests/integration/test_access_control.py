@@ -188,6 +188,7 @@ def encrypted_post(view, user, path, body, keys):
     force_authenticate(request, user=user)
     return view(request)
 
+
 def refused_for_subscription(response):
     """A refusal the client can act on: 403 and the agreed code."""
     if response.status_code != 403:
@@ -571,13 +572,9 @@ def test_a_non_subscriber_cannot_share_by_picking_recipients(nobody, somebody_el
     from api.views.core import ReelViewSet
 
     other = User.objects.create_user(username='recipient', password='x')
-    request = factory.post(
-        f'/reels/{somebody_elses_post.pk}/share_with/', {'user_ids': [other.pk]}
-    )
+    request = factory.post(f'/reels/{somebody_elses_post.pk}/share_with/', {'user_ids': [other.pk]})
     force_authenticate(request, user=nobody)
-    response = ReelViewSet.as_view({'post': 'share_with'})(
-        request, pk=str(somebody_elses_post.pk)
-    )
+    response = ReelViewSet.as_view({'post': 'share_with'})(request, pk=str(somebody_elses_post.pk))
 
     assert refused_for_subscription(response), response.data
 
@@ -587,9 +584,7 @@ def test_a_refused_direct_share_sends_no_messages(nobody, somebody_elses_post):
     from api.views.core import ReelViewSet
 
     other = User.objects.create_user(username='recipient2', password='x')
-    request = factory.post(
-        f'/reels/{somebody_elses_post.pk}/share_with/', {'user_ids': [other.pk]}
-    )
+    request = factory.post(f'/reels/{somebody_elses_post.pk}/share_with/', {'user_ids': [other.pk]})
     force_authenticate(request, user=nobody)
     ReelViewSet.as_view({'post': 'share_with'})(request, pk=str(somebody_elses_post.pk))
 
@@ -603,8 +598,11 @@ def test_a_non_subscriber_cannot_send_a_gift(nobody, encrypted_client_keys):
 
     creator = User.objects.create_user(username='a_creator', password='x')
     response = encrypted_post(
-        gift_creator, nobody, '/gift-creator/',
-        {'recipient_id': creator.pk, 'coins': 10}, encrypted_client_keys,
+        gift_creator,
+        nobody,
+        '/gift-creator/',
+        {'recipient_id': creator.pk, 'coins': 10},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -615,8 +613,11 @@ def test_a_non_subscriber_cannot_send_a_named_gift(nobody, encrypted_client_keys
 
     recipient = User.objects.create_user(username='gift_target', password='x')
     response = encrypted_post(
-        send_gift, nobody, '/send-gift/',
-        {'recipient_username': recipient.username, 'amount': 10}, encrypted_client_keys,
+        send_gift,
+        nobody,
+        '/send-gift/',
+        {'recipient_username': recipient.username, 'amount': 10},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -633,8 +634,11 @@ def test_a_refused_gift_moves_no_coins(nobody, encrypted_client_keys):
     before = balance.balance
 
     encrypted_post(
-        gift_creator, nobody, '/gift-creator/',
-        {'recipient_id': creator.pk, 'coins': 100}, encrypted_client_keys,
+        gift_creator,
+        nobody,
+        '/gift-creator/',
+        {'recipient_id': creator.pk, 'coins': 100},
+        encrypted_client_keys,
     )
 
     balance.refresh_from_db()
@@ -650,8 +654,11 @@ def test_a_non_subscriber_cannot_comment_through_the_comment_viewset(
     from api.views.extended import CommentViewSet
 
     response = encrypted_post(
-        CommentViewSet.as_view({'post': 'create'}), nobody, '/comments/',
-        {'reel': somebody_elses_post.pk, 'text': 'hi'}, encrypted_client_keys,
+        CommentViewSet.as_view({'post': 'create'}),
+        nobody,
+        '/comments/',
+        {'reel': somebody_elses_post.pk, 'text': 'hi'},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -668,8 +675,11 @@ def test_a_non_subscriber_cannot_reply_to_a_comment(
         user=somebody_elses_post.user, reel=somebody_elses_post, text='first'
     )
     response = encrypted_post(
-        CommentReplyViewSet.as_view({'post': 'create'}), nobody, '/comment-replies/',
-        {'comment': comment.pk, 'text': 'me too'}, encrypted_client_keys,
+        CommentReplyViewSet.as_view({'post': 'create'}),
+        nobody,
+        '/comment-replies/',
+        {'comment': comment.pk, 'text': 'me too'},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -691,8 +701,11 @@ def test_a_subscriber_gets_past_the_comment_viewset_gate(
     from api.views.extended import CommentViewSet
 
     response = encrypted_post(
-        CommentViewSet.as_view({'post': 'create'}), subscriber, '/comments/',
-        {'reel': somebody_elses_post.pk, 'text': 'hello'}, encrypted_client_keys,
+        CommentViewSet.as_view({'post': 'create'}),
+        subscriber,
+        '/comments/',
+        {'reel': somebody_elses_post.pk, 'text': 'hello'},
+        encrypted_client_keys,
     )
 
     assert not refused_for_subscription(response), response.data
@@ -798,8 +811,11 @@ def test_a_non_subscriber_cannot_vote_in_the_grand_finale(nobody, encrypted_clie
     from api.views.contest import vote_grand_finale
 
     response = encrypted_post(
-        vote_grand_finale, nobody, '/vote-grand-finale/',
-        {'entry_id': 1, 'coins': 10}, encrypted_client_keys,
+        vote_grand_finale,
+        nobody,
+        '/vote-grand-finale/',
+        {'entry_id': 1, 'coins': 10},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -811,21 +827,25 @@ def test_a_non_subscriber_cannot_gift_through_gamification(nobody, encrypted_cli
 
     recipient = User.objects.create_user(username='gam_target', password='x')
     response = encrypted_post(
-        send_coin_gift, nobody, '/send-coin-gift/',
-        {'recipient_username': recipient.username, 'amount': 10}, encrypted_client_keys,
+        send_coin_gift,
+        nobody,
+        '/send-coin-gift/',
+        {'recipient_username': recipient.username, 'amount': 10},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
 
 
-def test_a_non_subscriber_cannot_boost_a_post(
-    nobody, somebody_elses_post, encrypted_client_keys
-):
+def test_a_non_subscriber_cannot_boost_a_post(nobody, somebody_elses_post, encrypted_client_keys):
     from api.views.contest import boost_post
 
     response = encrypted_post(
-        boost_post, nobody, '/boost-post/',
-        {'reel_id': somebody_elses_post.pk}, encrypted_client_keys,
+        boost_post,
+        nobody,
+        '/boost-post/',
+        {'reel_id': somebody_elses_post.pk},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -836,7 +856,11 @@ def test_a_non_subscriber_cannot_buy_an_extra_entry(nobody, encrypted_client_key
     from api.views.contest import purchase_extra_entry
 
     response = encrypted_post(
-        purchase_extra_entry, nobody, '/purchase-extra-entry/', {}, encrypted_client_keys,
+        purchase_extra_entry,
+        nobody,
+        '/purchase-extra-entry/',
+        {},
+        encrypted_client_keys,
     )
 
     assert refused_for_subscription(response), response.data
@@ -855,12 +879,18 @@ def test_none_of_these_refusals_spend_coins(nobody, somebody_elses_post, encrypt
 
     recipient = User.objects.create_user(username='untouched', password='x')
     encrypted_post(
-        vote_grand_finale, nobody, '/vote-grand-finale/',
-        {'entry_id': 1, 'coins': 10}, encrypted_client_keys,
+        vote_grand_finale,
+        nobody,
+        '/vote-grand-finale/',
+        {'entry_id': 1, 'coins': 10},
+        encrypted_client_keys,
     )
     encrypted_post(
-        send_coin_gift, nobody, '/send-coin-gift/',
-        {'recipient_username': recipient.username, 'amount': 10}, encrypted_client_keys,
+        send_coin_gift,
+        nobody,
+        '/send-coin-gift/',
+        {'recipient_username': recipient.username, 'amount': 10},
+        encrypted_client_keys,
     )
     for view, body in (
         (boost_post, {'reel_id': somebody_elses_post.pk}),

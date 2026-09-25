@@ -227,9 +227,7 @@ def deliver_b2c(body):
 
     from api.views.direct_debit import telebirr_b2c_webhook
 
-    request = APIRequestFactory().post(
-        '/webhooks/telebirrB2C/', data=body, content_type='text/xml'
-    )
+    request = APIRequestFactory().post('/webhooks/telebirrB2C/', data=body, content_type='text/xml')
     return telebirr_b2c_webhook(request)
 
 
@@ -374,8 +372,11 @@ def test_a_crm_http_error_is_reported_with_its_status():
 
     with patch('requests.post', return_value=Broken()):
         success, message, _ = CRMService.send_gift(
-            service_number_b='251911000111', offering_id='OFF-1', charge_amount=0,
-            access_user='u', access_pwd='p',
+            service_number_b='251911000111',
+            offering_id='OFF-1',
+            charge_amount=0,
+            access_user='u',
+            access_pwd='p',
         )
 
     assert success is False
@@ -393,8 +394,11 @@ def test_a_crm_response_that_is_not_xml_is_a_failure():
 
     with patch('requests.post', return_value=Garbage()):
         success, _message, _ = CRMService.send_gift(
-            service_number_b='251911000111', offering_id='OFF-1', charge_amount=0,
-            access_user='u', access_pwd='p',
+            service_number_b='251911000111',
+            offering_id='OFF-1',
+            charge_amount=0,
+            access_user='u',
+            access_pwd='p',
         )
 
     assert success is False
@@ -406,8 +410,11 @@ def test_a_crm_connection_error_is_a_failure():
 
     with patch('requests.post', side_effect=requests.exceptions.ConnectionError('refused')):
         success, message, _ = CRMService.send_gift(
-            service_number_b='251911000111', offering_id='OFF-1', charge_amount=0,
-            access_user='u', access_pwd='p',
+            service_number_b='251911000111',
+            offering_id='OFF-1',
+            charge_amount=0,
+            access_user='u',
+            access_pwd='p',
         )
 
     assert success is False
@@ -421,8 +428,11 @@ def test_a_crm_failure_never_returns_the_credentials_it_was_given():
 
     with patch('requests.post', side_effect=requests.exceptions.Timeout()):
         _success, message, data = CRMService.send_gift(
-            service_number_b='251911000111', offering_id='OFF-1', charge_amount=0,
-            access_user='secret_user', access_pwd='secret_password',
+            service_number_b='251911000111',
+            offering_id='OFF-1',
+            charge_amount=0,
+            access_user='secret_user',
+            access_pwd='secret_password',
         )
 
     assert 'secret_password' not in message
@@ -446,8 +456,11 @@ def test_a_provisioning_failure_leaves_the_prize_retryable(db):
     winner.profile.save(update_fields=['phone_number'])
 
     campaign = Campaign.objects.create(
-        title='Sprint', campaign_type='daily', status='active',
-        start_date=timezone.now() - timedelta(days=1), entry_deadline=timezone.now(),
+        title='Sprint',
+        campaign_type='daily',
+        status='active',
+        start_date=timezone.now() - timedelta(days=1),
+        entry_deadline=timezone.now(),
     )
     prize, _ = prize_delivery.award(campaign, winner, 'daily')
 
@@ -477,14 +490,20 @@ def test_a_payout_initiation_failure_leaves_the_prize_retryable(db):
     winner.profile.save(update_fields=['phone_number'])
 
     campaign = Campaign.objects.create(
-        title='Battle', campaign_type='weekly', status='active',
-        start_date=timezone.now() - timedelta(days=7), entry_deadline=timezone.now(),
+        title='Battle',
+        campaign_type='weekly',
+        status='active',
+        start_date=timezone.now() - timedelta(days=7),
+        entry_deadline=timezone.now(),
     )
     prize, _ = prize_delivery.award(campaign, winner, 'weekly')
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        'api.integrations.telebirr.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment',
-        side_effect=requests.exceptions.ConnectionError('provider down'),
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            'api.integrations.telebirr.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment',
+            side_effect=requests.exceptions.ConnectionError('provider down'),
+        ),
     ):
         ok, _message = prize_delivery.deliver(prize)
 

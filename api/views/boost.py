@@ -164,9 +164,7 @@ def create_boost_campaign(request):
         else:
             raw_duration = request.data.get('duration_hours')
             if raw_duration is None:
-                return Response(
-                    {'error': 'boost_type or duration_hours is required'}, status=400
-                )
+                return Response({'error': 'boost_type or duration_hours is required'}, status=400)
             duration_hours = int(raw_duration)
 
         # Validate reel exists and belongs to user. The owner filter is what
@@ -226,9 +224,12 @@ def create_boost_campaign(request):
         # arriving together can both pass it; what stops them both creating a
         # campaign is the partial unique index on BoostCampaign, whose
         # IntegrityError is caught below and answered the same way.
-        if tier is not None and BoostCampaign.objects.filter(
-            reel=reel, status='active', end_time__gt=timezone.now()
-        ).exists():
+        if (
+            tier is not None
+            and BoostCampaign.objects.filter(
+                reel=reel, status='active', end_time__gt=timezone.now()
+            ).exists()
+        ):
             return Response(
                 {
                     'error': 'This post already has an active boost.',

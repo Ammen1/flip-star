@@ -7,6 +7,7 @@ WinnerSelection/SelectedWinner models (api/models/campaign_extended.py) and
 the beat schedule entry point, but none of the tasks that actually populate
 them, so leaderboards and winner selections were never generated.
 """
+
 from datetime import timedelta
 
 from celery import shared_task
@@ -28,7 +29,9 @@ def _period_bounds(period_type, now):
         period_start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(days=1)
     elif period_type == 'weekly':
-        period_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        period_start = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         period_end = period_start + timedelta(days=7)
     else:  # monthly
         period_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -47,20 +50,30 @@ def _generate_period_leaderboard(period_type, campaign_types, rank_field):
 
     count = 0
     for campaign in campaigns:
-        if Leaderboard.objects.filter(campaign=campaign, period_type=period_type, period_start=period_start).exists():
+        if Leaderboard.objects.filter(
+            campaign=campaign, period_type=period_type, period_start=period_start
+        ).exists():
             continue
 
-        Leaderboard.objects.filter(campaign=campaign, period_type=period_type).update(is_current=False)
+        Leaderboard.objects.filter(campaign=campaign, period_type=period_type).update(
+            is_current=False
+        )
 
         leaderboard = Leaderboard.objects.create(
-            campaign=campaign, period_type=period_type, period_start=period_start, period_end=period_end,
+            campaign=campaign,
+            period_type=period_type,
+            period_start=period_start,
+            period_end=period_end,
             is_current=True,
         )
 
         stats = UserCampaignStats.objects.filter(campaign=campaign).order_by('-total_score')
         for rank, stat in enumerate(stats, start=1):
             LeaderboardEntry.objects.create(
-                leaderboard=leaderboard, user=stat.user, rank=rank, score=stat.total_score,
+                leaderboard=leaderboard,
+                user=stat.user,
+                rank=rank,
+                score=stat.total_score,
                 posts_count=stat.approved_posts,
             )
             setattr(stat, rank_field, rank)
@@ -76,7 +89,9 @@ def generate_daily_leaderboards():
     """Generate daily leaderboards for all active campaigns."""
     try:
         period_start, _period_end, count = _generate_period_leaderboard(
-            'daily', ['daily', 'weekly', 'monthly', 'grand'], 'daily_rank',
+            'daily',
+            ['daily', 'weekly', 'monthly', 'grand'],
+            'daily_rank',
         )
         return f'Generated {count} daily leaderboards for {period_start.date()}'
     except Exception as e:
@@ -88,7 +103,9 @@ def generate_weekly_leaderboards():
     """Generate weekly leaderboards for all active campaigns."""
     try:
         period_start, _period_end, count = _generate_period_leaderboard(
-            'weekly', ['weekly', 'monthly', 'grand'], 'weekly_rank',
+            'weekly',
+            ['weekly', 'monthly', 'grand'],
+            'weekly_rank',
         )
         return f'Generated {count} weekly leaderboards for week of {period_start.date()}'
     except Exception as e:
@@ -100,7 +117,9 @@ def generate_monthly_leaderboards():
     """Generate monthly leaderboards for all active campaigns."""
     try:
         period_start, _period_end, count = _generate_period_leaderboard(
-            'monthly', ['monthly', 'grand'], 'monthly_rank',
+            'monthly',
+            ['monthly', 'grand'],
+            'monthly_rank',
         )
         return f"Generated {count} monthly leaderboards for {period_start.strftime('%B %Y')}"
     except Exception as e:
@@ -155,7 +174,8 @@ def auto_select_campaign_winners():
         now = timezone.now()
 
         ended_campaigns = Campaign.objects.filter(
-            status='active', entry_deadline__lt=now,
+            status='active',
+            entry_deadline__lt=now,
         ).exclude(winner_selections__isnull=False)
 
         count = 0
@@ -165,7 +185,11 @@ def auto_select_campaign_winners():
             if not leaderboard:
                 continue
 
-            selection_type = campaign.campaign_type if campaign.campaign_type in ('daily', 'weekly', 'monthly') else 'grand'
+            selection_type = (
+                campaign.campaign_type
+                if campaign.campaign_type in ('daily', 'weekly', 'monthly')
+                else 'grand'
+            )
 
             # One runner completes a campaign. Two overlapping beats -- or a
             # retried task -- would otherwise both pass the filter above and
@@ -179,13 +203,18 @@ def auto_select_campaign_winners():
             winners = CampaignScoringEngine(campaign).select_winners(entries)
 
             winner_selection = WinnerSelection.objects.create(
-                campaign=campaign, selection_type=selection_type, leaderboard=leaderboard,
-                is_finalized=True, finalized_at=now,
+                campaign=campaign,
+                selection_type=selection_type,
+                leaderboard=leaderboard,
+                is_finalized=True,
+                finalized_at=now,
             )
 
             for winner in winners:
                 SelectedWinner.objects.create(
-                    selection=winner_selection, user=winner['user'], rank=winner['rank'],
+                    selection=winner_selection,
+                    user=winner['user'],
+                    rank=winner['rank'],
                     final_score=winner.get('score', winner.get('final_score', 0)),
                     selection_method=winner.get('method', 'top_scorer'),
                 )

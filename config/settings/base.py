@@ -208,9 +208,7 @@ TRUSTED_PROXY_IPS = [
 # silently drop real payout confirmations. Set it once Telebirr's egress
 # addresses are confirmed, and allow-list the same range at the ingress.
 TELEBIRR_WEBHOOK_ALLOWED_IPS = [
-    ip.strip()
-    for ip in config('TELEBIRR_WEBHOOK_ALLOWED_IPS', default='').split(',')
-    if ip.strip()
+    ip.strip() for ip in config('TELEBIRR_WEBHOOK_ALLOWED_IPS', default='').split(',') if ip.strip()
 ]
 
 

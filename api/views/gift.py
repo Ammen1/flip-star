@@ -467,9 +467,7 @@ class GiftTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 # sender's balance row locked first, so two gifts arriving
                 # together cannot both read the same total and both pass.
                 contribution_limits.lock_sender(request.user)
-                over_limit = contribution_limits.refusal(
-                    request.user, recipient, total_cost
-                )
+                over_limit = contribution_limits.refusal(request.user, recipient, total_cost)
                 if over_limit is not None:
                     return Response(over_limit, status=status.HTTP_400_BAD_REQUEST)
 
@@ -501,9 +499,7 @@ class GiftTransactionViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
                 # see UserProfile._apply_delta's docstring: two gifts landing on the
                 # same recipient at once must not lose one of the credits.
                 recipient_profile = recipient.profile
-                recipient_profile.add_points(
-                    points_received, reason='gift_received'
-                )
+                recipient_profile.add_points(points_received, reason='gift_received')
                 UserProfile.objects.filter(pk=recipient_profile.pk).update(
                     gifts_received_total=F('gifts_received_total') + 1
                 )

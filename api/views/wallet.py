@@ -45,6 +45,7 @@ from api.services.telebirr_registration import (
     NOT_REGISTERED_CODE,
     classify_initiation_failure,
 )
+from api.services.webhook_allowlist import refuse as webhook_refuse
 from api.services.withdrawal_sms import (
     notify_failed as notify_withdrawal_failed,
 )
@@ -53,7 +54,6 @@ from api.services.withdrawal_sms import (
 )
 from api.views.core import _normalize_ethiopian_phone
 from common.security import encrypted_endpoint
-from api.services.webhook_allowlist import refuse as webhook_refuse
 
 logger = logging.getLogger(__name__)
 

@@ -67,7 +67,9 @@ def preferences_for(user):
 
         return NotificationPreference.objects.filter(user=user).first()
     except Exception:  # pragma: no cover - defensive, DB unavailable
-        logger.exception('Could not read notification preferences for user=%s', getattr(user, 'id', None))
+        logger.exception(
+            'Could not read notification preferences for user=%s', getattr(user, 'id', None)
+        )
         return None
 
 

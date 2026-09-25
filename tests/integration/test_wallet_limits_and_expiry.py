@@ -282,9 +282,7 @@ def function_source(module_name, func_name):
         end = len(rest)
     body = rest[:end]
     # Comments mention these names too; only the calls are the point.
-    return chr(10).join(
-        line for line in body.splitlines() if not line.lstrip().startswith('#')
-    )
+    return chr(10).join(line for line in body.splitlines() if not line.lstrip().startswith('#'))
 
 
 @pytest.mark.parametrize(
@@ -473,9 +471,15 @@ def test_a_recent_withdrawal_keeps_the_points(holder):
 
     make_stale(holder, days=200)
     WithdrawalRequest.objects.create(
-        user=holder, coin_amount=0, point_amount=100,
-        gross_birr=10, fee_birr=2, net_birr=8, conversion_rate=10,
-        payout_account='0911000111', status='pending',
+        user=holder,
+        coin_amount=0,
+        point_amount=100,
+        gross_birr=10,
+        fee_birr=2,
+        net_birr=8,
+        conversion_rate=10,
+        payout_account='0911000111',
+        status='pending',
     )
 
     assert not points_expiry.is_inactive(holder)

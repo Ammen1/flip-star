@@ -29,6 +29,7 @@ from api.models.direct_debit import (
     DirectDebitTransaction,
 )
 from api.models.subscription import SubscriptionPayment, SubscriptionPlan, SubscriptionTier
+from api.services.webhook_allowlist import refuse as webhook_refuse
 from api.services.withdrawal_sms import (
     notify_failed as notify_withdrawal_failed,
 )
@@ -37,7 +38,6 @@ from api.services.withdrawal_sms import (
 )
 from common.permissions.roles import HasAdminPermission
 from common.security import encrypted_endpoint
-from api.services.webhook_allowlist import refuse as webhook_refuse
 
 logger = logging.getLogger(__name__)
 

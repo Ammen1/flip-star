@@ -37,8 +37,6 @@ from decimal import Decimal
 
 import fakeredis
 import pytest
-
-from tests.conftest import grant_subscription
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
@@ -49,6 +47,7 @@ from api.models.contest import UserCoinBalance
 from api.services import boost_tiers
 from common.security.e2e_encryption import decrypt_payload, encrypt_payload, generate_keypair
 from infrastructure.keys import redis_store
+from tests.conftest import grant_subscription
 
 pytestmark = pytest.mark.django_db
 
@@ -102,7 +101,9 @@ def sealed_post(view, user, path, body, server_public, client_keys):
         body, receiver_public_key_b64=server_public, sender_private_key_b64=client_private
     ).to_dict()
     request = factory.post(
-        path, data=json.dumps(envelope), content_type='application/json',
+        path,
+        data=json.dumps(envelope),
+        content_type='application/json',
         HTTP_X_CLIENT_PUBLIC_KEY=client_public,
     )
     force_authenticate(request, user=user)
@@ -142,8 +143,12 @@ def post(owner):
 def wallet(owner):
     balance, _ = UserCoinBalance.objects.get_or_create(user=owner)
     UserCoinBalance.objects.filter(pk=balance.pk).update(
-        balance=0, earned_balance=0, bonus_balance=0,
-        telebirr_purchased_balance=0, airtime_purchased_balance=0, purchased_balance=0,
+        balance=0,
+        earned_balance=0,
+        bonus_balance=0,
+        telebirr_purchased_balance=0,
+        airtime_purchased_balance=0,
+        purchased_balance=0,
     )
     balance.refresh_from_db()
     return balance
@@ -154,7 +159,9 @@ def buy(user, reel_id, boost_type, server_public, client_keys, **extra):
     from api.views.boost import create_boost_campaign
 
     body = {'reel_id': reel_id, 'boost_type': boost_type, **extra}
-    return sealed_post(create_boost_campaign, user, '/boost/create/', body, server_public, client_keys)
+    return sealed_post(
+        create_boost_campaign, user, '/boost/create/', body, server_public, client_keys
+    )
 
 
 # ── the price list ──────────────────────────────────────────────────────────
@@ -399,9 +406,7 @@ def test_somebody_else_cannot_boost_your_post(post, config, db, server_key, clie
     assert not BoostCampaign.objects.filter(reel=post).exists()
 
 
-def test_a_moderated_post_cannot_be_boosted(
-    owner, post, wallet, config, server_key, client_key
-):
+def test_a_moderated_post_cannot_be_boosted(owner, post, wallet, config, server_key, client_key):
     """Taking coins for placement a hidden post can never receive would be
     selling nothing."""
     wallet.add_earned(500, transaction_type='reward')
@@ -512,7 +517,9 @@ def test_the_sweep_is_idempotent(owner, post, wallet, config, server_key, client
 # ── the viral guarantee ─────────────────────────────────────────────────────
 
 
-def test_impressions_are_counted_from_real_views(owner, post, wallet, config, server_key, client_key):
+def test_impressions_are_counted_from_real_views(
+    owner, post, wallet, config, server_key, client_key
+):
     """The guarantee is only honest because BoostImpression rows exist."""
     wallet.add_earned(2000, transaction_type='reward')
     buy(owner, post.pk, 'viral', server_key, client_key)
@@ -540,8 +547,12 @@ def test_a_viral_campaign_completes_when_its_guarantee_is_met(
 
     viewer = User.objects.create_user(username='final_viewer', password='x')
     sealed_post(
-        record_boost_impression, viewer, '/boost/impression/',
-        {'reel_id': post.pk}, server_key, client_key,
+        record_boost_impression,
+        viewer,
+        '/boost/impression/',
+        {'reel_id': post.pk},
+        server_key,
+        client_key,
     )
 
     campaign = BoostCampaign.objects.get(reel=post)
@@ -603,8 +614,12 @@ def test_an_hourly_boost_is_unchanged(owner, post, wallet, config, server_key, c
 
     wallet.add_earned(5000, transaction_type='reward')
     response, data = sealed_post(
-        create_boost_campaign, owner, '/boost/create/',
-        {'reel_id': post.pk, 'duration_hours': 6}, server_key, client_key,
+        create_boost_campaign,
+        owner,
+        '/boost/create/',
+        {'reel_id': post.pk, 'duration_hours': 6},
+        server_key,
+        client_key,
     )
 
     assert response.status_code == 200, data
@@ -621,8 +636,12 @@ def test_a_request_with_neither_a_tier_nor_a_duration_is_refused(
 
     wallet.add_earned(500, transaction_type='reward')
     response, _data = sealed_post(
-        create_boost_campaign, owner, '/boost/create/',
-        {'reel_id': post.pk}, server_key, client_key,
+        create_boost_campaign,
+        owner,
+        '/boost/create/',
+        {'reel_id': post.pk},
+        server_key,
+        client_key,
     )
 
     assert response.status_code == 400
@@ -667,36 +686,47 @@ def test_the_constraint_and_not_the_check_is_what_guarantees_it(
 def test_the_constraint_only_covers_live_tier_boosts(owner, post, config, db):
     """An ended boost does not block the next one, and the older hourly form
     keeps the several-at-once behaviour it has always had."""
-    common = dict(
-        user=owner,
-        reel=post,
-        duration_hours=1,
-        coins_spent=Decimal('10'),
-        coins_remaining=Decimal('10'),
-        expected_impressions=10,
-        hourly_budget=Decimal('10'),
-        target_location='',
-    )
+    common = {
+        'user': owner,
+        'reel': post,
+        'duration_hours': 1,
+        'coins_spent': Decimal('10'),
+        'coins_remaining': Decimal('10'),
+        'expected_impressions': 10,
+        'hourly_budget': Decimal('10'),
+        'target_location': '',
+    }
 
     BoostCampaign.objects.create(
-        boost_type='standard', placement=boost_tiers.TRENDING, status='completed',
-        end_time=timezone.now() - timedelta(hours=1), **common,
+        boost_type='standard',
+        placement=boost_tiers.TRENDING,
+        status='completed',
+        end_time=timezone.now() - timedelta(hours=1),
+        **common,
     )
     BoostCampaign.objects.create(
-        boost_type='standard', placement=boost_tiers.TRENDING, status='active',
-        end_time=timezone.now() + timedelta(hours=1), **common,
+        boost_type='standard',
+        placement=boost_tiers.TRENDING,
+        status='active',
+        end_time=timezone.now() + timedelta(hours=1),
+        **common,
     )
     # Two custom boosts alongside it, which has always been allowed.
     for _ in range(2):
         BoostCampaign.objects.create(
-            boost_type='custom', placement=boost_tiers.TRENDING, status='active',
-            end_time=timezone.now() + timedelta(hours=1), **common,
+            boost_type='custom',
+            placement=boost_tiers.TRENDING,
+            status='active',
+            end_time=timezone.now() + timedelta(hours=1),
+            **common,
         )
 
     assert BoostCampaign.objects.filter(reel=post).count() == 4
 
 
-def test_a_lost_race_is_answered_like_the_check(owner, post, wallet, config, server_key, client_key):
+def test_a_lost_race_is_answered_like_the_check(
+    owner, post, wallet, config, server_key, client_key
+):
     """The IntegrityError becomes the same friendly refusal, not a 500."""
     wallet.add_earned(500, transaction_type='reward')
     buy(owner, post.pk, 'standard', server_key, client_key)
@@ -786,9 +816,7 @@ def test_an_undelivered_boost_stops_being_lifted(
     )
     expire_boost_campaigns()
 
-    live = BoostCampaign.objects.filter(
-        reel=post, status='active', end_time__gt=timezone.now()
-    )
+    live = BoostCampaign.objects.filter(reel=post, status='active', end_time__gt=timezone.now())
     assert not live.exists()
     post.refresh_from_db()
     assert not post.is_boosted
@@ -902,8 +930,10 @@ def test_the_legacy_boost_runs_for_two_hours(owner, post, wallet, config, server
     legacy_boost(owner, post.pk, server_key, client_key)
 
     campaign = BoostCampaign.objects.get(reel=post)
-    assert timedelta(hours=1, minutes=59) <= campaign.end_time - campaign.start_time <= timedelta(
-        hours=2, minutes=1
+    assert (
+        timedelta(hours=1, minutes=59)
+        <= campaign.end_time - campaign.start_time
+        <= timedelta(hours=2, minutes=1)
     )
 
 
@@ -932,9 +962,7 @@ def test_a_failed_legacy_boost_takes_no_coins(owner, post, wallet, config, serve
     assert not BoostCampaign.objects.filter(reel=post).exists()
 
 
-def test_the_legacy_boost_refuses_a_second_one(
-    owner, post, wallet, config, server_key, client_key
-):
+def test_the_legacy_boost_refuses_a_second_one(owner, post, wallet, config, server_key, client_key):
     """The old check looked at PostBoost, which no feed read -- so a post
     could be 'boosted' twice and lifted neither time."""
     wallet.add_earned(1000, transaction_type='reward')

@@ -547,9 +547,12 @@ def test_a_winner_without_telebirr_is_recorded_as_owed_not_dropped(campaign, mak
     winner = make_user()
     prize, _ = prize_delivery.award(campaign, winner, 'weekly')
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=False), patch(
-        'api.integrations.telebirr.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment'
-    ) as initiate:
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=False),
+        patch(
+            'api.integrations.telebirr.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment'
+        ) as initiate,
+    ):
         ok, message = prize_delivery.deliver(prize)
 
     prize.refresh_from_db()

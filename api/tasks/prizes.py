@@ -187,9 +187,9 @@ def _report_missing_data_package():
     if offering:
         return
 
-    waiting = WinnerGiftTransaction.objects.filter(
-        payment_method=CRM
-    ).exclude(status='success').count()
+    waiting = (
+        WinnerGiftTransaction.objects.filter(payment_method=CRM).exclude(status='success').count()
+    )
     if not waiting:
         return
 

@@ -20,6 +20,7 @@ instead of paying twice -- and it is where the amount comes from. These
 endpoints used to read the payout amount from the request body, so what a
 winner received depended on what the caller asked for.
 """
+
 from decimal import Decimal
 
 from django.conf import settings
@@ -81,6 +82,7 @@ def _user_can(user, permission):
 
 class CRMGiftPackageViewSet(viewsets.ModelViewSet):
     """Admin viewset for managing CRM gift packages"""
+
     permission_classes = [HasAdminPermission]
     required_permission = 'manage_gift_packages'
     serializer_class = CRMGiftPackageSerializer
@@ -106,9 +108,13 @@ class CRMGiftPackageViewSet(viewsets.ModelViewSet):
     def by_trigger(self, request):
         trigger = request.query_params.get('trigger')
         if not trigger:
-            return Response({'error': 'trigger parameter required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'trigger parameter required'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
-        packages = CRMGiftPackage.objects.filter(is_active=True, trigger_condition=trigger).order_by('name')
+        packages = CRMGiftPackage.objects.filter(
+            is_active=True, trigger_condition=trigger
+        ).order_by('name')
         return Response(CRMGiftPackageSerializer(packages, many=True).data)
 
 
@@ -116,6 +122,7 @@ class CRMGiftTransactionViewSet(viewsets.ReadOnlyModelViewSet):
     """Viewset for CRM gift transactions. Any authenticated user sees their
     own; an admin with 'view_gifts' sees everyone's -- not a blanket
     is_staff check, matching the AdminRole-scoped fix in api/views/admin.py."""
+
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = CRMGiftTransactionSerializer
 
@@ -137,9 +144,13 @@ class CRMGiftTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'])
     def my_transactions(self, request):
-        transactions = CRMGiftTransaction.objects.filter(
-            user=request.user,
-        ).select_related('package').order_by('-created_at')
+        transactions = (
+            CRMGiftTransaction.objects.filter(
+                user=request.user,
+            )
+            .select_related('package')
+            .order_by('-created_at')
+        )
         return Response(CRMGiftTransactionSerializer(transactions, many=True).data)
 
     @action(detail=True, methods=['post'])
@@ -149,7 +160,9 @@ class CRMGiftTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 
         transaction = self.get_object()
         if transaction.status != 'failed':
-            return Response({'error': 'Can only retry failed transactions'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'Can only retry failed transactions'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         success, message, response_data = CRMService.send_gift(
             service_number_b=transaction.phone_number,
@@ -165,8 +178,11 @@ class CRMGiftTransactionViewSet(viewsets.ReadOnlyModelViewSet):
             transaction.mark_failed(response_data.get('ret_code', 'ERROR'), message)
 
         CRMGiftAuditLog.objects.create(
-            transaction=transaction, action='retry', performed_by=request.user,
-            details=f'Retried transaction: {message}', ip_address=_get_client_ip(request),
+            transaction=transaction,
+            action='retry',
+            performed_by=request.user,
+            details=f'Retried transaction: {message}',
+            ip_address=_get_client_ip(request),
         )
 
         return Response(CRMGiftTransactionSerializer(transaction).data)
@@ -174,19 +190,33 @@ class CRMGiftTransactionViewSet(viewsets.ReadOnlyModelViewSet):
 
 class CRMGiftAwardViewSet(viewsets.ViewSet):
     """Viewset for awarding CRM (data) and Telebirr B2C (cash) gifts to users"""
+
     permission_classes = [HasAdminPermission]
     required_permission = 'award_gifts'
 
-    def _check_and_create_crm_transaction(self, *, user, phone_number, package, trigger_source, campaign_id):
+    def _check_and_create_crm_transaction(
+        self, *, user, phone_number, package, trigger_source, campaign_id
+    ):
         if package.max_awards_per_user > 0:
-            awards_count = CRMGiftTransaction.objects.filter(user=user, package=package, status='success').count()
+            awards_count = CRMGiftTransaction.objects.filter(
+                user=user, package=package, status='success'
+            ).count()
             if awards_count >= package.max_awards_per_user:
-                return None, f'User has already received this package {awards_count} times (max: {package.max_awards_per_user})'
+                return (
+                    None,
+                    f'User has already received this package {awards_count} times (max: {package.max_awards_per_user})',
+                )
 
         return CRMGiftTransaction.objects.create(
-            user=user, phone_number=phone_number, package=package, offering_id=package.offering_id,
-            transaction_id=CRMService.generate_transaction_id(), charge_amount=package.charge_amount,
-            trigger_source=trigger_source, campaign_id=campaign_id, status='pending',
+            user=user,
+            phone_number=phone_number,
+            package=package,
+            offering_id=package.offering_id,
+            transaction_id=CRMService.generate_transaction_id(),
+            charge_amount=package.charge_amount,
+            trigger_source=trigger_source,
+            campaign_id=campaign_id,
+            status='pending',
         ), None
 
     @action(detail=False, methods=['post'])
@@ -208,29 +238,39 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
 
         phone_number = getattr(getattr(user, 'profile', None), 'phone_number', None)
         if not phone_number:
-            return Response({'error': 'User has no phone number'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'User has no phone number'}, status=status.HTTP_400_BAD_REQUEST
+            )
         phone_number = _normalize_local_phone(phone_number)
 
         try:
             package = CRMGiftPackage.objects.get(id=package_id, is_active=True)
         except CRMGiftPackage.DoesNotExist:
-            return Response({'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+            )
 
         if user.profile.level < package.min_level:
             return Response(
-                {'error': f'User level {user.profile.level} below required level {package.min_level}'},
+                {
+                    'error': f'User level {user.profile.level} below required level {package.min_level}'
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         transaction, error = self._check_and_create_crm_transaction(
-            user=user, phone_number=phone_number, package=package,
-            trigger_source=trigger_source, campaign_id=campaign_id,
+            user=user,
+            phone_number=phone_number,
+            package=package,
+            trigger_source=trigger_source,
+            campaign_id=campaign_id,
         )
         if error:
             return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
 
         success, message, response_data = CRMService.send_gift(
-            service_number_b=phone_number, offering_id=package.offering_id,
+            service_number_b=phone_number,
+            offering_id=package.offering_id,
             charge_amount=float(package.charge_amount),
             access_user=getattr(settings, 'CRM_ACCESS_USER', ''),
             access_pwd=getattr(settings, 'CRM_ACCESS_PASSWORD', ''),
@@ -242,8 +282,11 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
             transaction.mark_failed(response_data.get('ret_code', 'ERROR'), message)
 
         CRMGiftAuditLog.objects.create(
-            transaction=transaction, action='award', performed_by=request.user,
-            details=f'Awarded {package.name} to {user.username}: {message}', ip_address=_get_client_ip(request),
+            transaction=transaction,
+            action='award',
+            performed_by=request.user,
+            details=f'Awarded {package.name} to {user.username}: {message}',
+            ip_address=_get_client_ip(request),
         )
 
         return Response(
@@ -269,13 +312,19 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         user = User.objects.filter(profile__phone_number=phone_number).first()
 
         transaction = CRMGiftTransaction.objects.create(
-            user=user, phone_number=phone_number, offering_id=offering_id,
-            transaction_id=CRMService.generate_transaction_id(), charge_amount=charge_amount,
-            trigger_source=trigger_source, status='pending',
+            user=user,
+            phone_number=phone_number,
+            offering_id=offering_id,
+            transaction_id=CRMService.generate_transaction_id(),
+            charge_amount=charge_amount,
+            trigger_source=trigger_source,
+            status='pending',
         )
 
         success, message, response_data = CRMService.send_gift(
-            service_number_b=phone_number, offering_id=offering_id, charge_amount=float(charge_amount),
+            service_number_b=phone_number,
+            offering_id=offering_id,
+            charge_amount=float(charge_amount),
             access_user=getattr(settings, 'CRM_ACCESS_USER', ''),
             access_pwd=getattr(settings, 'CRM_ACCESS_PASSWORD', ''),
         )
@@ -286,9 +335,11 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
             transaction.mark_failed(response_data.get('ret_code', 'ERROR'), message)
 
         CRMGiftAuditLog.objects.create(
-            transaction=transaction, action='award',
+            transaction=transaction,
+            action='award',
             performed_by=request.user if request.user.is_authenticated else None,
-            details=f'External award to {phone_number}: {message}', ip_address=_get_client_ip(request),
+            details=f'External award to {phone_number}: {message}',
+            ip_address=_get_client_ip(request),
         )
 
         return Response(
@@ -301,19 +352,25 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         falling back to the current period's Leaderboard if none exists yet.
         Returns a list of (user, extra) or a SelectedWinner queryset, plus
         the WinnerSelection used (or None for the leaderboard fallback)."""
-        selection_query = WinnerSelection.objects.filter(selection_type=selection_type).select_related('campaign')
+        selection_query = WinnerSelection.objects.filter(
+            selection_type=selection_type
+        ).select_related('campaign')
         if campaign_id:
             selection_query = selection_query.filter(campaign_id=campaign_id)
         latest_selection = selection_query.order_by('-created_at').first()
 
         if latest_selection:
-            winners = SelectedWinner.objects.filter(selection=latest_selection).select_related('user', 'selection')
+            winners = SelectedWinner.objects.filter(selection=latest_selection).select_related(
+                'user', 'selection'
+            )
             return list(winners), latest_selection
 
         now = timezone.now()
         period_start, _period_end = _period_bounds(selection_type, now)
 
-        leaderboard_query = Leaderboard.objects.filter(period_type=selection_type, period_start=period_start)
+        leaderboard_query = Leaderboard.objects.filter(
+            period_type=selection_type, period_start=period_start
+        )
         if campaign_id:
             leaderboard_query = leaderboard_query.filter(campaign_id=campaign_id)
         latest_leaderboard = leaderboard_query.order_by('-created_at').first()
@@ -321,7 +378,11 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         if not latest_leaderboard:
             return [], None
 
-        entries = LeaderboardEntry.objects.filter(leaderboard=latest_leaderboard).select_related('user').order_by('rank')
+        entries = (
+            LeaderboardEntry.objects.filter(leaderboard=latest_leaderboard)
+            .select_related('user')
+            .order_by('rank')
+        )
         return list(entries), None
 
     @action(detail=False, methods=['post'])
@@ -332,20 +393,31 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         package_id = request.data.get('package_id')
 
         if not all([selection_type, package_id]):
-            return Response({'error': 'selection_type and package_id are required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'selection_type and package_id are required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         valid_types = ['daily', 'weekly', 'monthly', 'grand']
         if selection_type not in valid_types:
-            return Response({'error': f'Invalid selection_type. Must be one of: {", ".join(valid_types)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': f'Invalid selection_type. Must be one of: {", ".join(valid_types)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             package = CRMGiftPackage.objects.get(id=package_id, is_active=True)
         except CRMGiftPackage.DoesNotExist:
-            return Response({'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'Package not found or inactive'}, status=status.HTTP_404_NOT_FOUND
+            )
 
         winners, latest_selection = self._resolve_current_winners(selection_type, campaign_id)
         if not winners:
-            return Response({'error': f'No winners found for selection_type={selection_type}'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': f'No winners found for selection_type={selection_type}'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         results = {
             'total_winners': len(winners),
@@ -370,18 +442,27 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
 
             if user.profile.level < package.min_level:
                 results['skipped'] += 1
-                results['errors'].append({'user': user.username, 'reason': f'Level {user.profile.level} below required {package.min_level}'})
+                results['errors'].append(
+                    {
+                        'user': user.username,
+                        'reason': f'Level {user.profile.level} below required {package.min_level}',
+                    }
+                )
                 continue
 
             is_eligible, current_wins, max_wins = WinnerFrequencyRecord.check_frequency_eligibility(
-                user, selection_type, campaign,
+                user,
+                selection_type,
+                campaign,
             )
             if not is_eligible:
                 results['skipped'] += 1
-                results['errors'].append({
-                    'user': user.username,
-                    'reason': f'Already won {selection_type} {current_wins} times (max: {max_wins}) in this period',
-                })
+                results['errors'].append(
+                    {
+                        'user': user.username,
+                        'reason': f'Already won {selection_type} {current_wins} times (max: {max_wins}) in this period',
+                    }
+                )
                 continue
 
             if package.max_awards_per_user > 0:
@@ -390,10 +471,12 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
                 ).count()
                 if awards_count >= package.max_awards_per_user:
                     results['skipped'] += 1
-                    results['errors'].append({
-                        'user': user.username,
-                        'reason': f'User has already received this package {awards_count} times (max: {package.max_awards_per_user})',
-                    })
+                    results['errors'].append(
+                        {
+                            'user': user.username,
+                            'reason': f'User has already received this package {awards_count} times (max: {package.max_awards_per_user})',
+                        }
+                    )
                     continue
 
             # The prize is recorded before the CRM is called, under the same
@@ -416,18 +499,25 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
             if success:
                 results['successful'] += 1
                 WinnerFrequencyRecord.record_win(
-                    user=user, winner_type=selection_type,
-                    campaign=campaign, selection=latest_selection,
+                    user=user,
+                    winner_type=selection_type,
+                    campaign=campaign,
+                    selection=latest_selection,
                 )
             else:
                 results['failed'] += 1
                 results['errors'].append({'user': user.username, 'reason': message})
 
-            crm_transaction = CRMGiftTransaction.objects.filter(user=user).order_by('-created_at').first()
+            crm_transaction = (
+                CRMGiftTransaction.objects.filter(user=user).order_by('-created_at').first()
+            )
             if crm_transaction is not None:
                 CRMGiftAuditLog.objects.create(
-                    transaction=crm_transaction, action='award', performed_by=request.user,
-                    details=f'Campaign winner award ({selection_type}): {message}', ip_address=_get_client_ip(request),
+                    transaction=crm_transaction,
+                    action='award',
+                    performed_by=request.user,
+                    details=f'Campaign winner award ({selection_type}): {message}',
+                    ip_address=_get_client_ip(request),
                 )
 
         return Response(results)
@@ -510,7 +600,9 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
         if not user.profile.is_telebirr_user():
-            return Response({'error': 'User is not a Telebirr user'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'User is not a Telebirr user'}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         campaign = Campaign.objects.filter(pk=campaign_id).first() if campaign_id else None
 
@@ -610,11 +702,17 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         date_filter = request.query_params.get('date')
 
         if not selection_type:
-            return Response({'error': 'selection_type parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'selection_type parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         valid_types = ['daily', 'weekly', 'monthly', 'grand']
         if selection_type not in valid_types:
-            return Response({'error': f'Invalid selection_type. Must be one of: {", ".join(valid_types)}'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': f'Invalid selection_type. Must be one of: {", ".join(valid_types)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         from datetime import datetime
 
@@ -627,27 +725,47 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
         if date_filter:
             try:
                 parsed_date = datetime.strptime(date_filter, '%Y-%m-%d').date()
-                target_dt = timezone.make_aware(datetime.combine(parsed_date, datetime.min.time()), timezone.get_current_timezone())
+                target_dt = timezone.make_aware(
+                    datetime.combine(parsed_date, datetime.min.time()),
+                    timezone.get_current_timezone(),
+                )
             except ValueError:
-                return Response({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         period_start, period_end = _period_bounds(selection_type, target_dt)
         start_date = period_start.date()
 
         campaign_filter = {'campaign_id': campaign_id} if campaign_id else {}
         if selection_type == 'daily':
-            posts_qs = PostScore.objects.filter(created_at__date=start_date, **campaign_filter).exclude(moderation_status='rejected')
+            posts_qs = PostScore.objects.filter(
+                created_at__date=start_date, **campaign_filter
+            ).exclude(moderation_status='rejected')
         elif selection_type == 'monthly':
-            posts_qs = PostScore.objects.filter(created_at__year=target_dt.year, created_at__month=target_dt.month, **campaign_filter).exclude(moderation_status='rejected')
+            posts_qs = PostScore.objects.filter(
+                created_at__year=target_dt.year,
+                created_at__month=target_dt.month,
+                **campaign_filter,
+            ).exclude(moderation_status='rejected')
         else:  # weekly, grand
-            posts_qs = PostScore.objects.filter(created_at__gte=period_start, **campaign_filter).exclude(moderation_status='rejected')
+            posts_qs = PostScore.objects.filter(
+                created_at__gte=period_start, **campaign_filter
+            ).exclude(moderation_status='rejected')
 
         user_ids = list(posts_qs.values_list('user_id', flat=True).distinct())
         if not user_ids:
-            return Response({
-                'selection_type': selection_type, 'campaign_id': campaign_id, 'date_filter': date_filter,
-                'count': 0, 'winners': [], 'message': f'No participants found for {selection_type} period',
-            })
+            return Response(
+                {
+                    'selection_type': selection_type,
+                    'campaign_id': campaign_id,
+                    'date_filter': date_filter,
+                    'count': 0,
+                    'winners': [],
+                    'message': f'No participants found for {selection_type} period',
+                }
+            )
 
         likes_weight, comments_weight, shares_weight, gifts_weight = 1.0, 2.0, 3.0, 5.0
         if campaign_id:
@@ -655,7 +773,11 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
                 campaign = Campaign.objects.get(id=campaign_id)
                 engine = CampaignScoringEngine(campaign)
                 config = engine.type_config
-                engagement_weights = config.get('phase1_qualification', {}) if campaign.campaign_type == 'grand' else config.get('engagement', {})
+                engagement_weights = (
+                    config.get('phase1_qualification', {})
+                    if campaign.campaign_type == 'grand'
+                    else config.get('engagement', {})
+                )
                 likes_weight = engagement_weights.get('likes_weight', 1.0)
                 comments_weight = engagement_weights.get('comments_weight', 2.0)
                 shares_weight = engagement_weights.get('shares_weight', 3.0)
@@ -675,44 +797,76 @@ class CRMGiftAwardViewSet(viewsets.ViewSet):
             total_gifters = GiftTransaction.objects.filter(reel_id__in=reel_ids).count()
 
             calculated_score = (
-                total_likes * likes_weight + total_comments * comments_weight
-                + total_shares * shares_weight + total_gifters * gifts_weight
+                total_likes * likes_weight
+                + total_comments * comments_weight
+                + total_shares * shares_weight
+                + total_gifters * gifts_weight
             )
 
-            entries_data.append({
-                'user_id': user.id, 'username': user.username,
-                'phone_number': getattr(getattr(user, 'profile', None), 'phone_number', None),
-                'total_score': float(calculated_score), 'post_count': len(reel_ids),
-                'likes_count': total_likes, 'comments_count': total_comments, 'gifts_count': total_gifters,
-            })
+            entries_data.append(
+                {
+                    'user_id': user.id,
+                    'username': user.username,
+                    'phone_number': getattr(getattr(user, 'profile', None), 'phone_number', None),
+                    'total_score': float(calculated_score),
+                    'post_count': len(reel_ids),
+                    'likes_count': total_likes,
+                    'comments_count': total_comments,
+                    'gifts_count': total_gifters,
+                }
+            )
 
         entries_data.sort(key=lambda x: x['total_score'], reverse=True)
         limits = {'daily': 50, 'weekly': 10, 'monthly': 5, 'grand': 3}
-        entries_data = entries_data[:limits.get(selection_type, 50)]
+        entries_data = entries_data[: limits.get(selection_type, 50)]
 
         winners_data = []
         for idx, entry in enumerate(entries_data):
             user = User.objects.get(id=entry['user_id'])
-            winners_data.append({
-                'id': f'rt-{entry["user_id"]}', 'user_id': entry['user_id'], 'username': entry['username'],
-                'phone_number': entry['phone_number'], 'rank': idx + 1, 'final_score': entry['total_score'],
-                'selection_method': 'Real-time Leaderboard', 'campaign_id': campaign_id,
-                'campaign_title': Campaign.objects.get(id=campaign_id).title if campaign_id else 'All Campaigns',
-                'selection_type': selection_type, 'selection_date': now, 'created_at': now, 'is_from_realtime': True,
-                'post_count': entry['post_count'], 'likes_count': entry['likes_count'],
-                'comments_count': entry['comments_count'], 'gifts_count': entry['gifts_count'],
-                'is_telebirr_user': user.profile.is_telebirr_user() if hasattr(user, 'profile') else False,
-            })
+            winners_data.append(
+                {
+                    'id': f'rt-{entry["user_id"]}',
+                    'user_id': entry['user_id'],
+                    'username': entry['username'],
+                    'phone_number': entry['phone_number'],
+                    'rank': idx + 1,
+                    'final_score': entry['total_score'],
+                    'selection_method': 'Real-time Leaderboard',
+                    'campaign_id': campaign_id,
+                    'campaign_title': Campaign.objects.get(id=campaign_id).title
+                    if campaign_id
+                    else 'All Campaigns',
+                    'selection_type': selection_type,
+                    'selection_date': now,
+                    'created_at': now,
+                    'is_from_realtime': True,
+                    'post_count': entry['post_count'],
+                    'likes_count': entry['likes_count'],
+                    'comments_count': entry['comments_count'],
+                    'gifts_count': entry['gifts_count'],
+                    'is_telebirr_user': user.profile.is_telebirr_user()
+                    if hasattr(user, 'profile')
+                    else False,
+                }
+            )
 
-        return Response({
-            'selection_type': selection_type, 'campaign_id': campaign_id, 'date_filter': date_filter,
-            'count': len(winners_data), 'winners': winners_data, 'source': 'realtime_calculation',
-            'period_start': period_start, 'period_end': period_end,
-        })
+        return Response(
+            {
+                'selection_type': selection_type,
+                'campaign_id': campaign_id,
+                'date_filter': date_filter,
+                'count': len(winners_data),
+                'winners': winners_data,
+                'source': 'realtime_calculation',
+                'period_start': period_start,
+                'period_end': period_end,
+            }
+        )
 
 
 class CRMGiftAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Viewset for CRM audit logs (admin only)"""
+
     permission_classes = [HasAdminPermission]
     required_permission = 'view_gifts'
     serializer_class = CRMGiftAuditLogSerializer
@@ -741,7 +895,9 @@ def _period_bounds(selection_type, at):
         period_start = at.replace(hour=0, minute=0, second=0, microsecond=0)
         period_end = period_start + timedelta(days=1)
     elif selection_type == 'weekly':
-        period_start = (at - timedelta(days=at.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        period_start = (at - timedelta(days=at.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         period_end = period_start + timedelta(days=7)
     elif selection_type == 'monthly':
         period_start = at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)

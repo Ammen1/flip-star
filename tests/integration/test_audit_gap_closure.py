@@ -516,7 +516,9 @@ def test_the_backlog_task_is_scheduled():
 
 
 def webhook_request(ip='203.0.113.9', **extra):
-    request = factory.post('/api/webhooks/telebirrB2C/', data='<xml/>', content_type='text/xml', **extra)
+    request = factory.post(
+        '/api/webhooks/telebirrB2C/', data='<xml/>', content_type='text/xml', **extra
+    )
     request.META['REMOTE_ADDR'] = ip
     return request
 
@@ -622,9 +624,7 @@ def test_a_refused_webhook_never_reaches_the_handler(settings):
 
     settings.TELEBIRR_WEBHOOK_ALLOWED_IPS = ['203.0.113.9']
 
-    request = factory.post(
-        '/api/webhooks/telebirrB2C/', data='<garbage/>', content_type='text/xml'
-    )
+    request = factory.post('/api/webhooks/telebirrB2C/', data='<garbage/>', content_type='text/xml')
     request.META['REMOTE_ADDR'] = '198.51.100.7'
     response = telebirr_b2c_webhook(request)
     assert response.status_code == 403
@@ -904,9 +904,12 @@ def test_renewing_a_subscription_says_renewed_not_activated(author):
     plan.save()
     plan.activate()
 
-    assert Notification.objects.filter(
-        recipient=author, notification_type='subscription_renewed'
-    ).count() == 1
+    assert (
+        Notification.objects.filter(
+            recipient=author, notification_type='subscription_renewed'
+        ).count()
+        == 1
+    )
 
 
 def test_a_duplicate_activation_webhook_notifies_once(author):
@@ -940,9 +943,7 @@ def test_re_running_winner_selection_does_not_congratulate_twice(author, campaig
     award(campaign, author, 'daily')
     award(campaign, author, 'daily')
 
-    assert Notification.objects.filter(
-        recipient=author, notification_type='prize_won'
-    ).count() == 1
+    assert Notification.objects.filter(recipient=author, notification_type='prize_won').count() == 1
 
 
 def test_delivering_a_prize_notifies_the_winner(author, campaign):
@@ -951,9 +952,10 @@ def test_delivering_a_prize_notifies_the_winner(author, campaign):
     prize, _ = award(campaign, author, 'daily')
     prize.mark_success('CRM-123')
 
-    assert Notification.objects.filter(
-        recipient=author, notification_type='prize_delivered'
-    ).count() == 1
+    assert (
+        Notification.objects.filter(recipient=author, notification_type='prize_delivered').count()
+        == 1
+    )
 
 
 def test_a_repeated_delivery_callback_notifies_once(author, campaign):
@@ -965,9 +967,10 @@ def test_a_repeated_delivery_callback_notifies_once(author, campaign):
     prize.mark_success('CRM-123')
     prize.mark_success('CRM-123')
 
-    assert Notification.objects.filter(
-        recipient=author, notification_type='prize_delivered'
-    ).count() == 1
+    assert (
+        Notification.objects.filter(recipient=author, notification_type='prize_delivered').count()
+        == 1
+    )
 
 
 def test_a_paid_withdrawal_notifies_the_user(actor, monkeypatch):
@@ -987,9 +990,7 @@ def test_a_paid_withdrawal_notifies_the_user(actor, monkeypatch):
     )
     withdrawal_sms.notify_paid(withdrawal)
 
-    notification = Notification.objects.get(
-        recipient=actor, notification_type='withdrawal_paid'
-    )
+    notification = Notification.objects.get(recipient=actor, notification_type='withdrawal_paid')
     assert '95' in notification.message
 
 
@@ -1020,13 +1021,9 @@ def function_source(module_path, func_name):
     module = importlib.import_module(module_path)
     lines = open(module.__file__, encoding='utf-8').read().split('\n')
 
-    start = next(
-        i for i, line in enumerate(lines) if line.startswith(f'def {func_name}(')
-    )
+    start = next(i for i, line in enumerate(lines) if line.startswith(f'def {func_name}('))
     end = start + 1
-    while end < len(lines) and not (
-        lines[end] and not lines[end][0].isspace()
-    ):
+    while end < len(lines) and not (lines[end] and not lines[end][0].isspace()):
         end += 1
     return '\n'.join(lines[start:end])
 

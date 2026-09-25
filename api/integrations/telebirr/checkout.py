@@ -14,25 +14,32 @@ Request signing follows the "RequestSignatureProcess":
   - join as key=value with '&'
   - sign with RSA-PSS, SHA-256 digest, MGF1(SHA-256) -> i.e. SHA256withRSAandMGF1
 """
+
+import base64
 import json
+import logging
 import time
 import uuid
-import base64
-import logging
 
 import requests
-from django.conf import settings
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidSignature
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 # Fields that never participate in the signature string.
 _EXCLUDE_FIELDS = {
-    'sign', 'sign_type', 'header', 'refund_info', 'openType',
-    'raw_request', 'biz_content', 'wallet_reference_data',
+    'sign',
+    'sign_type',
+    'header',
+    'refund_info',
+    'openType',
+    'raw_request',
+    'biz_content',
+    'wallet_reference_data',
 }
 
 
@@ -170,8 +177,9 @@ class TelebirrService:
     # ------------------------------------------------------------------
     # Step 3: create order (preOrder) -> rawRequest
     # ------------------------------------------------------------------
-    def _build_pre_order_request(self, title, amount, merch_order_id, notify_url=None,
-                                 redirect_url=None, trade_type='InApp'):
+    def _build_pre_order_request(
+        self, title, amount, merch_order_id, notify_url=None, redirect_url=None, trade_type='InApp'
+    ):
         req = {
             'timestamp': self.create_timestamp(),
             'nonce_str': self.create_nonce_str(),
@@ -199,8 +207,9 @@ class TelebirrService:
         req['sign_type'] = 'SHA256WithRSA'
         return req
 
-    def _build_pre_order_request_ondemand(self, title, amount, merch_order_id, notify_url=None,
-                                          redirect_url=None, trade_type='InApp'):
+    def _build_pre_order_request_ondemand(
+        self, title, amount, merch_order_id, notify_url=None, redirect_url=None, trade_type='InApp'
+    ):
         """Build preOrder request for on-demand coin purchases (without payee fields)."""
         req = {
             'timestamp': self.create_timestamp(),
@@ -236,18 +245,27 @@ class TelebirrService:
             'timestamp': self.create_timestamp(),
         }
         sign = self.sign_request_object(fields)
-        return '&'.join([
-            f"appid={fields['appid']}",
-            f"merch_code={fields['merch_code']}",
-            f"nonce_str={fields['nonce_str']}",
-            f"prepay_id={fields['prepay_id']}",
-            f"timestamp={fields['timestamp']}",
-            f'sign={sign}',
-            'sign_type=SHA256WithRSA',
-        ])
+        return '&'.join(
+            [
+                f"appid={fields['appid']}",
+                f"merch_code={fields['merch_code']}",
+                f"nonce_str={fields['nonce_str']}",
+                f"prepay_id={fields['prepay_id']}",
+                f"timestamp={fields['timestamp']}",
+                f'sign={sign}',
+                'sign_type=SHA256WithRSA',
+            ]
+        )
 
-    def create_order(self, title, amount, merch_order_id=None, notify_url=None,
-                     redirect_url=None, trade_type='InApp'):
+    def create_order(
+        self,
+        title,
+        amount,
+        merch_order_id=None,
+        notify_url=None,
+        redirect_url=None,
+        trade_type='InApp',
+    ):
         """
         Create a prepaid order and return the signed rawRequest for the H5 page.
 
@@ -260,12 +278,19 @@ class TelebirrService:
             token_result = self.apply_fabric_token()
             fabric_token = token_result.get('token')
             if not fabric_token:
-                return {'success': False, 'error': 'Failed to obtain fabric token',
-                        'raw': token_result}
+                return {
+                    'success': False,
+                    'error': 'Failed to obtain fabric token',
+                    'raw': token_result,
+                }
 
             req_obj = self._build_pre_order_request(
-                title, amount, merch_order_id,
-                notify_url=notify_url, redirect_url=redirect_url, trade_type=trade_type,
+                title,
+                amount,
+                merch_order_id,
+                notify_url=notify_url,
+                redirect_url=redirect_url,
+                trade_type=trade_type,
             )
             url = f'{self.base_url}/payment/v1/merchant/preOrder'
             logger.info(f'[TELEBIRR] preOrder request: {json.dumps(req_obj, indent=2)}')
@@ -310,8 +335,15 @@ class TelebirrService:
             logger.error('Telebirr preOrder error: %s', exc)
             return {'success': False, 'error': str(exc)}
 
-    def create_order_ondemand(self, title, amount, merch_order_id=None, notify_url=None,
-                              redirect_url=None, trade_type='InApp'):
+    def create_order_ondemand(
+        self,
+        title,
+        amount,
+        merch_order_id=None,
+        notify_url=None,
+        redirect_url=None,
+        trade_type='InApp',
+    ):
         """
         Create a prepaid order for on-demand coin purchases (without payee fields).
 
@@ -324,12 +356,19 @@ class TelebirrService:
             token_result = self.apply_fabric_token()
             fabric_token = token_result.get('token')
             if not fabric_token:
-                return {'success': False, 'error': 'Failed to obtain fabric token',
-                        'raw': token_result}
+                return {
+                    'success': False,
+                    'error': 'Failed to obtain fabric token',
+                    'raw': token_result,
+                }
 
             req_obj = self._build_pre_order_request_ondemand(
-                title, amount, merch_order_id,
-                notify_url=notify_url, redirect_url=redirect_url, trade_type=trade_type,
+                title,
+                amount,
+                merch_order_id,
+                notify_url=notify_url,
+                redirect_url=redirect_url,
+                trade_type=trade_type,
             )
             url = f'{self.base_url}/payment/v1/merchant/preOrder'
             logger.info(f'[TELEBIRR] preOrder request (ondemand): {json.dumps(req_obj, indent=2)}')
@@ -349,7 +388,10 @@ class TelebirrService:
             # Authorization header, and a failing response commonly echoes
             # the request back. The status and the parsed outcome below are
             # what diagnosing this actually needs.
-            logger.info('[TELEBIRR] preOrder response body (ondemand) withheld (status %s)', resp.status_code)
+            logger.info(
+                '[TELEBIRR] preOrder response body (ondemand) withheld (status %s)',
+                resp.status_code,
+            )
             resp.raise_for_status()
             result = resp.json()
 
@@ -428,8 +470,12 @@ class TelebirrService:
                     'total_amount': biz.get('total_amount'),
                     'raw': result,
                 }
-            return {'success': False, 'error': result.get('msg', 'queryOrder failed'),
-                    'code': result.get('code'), 'raw': result}
+            return {
+                'success': False,
+                'error': result.get('msg', 'queryOrder failed'),
+                'code': result.get('code'),
+                'raw': result,
+            }
         except requests.RequestException as exc:
             logger.error('Telebirr queryOrder network error: %s', exc)
             return {'success': False, 'error': f'Network error: {exc}'}
@@ -454,8 +500,11 @@ class TelebirrService:
             token_result = self.apply_fabric_token()
             fabric_token = token_result.get('token')
             if not fabric_token:
-                return {'success': False, 'error': 'Failed to obtain fabric token',
-                        'raw': token_result}
+                return {
+                    'success': False,
+                    'error': 'Failed to obtain fabric token',
+                    'raw': token_result,
+                }
 
             req = {
                 'timestamp': self.create_timestamp(),
@@ -528,8 +577,7 @@ class TelebirrService:
                    trade_status, total_amount, trans_id, raw }
         """
         signature = notify_data.get('sign')
-        verify_payload = {k: v for k, v in notify_data.items()
-                          if k not in ('sign', 'sign_type')}
+        verify_payload = {k: v for k, v in notify_data.items() if k not in ('sign', 'sign_type')}
         verified = bool(signature) and self.verify_signature(verify_payload, signature)
         trade_status = notify_data.get('trade_status')
         return {

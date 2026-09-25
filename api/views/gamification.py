@@ -12,8 +12,8 @@ from rest_framework.response import Response
 
 from api.models import UserProfile
 from api.models.campaign_extended import GamificationActivity
-from api.services.subscription_access import subscriber_action_refusal
 from api.models.contest import UserCoinBalance
+from api.services.subscription_access import subscriber_action_refusal
 from common.security import encrypted_endpoint
 
 

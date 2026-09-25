@@ -170,7 +170,8 @@ def _notify_won(prize, prize_spec):
     notify_system(
         prize.winner,
         'prize_won',
-        f'You won {prize_spec.description}! ' + (
+        f'You won {prize_spec.description}! '
+        + (
             f'It will be delivered by {prize.deadline_at.date().isoformat()}.'
             if prize.deadline_at
             else 'It will be delivered shortly.'

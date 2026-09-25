@@ -67,7 +67,7 @@ def staff_without_admin_role(db):
 
 
 def _soap_result(*, originator_conversation_id, result_code, transaction_id='', result_desc=''):
-    return f'''<?xml version="1.0" encoding="UTF-8"?>
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:res="http://cps.huawei.com/cpsinterface/response">
   <soapenv:Body>
     <api:Result xmlns:api="http://cps.huawei.com/cpsinterface/response">
@@ -78,17 +78,20 @@ def _soap_result(*, originator_conversation_id, result_code, transaction_id='', 
       <res:TransactionID>{transaction_id}</res:TransactionID>
     </api:Result>
   </soapenv:Body>
-</soapenv:Envelope>'''.encode()
+</soapenv:Envelope>""".encode()
 
 
 # ---------------------------------------------------------------------------
 # HasAdminPermission scoping -- award_gifts is per-role, not is_staff
 # ---------------------------------------------------------------------------
 
+
 def test_staff_without_admin_role_cannot_award_crm_gift(staff_without_admin_role, user):
     package = CRMGiftPackage.objects.create(name='1GB', offering_id='OFF1', charge_amount=10)
 
-    request = factory.post('/admin/crm/award/', {'user_id': user.id, 'package_id': package.id}, format='json')
+    request = factory.post(
+        '/admin/crm/award/', {'user_id': user.id, 'package_id': package.id}, format='json'
+    )
     force_authenticate(request, user=staff_without_admin_role)
 
     response = CRMGiftAwardViewSet.as_view({'post': 'award'})(request)
@@ -104,7 +107,9 @@ def test_finance_team_admin_can_award_crm_gift(admin_with_gift_permission, user)
         'api.views.crm.CRMService.send_gift',
         return_value=(True, 'OK', {'ret_code': '0'}),
     ):
-        request = factory.post('/admin/crm/award/', {'user_id': user.id, 'package_id': package.id}, format='json')
+        request = factory.post(
+            '/admin/crm/award/', {'user_id': user.id, 'package_id': package.id}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'award'})(request)
 
@@ -113,14 +118,21 @@ def test_finance_team_admin_can_award_crm_gift(admin_with_gift_permission, user)
     assert txn.status == 'success'
 
 
-def test_crm_transaction_viewset_hides_other_users_transactions_from_plain_staff(staff_without_admin_role, user):
+def test_crm_transaction_viewset_hides_other_users_transactions_from_plain_staff(
+    staff_without_admin_role, user
+):
     """is_staff=True with no AdminRole must see only their own transactions
     -- the exact regression class fixed for api/views/admin.py in item 3,
     now also checked here since this viewset scopes visibility the same way."""
     package = CRMGiftPackage.objects.create(name='1GB', offering_id='OFF3', charge_amount=10)
     CRMGiftTransaction.objects.create(
-        user=user, phone_number='0911223344', package=package, offering_id='OFF3',
-        transaction_id='TXN_OTHER_1', charge_amount=10, status='success',
+        user=user,
+        phone_number='0911223344',
+        package=package,
+        offering_id='OFF3',
+        transaction_id='TXN_OTHER_1',
+        charge_amount=10,
+        status='success',
     )
 
     request = factory.get('/admin/crm/transactions/')
@@ -131,11 +143,18 @@ def test_crm_transaction_viewset_hides_other_users_transactions_from_plain_staff
     assert len(response.data) == 0
 
 
-def test_crm_transaction_viewset_shows_all_to_admin_with_view_gifts(admin_with_gift_permission, user):
+def test_crm_transaction_viewset_shows_all_to_admin_with_view_gifts(
+    admin_with_gift_permission, user
+):
     package = CRMGiftPackage.objects.create(name='1GB', offering_id='OFF4', charge_amount=10)
     CRMGiftTransaction.objects.create(
-        user=user, phone_number='0911223344', package=package, offering_id='OFF4',
-        transaction_id='TXN_OTHER_2', charge_amount=10, status='success',
+        user=user,
+        phone_number='0911223344',
+        package=package,
+        offering_id='OFF4',
+        transaction_id='TXN_OTHER_2',
+        charge_amount=10,
+        status='success',
     )
 
     request = factory.get('/admin/crm/transactions/')
@@ -150,14 +169,24 @@ def test_crm_transaction_viewset_shows_all_to_admin_with_view_gifts(admin_with_g
 # CRM award: max_awards_per_user, package eligibility
 # ---------------------------------------------------------------------------
 
+
 def test_award_rejects_when_max_awards_per_user_reached(admin_with_gift_permission, user):
-    package = CRMGiftPackage.objects.create(name='1GB', offering_id='OFF5', charge_amount=10, max_awards_per_user=1)
+    package = CRMGiftPackage.objects.create(
+        name='1GB', offering_id='OFF5', charge_amount=10, max_awards_per_user=1
+    )
     CRMGiftTransaction.objects.create(
-        user=user, phone_number='0911223344', package=package, offering_id='OFF5',
-        transaction_id='TXN_PRIOR', charge_amount=10, status='success',
+        user=user,
+        phone_number='0911223344',
+        package=package,
+        offering_id='OFF5',
+        transaction_id='TXN_PRIOR',
+        charge_amount=10,
+        status='success',
     )
 
-    request = factory.post('/admin/crm/award/', {'user_id': user.id, 'package_id': package.id}, format='json')
+    request = factory.post(
+        '/admin/crm/award/', {'user_id': user.id, 'package_id': package.id}, format='json'
+    )
     force_authenticate(request, user=admin_with_gift_permission)
     response = CRMGiftAwardViewSet.as_view({'post': 'award'})(request)
 
@@ -182,15 +211,22 @@ B2C_PAYMENT = (
 
 
 def test_send_b2c_gift_leaves_transaction_processing_not_success(admin_with_gift_permission, user):
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={
-            'success': True,
-            'originator_conversation_id': 'S_X20260820WINGIFT1',
-            'conversation_id': 'AG_20260820WINGIFT1',
-        },
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'S_X20260820WINGIFT1',
+                'conversation_id': 'AG_20260820WINGIFT1',
+            },
+        ),
     ):
-        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'winner_type': 'weekly'}, format='json')
+        request = factory.post(
+            '/admin/crm/send-b2c-gift/',
+            {'user_id': user.id, 'winner_type': 'weekly'},
+            format='json',
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
@@ -203,11 +239,22 @@ def test_send_b2c_gift_leaves_transaction_processing_not_success(admin_with_gift
 
 def test_send_b2c_gift_pays_the_documented_amount(admin_with_gift_permission, user):
     """Not whatever the caller asked for -- a weekly prize is 1,000 ETB."""
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'O1', 'conversation_id': 'C1'},
-    ) as initiate:
-        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'winner_type': 'weekly'}, format='json')
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'O1',
+                'conversation_id': 'C1',
+            },
+        ) as initiate,
+    ):
+        request = factory.post(
+            '/admin/crm/send-b2c-gift/',
+            {'user_id': user.id, 'winner_type': 'weekly'},
+            format='json',
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
@@ -223,10 +270,15 @@ def test_b2c_gift_refuses_a_caller_supplied_amount(admin_with_gift_permission, u
     rather than silently overridden, so nobody is left believing they paid a
     figure they did not.
     """
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT
-    ) as initiate:
-        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 500, 'winner_type': 'weekly'}, format='json')
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(B2C_PAYMENT) as initiate,
+    ):
+        request = factory.post(
+            '/admin/crm/send-b2c-gift/',
+            {'user_id': user.id, 'amount': 500, 'winner_type': 'weekly'},
+            format='json',
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
@@ -238,11 +290,22 @@ def test_b2c_gift_refuses_a_caller_supplied_amount(admin_with_gift_permission, u
 
 def test_b2c_gift_accepts_a_request_naming_the_correct_amount(admin_with_gift_permission, user):
     """Existing callers send the right figure; they keep working."""
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'O2', 'conversation_id': 'C2'},
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'O2',
+                'conversation_id': 'C2',
+            },
+        ),
     ):
-        request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'amount': 1000, 'winner_type': 'weekly'}, format='json')
+        request = factory.post(
+            '/admin/crm/send-b2c-gift/',
+            {'user_id': user.id, 'amount': 1000, 'winner_type': 'weekly'},
+            format='json',
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
@@ -251,12 +314,23 @@ def test_b2c_gift_accepts_a_request_naming_the_correct_amount(admin_with_gift_pe
 
 def test_send_b2c_gift_is_idempotent(admin_with_gift_permission, user):
     """Pressing send twice must not pay twice."""
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'O3', 'conversation_id': 'C3'},
-    ) as initiate:
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'O3',
+                'conversation_id': 'C3',
+            },
+        ) as initiate,
+    ):
         for _ in range(2):
-            request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id, 'winner_type': 'weekly'}, format='json')
+            request = factory.post(
+                '/admin/crm/send-b2c-gift/',
+                {'user_id': user.id, 'winner_type': 'weekly'},
+                format='json',
+            )
             force_authenticate(request, user=admin_with_gift_permission)
             CRMGiftAwardViewSet.as_view({'post': 'send_b2c_gift'})(request)
 
@@ -276,9 +350,12 @@ def test_send_b2c_gift_rejects_non_telebirr_user(admin_with_gift_permission, use
 
 
 def test_send_b2c_gift_marks_failed_on_initiation_failure(admin_with_gift_permission, user):
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': False, 'error': 'upstream error'},
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={'success': False, 'error': 'upstream error'},
+        ),
     ):
         request = factory.post('/admin/crm/send-b2c-gift/', {'user_id': user.id}, format='json')
         force_authenticate(request, user=admin_with_gift_permission)
@@ -294,15 +371,25 @@ def test_send_b2c_gift_marks_failed_on_initiation_failure(admin_with_gift_permis
 # telebirr_b2c_webhook: WinnerGiftTransaction correlation (extended path)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def processing_winner_gift(db):
     u = User.objects.create_user(username='winner_gift_user', password='x')
     package = WinnerGiftPackage.objects.create(
-        winner_type='weekly', gift_type='cash', payment_method='telebirr_b2c', amount=500,
+        winner_type='weekly',
+        gift_type='cash',
+        payment_method='telebirr_b2c',
+        amount=500,
     )
     txn = WinnerGiftTransaction.objects.create(
-        winner=u, winner_type='weekly', gift_package=package, amount=500, payment_method='telebirr_b2c',
-        receiver_msisdn='251911223344', status='processing', originator_conversation_id='S_X20260820WGWEBHOOK1',
+        winner=u,
+        winner_type='weekly',
+        gift_package=package,
+        amount=500,
+        payment_method='telebirr_b2c',
+        receiver_msisdn='251911223344',
+        status='processing',
+        originator_conversation_id='S_X20260820WGWEBHOOK1',
     )
     yield txn
     txn.delete()
@@ -310,7 +397,9 @@ def processing_winner_gift(db):
 
 
 def test_webhook_marks_winner_gift_success(processing_winner_gift):
-    body = _soap_result(originator_conversation_id='S_X20260820WGWEBHOOK1', result_code='0', transaction_id='TXNWG1')
+    body = _soap_result(
+        originator_conversation_id='S_X20260820WGWEBHOOK1', result_code='0', transaction_id='TXNWG1'
+    )
     request = factory.post('/webhooks/telebirrB2C/', data=body, content_type='text/xml')
 
     response = telebirr_b2c_webhook(request)
@@ -322,7 +411,9 @@ def test_webhook_marks_winner_gift_success(processing_winner_gift):
 
 
 def test_webhook_marks_winner_gift_failed(processing_winner_gift):
-    body = _soap_result(originator_conversation_id='S_X20260820WGWEBHOOK1', result_code='1', result_desc='declined')
+    body = _soap_result(
+        originator_conversation_id='S_X20260820WGWEBHOOK1', result_code='1', result_desc='declined'
+    )
     request = factory.post('/webhooks/telebirrB2C/', data=body, content_type='text/xml')
 
     response = telebirr_b2c_webhook(request)
@@ -334,7 +425,9 @@ def test_webhook_marks_winner_gift_failed(processing_winner_gift):
 
 
 def test_webhook_winner_gift_duplicate_delivery_does_not_double_process(processing_winner_gift):
-    body = _soap_result(originator_conversation_id='S_X20260820WGWEBHOOK1', result_code='0', transaction_id='TXNWG2')
+    body = _soap_result(
+        originator_conversation_id='S_X20260820WGWEBHOOK1', result_code='0', transaction_id='TXNWG2'
+    )
 
     telebirr_b2c_webhook(factory.post('/webhooks/telebirrB2C/', data=body, content_type='text/xml'))
     telebirr_b2c_webhook(factory.post('/webhooks/telebirrB2C/', data=body, content_type='text/xml'))
@@ -346,6 +439,7 @@ def test_webhook_winner_gift_duplicate_delivery_does_not_double_process(processi
 # ---------------------------------------------------------------------------
 # WinnerFrequencyRecord: eligibility math ported from master
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def campaign_with_scoring_config(db):
@@ -359,7 +453,9 @@ def campaign_with_scoring_config(db):
 def test_frequency_eligibility_true_when_under_limit(user, campaign_with_scoring_config):
     campaign, _config = campaign_with_scoring_config
 
-    is_eligible, current_wins, limit = WinnerFrequencyRecord.check_frequency_eligibility(user, 'daily', campaign)
+    is_eligible, current_wins, limit = WinnerFrequencyRecord.check_frequency_eligibility(
+        user, 'daily', campaign
+    )
 
     assert is_eligible is True
     assert current_wins == 0
@@ -372,12 +468,17 @@ def test_frequency_eligibility_false_when_limit_reached(user, campaign_with_scor
     now = timezone.now()
     for i in range(2):
         WinnerFrequencyRecord.objects.create(
-            user=user, campaign=campaign, winner_type='daily',
-            period_start=now.replace(hour=0, minute=0, second=0, microsecond=0) - timezone.timedelta(days=i),
+            user=user,
+            campaign=campaign,
+            winner_type='daily',
+            period_start=now.replace(hour=0, minute=0, second=0, microsecond=0)
+            - timezone.timedelta(days=i),
             period_end=now,
         )
 
-    is_eligible, current_wins, limit = WinnerFrequencyRecord.check_frequency_eligibility(user, 'daily', campaign)
+    is_eligible, current_wins, limit = WinnerFrequencyRecord.check_frequency_eligibility(
+        user, 'daily', campaign
+    )
 
     assert is_eligible is False
     assert current_wins == 2
@@ -445,11 +546,20 @@ def selected_weekly_winners(db):
 def test_bulk_payout_pays_each_winner_once(admin_with_gift_permission, selected_weekly_winners):
     _campaign, winners = selected_weekly_winners
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
-    ) as initiate:
-        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'OB',
+                'conversation_id': 'CB',
+            },
+        ) as initiate,
+    ):
+        request = factory.post(
+            '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 
@@ -469,12 +579,21 @@ def test_rerunning_the_bulk_payout_does_not_pay_twice(
     """
     _campaign, winners = selected_weekly_winners
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
-    ) as initiate:
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'OB',
+                'conversation_id': 'CB',
+            },
+        ) as initiate,
+    ):
         for _ in range(2):
-            request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+            request = factory.post(
+                '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json'
+            )
             force_authenticate(request, user=admin_with_gift_permission)
             response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 
@@ -485,11 +604,20 @@ def test_rerunning_the_bulk_payout_does_not_pay_twice(
 
 
 def test_bulk_payout_reports_the_prize_amount(admin_with_gift_permission, selected_weekly_winners):
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'OB',
+                'conversation_id': 'CB',
+            },
+        ),
     ):
-        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        request = factory.post(
+            '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 
@@ -499,10 +627,13 @@ def test_bulk_payout_reports_the_prize_amount(admin_with_gift_permission, select
 def test_bulk_payout_refuses_a_caller_supplied_amount(
     admin_with_gift_permission, selected_weekly_winners
 ):
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT
-    ) as initiate:
-        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly', 'amount': 5}, format='json')
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(B2C_PAYMENT) as initiate,
+    ):
+        request = factory.post(
+            '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly', 'amount': 5}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 
@@ -517,11 +648,20 @@ def test_bulk_payout_records_the_campaign_and_deadline(
     is trackable for winners paid this way."""
     campaign, winners = selected_weekly_winners
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', return_value=True), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', return_value=True),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'OB',
+                'conversation_id': 'CB',
+            },
+        ),
     ):
-        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        request = factory.post(
+            '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 
@@ -538,11 +678,20 @@ def test_bulk_payout_skips_non_telebirr_winners(
     def only_first_is_telebirr(self):
         return self.user_id == winners[0].id
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', only_first_is_telebirr), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
-    ) as initiate:
-        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', only_first_is_telebirr),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'OB',
+                'conversation_id': 'CB',
+            },
+        ) as initiate,
+    ):
+        request = factory.post(
+            '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         response = CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 
@@ -567,11 +716,20 @@ def test_a_skipped_winner_still_gets_a_prize_row(
     def only_first_is_telebirr(self):
         return self.user_id == winners[0].id
 
-    with patch('api.models.core.UserProfile.is_telebirr_user', only_first_is_telebirr), patch(
-        B2C_PAYMENT,
-        return_value={'success': True, 'originator_conversation_id': 'OB', 'conversation_id': 'CB'},
+    with (
+        patch('api.models.core.UserProfile.is_telebirr_user', only_first_is_telebirr),
+        patch(
+            B2C_PAYMENT,
+            return_value={
+                'success': True,
+                'originator_conversation_id': 'OB',
+                'conversation_id': 'CB',
+            },
+        ),
     ):
-        request = factory.post('/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json')
+        request = factory.post(
+            '/admin/crm/send-b2c-bulk/', {'winner_type': 'weekly'}, format='json'
+        )
         force_authenticate(request, user=admin_with_gift_permission)
         CRMGiftAwardViewSet.as_view({'post': 'send_b2c_bulk'})(request)
 

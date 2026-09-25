@@ -287,9 +287,7 @@ class UserProfile(models.Model):
         if total_field:
             setattr(self, total_field, getattr(locked, total_field))
 
-    def add_points(
-        self, amount, total_field='points_earned_total', *, reason=None, description=''
-    ):
+    def add_points(self, amount, total_field='points_earned_total', *, reason=None, description=''):
         if amount <= 0:
             raise ValueError('Amount must be positive')
         self._apply_delta(
@@ -993,13 +991,13 @@ class Notification(models.Model):
             models.Index(fields=['recipient', 'is_read']),
         ]
 
+    def __str__(self):
+        return f'{self.notification_type} notification for {self.recipient.username}'
+
     @property
     def is_system(self):
         """Raised by the platform rather than by another user."""
         return self.notification_type in self.SYSTEM_TYPES
-
-    def __str__(self):
-        return f'{self.notification_type} notification for {self.recipient.username}'
 
 
 class NotInterested(models.Model):

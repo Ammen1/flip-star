@@ -75,17 +75,19 @@ def last_activity_at(user):
     stamps = []
 
     last_transaction = (
-        CoinTransaction.objects.filter(user=user).order_by('-created_at').values_list(
-            'created_at', flat=True
-        ).first()
+        CoinTransaction.objects.filter(user=user)
+        .order_by('-created_at')
+        .values_list('created_at', flat=True)
+        .first()
     )
     if last_transaction:
         stamps.append(last_transaction)
 
     last_withdrawal = (
-        WithdrawalRequest.objects.filter(user=user).order_by('-created_at').values_list(
-            'created_at', flat=True
-        ).first()
+        WithdrawalRequest.objects.filter(user=user)
+        .order_by('-created_at')
+        .values_list('created_at', flat=True)
+        .first()
     )
     if last_withdrawal:
         stamps.append(last_withdrawal)
@@ -96,9 +98,7 @@ def last_activity_at(user):
         # A DateField; taken as the end of that day so a login today is not
         # read as midnight this morning.
         stamps.append(
-            timezone.make_aware(
-                timezone.datetime.combine(login_date, timezone.datetime.max.time())
-            )
+            timezone.make_aware(timezone.datetime.combine(login_date, timezone.datetime.max.time()))
         )
 
     if getattr(user, 'last_login', None):
