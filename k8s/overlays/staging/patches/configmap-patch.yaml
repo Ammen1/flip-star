@@ -219,14 +219,34 @@ data:
   # allows_airtime false and the Buy Coins page keeps hiding the button. Both
   # are needed, which is why they are turned on together.
   #
-  # This does NOT start charging subscription renewals. That flow needs this
-  # AND TIMWE_SUBSCRIPTION_RENEWAL_ENABLED, which stays off (see
-  # api/services/subscription_renewal.py:125) until TIMWE confirm that
-  # renewals on this service are ours to charge rather than theirs -- charging
-  # from here while TIMWE also renew would bill a subscriber twice.
+  # The master switch. Subscription renewal charging additionally needs
+  # TIMWE_SUBSCRIPTION_RENEWAL_ENABLED below; both are required by
+  # renewal_enabled() in api/services/subscription_renewal.py.
   #
   # Production inherits the default False from config/settings/base.py.
   TIMWE_CHARGING_ENABLED: "true"
+
+  # Subscription renewal charging. STAGING ONLY.
+  #
+  # Turned on deliberately. It was held off until TIMWE confirmed whether
+  # renewals on this service are ours to charge or theirs, and that
+  # confirmation has NOT been recorded here -- the switch was flipped as an
+  # operational decision to get staging renewing.
+  #
+  # The risk that was being avoided, stated plainly so it is not forgotten:
+  # if TIMWE also renew a subscription on short code 9286, the subscriber is
+  # charged twice -- once by them, once by the hourly sweep. Watch the first
+  # renewals for duplicate charges against the same period, and turn this
+  # back off if any appear.
+  #
+  # What it starts: sweep_expired_subscriptions runs hourly and charges every
+  # lapsed airtime plan that is due, retrying an hour after a refusal for
+  # TIMWE_RENEWAL_WINDOW_DAYS (7). Each tier charges its own price against its
+  # own service id -- daily 3 Birr against 30026300007331, and so on.
+  #
+  # `manage.py timwe_charge_check --renewals` lists what is due and charges
+  # nothing; run it before and after to see what this actually did.
+  TIMWE_SUBSCRIPTION_RENEWAL_ENABLED: "true"
 
   # Deep link base URL embedded in the welcome SMS. A subscriber who gets
   # this URL taps it to open the app / register. Must match what the mobile
