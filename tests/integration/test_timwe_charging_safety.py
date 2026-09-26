@@ -104,21 +104,32 @@ def test_every_charging_switch_defaults_off(name):
 #: TIMWE_CHARGING_ENABLED joined this list once staging's charging credentials
 #: were confirmed present in Vault and the endpoint confirmed reachable.
 #: Airtime purchase does not work without it -- the two are only useful
-#: together -- and it is the narrower of the two ways to get there, because
-#: the renewal flow stays off behind its own switch either way.
+#: together.
+#:
+#: TIMWE_SUBSCRIPTION_RENEWAL_ENABLED joined it later, as an operational
+#: decision to get staging renewing. It is the one switch that bills a
+#: subscriber who pressed nothing, and the question it was held for -- whether
+#: TIMWE renew short-code subscriptions themselves, which would charge the
+#: same period twice -- is still not answered in this repository. Widening the
+#: exception is not the same as retiring the risk: see
+#: test_only_staging_may_charge_for_renewals below, which is what now keeps it
+#: away from production.
 STAGING_OVERLAY = Path('k8s/overlays/staging/patches/configmap-patch.yaml')
-STAGING_MAY_ENABLE = {'TIMWE_AIRTIME_PURCHASE_ENABLED', 'TIMWE_CHARGING_ENABLED'}
+STAGING_MAY_ENABLE = {
+    'TIMWE_AIRTIME_PURCHASE_ENABLED',
+    'TIMWE_CHARGING_ENABLED',
+    'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED',
+}
 
 
 def test_nothing_in_the_deployment_turns_charging_on():
     """A deploy picks these files up. None of them may flip a switch.
 
-    Two exceptions, both in the staging overlay and both listed in
+    The exceptions are all in the staging overlay and all listed in
     STAGING_MAY_ENABLE. What this test still guarantees with them in place:
-    production and k8s/base turn nothing on, and
-    TIMWE_SUBSCRIPTION_RENEWAL_ENABLED is on nowhere -- so no deploy can start
-    charging subscribers for renewals, which is the double-billing risk this
-    file was written for.
+    every other file -- production, k8s/base, argocd, .github, the compose
+    file and .env.example -- turns nothing on. A switch can only be enabled
+    in the one overlay that is allowed to enable it.
     """
     enabling = re.compile(
         r'(TIMWE_(?:CHARGING|SUBSCRIPTION_RENEWAL|AIRTIME_PURCHASE)_ENABLED)\s*[:=]\s*["\']?(true|1|yes|on)\b',
@@ -146,25 +157,50 @@ def test_nothing_in_the_deployment_turns_charging_on():
     assert not offenders, 'A deployment file enables TIMWE charging:\n  ' + '\n  '.join(offenders)
 
 
-def test_the_staging_exception_is_only_the_airtime_pair():
-    """Pinned so the exception cannot quietly widen."""
-    assert STAGING_MAY_ENABLE == {'TIMWE_AIRTIME_PURCHASE_ENABLED', 'TIMWE_CHARGING_ENABLED'}
+def test_the_staging_exception_is_exactly_these_three():
+    """Pinned so the exception cannot quietly widen any further.
+
+    Adding a fourth switch here is a decision about billing somebody, and it
+    should require editing this list and saying why.
+    """
+    assert STAGING_MAY_ENABLE == {
+        'TIMWE_AIRTIME_PURCHASE_ENABLED',
+        'TIMWE_CHARGING_ENABLED',
+        'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED',
+    }
 
     overlay = (BACKEND / STAGING_OVERLAY).read_text(encoding='utf-8')
     for switch in sorted(STAGING_MAY_ENABLE):
         assert f'{switch}: "true"' in overlay, f'staging no longer enables {switch}'
 
 
-def test_staging_does_not_charge_for_renewals():
-    """The one switch that bills a subscriber unprompted stays off.
+def test_only_staging_may_charge_for_renewals():
+    """The one switch that bills a subscriber who pressed nothing.
 
     TIMWE may renew short-code subscriptions themselves. Renewing from here as
-    well charges twice for the same period, and the subscriber has asked for
-    neither. Unlike a coin purchase, nobody pressed a button for it.
+    well charges twice for the same period, and the subscriber asked for
+    neither -- unlike a coin purchase, nobody pressed a button for it.
+
+    Staging now enables it deliberately. This test is what stops that
+    travelling: production and k8s/base must not mention it at all, so
+    production keeps inheriting the False default from settings and a copied
+    ConfigMap block cannot switch renewals on for real subscribers.
     """
-    overlay = (BACKEND / STAGING_OVERLAY).read_text(encoding='utf-8')
-    assert 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED: "true"' not in overlay
-    assert 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED' not in STAGING_MAY_ENABLE
+    for folder in ('k8s/base', 'k8s/overlays/production', 'argocd'):
+        root = BACKEND / folder
+        if not root.exists():
+            continue
+        for path in root.rglob('*'):
+            if path.is_file() and path.suffix in ('.yaml', '.yml'):
+                text = path.read_text(encoding='utf-8', errors='replace')
+                assert 'TIMWE_SUBSCRIPTION_RENEWAL_ENABLED' not in text, (
+                    f'{path.relative_to(BACKEND)} sets the renewal switch; '
+                    'production must inherit the default instead'
+                )
+
+    # And the default it inherits is off -- asserted directly rather than
+    # trusted, because that default is the whole protection.
+    assert _declared_default('TIMWE_SUBSCRIPTION_RENEWAL_ENABLED') is False
 
 
 def test_nowhere_else_enables_airtime_purchase():
