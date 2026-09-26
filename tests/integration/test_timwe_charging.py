@@ -2172,3 +2172,198 @@ def test_the_columns_hold_every_currency_the_client_accepts():
     for model in (TimweChargeTransaction, SubscriptionPayment):
         width = model._meta.get_field('currency').max_length
         assert width >= len(longest), f'{model.__name__}.currency holds only {width}'
+
+
+# ── SVC0001 is NO_BALANCE, not a timeout ────────────────────────────────────
+#
+# Observed live: charging 10 Birr to a number with no airtime returned SVC0001
+# / NO_BALANCE in 142 ms. The code was documented as a timeout, which is how a
+# working integration came to be recorded as an unresolved provider blocker --
+# and the subscriber was told the system was unavailable when the fix was to
+# top up.
+
+
+def _rejected(error_code, error_message):
+    """A rejected charge row, without going near the network."""
+    from api.models.timwe import TimweChargeTransaction
+    from api.services.timwe_charging import ChargeResult
+
+    charge = TimweChargeTransaction(
+        status='failed',
+        outcome='rejected',
+        error_code=error_code,
+        error_message=error_message,
+    )
+    return ChargeResult(transaction=charge, created=True)
+
+
+def test_no_balance_tells_the_subscriber_to_top_up():
+    from api.services.timwe_charging import user_message
+
+    message = user_message(_rejected('SVC0001', 'NO_BALANCE'))
+
+    assert 'airtime' in message.lower()
+    assert 'top up' in message.lower()
+    assert 'not been charged' in message.lower()
+    # The old behaviour, and the thing that made this unactionable.
+    assert 'temporarily unavailable' not in message.lower()
+
+
+def test_a_genuine_timeout_on_the_same_code_stays_our_problem():
+    """SVC0001 covers both. Only NO_BALANCE is named to the subscriber -- a
+    timeout is not their fault and not theirs to fix."""
+    from api.services.timwe_charging import user_message
+
+    message = user_message(_rejected('SVC0001', 'Waiting for response timed out'))
+
+    assert 'top up' not in message.lower()
+    assert 'temporarily unavailable' in message.lower()
+
+
+def test_no_balance_is_never_described_as_ambiguous():
+    """It is a definite refusal: nothing was charged, so it must not land in
+    the reconciliation queue as 'may or may not have paid'."""
+    result = _rejected('SVC0001', 'NO_BALANCE')
+
+    assert result.transaction.is_ambiguous is False
+
+
+def test_the_operator_description_names_no_balance_first():
+    """An operator reading only the code table should reach for the balance,
+    not for an MA outage."""
+    from api.integrations.timwe.errors import CHARGE_AMOUNT_ERRORS, CHARGE_NO_BALANCE
+
+    description = CHARGE_AMOUNT_ERRORS[CHARGE_NO_BALANCE]
+
+    assert 'NO_BALANCE' in description
+    assert 'error_message' in description
+
+
+def test_no_balance_is_retryable_because_a_top_up_fixes_it():
+    from api.integrations.timwe.errors import (
+        CHARGE_NO_BALANCE,
+        CHARGE_PERMANENT,
+        CHARGE_RETRYABLE,
+    )
+
+    assert CHARGE_NO_BALANCE in CHARGE_RETRYABLE
+    assert CHARGE_NO_BALANCE not in CHARGE_PERMANENT
+
+
+# ── the per-tier charging service ───────────────────────────────────────────
+#
+# TIMWE register a price point per service, so 3 Birr is valid only against the
+# daily service and 10 only against the on-demand one. Every tier on staging had
+# a blank service_id, so all four charged against the deployment default --
+# 30026300007334, the ON-DEMAND service. 10 Birr reached a balance check;
+# 3 Birr came back INVALID_PRICEPOINT_ID. No renewal could ever have succeeded.
+
+
+def _backfill():
+    import importlib
+
+    from django.apps import apps as real_apps
+
+    module = importlib.import_module('api.migrations.0143_backfill_tier_charge_service_ids')
+    module.backfill(real_apps, None)
+    return module
+
+
+def _blank_tier(slug, duration_type, price):
+    from decimal import Decimal
+
+    from api.models.subscription import SubscriptionTier
+
+    return SubscriptionTier.objects.create(
+        name=slug,
+        slug=slug,
+        description='',
+        duration_type=duration_type,
+        # The model refuses duration_days on the on-demand tier: it is a
+        # one-off purchase, not a period.
+        duration_days=None if duration_type == 'ondemand' else 1,
+        price_etb=Decimal(price),
+        onevas_code=slug[0].upper(),
+        spid='300263',
+        service_id='',
+        product_id='',
+        application_key='key-' + slug,
+    )
+
+
+def test_each_tier_gets_the_service_its_price_point_lives_on(db):
+    from api.models.subscription import SubscriptionTier
+    from api.services.subscription_tiers import charging_service_id
+
+    SubscriptionTier.objects.all().delete()
+    for slug, duration, price in [
+        ('daily', 'daily', '3'),
+        ('weekly', 'weekly', '20'),
+        ('monthly', 'monthly', '70'),
+        ('ondemand', 'ondemand', '10'),
+    ]:
+        _blank_tier(slug, duration, price)
+
+    # Before: everything falls back to the deployment default.
+    assert all(charging_service_id(t) == '' for t in SubscriptionTier.objects.all())
+
+    _backfill()
+
+    expected = {
+        'daily': '30026300007331',
+        'weekly': '30026300007332',
+        'monthly': '30026300007333',
+        'ondemand': '30026300007334',
+    }
+    for slug, service_id in expected.items():
+        tier = SubscriptionTier.objects.get(slug=slug)
+        assert charging_service_id(tier) == service_id, slug
+
+    # The four are distinct: that is the whole point -- one service per price
+    # point, not one service for everything.
+    assert len(set(expected.values())) == 4
+
+
+def test_the_default_setting_is_the_on_demand_service(db):
+    """Which is why a 10 Birr coin purchase worked and a 3 Birr renewal did not.
+
+    Pinning the relationship so the coincidence is not read as intent again.
+    """
+    module = _backfill()
+    ids = module.CHARGE_SERVICE_IDS
+
+    # 30026300007334 is what staging has in TIMWE_SERVICE_ID, and it is the
+    # on-demand tier's -- not a neutral default. Asserted against the constant
+    # rather than the setting, which differs per environment.
+    assert ids['ondemand'] == '30026300007334'
+    assert ids['daily'] != ids['ondemand']
+    assert len(set(ids.values())) == len(ids)
+
+
+def test_a_service_id_already_set_is_never_overwritten(db):
+    """A backfill, not a reset. An environment TIMWE gave different ids keeps
+    them -- which is also what makes this safe to re-run."""
+    from api.models.subscription import SubscriptionTier
+    from api.services.subscription_tiers import charging_service_id
+
+    SubscriptionTier.objects.all().delete()
+    tier = _blank_tier('daily', 'daily', '3')
+    tier.service_id = '99999999999999'
+    tier.save()
+
+    _backfill()
+
+    assert charging_service_id(SubscriptionTier.objects.get(slug='daily')) == '99999999999999'
+
+
+def test_the_backfill_is_idempotent(db):
+    from api.models.subscription import SubscriptionTier
+    from api.services.subscription_tiers import charging_service_id
+
+    SubscriptionTier.objects.all().delete()
+    _blank_tier('weekly', 'weekly', '20')
+
+    _backfill()
+    _backfill()
+
+    assert charging_service_id(SubscriptionTier.objects.get(slug='weekly')) == '30026300007332'

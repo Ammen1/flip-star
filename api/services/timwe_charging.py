@@ -50,6 +50,7 @@ from api.integrations.timwe.charge import (
 from api.integrations.timwe.errors import (
     CHARGE_AMOUNT_OUT_OF_RANGE,
     CHARGE_FAILED,
+    CHARGE_NO_BALANCE,
     TimweChargingDisabled,
     TimweError,
 )
@@ -407,6 +408,16 @@ def user_message(result: ChargeResult) -> str:
     if charge.error_code == CHARGE_FAILED:
         return (
             'The payment could not be completed. Please check your airtime balance and try again.'
+        )
+    # NO_BALANCE is the one failure the subscriber can actually fix, and it was
+    # falling through to "temporarily unavailable" -- telling someone the system
+    # is down when the answer is to top up. The MA's own text separates this
+    # from the timeout that shares its code; only NO_BALANCE is named to the
+    # user, because a timeout genuinely is our problem.
+    if charge.error_code == CHARGE_NO_BALANCE and 'NO_BALANCE' in (charge.error_message or ''):
+        return (
+            'You do not have enough airtime for this payment. '
+            'Top up and try again -- you have not been charged.'
         )
     # Authentication, service-configuration and input codes are our problem,
     # not the subscriber's, and are not described to them as their fault.

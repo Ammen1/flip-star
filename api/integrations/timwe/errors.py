@@ -38,14 +38,26 @@ SYNC_ORDER_RELATION_ERRORS = {
     SYNC_INTERNAL_ERROR: 'An internal system error occurred.',
 }
 
+#: The guide calls SVC0001 a timeout. TIMWE's gateway also returns it for an
+#: empty airtime balance, with the MA text NO_BALANCE -- observed on staging
+#: in 142 ms, which no timeout produces. Both names point at the same code;
+#: error_message is what distinguishes them.
 CHARGE_TIMEOUT = 'SVC0001'
+CHARGE_NO_BALANCE = CHARGE_TIMEOUT
 CHARGE_INVALID_INPUT = 'SVC0002'
 CHARGE_AUTH_FAILED = 'SVC0901'
 CHARGE_FAILED = 'SVC0270'
 CHARGE_AMOUNT_OUT_OF_RANGE = 'POL0910'
 
 CHARGE_AMOUNT_ERRORS = {
-    CHARGE_TIMEOUT: 'Waiting for response timed out; an internal MA service is abnormal.',
+    # Two very different situations behind one code, and the subscriber's
+    # empty balance is by far the commoner. Reading this as a timeout is
+    # what made a working integration look broken: a charge that returns in
+    # 142 ms did not time out.
+    CHARGE_TIMEOUT: (
+        'The subscriber has insufficient airtime (NO_BALANCE), or the request '
+        'timed out against an abnormal MA service. Read error_message for which.'
+    ),
     CHARGE_INVALID_INPUT: 'A required charging field is blank or invalid.',
     # The guide calls SVC0901 authentication/authorisation, and it was
     # described as only that here. TIMWE's gateway also returns it for
