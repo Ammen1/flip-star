@@ -1,45 +1,50 @@
-"""Give each subscription tier back its TIMWE charging service id.
+"""Fill in a subscription tier's TIMWE charging service id when it is blank.
 
-Why this is needed
-------------------
-A charge names the MA service the product is provisioned under --
-``<v2:serviceId>`` in api/integrations/timwe/charge.py. TIMWE register a
-price point per service, so 3 Birr is only valid against the daily service
-and 10 Birr only against the on-demand one.
+What this is NOT
+----------------
+It is not a repair for staging. Staging's four tiers already carry the right
+ids -- verified against the live database, which returns 30026300007331 /
+7332 / 7333 / 7334 for daily / weekly / monthly / ondemand. This migration
+finds nothing to do there, and that is the expected outcome.
 
-``charging_service_id(tier)`` reads ``SubscriptionTier.service_id`` and falls
-back to the deployment-wide ``TIMWE_SERVICE_ID`` when it is blank. On staging
-every tier was blank, so all four products charged against the configured
-default -- which is ``30026300007334``, the **on-demand** service. The result:
-
-    10 Birr  ->  SVC0001 NO_BALANCE          (valid price point, empty wallet)
-     3 Birr  ->  SVC0901 INVALID_PRICEPOINT_ID
-    20 Birr  ->  would fail the same way
-    70 Birr  ->  would fail the same way
-
-So no subscription renewal could ever have succeeded, whatever
-``TIMWE_SUBSCRIPTION_RENEWAL_ENABLED`` was set to.
-
-Migration 0057 seeded these ids correctly. They were lost because
+What it guards
+--------------
 ``manage.py seed_subscription_tiers`` creates tiers with
 ``get_or_create(slug=..., defaults=...)`` and deliberately omits the
-provisioning columns -- a tier created by that command starts blank, and no
-later run fills it in. That omission is right (re-running must never blank a
-stored value); what was missing is anything that puts them back.
+provisioning columns (spid / service_id / product_id / application_key) so
+that re-running it can never blank a stored ``product_id``. That omission is
+right. Its consequence is that a tier *created* by that command starts with
+``service_id=''`` and nothing ever fills it in -- so a freshly seeded
+environment charges every product against the deployment-wide
+``TIMWE_SERVICE_ID`` instead of its own service.
+
+Why that matters
+----------------
+A charge names the MA service the product is provisioned under
+(``<v2:serviceId>`` in api/integrations/timwe/charge.py) and TIMWE register a
+price point per service. 3 Birr is valid against the daily service and not
+against the on-demand one, which is what ``TIMWE_SERVICE_ID`` happens to hold
+-- so a blank tier would charge 3 Birr at the 10 Birr service and get
+``SVC0901 INVALID_PRICEPOINT_ID`` on every renewal, hourly, for a week.
+
+``charging_service_id(tier)`` returns '' for a blank tier and the caller falls
+back to the default, so nothing fails loudly; it just quietly charges the
+wrong service.
 
 Only fills what is empty
 ------------------------
-A tier that already carries a service id is left exactly as it is. This is a
-backfill, not a reset: if an environment has been given different ids by
-TIMWE, they survive. That also makes it safe to re-run and safe on
-production, where the values may already be present.
+A tier that already carries an id keeps it, whatever it is. This is a
+backfill, not a reset: an environment TIMWE issued different ids to survives
+untouched, and re-running is a no-op. That is what makes it safe to apply
+everywhere, including production, where the values are expected to be present
+already.
 """
 
 from django.db import migrations
 
-#: Source: api/migrations/0057_create_subscription_tiers.py, and
-#: scripts/populate_subscription_tiers.py, which agree. Keyed by slug --
-#: `duration_type` carries the same four values, but slug is what the seed
+#: Source: api/migrations/0057_create_subscription_tiers.py and
+#: scripts/populate_subscription_tiers.py, which agree with each other and
+#: with the live staging database. Keyed by slug, which is what the seed
 #: command matches on.
 CHARGE_SERVICE_IDS = {
     'daily': '30026300007331',
@@ -60,9 +65,8 @@ def backfill(apps, schema_editor):
 def unbackfill(apps, schema_editor):
     """Clear only the ids this migration would have written.
 
-    Reversing restores the state that made charging fail, which is not
-    something to do casually -- but a migration that cannot be reversed is
-    worse, and a tier carrying some other id is left alone.
+    A tier carrying some other id is left alone, so reversing cannot destroy
+    a value this migration did not put there.
     """
     SubscriptionTier = apps.get_model('api', 'SubscriptionTier')
 
