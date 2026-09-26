@@ -1628,7 +1628,21 @@ def telebirr_b2c_webhook(request):
                             withdrawal.rejection_reason = (
                                 f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
                             )
-                            withdrawal.save(update_fields=['status', 'rejection_reason'])
+                            # Kept on a failure too, not only on a payout.
+                            # Telebirr can assign a TransactionID and then
+                            # cancel the transaction, and that id is the only
+                            # handle their support can trace it by -- so it
+                            # belongs on the row rather than in a log line
+                            # that rolls away.
+                            if transaction_id:
+                                withdrawal.telebirr_transaction_id = transaction_id
+                            withdrawal.save(
+                                update_fields=[
+                                    'status',
+                                    'rejection_reason',
+                                    'telebirr_transaction_id',
+                                ]
+                            )
                             # The shared refund (WithdrawalRequest.refund_to_user),
                             # not add_points directly: a legacy coin withdrawal
                             # has point_amount 0, and add_points(0) raises
@@ -1719,7 +1733,13 @@ def telebirr_b2c_webhook(request):
                 withdrawal.rejection_reason = (
                     f'B2C payment failed: {result_desc or f"ResultCode={result_code}"}'
                 )
-                withdrawal.save(update_fields=['status', 'rejection_reason'])
+                # See the other failure branch: the provider's TransactionID is
+                # kept on a cancelled payout as well as a paid one.
+                if transaction_id:
+                    withdrawal.telebirr_transaction_id = transaction_id
+                withdrawal.save(
+                    update_fields=['status', 'rejection_reason', 'telebirr_transaction_id']
+                )
                 # See the note on the other failure branch above: one refund
                 # path for all of them, and it handles a coin-era row too.
                 refunded = withdrawal.refund_to_user(reason='failed')

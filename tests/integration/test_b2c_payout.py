@@ -565,3 +565,28 @@ def test_the_conversation_id_keeps_the_prefix_the_gateway_accepts():
 
     assert generated.startswith('S_X')
     assert len(generated) > len('S_X20260926113518')
+
+
+def test_a_cancelled_payout_keeps_the_provider_transaction_id(processing_withdrawal):
+    """Telebirr can assign a TransactionID and then cancel the transaction.
+
+    Observed live on withdrawal #48: ResultCode -1, ResultDesc
+    'System internal error.', TransactionStatus 'Cancelled', TransactionID
+    'DIQ368L6G1'. That id is the only handle their support can trace the
+    failure by, and it was written to a log line and then dropped -- the
+    success path stored it, the failure path did not.
+    """
+    body = _soap_result(
+        originator_conversation_id='S_X20260820WEBHOOK1',
+        result_code='-1',
+        transaction_id='DIQ368L6G1',
+        result_desc='System internal error.',
+    )
+    request = factory.post('/api/webhooks/telebirrB2C/', data=body, content_type='text/xml')
+    response = telebirr_b2c_webhook(request)
+
+    assert response.status_code == 200
+    processing_withdrawal.refresh_from_db()
+    assert processing_withdrawal.status == 'failed'
+    assert processing_withdrawal.telebirr_transaction_id == 'DIQ368L6G1'
+    assert 'System internal error' in processing_withdrawal.rejection_reason
