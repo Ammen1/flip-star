@@ -412,7 +412,12 @@ VAPID_SUBJECT = config('VAPID_SUBJECT', default='mailto:admin@flipstar.et')
 TELEBIRR_SOAP_URL = config('TELEBIRR_SOAP_URL', default='')
 TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='')
 TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='')
-TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='')
+# The merchant short code. One code for every direction on this account:
+# telebirr issues per-direction codes to some merchants, which is why the
+# B2C and USSD settings below exist separately, but this deployment was
+# issued 553559 for all of them. Sent as <req:ShortCode> on mandate
+# creation and mandate query.
+TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='553559')
 TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='')
 # Whether SOAP calls to the Telebirr gateway verify the server certificate.
 # The provider's testbed endpoints (internal IPs such as 10.180.70.177) serve
@@ -450,14 +455,27 @@ TELEBIRR_ORG_OPERATOR_CREDENTIAL = config('TELEBIRR_ORG_OPERATOR_CREDENTIAL', de
 # Telebirr B2C (Business-to-Consumer payouts, e.g. withdrawal payouts).
 # Falls back to the direct-debit org-operator/third-party credentials above
 # when unset -- see TelebirrDirectDebitService.initiate_b2c_payment.
-# The account a payout leaves FROM. Separate from TELEBIRR_SHORTCODE, which
-# is the C2B code money arrives at: telebirr issues a different short code for
-# each direction, and sending the C2B one on a B2C request -- or, as happened
-# here, sending an empty element because the shared setting was never set --
-# is refused by the gateway with no useful reason. Falls back to
-# TELEBIRR_SHORTCODE so nothing changes for a deployment that has only one.
-TELEBIRR_B2C_SHORTCODE = config('TELEBIRR_B2C_SHORTCODE', default='53906')
-TELEBIRR_B2C_SERVICE_CODE = config('TELEBIRR_B2C_SERVICE_CODE', default='53906')
+# The account a payout leaves FROM. A separate setting from
+# TELEBIRR_SHORTCODE because telebirr issues per-direction codes to some
+# merchants, and sending the wrong direction's code -- or, as happened
+# here, sending an empty element because the shared setting was never set
+# -- is refused by the gateway with no useful reason. This account has one
+# code for both directions, so it holds the same value; the separation is
+# kept so a deployment issued two can still say so. Falls back to
+# TELEBIRR_SHORTCODE when unset.
+TELEBIRR_B2C_SHORTCODE = config('TELEBIRR_B2C_SHORTCODE', default='553559')
+
+# NOT a short code, despite this default being a copy of the old one. It is
+# the service identifier that becomes the CommandID (`InitTrans_<code>`) and
+# the SOAPAction header on a B2C request -- see
+# TelebirrDirectDebitService.initiate_b2c_payment.
+#
+# CONFIRMED by Ethio Telecom: their reference cashout envelope sends
+# <req:CommandID>InitTrans_2003</req:CommandID>. The previous default of 53906
+# was a copy of the short code B2C used before it became 553559 -- a
+# coincidence that read as intentional, and wrong either way since this is a
+# command name rather than an account.
+TELEBIRR_B2C_SERVICE_CODE = config('TELEBIRR_B2C_SERVICE_CODE', default='2003')
 TELEBIRR_B2C_REASON_TYPE = config(
     'TELEBIRR_B2C_REASON_TYPE', default='Pay for Individual B2C_VDF_Demo'
 )
@@ -472,7 +490,7 @@ TELEBIRR_B2C_THIRD_PARTY_PASSWORD = config('TELEBIRR_B2C_THIRD_PARTY_PASSWORD', 
 # the payer's phone, used for coin purchases and one-time subscription
 # payments). Falls back to the direct-debit settings above when unset -- see
 # TelebirrDirectDebitService.initiate_ussd_push_payment.
-TELEBIRR_USSD_MERCHANT_SHORTCODE = config('TELEBIRR_USSD_MERCHANT_SHORTCODE', default='')
+TELEBIRR_USSD_MERCHANT_SHORTCODE = config('TELEBIRR_USSD_MERCHANT_SHORTCODE', default='553559')
 TELEBIRR_USSD_RESULT_URL = config('TELEBIRR_USSD_RESULT_URL', default='')
 TELEBIRR_USSD_SOAP_URL = config('TELEBIRR_USSD_SOAP_URL', default='')
 TELEBIRR_USSD_THIRD_PARTY_ID = config('TELEBIRR_USSD_THIRD_PARTY_ID', default='')

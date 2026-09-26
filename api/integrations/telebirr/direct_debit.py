@@ -71,8 +71,22 @@ class TelebirrDirectDebitService:
         self.client = None
 
     def _generate_originator_conversation_id(self):
-        """Generate unique originator conversation ID"""
-        return f"S_X{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        """A unique id for one request, used to correlate the async result.
+
+        The random tail is not decoration. This was `S_X` plus a
+        second-resolution timestamp, so two requests in the same second got
+        the SAME id -- and `telebirr_b2c_webhook` correlates a payout result
+        by looking the id up (`filter(originator_conversation_id=...)`). Two
+        payouts a second apart were therefore indistinguishable, and a result
+        for one could settle the other. Same failure as the CRM transaction id
+        that collided when provisioning twenty winners in a loop.
+
+        The `S_X` prefix is kept because it is known-accepted by the gateway;
+        Ethio Telecom's own sample uses a bare 32-character hex string, so the
+        field is clearly not parsed for structure.
+        """
+        stamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        return f'S_X{stamp}{uuid.uuid4().hex[:8].upper()}'
 
     def _generate_conversation_id(self):
         """Generate unique conversation ID"""
@@ -1190,6 +1204,27 @@ class TelebirrDirectDebitService:
 
             amount_formatted = f'{Decimal(amount):.2f}'
 
+            # ReferenceData carries the Remarks item. Ethio Telecom's reference
+            # cashout envelope includes it and ours did not, which is what
+            # `1002 Parameter is incorrect` was: the gateway parsed the request
+            # and rejected its contents.
+            #
+            # This is also where `remark` finally goes. It was accepted as an
+            # argument, documented, and then dropped -- as was `reason_type`,
+            # which still has nowhere to go because their sample has no field
+            # for it. Omitted entirely when empty rather than sent blank: an
+            # empty element is a value, and this endpoint rejects values it
+            # does not like.
+            reference_data = ''
+            if remark:
+                reference_data = f"""
+            <req:ReferenceData>
+               <req:ReferenceItem>
+                  <com:Key>Remarks</com:Key>
+                  <com:Value>{remark}</com:Value>
+               </req:ReferenceItem>
+            </req:ReferenceData>"""
+
             soap_envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:com="http://cps.huawei.com/cpsinterface/common" xmlns:api="http://cps.huawei.com/cpsinterface/api_requestmgr" xmlns:req="http://cps.huawei.com/cpsinterface/request">
    <soapenv:Header/>
@@ -1226,7 +1261,7 @@ class TelebirrDirectDebitService:
                   <req:Amount>{amount_formatted}</req:Amount>
                   <req:Currency>{currency}</req:Currency>
                </req:Parameters>
-            </req:TransactionRequest>
+            </req:TransactionRequest>{reference_data}
          </req:Body>
       </api:Request>
    </soapenv:Body>

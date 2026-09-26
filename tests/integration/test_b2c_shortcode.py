@@ -1,15 +1,24 @@
 """
 Which short code a withdrawal is paid from.
 
-telebirr issues one short code per direction -- 53906 for B2C, money going
-out, and 53599 for C2B, money coming in. Both directions read a single
-`TELEBIRR_SHORTCODE` until now, and on staging that setting was never set at
-all. `initiate_b2c_payment` renders `<req:ShortCode>` unconditionally, so
-every payout left with an empty element and came back refused with a generic
-error: the withdrawal was marked failed, the points were returned, and nothing
-said why.
+Both directions read a single `TELEBIRR_SHORTCODE` until this was split, and
+on staging that setting was never set at all. `initiate_b2c_payment` renders
+`<req:ShortCode>` unconditionally, so every payout left with an empty element
+and came back refused with a generic error: the withdrawal was marked failed,
+the points were returned, and nothing said why.
 
-These pin the two things that stops recurring: the directions read different
+telebirr issues per-direction short codes to some merchants -- one for money
+in, one for money out -- which is why the settings are separate. **This
+deployment is not one of them:** it was issued 553559 for every direction, so
+all three short-code settings hold the same value in production.
+
+The distinct values below are therefore deliberate fiction. Asserting with two
+different codes is the only way to tell "B2C read its own setting" apart from
+"B2C read the other one and happened to match", which is exactly the bug that
+cost real withdrawals. A test that used one value everywhere would pass with
+the bug reintroduced.
+
+These pin the two things that stop it recurring: the directions read different
 settings, and a payout with no short code is refused here rather than by the
 gateway.
 """
@@ -19,7 +28,9 @@ from django.test import override_settings
 
 from api.integrations.telebirr.direct_debit import TelebirrDirectDebitService
 
-B2C = '53906'
+# Deliberately different from each other, and deliberately not this
+# deployment's real code -- see the module docstring.
+B2C = '553559'
 C2B = '53599'
 
 

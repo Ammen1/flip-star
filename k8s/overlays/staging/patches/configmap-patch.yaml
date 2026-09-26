@@ -88,20 +88,50 @@ data:
   # Pointing this at a distinct path would just be a URL nothing ever calls.
   TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL: "http://uat.flipstar.et:6082/api/webhooks/telebirrUssdPurchase/"
 
-  # B2C payout callbacks. Unlike the USSD flows -- where Telebirr uses a Result
-  # Address registered against the merchant and ignores what we send -- the B2C
-  # ResultURL is read from each request, so this value actually takes effect.
-  # It was still pointing at uat.flipstar.et:6082, a closed port on a public
-  # hostname their VPN cannot route to, so winner payout confirmations were
-  # being lost the same way subscription ones were.
-  TELEBIRR_B2C_RESULT_URL: "https://10.0.0.93:443/api/webhooks/telebirrB2C/"
+  # B2C payout callbacks. The B2C ResultURL is read from each request, unlike
+  # the USSD flows where Telebirr uses a Result Address registered against the
+  # merchant and ignores what we send.
+  #
+  # Ethio Telecom has stated this must be the uat.flipstar.et:6082 address
+  # below -- they will not call an arbitrary one, so the value is theirs to
+  # dictate and not ours to choose.
+  #
+  # This reverses an earlier change. That change moved the URL to
+  # https://10.0.0.93:443 on the reasoning that uat.flipstar.et:6082 was a
+  # closed port their VPN could not route to. The observation was sound --
+  # payout confirmations were being lost, and withdrawals #37 and #41 have sat
+  # in 'processing' since September -- but the remedy was not: repointing the
+  # URL at an address Telebirr does not call cannot make a callback arrive.
+  #
+  # So the address stays as Telebirr requires, and REACHABILITY IS THE OPEN
+  # WORK: port 6082 on uat.flipstar.et must accept connections from Telebirr's
+  # egress, and requests must route through to this Service. Until that is
+  # true the callback still will not land, and a payout will still be
+  # confirmed by nothing.
+  #
+  # Note it is http, not https. Telebirr's requirement, not a choice here: the
+  # result envelope therefore crosses the network in clear text, carrying a
+  # TransactionID and the payee MSISDN.
+  TELEBIRR_B2C_RESULT_URL: "http://uat.flipstar.et:6082/api/v1/webhooks/telebirrB2C/"
 
-  # The account a withdrawal is paid FROM. telebirr issues one short code per
-  # direction: 53906 for B2C (money out) and 53599 for C2B (money in). They
-  # shared a single setting until now, and TELEBIRR_SHORTCODE was never set,
-  # so every payout went out with an empty <req:ShortCode> and was refused
-  # with a generic error -- which is what the failed withdrawals were.
-  TELEBIRR_B2C_SHORTCODE: "53906"
+  # The merchant short code. This account has one code for every direction
+  # (553559); telebirr issues per-direction codes to some merchants, which
+  # is why these remain separate settings. They shared a single setting
+  # until it was split, and TELEBIRR_SHORTCODE was never set, so every
+  # payout went out with an empty <req:ShortCode> and was refused with a
+  # generic error -- which is what the failed withdrawals were.
+  #
+  # B2C was 53906, USSD and C2B were 53599.
+  #
+  # The ORG operator moved with the short code after all: Ethio Telecom
+  # issued one identity (IdentifierType 12, Identifier 227833) for both
+  # cashout and USSD push, replacing 5359901 and 5359902. Operator ids,
+  # credentials and SOAP URLs are NOT set here -- they live in Vault, and
+  # VAULT_PRECEDENCE is 'env', so setting any of them here would silently
+  # override Vault.
+  TELEBIRR_SHORTCODE: "553559"
+  TELEBIRR_B2C_SHORTCODE: "553559"
+  TELEBIRR_USSD_MERCHANT_SHORTCODE: "553559"
 
   # H5 / SuperApp (Fabric) async payment notification.
   #

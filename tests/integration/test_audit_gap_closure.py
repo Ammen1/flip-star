@@ -276,7 +276,11 @@ def test_deducting_points_writes_a_negative_row(actor):
     actor.profile.add_points(100, reason='gift_received')
     actor.profile.deduct_points(30, reason='swap')
 
-    row = PointTransaction.objects.filter(user=actor).order_by('created_at').last()
+    # By id, not created_at: auto_now_add on a coarse clock gives both rows
+    # the same microsecond, and 'the later one' then depends on which the
+    # database happens to return first. The same hazard is documented in
+    # SubscriptionPlan._grant_bonus_coins.
+    row = PointTransaction.objects.filter(user=actor).order_by('id').last()
     assert row.points == -30
     assert row.balance_after == 70
     assert row.transaction_type == 'swap'

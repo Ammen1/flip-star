@@ -59,6 +59,25 @@ INTEGRATION_KEYS = {
 }
 
 
+#: Keys to report the source of, without treating absence as a fault.
+#:
+#: These resolve to a settings default when nothing configures them, so they
+#: are never "missing" in a way that breaks anything -- listing them in
+#: INTEGRATION_KEYS would report the whole Telebirr integration as PARTIAL on
+#: a deployment that legitimately relies on those defaults.
+#:
+#: What matters about them is *which source wins*. VAULT_PRECEDENCE is 'env',
+#: so a value in the ConfigMap silently overrides Vault, and a short code
+#: routing money to the wrong account is not something to find out from a
+#: failed payout.
+AUDIT_KEYS = [
+    'TELEBIRR_SHORTCODE',
+    'TELEBIRR_B2C_SHORTCODE',
+    'TELEBIRR_USSD_MERCHANT_SHORTCODE',
+    'TELEBIRR_B2C_SERVICE_CODE',
+]
+
+
 class Command(BaseCommand):
     help = 'Report Vault connectivity and where each configuration key resolves from.'
 
@@ -151,7 +170,10 @@ class Command(BaseCommand):
     def _report_sources(self):
         self.stdout.write(self.style.MIGRATE_HEADING('All known keys'))
         seen = set()
-        for key in REQUIRED_KEYS + [k for keys in INTEGRATION_KEYS.values() for k in keys]:
+        every_key = (
+            REQUIRED_KEYS + [k for keys in INTEGRATION_KEYS.values() for k in keys] + AUDIT_KEYS
+        )
+        for key in every_key:
             if key in seen:
                 continue
             seen.add(key)

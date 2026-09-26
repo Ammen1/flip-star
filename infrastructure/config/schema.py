@@ -182,7 +182,20 @@ SCHEMA: tuple[Key, ...] = (
     ),
     # -- telebirr: B2C payouts ------------------------------------------------
     _k('TELEBIRR_B2C_SOAP_URL', group='telebirr_b2c'),
-    _k('TELEBIRR_B2C_SERVICE_CODE', group='telebirr_b2c'),
+    _k(
+        'TELEBIRR_B2C_SHORTCODE',
+        group='telebirr_b2c',
+        doc='The merchant short code a payout leaves FROM. Added to the schema '
+        'late: the setting existed from the B2C/C2B split but was never '
+        'registered here, so the config layer could not see or report a value '
+        'that routes money. Falls back to TELEBIRR_SHORTCODE in settings.',
+    ),
+    _k(
+        'TELEBIRR_B2C_SERVICE_CODE',
+        group='telebirr_b2c',
+        doc='NOT a short code: becomes the CommandID (InitTrans_<code>) and the '
+        'SOAPAction header on a B2C request.',
+    ),
     _k('TELEBIRR_B2C_REASON_TYPE', group='telebirr_b2c'),
     _k('TELEBIRR_B2C_RESULT_URL', group='telebirr_b2c'),
     _k('TELEBIRR_B2C_THIRD_PARTY_ID', group='telebirr_b2c'),
