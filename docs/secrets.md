@@ -35,10 +35,10 @@ deploying this code without a Vault server.
 | `VAULT_ROLE_ID` / `VAULT_SECRET_ID` | AppRole credentials. **Use these in production.** |
 | `VAULT_TOKEN` | Token auth. Development and the dev server only. |
 | `VAULT_KV_MOUNT` | KV v2 mount point. Default `secret`. |
-| `VAULT_SECRET_PATH` | Path within the mount. Default `flipstar/backend`. |
+| `VAULT_SECRET_PATH` | Path within the mount. Default `flipstar/backend` -- **set it explicitly per environment** (`flipstar/backend/staging`, `flipstar/backend/production`), which is what the k8s overlays do. Falling back to the default reads the shared path instead. |
 | `VAULT_NAMESPACE` | Vault Enterprise namespace. Optional. |
 | `VAULT_REQUIRED` | `true` makes a Vault outage a hard startup failure. |
-| `VAULT_PRECEDENCE` | `env` (default) or `vault`. |
+| `VAULT_PRECEDENCE` | `env` (default) or `vault`. With the default, **an environment variable silently overrides Vault** -- a value left in a ConfigMap or a `.env` file wins over the one you just pushed. |
 | `VAULT_CACERT` | Path to a CA bundle for a private TLS cert. |
 | `VAULT_SKIP_VERIFY` | `true` disables TLS verification. **Never in production.** |
 | `VAULT_TIMEOUT` | Seconds. Default 5 — this runs during settings import. |
@@ -109,32 +109,88 @@ and a documented unseal procedure.
 
 ### 1. Enable KV v2 and write the secrets
 
+One path per environment. `VAULT_SECRET_PATH` has no default and is
+required, so a staging deployment that forgets it fails to start rather
+than silently reading production -- see
+`infrastructure/config/loader.py`.
+
 ```bash
 vault secrets enable -path=secret kv-v2
-vault kv put secret/flipstar/backend \
+vault kv put secret/flipstar/backend/staging \
     SECRET_KEY="..." \
     DB_PASSWORD="..." \
     TELEBIRR_THIRD_PARTY_PASSWORD="..."
 ```
 
-### 2. Create a read-only policy
+Use `vault kv patch` for later changes, never `put` -- see Rotation below.
+
+### 2. Create a read-only policy, per environment
+
+**Vault ACL paths are exact matches unless globbed.** A policy on
+`secret/data/flipstar/backend` does NOT grant
+`secret/data/flipstar/backend/staging`; a role holding it gets
+`permission denied` against every real environment. Name the environment:
 
 ```hcl
-# flipstar-backend.hcl
-path "secret/data/flipstar/backend" {
+# flipstar-backend-staging.hcl
+path "secret/data/flipstar/backend/staging" {
   capabilities = ["read"]
 }
-path "secret/metadata/flipstar/backend" {
+path "secret/metadata/flipstar/backend/staging" {
   capabilities = ["read", "list"]
 }
 ```
 
 ```bash
-vault policy write flipstar-backend flipstar-backend.hcl
+vault policy write flipstar-backend-staging flipstar-backend-staging.hcl
 ```
 
-The application only ever reads. `vault_push` writes, and is an operator tool —
-give it a separate, more privileged credential, not the app's.
+Scoped to one environment rather than globbed with `/*` on purpose: the
+staging backend has no business reading production credentials.
+
+The application only ever reads. `vault_push` writes, and is an operator
+tool -- give it a separate, more privileged credential, not the app's:
+
+```hcl
+# flipstar-operator-staging.hcl
+path "secret/data/flipstar/backend/staging" {
+  # `read` as well as write: `vault_push --merge` reads the current
+  # contents before writing the merged result.
+  capabilities = ["create", "update", "read"]
+}
+path "secret/metadata/flipstar/backend/staging" {
+  capabilities = ["read", "list"]
+}
+```
+
+HCL is a file format, not shell input. Pasted at a prompt, bash tries to
+run `path` as a command. Either save it and load the file, or pipe it --
+`vault policy write <name> -` reads the policy from stdin, so nothing has
+to be written to disk:
+
+```bash
+vault policy write flipstar-operator-staging - <<'HCL'
+path "secret/data/flipstar/backend/staging" {
+  capabilities = ["create", "update", "read"]
+}
+path "secret/metadata/flipstar/backend/staging" {
+  capabilities = ["read", "list"]
+}
+HCL
+```
+
+Then a token carrying it, for `vault_push`:
+
+```bash
+vault token create -policy=flipstar-operator-staging -ttl=1h -field=token
+```
+
+Verify before using it, rather than finding out from a failed push:
+
+```bash
+vault token capabilities <token> secret/data/flipstar/backend/staging
+# expect: create, read, update
+```
 
 ### 3. Configure AppRole
 
@@ -142,7 +198,7 @@ give it a separate, more privileged credential, not the app's.
 vault auth enable approle
 
 vault write auth/approle/role/flipstar-backend \
-    token_policies="flipstar-backend" \
+    token_policies="flipstar-backend-staging" \
     token_ttl=1h \
     token_max_ttl=4h \
     secret_id_ttl=0 \
@@ -158,7 +214,7 @@ vault write -f auth/approle/role/flipstar-backend/secret-id
 VAULT_ADDR=https://vault.internal:8200
 VAULT_ROLE_ID=<role_id>
 VAULT_SECRET_ID=<secret_id>
-VAULT_SECRET_PATH=flipstar/backend
+VAULT_SECRET_PATH=flipstar/backend/staging
 VAULT_REQUIRED=true
 ```
 
@@ -204,7 +260,7 @@ schedule is the realistic starting point; option 1 once CD exists.
 
 | Secret | Procedure |
 |---|---|
-| Application secrets | `vault kv put` the new value, then restart the backend and Celery services. |
+| Application secrets | `vault kv patch` the new value, then restart the backend and Celery services. **Not `put`** -- KV v2 `put` replaces the entire secret, so putting one key deletes every other key at that path. |
 | AppRole `secret_id` | Issue a new one, update the deployment, restart. Revoke the old with `vault write auth/approle/role/flipstar-backend/secret-id-accessor/destroy`. |
 | `SECRET_KEY` | Invalidates sessions and password-reset tokens. DRF auth tokens survive — they are random database rows, not signed. |
 | Telebirr / Onevas | Must be reissued by Ethio Telecom; coordinate before rotating. |
@@ -230,6 +286,83 @@ rotated regardless of Vault.** Adopting Vault is a good moment to do it, since
 you are touching every credential anyway. See [security.md](security.md).
 
 ---
+
+## Getting a token
+
+Four routes, in the order worth trying. `vault status` needs no token at all
+and tells you which situation you are in -- run it first.
+
+### 1. AppRole login (read-only, but immediate)
+
+The backend already authenticates this way, so the credentials exist in the
+cluster. This proves your tunnel and Vault are working, and lets you read
+values. It will NOT authorise `vault_push`, which writes.
+
+```bash
+NS=flipstar-staging
+ROLE=$(kubectl -n $NS get secret flipstar-backend-vault-approle \
+        -o jsonpath='{.data.VAULT_ROLE_ID}' | base64 -d)
+SECRET=$(kubectl -n $NS get secret flipstar-backend-vault-approle \
+        -o jsonpath='{.data.VAULT_SECRET_ID}' | base64 -d)
+
+vault write -field=token auth/approle/login role_id="$ROLE" secret_id="$SECRET"
+```
+
+### 2. The root token from `vault operator init`
+
+Printed **once**, when Vault was first initialised, along with the unseal keys. It
+is not in this repo, not in Kubernetes, and not recoverable from Vault. It is
+wherever the person who deployed Vault put it -- ask them.
+
+> **Write down where these live.** Staging Vault uses file storage and seals
+> on every pod restart, so somebody already holds the unseal keys to have
+> unsealed it before now. Record the custodian and the location here (a
+> pointer -- never the keys themselves). Until that is written down, this
+> deployment is one laptop away from being unrecoverable.
+
+### 3. Lost the root token but still have the unseal keys
+
+Regenerate it. This needs a quorum of key shares and does not touch stored
+data:
+
+```bash
+vault operator generate-root -init      # note the nonce and OTP
+vault operator generate-root            # once per key share, pasting the nonce
+vault operator generate-root -decode=<encoded-token> -otp=<otp>
+```
+
+Revoke it when you are done -- a root token should not outlive the task:
+
+```bash
+vault token revoke <token>
+```
+
+### 4. Lost both
+
+Vault has to be re-initialised, and **everything stored in it is gone**:
+
+```bash
+vault operator init          # new unseal keys + new root token
+```
+
+Then rewrite the secrets (`vault_push --merge`, from a dotenv file that still
+has them), re-create the policies and AppRole, and update the
+`flipstar-backend-vault-approle` Secret with the new `role_id`/`secret_id` --
+the old pair authenticates against an auth mount that no longer exists.
+
+### Sealed or uninitialised
+
+No token works in either state. `vault status` distinguishes them:
+
+```bash
+vault status
+# Sealed: true       -> vault operator unseal   (repeat per key share)
+# Initialized: false -> vault operator init     (Vault is empty)
+```
+
+A sealed Vault answers with a service error rather than a permissions one, but
+an uninitialised one can look like an auth failure, which is why this is worth
+checking before hunting for a token.
 
 ## Troubleshooting
 
