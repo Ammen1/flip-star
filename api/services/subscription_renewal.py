@@ -416,8 +416,19 @@ def apply_renewal(charge) -> bool:
             if not claimed:
                 return False
 
+            # of=('self',) locks the plan row only. Without it, PostgreSQL
+            # refuses the whole statement: `tier` is nullable, so
+            # select_related('tier') makes a LEFT OUTER JOIN and
+            # "FOR UPDATE cannot be applied to the nullable side of an outer
+            # join". That raised inside this transaction, rolled back the
+            # fulfilled_at claim above, and left the charge paid but
+            # unapplied -- the subscriber charged and given nothing.
+            #
+            # The tier is read here and never written, so it does not want a
+            # lock. SQLite ignores FOR UPDATE entirely, which is why the test
+            # suite cannot see this.
             plan = (
-                SubscriptionPlan.objects.select_for_update()
+                SubscriptionPlan.objects.select_for_update(of=('self',))
                 .select_related('tier')
                 .get(pk=charge.subscription_id)
             )

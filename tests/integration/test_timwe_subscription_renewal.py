@@ -1165,3 +1165,72 @@ def test_the_renewals_preview_charges_and_queues_nothing(user, tier, plan):
     assert renewal.REASON_MSISDN_MISMATCH in report
     assert '1 due, 1 skipped' in report
     assert MSISDN not in report
+
+
+# ── locking the plan without locking the joined tier ────────────────────────
+#
+# Live failure on staging, 2026-09-26:
+#
+#   psycopg2.errors.FeatureNotSupported:
+#     FOR UPDATE cannot be applied to the nullable side of an outer join
+#
+# SubscriptionPlan.tier is null=True, so select_related('tier') emits a LEFT
+# OUTER JOIN and PostgreSQL refuses to lock its nullable side. The exception
+# rolled back apply_renewal's whole transaction -- including the fulfilled_at
+# claim -- so a charge TIMWE had already taken stayed success-but-unfulfilled.
+# The subscriber paid 3 Birr and got no period.
+#
+# These assert the shape of the query rather than executing it: the suite runs
+# on SQLite, which does not implement SELECT ... FOR UPDATE and silently
+# ignores it, so executing proves nothing about the backend that broke.
+
+
+def test_the_plan_lock_does_not_extend_to_the_joined_tier():
+    """`of=('self',)` -- the plan row is locked, the outer-joined tier is not."""
+    import inspect
+    import re
+
+    from api.services import subscription_renewal
+
+    source = inspect.getsource(subscription_renewal.apply_renewal)
+    call = re.search(r'select_for_update\(([^)]*)\)', source)
+
+    assert call is not None, 'apply_renewal no longer locks the plan at all'
+    assert "of=('self',)" in call.group(0), (
+        'apply_renewal locks the outer-joined tier again: PostgreSQL refuses '
+        '"FOR UPDATE cannot be applied to the nullable side of an outer join", '
+        'which leaves a paid charge unapplied'
+    )
+
+
+def test_the_tier_relation_is_still_nullable():
+    """The reason the lock has to be narrowed. If this ever becomes non-null
+    the join stops being an outer one and the constraint disappears -- but
+    until then, of=('self',) is load-bearing."""
+    from api.models.subscription import SubscriptionPlan
+
+    assert SubscriptionPlan._meta.get_field('tier').null is True
+
+
+def test_the_narrowed_lock_is_what_django_builds():
+    """Not just the source text: the queryset really carries the restriction."""
+    from api.models.subscription import SubscriptionPlan
+
+    queryset = SubscriptionPlan.objects.select_for_update(of=('self',)).select_related('tier')
+
+    assert queryset.query.select_for_update is True
+    assert queryset.query.select_for_update_of == ('self',)
+
+
+def test_apply_renewal_still_selects_the_tier():
+    """The join is wanted -- apply_renewal reads tier.duration_days to work out
+    the new end date. Dropping select_related would fix the lock by costing a
+    query, which is not the trade made here."""
+    import inspect
+
+    from api.services import subscription_renewal
+
+    source = inspect.getsource(subscription_renewal.apply_renewal)
+
+    assert "select_related('tier')" in source
+    assert 'tier.duration_days' in source
