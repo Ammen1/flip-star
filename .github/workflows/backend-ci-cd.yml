@@ -394,7 +394,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
 
+      # dev-requirements, because `coverage` ships in requirements-dev.txt
+      # (via pytest-cov) and not in requirements.txt. Without this the job
+      # downloads both data files, prints "combining: ..." and then dies with
+      # `coverage: command not found` -- which is exactly how it first failed.
       - uses: ./.github/actions/setup-backend
+        with:
+          dev-requirements: "true"
 
       - name: Download unit coverage data
         uses: actions/download-artifact@v4
@@ -411,10 +417,14 @@ jobs:
       - name: Combine and report
         run: |
           set -eu
-          shopt -s nullglob
-          files=(.coverage.unit .coverage.integration)
+          # Either file can be missing: `if: always()` runs this job even when
+          # a test job failed, so handle 0, 1 or 2 data files.
           present=()
-          for f in "${files[@]}"; do [ -f "$f" ] && present+=("$f"); done
+          for f in .coverage.unit .coverage.integration; do
+            if [ -f "$f" ]; then
+              present+=("$f")
+            fi
+          done
           if [ ${#present[@]} -eq 0 ]; then
             echo "### Combined coverage" >> "$GITHUB_STEP_SUMMARY"
             echo "No coverage data was produced -- both test jobs failed before writing it." \
