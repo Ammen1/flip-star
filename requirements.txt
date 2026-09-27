@@ -5,7 +5,25 @@
 #   CVE-2025-64459  SQL injection                                     (fixed 4.2.26)
 # 4.2.26 is a patch release on the same 4.2 LTS line, so it carries no
 # breaking changes by Django policy. Verified against the full test suite.
-Django==4.2.26
+#
+# Bumped 4.2.26 -> 4.2.30 for audit finding H-03. Queried against OSV, 4.2.26
+# carried 22 distinct unpatched CVEs; 15 of them have fixes on the 4.2 branch
+# itself, so this is the same kind of patch-level bump as the note above and it
+# closes 15 of them for nothing. Among them:
+#   CVE-2025-13372, CVE-2025-64460                      (fixed 4.2.27)
+#   CVE-2025-13473, CVE-2025-14550, CVE-2026-1207,
+#   CVE-2026-1285, CVE-2026-1287, CVE-2026-1312        (fixed 4.2.28)
+#   CVE-2026-25673, CVE-2026-25674                      (fixed 4.2.29)
+#   CVE-2026-33033, CVE-2026-33034, CVE-2026-3902,
+#   CVE-2026-4277, CVE-2026-4292                        (fixed 4.2.30)
+# 4.2.30 is the newest release on the branch.
+#
+# The remaining 7 have fixes only on 5.2.x / 6.0.x -- they postdate 4.2's end of
+# extended support (April 2026), which is the substance of H-03 and is not
+# something a pin can fix. The 5.2 LTS migration is tracked separately in
+# audit/REMEDIATION_ROADMAP.md (P3-2); this bump is what could be done today.
+# Evidence: audit/remediation/dependency-cve-scan.txt
+Django==4.2.30
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 python-decouple==3.8

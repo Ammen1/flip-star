@@ -286,6 +286,32 @@ class CoinTransaction(models.Model):
     class Meta:
         db_table = 'coin_transactions'
         ordering = ['-created_at']
+        indexes = [
+            # Audit finding M-02. This model had no Meta.indexes at all, only
+            # db_index=True on the FK columns, while its default ordering is
+            # -created_at. So `WHERE user_id = ? ORDER BY created_at DESC` did an
+            # index scan on user_id and then sorted every row that user owns, in
+            # memory, to return ten of them.
+            #
+            # Four call sites do exactly that shape, and the first is the wallet
+            # summary, which loads on every visit to the wallet:
+            #
+            #   api/views/wallet.py:173   filter(user=...).order_by('-created_at')[:10]
+            #   api/views/wallet.py:238   filter(user=...).order_by('-created_at')
+            #   api/views/contest.py:172  filter(user=...)[:20]   (Meta.ordering applies)
+            #   api/services/points_expiry.py:78  filter(user=...).order_by('-created_at')
+            #
+            # This is the money ledger and one of the fastest-growing tables in
+            # the schema, so the sort grows with a user's history forever.
+            #
+            # Only this index, deliberately. The audit found 44 models declaring
+            # ordering with no matching index; most are configuration tables
+            # where an index costs write time and buys nothing, and the other
+            # high-volume candidates (SavedPost, Follow, CommentLike) are queried
+            # by already-indexed columns with no ORDER BY, so a composite index
+            # would not be used. Reasoning in audit/DATABASE_AUDIT.md.
+            models.Index(fields=['user', '-created_at'], name='cointx_user_created_idx'),
+        ]
         constraints = [
             # Protects the invariant api/views/wallet.py::telebirr_callback
             # relies on: at most one pending (is_successful=False) row per

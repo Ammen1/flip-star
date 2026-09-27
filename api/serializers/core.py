@@ -582,7 +582,21 @@ class ReelSerializer(serializers.ModelSerializer):
         return campaign.end_time.isoformat() if campaign else None
 
     def get_comment_count(self, obj):
-        # Always use actual count to ensure accuracy
+        # Prefer the annotation, exactly as get_is_liked and get_votes do.
+        #
+        # Measured: this method was one of two queries per row on
+        # GET /api/v1/reels/ -- 6 rows cost 6 of
+        # "SELECT COUNT(*) FROM api_comment WHERE reel_id = N". And it was pure
+        # waste, because ReelViewSet.get_queryset already annotates
+        # comment_count_db=Count('comments', distinct=True) for every row in one
+        # pass; the value was computed and then ignored. See
+        # audit/performance/endpoint_query_measure.py.
+        annotated = getattr(obj, 'comment_count_db', None)
+        if annotated is not None:
+            return annotated
+        # Fallback for callers that serialise a Reel without annotating -- the
+        # detail view's own queryset does annotate, but several other views
+        # serialise reels directly.
         try:
             return obj.comments.count()
         except (AttributeError, TypeError):
@@ -615,7 +629,22 @@ class ReelSerializer(serializers.ModelSerializer):
         return Vote.objects.filter(reel=obj).count()
 
     def get_gift_count(self, obj):
-        # Query GiftTransaction directly to count gifts for this reel
+        # The second of the two measured per-row queries on GET /api/v1/reels/:
+        # "SELECT SUM(quantity) FROM api_gifttransaction WHERE reel_id = N", once
+        # for every row. ReelViewSet.get_queryset already does
+        # prefetch_related('gifts_received'), so the rows were fetched and then
+        # re-fetched one reel at a time.
+        #
+        # Summed from the prefetch rather than added to the queryset as
+        # Sum('gifts_received__quantity'): that queryset already carries
+        # Count('comments') and Count('reel_votes'), and a Sum over a third
+        # multi-valued join fans out against them and silently inflates the
+        # total. Summing in Python over rows already in memory cannot.
+        cache = getattr(obj, '_prefetched_objects_cache', None)
+        if cache is not None and 'gifts_received' in cache:
+            return sum(gift.quantity or 0 for gift in cache['gifts_received'])
+
+        # Fallback for callers that serialise a Reel without the prefetch.
         from django.db.models import Sum
 
         from api.models.gift import GiftTransaction

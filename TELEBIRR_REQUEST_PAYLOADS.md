@@ -36,7 +36,7 @@
         <req:Caller>
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
-          <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
+          <req:Password><REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD></req:Password>
           <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
@@ -113,7 +113,7 @@
         <req:Caller>
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
-          <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
+          <req:Password><REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD></req:Password>
           <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
@@ -168,7 +168,7 @@
         <req:Caller>
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
-          <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
+          <req:Password><REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD></req:Password>
           <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
@@ -179,7 +179,7 @@
           <req:Initiator>
             <req:IdentifierType>14</req:IdentifierType>
             <req:Identifier>TestMer</req:Identifier>
-            <req:SecurityCredential>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:SecurityCredential>
+            <req:SecurityCredential><REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD></req:SecurityCredential>
           </req:Initiator>
           <req:ReceiverParty>
             <req:IdentifierType>53</req:IdentifierType>
@@ -235,7 +235,7 @@
         <req:Caller>
           <req:CallerType>2</req:CallerType>
           <req:ThirdPartyID>TestMer</req:ThirdPartyID>
-          <req:Password>jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=</req:Password>
+          <req:Password><REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD></req:Password>
           <req:ResultURL>https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit/</req:ResultURL>
         </req:Caller>
         <req:KeyOwner>1</req:KeyOwner>
@@ -269,7 +269,7 @@
 | Field                            | Value                                          |
 | -------------------------------- | ---------------------------------------------- |
 | `ThirdPartyID`                   | `TestMer`                                      |
-| `Password`                       | `jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=` |
+| `Password`                       | `<REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD>` |
 | `SP Operator Identifier`         | `TestSPOperAPI` (IdentifierType=14)            |
 | `SP Operator SecurityCredential` | `2JKSrKYlLAVvKWuIUXcexc3GHiT0+lEKzeVb6JRcZUM=` |
 | `Payee ShortCode`                | `232323`                                       |

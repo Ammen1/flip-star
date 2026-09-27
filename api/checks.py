@@ -87,3 +87,56 @@ def check_webhook_allowlist(app_configs, **kwargs):
             id=f'{PREFIX}.W003',
         )
     ]
+
+
+@register()
+def check_payment_tls_verification(app_configs, **kwargs):
+    """Payment SOAP traffic with certificate verification turned off.
+
+    Audit finding H-02. ``TELEBIRR_VERIFY_SSL`` used to default to False, so an
+    environment that never set it -- which was every environment, since nothing
+    in ``k8s/`` set it -- sent third-party credentials and payment instructions
+    over a connection nobody authenticated. The default is now True, and this
+    check exists so that turning it back off stays visible instead of becoming
+    invisible again.
+
+    Staging turns it off deliberately (the provider's UAT endpoint serves a
+    private certificate), so this is a warning rather than an error. It is meant
+    to be seen and left alone there, not silenced.
+    """
+    messages = []
+
+    if getattr(settings, 'DEBUG', False):
+        return messages
+
+    if not getattr(settings, 'TELEBIRR_VERIFY_SSL', True):
+        messages.append(
+            CheckWarning(
+                'Telebirr SOAP calls do not verify the server certificate.',
+                hint=(
+                    'TELEBIRR_VERIFY_SSL is false, so payment credentials and payout '
+                    'instructions travel over a connection that is encrypted but not '
+                    'authenticated -- an on-path party can read and alter them. This is '
+                    "expected against the provider's UAT endpoint, which serves a private "
+                    'certificate. It is not acceptable against a production gateway: '
+                    'install the CA and remove the override. See '
+                    'k8s/overlays/staging/patches/configmap-patch.yaml.'
+                ),
+                id=f'{PREFIX}.W004',
+            )
+        )
+
+    if not getattr(settings, 'TIMWE_CHARGE_VERIFY_TLS', True):
+        messages.append(
+            CheckWarning(
+                'TIMWE charging calls do not verify the server certificate.',
+                hint=(
+                    'TIMWE_CHARGE_VERIFY_TLS is false, so subscriber charging requests -- '
+                    'which carry an MSISDN and take money -- are not authenticated in '
+                    'transit. Install the MA certificate chain and remove the override.'
+                ),
+                id=f'{PREFIX}.W005',
+            )
+        )
+
+    return messages

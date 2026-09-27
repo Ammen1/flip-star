@@ -102,6 +102,25 @@ ignore = [
 "api/models/__init__.py" = ["I001"]
 # Tests may use hardcoded credentials and asserts.
 "tests/**/*.py" = ["S105", "S106", "S101"]
+# audit/ holds the measurement scripts the audit's numbers came from -- they
+# create throwaway users the same way the test suite does, and several run under
+# pytest. Same exemption, same reason: a literal password in a script that builds
+# a disposable fixture is not a credential.
+"audit/**/*.py" = ["S105", "S106", "S101"]
+# Standalone operational scripts bootstrap Django themselves: they must call
+# django.setup() before importing any model, so module-level imports after the
+# first statement are required, not sloppy. Same reason as api/urls.py above --
+# the blocking lint gate runs on CHANGED files, so touching one of these to
+# remove a hardcoded password (audit M-06) would otherwise fail on structure
+# the edit did not introduce and cannot correct.
+"scripts/*.py" = ["E402"]
+# DirectDebitMandate.mandate_id is CharField(null=True): rows written before it
+# had a default hold NULL, and Telebirr distinguishes "no mandate yet" from a
+# mandate whose id is the empty string. Converting it to '' is a data migration
+# on the mandate table, which audit finding H-04 -- the change that touched this
+# file -- has no business bundling. Excluded for the same reason as
+# api/models/boost.py above.
+"api/models/direct_debit.py" = ["DJ001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["api", "common", "config", "infrastructure"]
@@ -109,6 +128,49 @@ known-first-party = ["api", "common", "config", "infrastructure"]
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+# Audit finding N-03. CI measured coverage in the test-unit job alone
+# (`pytest -m "not integration"`). While the integration marker was applied by
+# hand, that job happened to run 2,600+ database tests and reported 68%. Once
+# T-01 corrected the marker, the same job runs 577 genuinely-unit tests and
+# reports 36% -- while the suite as a whole covers far more. Nothing got worse;
+# the number stopped describing what people read it as.
+#
+# The fix is to combine the two jobs' data. `relative_files` is what makes that
+# possible: the unit and integration jobs run in separate checkouts, so without
+# it the same module appears under two absolute paths and `coverage combine`
+# reports each as separately uncovered.
+[tool.coverage.run]
+relative_files = true
+branch = false
+# The application, not the tests. `--cov=.` counted the test suite in the
+# denominator, and test files are near-100% covered by construction, so it
+# flattered the figure. These four packages are what ships.
+source = ["api", "common", "config", "infrastructure"]
+omit = [
+    "*/migrations/*",
+    "*/__pycache__/*",
+    "config/asgi.py",
+    "config/wsgi.py",
+    "manage.py",
+]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+
+[tool.coverage.paths]
+# Maps the two jobs' checkouts onto one tree so combine merges rather than
+# double-counts.
+source = ["api", "*/api", "common", "*/common", "config", "*/config", "infrastructure", "*/infrastructure"]
 
 # ---------------------------------------------------------------------------
 # pytest

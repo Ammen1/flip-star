@@ -442,7 +442,7 @@ def create_direct_debit_mandate(request):
 # Telebirr SOAP API Configuration
 TELEBIRR_SOAP_URL = config('TELEBIRR_SOAP_URL', default='http://10.180.79.13:30001/payment/services/APIRequestMgrService')
 TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='TestMer')
-TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=')
+TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default='<REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD>')
 TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='232323')
 TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='https://api.uat.flipstar.et/api/webhooks/telebirr-direct-debit')
 TELEBIRR_PAYEE_ACCOUNT_NAME = config('TELEBIRR_PAYEE_ACCOUNT_NAME', default='Flipstar')
@@ -984,7 +984,7 @@ print(result)
 
 - **URL**: `http://10.180.79.13:30001/payment/services/APIRequestMgrService`
 - **Third Party ID**: `TestMer`
-- **Third Party Password**: `jIfxwUU1S7jJmh1dgP3+wK3fd4Qxlxxcc4cb4i0z4Tk=`
+- **Third Party Password**: `<REDACTED:TELEBIRR_THIRD_PARTY_PASSWORD>`
 - **SP Operator ID**: `TestSPOperAPI`
 - **SP Operator Credential**: `2JKSrKYlLAVvKWuIUXcexc3GHiT0+lEKzeVb6JRcZUM=`
 - **Short Code**: `232323`

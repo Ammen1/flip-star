@@ -189,13 +189,18 @@ def push_notification_on_create(sender, instance, created, **kwargs):
         send_push_notification.delay(instance.recipient_id, payload)
     except Exception:
         logger.debug('FCM push not queued for notification=%s', instance.pk, exc_info=True)
-    # Web Push (browser) — synchronous but cheap; ignored if VAPID unset
+    # Web Push (browser), queued rather than inline. Audit finding H-07: this
+    # used to call send_web_push_to_user() synchronously, described as "cheap".
+    # It makes one outbound request per subscription to a subscriber-supplied
+    # destination, so a push service that stalls held this thread -- an API
+    # request thread, usually -- for as long as it cared to. Queuing matches
+    # what the FCM call above already does. Ignored if VAPID is unset.
     try:
-        from .integrations.push.webpush import send_web_push_to_user
+        from api.tasks import send_web_push
 
-        send_web_push_to_user(instance.recipient, payload)
+        send_web_push.delay(instance.recipient_id, payload)
     except Exception:
-        logger.debug('Web push not sent for notification=%s', instance.pk, exc_info=True)
+        logger.debug('Web push not queued for notification=%s', instance.pk, exc_info=True)
 
 
 @receiver(post_save, sender=UserProfile)

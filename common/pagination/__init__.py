@@ -1,5 +1,13 @@
 """Reusable paginators."""
 
-from common.pagination.paginators import CursorResultsPagination, StandardResultsPagination
+from common.pagination.paginators import (
+    CursorResultsPagination,
+    OptInPageNumberPagination,
+    StandardResultsPagination,
+)
 
-__all__ = ['CursorResultsPagination', 'StandardResultsPagination']
+__all__ = [
+    'CursorResultsPagination',
+    'OptInPageNumberPagination',
+    'StandardResultsPagination',
+]

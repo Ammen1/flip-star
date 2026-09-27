@@ -15,12 +15,59 @@
    running the forwards migration plan and applying it end-to-end.
 """
 
+import pathlib
+
 import pytest
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 
 #: The 0063 dependency fix has landed; database-backed tests can run for real.
 MIGRATIONS_ARE_REPLAYABLE = True
+
+#: Directory whose contents are, by definition, integration tests.
+_INTEGRATION_DIR = pathlib.Path(__file__).parent / 'integration'
+
+
+def pytest_collection_modifyitems(config, items):
+    """Mark everything under ``tests/integration/`` as ``integration``.
+
+    Audit finding T-01. CI splits testing in two:
+
+        test-unit         pytest -m "not integration"   SQLite
+        test-integration  pytest -m integration         postgres:15-alpine
+
+    The marker was applied by hand, and only 33 of 110 files in
+    ``tests/integration/`` carried it. The other 77 declared
+    ``pytestmark = pytest.mark.django_db`` and nothing else, so
+    ``-m "not integration"`` selected them: **1,700 of 2,135 database tests ran
+    on SQLite and were excluded from the PostgreSQL job.**
+
+    That is not a cosmetic gap. SQLite silently ignores ``SELECT ... FOR
+    UPDATE``, so this class of bug is invisible to it:
+
+        SubscriptionPlan.objects.select_for_update().select_related('tier')
+        psycopg2.errors.FeatureNotSupported: FOR UPDATE cannot be applied to
+        the nullable side of an outer join
+
+    ``SubscriptionPlan.tier`` is nullable, so ``select_related`` makes a LEFT
+    JOIN and PostgreSQL refuses the lock. It reached staging and took 3 Birr
+    from a subscriber without granting a period. The file covering that path,
+    ``tests/integration/test_timwe_subscription_renewal.py``, carried no marker
+    at all, and the suite was green throughout.
+
+    Deriving the marker from the path means a new file cannot forget it. An
+    explicit ``pytest.mark.integration`` in a file is still honoured; this only
+    adds, never removes.
+    """
+    integration = _INTEGRATION_DIR.resolve()
+    for item in items:
+        try:
+            path = pathlib.Path(str(item.fspath)).resolve()
+        except (OSError, ValueError):  # pragma: no cover - defensive
+            continue
+        if integration == path or integration in path.parents:
+            item.add_marker(pytest.mark.integration)
+
 
 _SKIP_REASON = (
     'Migration history cannot build a fresh database: 0063_add_mentions depends '

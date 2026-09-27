@@ -1,13 +1,42 @@
 """
 Load runtime configuration from Vault, validate it, or abort startup.
 
+.. warning::
+
+   **This module is not what the application uses.** Nothing outside
+   ``infrastructure/config/`` imports it, and it has 0% test coverage. The live
+   path is::
+
+       config/settings/base.py:20
+       from infrastructure.secrets import secret as config
+
+   Audit finding L-08. The two systems documented **opposite** semantics, and
+   this one is the wrong half: the paragraph below used to state flatly that
+   there is "no environment fallback", while the module actually in use defaults
+   to environment variables *overriding* Vault
+   (``infrastructure/secrets/provider.py:126`` -- ``VAULT_PRECEDENCE`` defaults
+   to ``'env'``). Anyone reading this file to understand how FlipStar resolves
+   secrets would reach the wrong conclusion about the most security-relevant
+   behaviour in the configuration layer.
+
+   The runtime behaviour is the source of truth, so the fix was to correct this
+   docstring, not to change secret resolution to match it.
+
+   ``schema.py`` alongside this file is still referenced as documentation of the
+   recognised configuration keys (``config/settings/base.py:307`` and ``:753``),
+   which is why the package was annotated rather than deleted. Deleting it
+   outright remains the cleaner end state and is left as a decision.
+
+What follows describes this module's own intended design, which no deployment
+exercises.
+
     Vault -> VaultClient -> load() -> validate against schema -> RuntimeConfig
 
-There is deliberately no environment fallback and no default for anything the
-schema marks required. A missing value stops the process with a message naming
-the path and key. The alternative -- starting with a plausible default -- is
-how an application ends up talking to the wrong database while appearing
-healthy, which is strictly worse than not starting.
+In *this* module there is deliberately no environment fallback and no default
+for anything the schema marks required. A missing value stops the process with a
+message naming the path and key. The alternative -- starting with a plausible
+default -- is how an application ends up talking to the wrong database while
+appearing healthy, which is strictly worse than not starting.
 
 Bootstrap
 ---------

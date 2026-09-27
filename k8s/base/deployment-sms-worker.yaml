@@ -107,6 +107,16 @@ spec:
               cpu: 50m
               memory: 192Mi
             limits:
+              # Audit finding M-09: memory was capped and CPU was not, so a busy
+              # loop here -- an SMPP reconnect storm is the likely shape -- could
+              # take whatever the node had and starve the API pods scheduled
+              # beside it. Every other workload in this tree limits both.
+              #
+              # 250m matches celery-beat, and is deliberately generous against a
+              # 50m request: this worker is --pool=solo and does one thing, so it
+              # needs a little headroom for a burst of queued messages and no
+              # more than that.
+              cpu: 250m
               memory: 512Mi
           volumeMounts:
             - name: tmp

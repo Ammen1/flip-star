@@ -51,6 +51,7 @@ from api.views.core import (
     delete_account,
     dev_create_subscription,
     download_data,
+    follow_stats,
     forgot_password_confirm,
     forgot_password_phone_request,
     forgot_password_phone_verify,
@@ -375,7 +376,6 @@ from api.views.extended import (
 from api.views.gamification import (
     check_in,
     claim_login_bonus,
-    debug_gamification,
     get_gamification_status,
     get_gift_history,
     get_recent_activity,
@@ -942,7 +942,6 @@ urlpatterns = [
     path('campaigns/<int:campaign_id>/vote/', cast_vote, name='cast-vote'),
     # Gamification
     path('gamification/status/', get_gamification_status, name='gamification-status'),
-    path('gamification/debug/', debug_gamification, name='gamification-debug'),
     path('gamification/login-bonus/', claim_login_bonus, name='claim-login-bonus'),
     path('gamification/gift/', send_coin_gift, name='send-coin-gift'),
     path('gamification/gifts/history/', get_gift_history, name='gift-history'),
@@ -1004,6 +1003,7 @@ urlpatterns = [
         update_notification_settings,
         name='update-notification-settings',
     ),
+    path('users/<int:user_id>/follow-stats/', follow_stats, name='follow-stats'),
     path('profile/privacy/', get_privacy_settings, name='get-privacy-settings'),
     path('profile/privacy/update/', update_privacy_settings, name='update-privacy-settings'),
     path('explorer/trending/', get_trending_reels, name='explorer-trending'),

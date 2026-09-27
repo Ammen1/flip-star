@@ -271,17 +271,31 @@ jobs:
         with:
           dev-requirements: "true"
 
+      # --cov with no argument, not --cov=. : the source list now lives in
+      # pyproject.toml ([tool.coverage.run]) so both test jobs measure the same
+      # thing and `coverage combine` can merge them. --cov=. also counted the
+      # test suite in the denominator, and test files are near-100% covered by
+      # construction, which flattered the figure.
       - name: pytest (unit + e2e, SQLite)
         env:
           USE_LOCMEM_CACHE: "true"
-        run: pytest -m "not integration" --cov=. --cov-report=term-missing --cov-report=xml
+          COVERAGE_FILE: .coverage.unit
+        run: pytest -m "not integration" --cov --cov-report=term-missing
 
-      - name: Coverage summary
+      # Audit finding N-03: this job's coverage number alone is not the suite's
+      # coverage. Before T-01 the marker was applied by hand, so this job
+      # happened to run 2,600+ database tests and reported 68%. With the marker
+      # corrected it runs 577 genuinely-unit tests, and reporting its number as
+      # "coverage" understates the suite by more than half. The data file is
+      # handed to the coverage-report job instead of being summarised here.
+      - name: Upload unit coverage data
         if: always()
-        run: |
-          echo "### Unit test coverage" >> "$GITHUB_STEP_SUMMARY"
-          python -c "import xml.etree.ElementTree as ET; r = ET.parse('coverage.xml').getroot(); print(f'**{float(r.attrib[\"line-rate\"]) * 100:.1f}%** line coverage')" >> "$GITHUB_STEP_SUMMARY" \
-            || echo "coverage.xml not found (test run likely failed before producing it)" >> "$GITHUB_STEP_SUMMARY"
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: .coverage.unit
+          include-hidden-files: true
+          retention-days: 1
 
   # ---------------------------------------------------------------------------
   # Integration tests -- real PostgreSQL, matching production's engine.
@@ -330,8 +344,14 @@ jobs:
           SECRET_KEY: ci-only-not-a-real-secret
         run: python manage.py migrate --noinput
 
+      # CI is the one place an integration run must be on PostgreSQL. With CI=true
+      # set, tests/integration/test_integration_db_is_postgres.py fails the job if
+      # this is ever pointed at SQLite -- audit finding T-01, where 1,700 database
+      # tests ran only on SQLite and a FOR UPDATE defect reached staging as a
+      # result. A silent engine fallback must not be possible here.
       - name: pytest (integration, real Postgres)
         env:
+          CI: "true"
           DJANGO_SETTINGS_MODULE: config.settings.testing
           TEST_DB_ENGINE: postgresql
           TEST_DB_NAME: flipstar_ci
@@ -339,7 +359,96 @@ jobs:
           TEST_DB_PASSWORD: flipstar_ci
           TEST_DB_HOST: localhost
           TEST_DB_PORT: "5432"
-        run: pytest -m integration -v
+          COVERAGE_FILE: .coverage.integration
+        run: pytest -m integration -v --cov --cov-report=term-missing
+
+      - name: Upload integration coverage data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration
+          path: .coverage.integration
+          include-hidden-files: true
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Combined coverage -- audit finding N-03.
+  # ---------------------------------------------------------------------------
+  # The two test jobs each cover a different half of the suite, so neither
+  # number on its own is the project's coverage. This job merges the data files
+  # and reports the figure for the suite as a whole.
+  #
+  # `relative_files = true` in pyproject.toml is what makes the merge work: the
+  # jobs run in separate checkouts, so without it the same module appears under
+  # two absolute paths and combine reports each as separately uncovered.
+  #
+  # Deliberately NOT a gate. There is no --fail-under, because a coverage
+  # threshold added at the same time as a coverage correction would make it
+  # impossible to tell a real regression from the correction. Add one once the
+  # combined number has been stable for a few runs.
+  coverage-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test-unit, test-integration]
+    if: always()
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+
+      - uses: ./.github/actions/setup-backend
+
+      - name: Download unit coverage data
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-unit
+        continue-on-error: true
+
+      - name: Download integration coverage data
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-integration
+        continue-on-error: true
+
+      - name: Combine and report
+        run: |
+          set -eu
+          shopt -s nullglob
+          files=(.coverage.unit .coverage.integration)
+          present=()
+          for f in "${files[@]}"; do [ -f "$f" ] && present+=("$f"); done
+          if [ ${#present[@]} -eq 0 ]; then
+            echo "### Combined coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo "No coverage data was produced -- both test jobs failed before writing it." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "combining: ${present[*]}"
+          coverage combine "${present[@]}"
+          coverage report --precision=1 | tail -40
+          coverage xml
+          total=$(python -c "import xml.etree.ElementTree as ET; \
+            print(f'{float(ET.parse(\"coverage.xml\").getroot().attrib[\"line-rate\"]) * 100:.1f}')")
+          {
+            echo "### Combined coverage"
+            echo ""
+            echo "**${total}%** across the whole suite (unit + integration)."
+            echo ""
+            if [ ${#present[@]} -lt 2 ]; then
+              echo "> Only ${#present[@]} of 2 data files were available, so this is a"
+              echo "> partial figure -- one of the test jobs did not finish."
+            fi
+            echo ""
+            echo "Measured over \`api\`, \`common\`, \`config\`, \`infrastructure\`;"
+            echo "migrations and the test suite are excluded. See"
+            echo "\`[tool.coverage.run]\` in \`pyproject.toml\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload combined coverage xml
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-combined-xml
+          path: coverage.xml
+          retention-days: 7
 
   # ---------------------------------------------------------------------------
   # Django's own checks -- config validity and migration/model drift.

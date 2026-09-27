@@ -405,7 +405,24 @@ def test_webhook_standalone_transaction_also_completes_linked_withdrawal(standal
 # ---------------------------------------------------------------------------
 
 
-def test_initiate_b2c_payment_creates_transaction_record(user):
+# initiate_b2c_payment is staff-only as of audit finding H-01. It used to sit
+# behind IsAuthenticated with receiver_msisdn and amount read straight from the
+# request body and no ceiling, so any registered account could ask the merchant
+# short code to pay an arbitrary number an arbitrary sum. Unlike a withdrawal,
+# no wallet balance stands in the way -- the money is the merchant's. The two
+# tests below were written against the old behaviour and now assert the new one.
+
+
+@pytest.fixture
+def b2c_operator(db):
+    return User.objects.create_user(
+        username='b2c_operator',
+        password='123456',  # noqa: S106 - test fixture
+        is_staff=True,
+    )
+
+
+def test_initiate_b2c_payment_creates_transaction_record(b2c_operator):
     with patch(
         'api.views.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment',
         return_value={
@@ -423,18 +440,18 @@ def test_initiate_b2c_payment_creates_transaction_record(user):
             },
             format='json',
         )
-        force_authenticate(request, user=user)
+        force_authenticate(request, user=b2c_operator)
 
         response = initiate_b2c_payment(request)
 
     assert response.status_code == 201, response.data
     assert response.data['success'] is True
-    txn = B2CPaymentTransaction.objects.get(payer=user)
+    txn = B2CPaymentTransaction.objects.get(payer=b2c_operator)
     assert txn.status == 'pending'
     assert txn.originator_conversation_id == 'S_X20260820STANDALONE9'
 
 
-def test_initiate_b2c_payment_rejects_invalid_amount(user):
+def test_initiate_b2c_payment_rejects_invalid_amount(b2c_operator):
     request = factory.post(
         '/telebirr/b2c/initiate/',
         {
@@ -443,12 +460,100 @@ def test_initiate_b2c_payment_rejects_invalid_amount(user):
         },
         format='json',
     )
-    force_authenticate(request, user=user)
+    force_authenticate(request, user=b2c_operator)
 
     response = initiate_b2c_payment(request)
 
     assert response.status_code == 400
-    assert not B2CPaymentTransaction.objects.filter(payer=user).exists()
+    assert not B2CPaymentTransaction.objects.filter(payer=b2c_operator).exists()
+
+
+def test_initiate_b2c_payment_is_refused_to_an_ordinary_user(user):
+    with patch(
+        'api.views.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment'
+    ) as provider:
+        request = factory.post(
+            '/telebirr/b2c/initiate/',
+            {'receiver_msisdn': '251911223344', 'amount': '150.00'},
+            format='json',
+        )
+        force_authenticate(request, user=user)
+        response = initiate_b2c_payment(request)
+
+    assert response.status_code == 403, response.data
+    provider.assert_not_called()
+    assert not B2CPaymentTransaction.objects.exists()
+
+
+def test_initiate_b2c_payment_is_refused_to_an_anonymous_caller():
+    with patch(
+        'api.views.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment'
+    ) as provider:
+        request = factory.post(
+            '/telebirr/b2c/initiate/',
+            {'receiver_msisdn': '251911223344', 'amount': '150.00'},
+            format='json',
+        )
+        response = initiate_b2c_payment(request)
+
+    assert response.status_code in (401, 403)
+    provider.assert_not_called()
+
+
+def test_initiate_b2c_payment_refuses_an_amount_over_the_cap(b2c_operator, settings):
+    """H-01, second half: a staff endpoint that moves money is still capped."""
+    settings.TELEBIRR_B2C_MAX_PAYOUT_ETB = '5000'
+    with patch(
+        'api.views.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment'
+    ) as provider:
+        request = factory.post(
+            '/telebirr/b2c/initiate/',
+            {'receiver_msisdn': '251911223344', 'amount': '5000.01'},
+            format='json',
+        )
+        force_authenticate(request, user=b2c_operator)
+        response = initiate_b2c_payment(request)
+
+    assert response.status_code == 400
+    assert response.data['code'] == 'amount_over_cap'
+    provider.assert_not_called()
+    assert not B2CPaymentTransaction.objects.exists()
+
+
+def test_initiate_b2c_payment_allows_an_amount_exactly_at_the_cap(b2c_operator, settings):
+    settings.TELEBIRR_B2C_MAX_PAYOUT_ETB = '5000'
+    with patch(
+        'api.views.direct_debit.telebirr_direct_debit_service.initiate_b2c_payment',
+        return_value={
+            'success': True,
+            'originator_conversation_id': 'S_X20260820ATCAP',
+            'conversation_id': 'AG_20260820ATCAP',
+        },
+    ):
+        request = factory.post(
+            '/telebirr/b2c/initiate/',
+            {'receiver_msisdn': '251911223344', 'amount': '5000.00'},
+            format='json',
+        )
+        force_authenticate(request, user=b2c_operator)
+        response = initiate_b2c_payment(request)
+
+    assert response.status_code == 201, response.data
+
+
+def test_initiate_b2c_payment_rejects_a_non_numeric_amount(b2c_operator):
+    """``Decimal('abc')`` raises InvalidOperation, which the original
+    ``except (ValueError, TypeError)`` did not catch -- so this was a 500."""
+    request = factory.post(
+        '/telebirr/b2c/initiate/',
+        {'receiver_msisdn': '251911223344', 'amount': 'abc'},
+        format='json',
+    )
+    force_authenticate(request, user=b2c_operator)
+    response = initiate_b2c_payment(request)
+
+    assert response.status_code == 400
+    assert not B2CPaymentTransaction.objects.exists()
 
 
 def test_list_b2c_payments_only_returns_the_caller_own_transactions(user):

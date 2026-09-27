@@ -403,6 +403,25 @@ class WithdrawalRequest(models.Model):
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['originator_conversation_id']),
         ]
+        constraints = [
+            # Audit finding H-04. The B2C result webhook resolves a payout to
+            # this withdrawal by originator_conversation_id. Uniqueness was a
+            # property of the id generator alone -- nothing in the database
+            # stopped two rows sharing one, and if two ever did, a single
+            # callback would settle whichever `.first()` returned.
+            #
+            # Partial, because the column is blank=True: a withdrawal exists
+            # before the B2C call is made, so '' is a legitimate and repeated
+            # value. Excluding it is what lets the constraint coexist with those
+            # rows. The webhook never looks up '' (it returns early on a missing
+            # OriginatorConversationID), so the partial index covers every real
+            # lookup as well.
+            models.UniqueConstraint(
+                fields=['originator_conversation_id'],
+                condition=~models.Q(originator_conversation_id=''),
+                name='uniq_withdrawal_originator_conversation_id',
+            ),
+        ]
 
     def __str__(self):
         return (

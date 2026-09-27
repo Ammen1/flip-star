@@ -3196,7 +3196,31 @@ def _follow_user_id_param(value, name):
 class FollowViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     serializer_class = FollowSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = None
+    # Bounded by the global paginator, as of N-01.
+    #
+    # This used to carry `pagination_class = None`, because the web client
+    # derived two correctness-critical values from the length and membership of
+    # the WHOLE list -- `followers.length` for the displayed count and
+    # `followers.some(...)` for the Follow button. Capping would have shown
+    # "100 followers" for a creator with 5,000 and offered "Follow" to someone
+    # who already followed but sorted past the cap. Wrong answers are worse
+    # than a large response, so the exemption was correct at the time.
+    #
+    # Measured what the exemption cost (FollowSerializer, 20 rows, extrapolated):
+    #   followers    payload    queries
+    #      1,000      0.6 MB      8,050
+    #     50,000     31.0 MB    402,500
+    # -- per profile view.
+    #
+    # `GET /api/v1/users/<id>/follow-stats/` now answers both questions in two
+    # COUNTs and one EXISTS, so nothing derives a count or a follow state from
+    # this list any more. Its remaining callers all *display* a list -- the
+    # share-target picker and the followers page -- where a bounded page is the
+    # correct shape rather than a compromise.
+    #
+    # Follow-up, not a regression: FollowersListPage.jsx shows the first page
+    # and does not yet request further ones. It reads `results` already, so
+    # adopting `?page=` is additive.
 
     def get_permissions(self):
         if self.action == 'suggestions':
@@ -3321,9 +3345,69 @@ class FollowViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+@encrypted_endpoint
+def follow_stats(request, user_id):
+    """Follower and following counts for one user, plus the caller's follow state.
+
+    Audit finding N-01. The web profile page derived all three of these from the
+    *entire* follower list:
+
+        api/../ProfilePage.jsx
+            setFollowersCount(followers.length)
+            followers.some(f => f.follower?.id === user.id)
+
+    Measured cost of that list (FollowSerializer, 20 rows, extrapolated):
+
+        followers    payload    queries
+           1,000      0.6 MB      8,050
+          10,000      6.2 MB     80,500
+          50,000     31.0 MB    402,500
+
+    -- for two numbers and a boolean, on every profile view. It is also why
+    ``FollowViewSet`` could not be paginated: capping the list would have made
+    the displayed count wrong and shown "Follow" to someone who already follows.
+
+    This endpoint answers the same question in two COUNTs and one EXISTS,
+    independent of how many followers there are.
+
+    Keyed on ``user_id``, a ``User`` pk, deliberately and explicitly. The
+    existing ``/profile/<id>/`` route is a ``UserProfile`` pk -- the two spaces
+    coincide only while every user has exactly one profile created in order, and
+    the frontend calls that route with a User id today (finding N-07). Naming the
+    space in the URL is how this one avoids inheriting the same ambiguity.
+    """
+    from django.shortcuts import get_object_or_404
+
+    target = get_object_or_404(User, pk=user_id)
+
+    followers_count = Follow.objects.filter(following=target).count()
+    following_count = Follow.objects.filter(follower=target).count()
+    is_following = (
+        request.user.is_authenticated
+        and request.user.pk != target.pk
+        and Follow.objects.filter(follower=request.user, following=target).exists()
+    )
+
+    return Response(
+        {
+            'user_id': target.pk,
+            'followers_count': followers_count,
+            'following_count': following_count,
+            'is_following': is_following,
+        }
+    )
+
+
 class BlockViewSet(EncryptedPayloadMixin, viewsets.ModelViewSet):
     serializer_class = BlockSerializer
     permission_classes = [IsAuthenticated]
+    # Deliberately exempt from the global paginator (audit C-01). The client
+    # holds this list in BlockContext and filters content against it, so a
+    # truncated list means content from a blocked user is shown. Scoped to
+    # blocker=request.user, so it grows with one person's blocking, not with
+    # the platform -- bounded in practice in a way ?following= is not.
     pagination_class = None
 
     def get_queryset(self):

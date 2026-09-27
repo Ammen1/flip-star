@@ -164,6 +164,15 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.AllowAny',
     ],
     'EXCEPTION_HANDLER': 'common.exceptions.handlers.api_exception_handler',
+    # Audit finding C-01: before this, 41 GET-list routes had no paginator and
+    # no global default, so each returned its whole table -- response size,
+    # memory and query count all grew with the data rather than with the
+    # request. OptInPageNumberPagination bounds every one of them while leaving
+    # the response shape unchanged for clients that do not ask to paginate;
+    # see its docstring for why a plain paginator here would have been a
+    # breaking change. PAGE_SIZE applies to ?page= requests only.
+    'DEFAULT_PAGINATION_CLASS': 'common.pagination.OptInPageNumberPagination',
+    'PAGE_SIZE': 20,
     # Not globally enforced (no DEFAULT_THROTTLE_CLASSES) -- these are scopes
     # for views that opt in via @throttle_classes(...). See
     # common/throttling.py for the throttle classes themselves and the
@@ -351,6 +360,31 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 
+# Task time limits. Audit finding H-06: not one of the 21 tasks set a limit and
+# no global default existed, so a task that stopped making progress held its
+# worker slot indefinitely. The worker runs --concurrency=4 on a single staging
+# replica, so four stuck tasks stopped *all* background work -- subscription
+# renewals, SMS, prize payouts, media. `redrive_stuck_media` exists, which says
+# stuck media had already been seen.
+#
+# Sized from what the tasks actually do, not guessed. The slowest non-media path
+# is a provider call bounded by TIMWE_CHARGE_TIMEOUT plus retries, well inside
+# five minutes; process_reel_media is the genuine long-runner and overrides this
+# at the decorator (a ~120s clip, MEDIA_MAX_VIDEO_SECONDS, through a three-rung
+# ladder at preset=fast on a 2-CPU limit).
+#
+# Soft first, hard as the backstop: SoftTimeLimitExceeded is raised *inside* the
+# task, so anything that has taken money gets the chance to record what it did
+# before it dies. A bare hard kill cannot.
+#
+# Scope note, because "every task is now bounded" would be wrong: time limits
+# are enforced by the prefork pool. The SMS worker runs --pool=solo
+# (k8s/base/deployment-sms-worker.yaml, so the SMPP bind survives), where Celery
+# does not enforce them. deliver_sms is bounded instead by the SMPP client's own
+# SUBMIT_TIMEOUT_SECONDS.
+CELERY_TASK_SOFT_TIME_LIMIT = config('CELERY_TASK_SOFT_TIME_LIMIT', default=300, cast=int)
+CELERY_TASK_TIME_LIMIT = config('CELERY_TASK_TIME_LIMIT', default=360, cast=int)
+
 
 # ---------------------------------------------------------------------------
 # CORS
@@ -408,6 +442,28 @@ VAPID_PUBLIC_KEY = config('VAPID_PUBLIC_KEY', default='')
 VAPID_PRIVATE_KEY = config('VAPID_PRIVATE_KEY', default='')
 VAPID_SUBJECT = config('VAPID_SUBJECT', default='mailto:admin@flipstar.et')
 
+# Hosts a browser push subscription may name. Audit finding H-07: the server
+# POSTs to whatever endpoint a subscription carries, so this is an outbound
+# destination allow-list, not a convenience. Leave it unset to use the known
+# browser push services in api/integrations/push/endpoints.py -- an explicitly
+# empty value falls back to those defaults rather than allowing everything,
+# because "empty means allow all" is the shape of finding M-11.
+#
+# Widen it only for a genuinely self-hosted push service, and note that doing so
+# is what makes the IP-range checks in that module load-bearing.
+PUSH_ALLOWED_ENDPOINT_HOSTS = [
+    host.strip()
+    for host in config('PUSH_ALLOWED_ENDPOINT_HOSTS', default='').split(',')
+    if host.strip()
+]
+
+# Ceiling on a single standalone B2C payout, in ETB. Audit finding H-01: that
+# endpoint moves the merchant's money -- there is no wallet balance in the way,
+# unlike a withdrawal -- so one request, or one compromised staff token, should
+# not be able to name an unbounded amount. 0 disables the check; the default is
+# deliberately not 0.
+TELEBIRR_B2C_MAX_PAYOUT_ETB = config('TELEBIRR_B2C_MAX_PAYOUT_ETB', default='5000', cast=str)
+
 # Telebirr Direct Debit (SOAP)
 TELEBIRR_SOAP_URL = config('TELEBIRR_SOAP_URL', default='')
 TELEBIRR_THIRD_PARTY_ID = config('TELEBIRR_THIRD_PARTY_ID', default='')
@@ -420,12 +476,20 @@ TELEBIRR_THIRD_PARTY_PASSWORD = config('TELEBIRR_THIRD_PARTY_PASSWORD', default=
 TELEBIRR_SHORTCODE = config('TELEBIRR_SHORTCODE', default='553559')
 TELEBIRR_RESULT_URL = config('TELEBIRR_RESULT_URL', default='')
 # Whether SOAP calls to the Telebirr gateway verify the server certificate.
-# The provider's testbed endpoints (internal IPs such as 10.180.70.177) serve
-# a private certificate that is not chain-trusted locally, so verification is
-# OFF by default -- the pre-existing behavior before TELEBIRR_VERIFY_SSL was
-# introduced. Set it to true in a deployment that has the provider's CA
-# installed and trusts the chain.
-TELEBIRR_VERIFY_SSL = config('TELEBIRR_VERIFY_SSL', default=False, cast=bool)
+#
+# Audit finding H-02: this defaulted to False, so every deployment that did not
+# think to set it sent payment credentials over a connection nobody
+# authenticated -- and nothing in k8s/ set it, so that included production. The
+# reason it was False is real: the provider's testbed endpoints (internal IPs
+# such as 10.180.70.177) serve a private certificate with no locally trusted
+# chain. But that is a property of UAT, not a sane global default.
+#
+# So the default is now True and staging opts out explicitly
+# (k8s/overlays/staging/patches/configmap-patch.yaml). The failure mode is
+# inverted: forgetting the flag used to mean no verification, and now means
+# verification is on. `manage.py check` reports flipstar.W004 wherever it is
+# off, so a deployment cannot be quietly insecure.
+TELEBIRR_VERIFY_SSL = config('TELEBIRR_VERIFY_SSL', default=True, cast=bool)
 
 # ---------------------------------------------------------------------------
 # Crypto test endpoints -- DEVELOPMENT AND STAGING ONLY

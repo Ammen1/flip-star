@@ -16,53 +16,6 @@ from api.models.contest import UserCoinBalance
 from api.services.subscription_access import subscriber_action_refusal
 from common.security import encrypted_endpoint
 
-
-@api_view(['GET'])
-@encrypted_endpoint
-def debug_gamification(request):
-    """Debug endpoint to check if gamification system is working"""
-    try:
-        # Check if UserProfile model exists and has gamification fields
-        user_count = User.objects.count()
-        profile_count = UserProfile.objects.count()
-
-        # Test creating a profile
-        test_user = User.objects.first()
-        if test_user:
-            profile, created = UserProfile.objects.get_or_create(user=test_user)
-
-            return Response(
-                {
-                    'status': 'success',
-                    'debug_info': {
-                        'total_users': user_count,
-                        'total_profiles': profile_count,
-                        'test_user': test_user.username,
-                        'profile_created': created,
-                        'profile_fields': {
-                            'coins': profile.coins,
-                            'login_streak': profile.login_streak,
-                            'last_spin_date': (
-                                profile.last_spin_date.isoformat()
-                                if profile.last_spin_date
-                                else None
-                            ),
-                            'spins_total': profile.spins_total,
-                        },
-                        'has_gamification_fields': True,
-                    },
-                }
-            )
-        else:
-            return Response({'status': 'error', 'message': 'No users found in database'})
-
-    except Exception as e:
-        return Response(
-            {'status': 'error', 'error': str(e), 'message': 'Gamification system not working'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-
-
 # The login bonus is over. Coins are now earned by paying for a
 # subscription -- one gift per completed charge -- which is granted
 # automatically and needs no claim: see api/services/subscription_gift.py.

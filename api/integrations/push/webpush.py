@@ -6,22 +6,46 @@ user's PushSubscriptions. Subscriptions that the browser has revoked
 
 Configure VAPID keys via env vars (see `config/settings.py`).
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
 
+import requests
 from django.conf import settings
 from django.contrib.auth.models import User
 
+from api.integrations.push.endpoints import PushEndpointRejected, validate_push_endpoint
+
 logger = logging.getLogger(__name__)
 
+#: Seconds to wait for a push service. Audit finding H-07: pywebpush's own
+#: default is ``timeout=10000`` -- ten thousand SECONDS, which requests reads as
+#: nearly three hours -- and ``webpush(timeout=None)`` waits forever, because
+#: ``send()`` pops the key and hands None straight to requests. Neither is a
+#: timeout. This value is passed explicitly on every call.
+PUSH_TIMEOUT_SECONDS = 10
 
-def _vapid_claims() -> Optional[dict]:
+
+class _NoRedirectSession(requests.Session):
+    """A session that refuses to follow redirects.
+
+    Validation happens on the URL that gets stored, so a 302 from an
+    allow-listed host to an internal address would step around it. pywebpush's
+    ``send()`` builds its own ``post()`` call and forwards no
+    ``allow_redirects``, so the only place to force it is here.
+    """
+
+    def request(self, method, url, **kwargs):  # type: ignore[override]
+        kwargs['allow_redirects'] = False
+        return super().request(method, url, **kwargs)
+
+
+def _vapid_claims() -> dict | None:
     if not _resolve_private_key():
         return None
-    return {"sub": settings.VAPID_SUBJECT}
+    return {'sub': settings.VAPID_SUBJECT}
 
 
 def _resolve_private_key() -> str:
@@ -43,16 +67,24 @@ def _resolve_private_key() -> str:
     # File path?
     try:
         import os
+
         if os.path.isfile(raw):
-            with open(raw, 'r') as f:
+            with open(raw) as f:
                 return f.read()
-    except Exception:
-        pass
+    except OSError:
+        # Not readable as a file; fall through to the base64 interpretation
+        # below. Logged at debug rather than swallowed: a VAPID_PRIVATE_KEY that
+        # looks like a path but cannot be read is a deployment mistake worth
+        # being able to see, and it is not otherwise distinguishable from a key
+        # that was never a path.
+        logger.debug('VAPID_PRIVATE_KEY is not a readable file path', exc_info=True)
     # Treat as URL-safe base64 of the 32-byte scalar → build a PEM.
     try:
         import base64
+
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric import ec
+
         pad = '=' * (-len(raw) % 4)
         data = base64.urlsafe_b64decode(raw + pad)
         if len(data) != 32:
@@ -86,7 +118,7 @@ def send_web_push_to_user(user: User, payload: dict) -> int:
     try:
         from pywebpush import WebPushException, webpush
     except Exception:  # pragma: no cover
-        logger.warning("pywebpush not installed; skipping push send")
+        logger.warning('pywebpush not installed; skipping push send')
         return 0
 
     from api.models import PushSubscription
@@ -96,29 +128,79 @@ def send_web_push_to_user(user: User, payload: dict) -> int:
         return 0
 
     body = json.dumps(payload)
+    # Derived once, not once per subscription: _resolve_private_key() can run a
+    # base64 decode and an EC key derivation, and it returns the same value
+    # every time within a call.
+    private_key = _resolve_private_key()
     delivered = 0
-    for sub in subs:
-        try:
-            webpush(
-                subscription_info={
-                    "endpoint": sub.endpoint,
-                    "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
-                },
-                data=body,
-                vapid_private_key=_resolve_private_key(),
-                vapid_claims=dict(claims),
-            )
-            delivered += 1
-        except WebPushException as exc:  # type: ignore[misc]
-            status = getattr(exc.response, "status_code", None) if exc.response else None
-            if status in (404, 410):
-                # Subscription expired/unsubscribed — clean up.
-                try:
-                    sub.delete()
-                except Exception:
-                    pass
-            else:
-                logger.warning("WebPush send failed (%s): %s", status, exc)
-        except Exception as exc:  # pragma: no cover
-            logger.warning("WebPush send error: %s", exc)
+    with _NoRedirectSession() as session:
+        for sub in subs:
+            # Re-validated at send time, not just at subscribe time. Rows
+            # predate this check, PUSH_ALLOWED_ENDPOINT_HOSTS can narrow, and a
+            # row can be written by something other than push_subscribe. A
+            # destination that is no longer acceptable is dropped rather than
+            # contacted.
+            try:
+                endpoint = validate_push_endpoint(sub.endpoint)
+            except PushEndpointRejected as exc:
+                logger.warning(
+                    'WebPush subscription %s not delivered: %s',
+                    sub.pk,
+                    exc.detail,
+                    extra={'operation': 'web_push_send', 'result': exc.reason},
+                )
+                continue
+
+            try:
+                webpush(
+                    subscription_info={
+                        'endpoint': endpoint,
+                        'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
+                    },
+                    data=body,
+                    vapid_private_key=private_key,
+                    vapid_claims=dict(claims),
+                    timeout=PUSH_TIMEOUT_SECONDS,
+                    requests_session=session,
+                )
+                delivered += 1
+            except WebPushException as exc:  # type: ignore[misc]
+                status = getattr(exc.response, 'status_code', None) if exc.response else None
+                if status in (404, 410):
+                    # Subscription expired/unsubscribed — clean up.
+                    try:
+                        sub.delete()
+                    except Exception:
+                        # A row that cannot be deleted will be retried on the
+                        # next notification and fail the same way, so this is
+                        # worth seeing rather than discarding.
+                        logger.warning(
+                            'WebPush subscription %s reported %s but could not be deleted',
+                            sub.pk,
+                            status,
+                            exc_info=True,
+                            extra={'operation': 'web_push_send', 'result': 'cleanup_failed'},
+                        )
+                elif status is not None and 300 <= status < 400:
+                    # _NoRedirectSession did not follow it, so pywebpush saw the
+                    # 3xx as a failure (it raises on anything over 202). Logged
+                    # distinctly because a redirect off an allow-listed host is
+                    # how endpoint validation would be bypassed, not routine.
+                    logger.warning(
+                        'WebPush subscription %s answered %s; redirect not followed',
+                        sub.pk,
+                        status,
+                        extra={'operation': 'web_push_send', 'result': 'redirect_refused'},
+                    )
+                else:
+                    logger.warning('WebPush send failed (%s): %s', status, exc)
+            except requests.Timeout:
+                logger.warning(
+                    'WebPush subscription %s timed out after %ss',
+                    sub.pk,
+                    PUSH_TIMEOUT_SECONDS,
+                    extra={'operation': 'web_push_send', 'result': 'timeout'},
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.warning('WebPush send error: %s', exc)
     return delivered

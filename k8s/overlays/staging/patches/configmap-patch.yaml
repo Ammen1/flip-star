@@ -133,6 +133,24 @@ data:
   TELEBIRR_B2C_SHORTCODE: "553559"
   TELEBIRR_USSD_MERCHANT_SHORTCODE: "553559"
 
+  # Certificate verification for the Telebirr SOAP gateway, off HERE ONLY.
+  #
+  # Audit finding H-02 flipped the TELEBIRR_VERIFY_SSL default in
+  # config/settings/base.py from false to true, because a false default meant
+  # every environment that never set it -- production included -- sent payment
+  # credentials over an unauthenticated connection.
+  #
+  # Staging still needs it off: the provider's UAT endpoint is an internal
+  # address (10.180.70.177) serving a private certificate with no chain this
+  # cluster trusts, so verification here fails the handshake rather than
+  # catching anything. That is a UAT property, which is why it belongs in this
+  # overlay and not in the defaults.
+  #
+  # `manage.py check` reports flipstar.W004 while this is false. The warning is
+  # correct and is meant to stay visible; do not silence it. Remove this line
+  # once the provider supplies a CA the cluster can trust.
+  TELEBIRR_VERIFY_SSL: "false"
+
   # H5 / SuperApp (Fabric) async payment notification.
   #
   # This was set in .env but never in the ConfigMap, so the deployed pod ran

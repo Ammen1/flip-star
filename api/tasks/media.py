@@ -1223,7 +1223,24 @@ def _give_up(reel_id, task_id, code, live):
     )
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60, acks_late=True)
+@shared_task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    acks_late=True,
+    # Overrides the global CELERY_TASK_SOFT_TIME_LIMIT of 300s, which is right
+    # for the rest of the tasks and far too short for this one. Audit finding
+    # H-06 added the global limit; this is the one task whose real work can
+    # legitimately exceed it: a MEDIA_MAX_VIDEO_SECONDS (120s) clip encoded
+    # through the three-rung VIDEO_LADDER at preset=fast, on a container capped
+    # at 2 CPU, plus the download and the variant uploads.
+    #
+    # Still finite, which is the point -- a wedged FFmpeg used to hold a worker
+    # slot for as long as it liked, and with --concurrency=4 on one replica four
+    # of them stopped every background job in the system.
+    soft_time_limit=900,
+    time_limit=960,
+)
 def process_reel_media(self, reel_id, force=False):
     """Turn a post's original upload into what the feed serves.
 

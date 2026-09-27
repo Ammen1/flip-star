@@ -82,7 +82,14 @@ def monthly_tier():
         duration_type='monthly',
         duration_days=30,
         price_etb=100,
-        onevas_code='CREDMONTHLY',
+        # 10 chars, not 11. SubscriptionTier.onevas_code is CharField(max_length=10)
+        # and this fixture said 'CREDMONTHLY' (11), which SQLite stores happily
+        # and PostgreSQL rejects with StringDataRightTruncation. Every test in
+        # this module errored at setup the first time the suite ran against
+        # PostgreSQL -- audit finding T-01, which is what had kept it on SQLite.
+        # Real codes are single letters ('A'..'D' in the seed migration), so the
+        # column is the right width and the fixture was simply wrong.
+        onevas_code='CREDMONTH',
     )
 
 

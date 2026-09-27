@@ -12,8 +12,9 @@ API endpoints for direct debit mandate management:
 import logging
 import re
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from rest_framework import status
@@ -36,7 +37,7 @@ from api.services.withdrawal_sms import (
 from api.services.withdrawal_sms import (
     notify_paid as notify_withdrawal_paid,
 )
-from common.permissions.roles import HasAdminPermission
+from common.permissions.roles import HasAdminPermission, IsStaff
 from common.security import encrypted_endpoint
 
 logger = logging.getLogger(__name__)
@@ -1338,13 +1339,26 @@ def check_mandate_status(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsStaff])
 def initiate_b2c_payment(request):
     """
     Initiate a standalone Individual B2C Payment Transaction, tracked as its
     own B2CPaymentTransaction row (distinct from the withdrawal payout flow
     in api/views/wallet.py::request_withdrawal, which links a B2C payout
     directly to a WithdrawalRequest instead of creating one of these).
+
+    Staff only, and capped. Audit finding H-01: this took ``receiver_msisdn``
+    and ``amount`` straight from the request body behind nothing but
+    ``IsAuthenticated``, with no ownership check and no ceiling -- so any
+    registered account could ask the merchant short code to pay an arbitrary
+    number an arbitrary sum. Unlike ``request_withdrawal``, there is no wallet
+    balance in the way here: the money is the merchant's, not the caller's.
+
+    ``IsStaff`` rather than an ownership check because there is no owner to
+    check against -- the receiver is whoever the operator names. That is the
+    point of the endpoint (``initiator_type`` defaults to ``org_operator``), and
+    it is why it cannot be reachable by ordinary users. No client in
+    ``Flipstar-web/`` calls it; it is an operational tool.
 
     Request Body:
     {
@@ -1378,8 +1392,28 @@ def initiate_b2c_payment(request):
                 return Response(
                     {'error': 'Amount must be greater than 0'}, status=status.HTTP_400_BAD_REQUEST
                 )
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, InvalidOperation):
             return Response({'error': 'Invalid amount format'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Second half of H-01. A staff-only endpoint is still an endpoint that
+        # moves the merchant's money on one request, so the blast radius of a
+        # mistake -- or of one compromised staff token -- is bounded here rather
+        # than left to whatever the caller typed.
+        max_payout = Decimal(str(getattr(settings, 'TELEBIRR_B2C_MAX_PAYOUT_ETB', 0) or 0))
+        if max_payout > 0 and amount_decimal > max_payout:
+            logger.warning(
+                'B2C payout refused: %s exceeds the %s cap',
+                amount_decimal,
+                max_payout,
+                extra={'operation': 'b2c_initiate', 'result': 'amount_over_cap'},
+            )
+            return Response(
+                {
+                    'error': f'Amount exceeds the per-transaction limit of {max_payout} ETB.',
+                    'code': 'amount_over_cap',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         result = telebirr_direct_debit_service.initiate_b2c_payment(
             receiver_msisdn=receiver_msisdn,

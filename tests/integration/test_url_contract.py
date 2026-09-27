@@ -262,8 +262,21 @@ def test_total_route_count_is_stable():
     """
     from api.urls import urlpatterns
 
-    # 334 since the two USSD Push verification endpoints
-    # (charging/ussd-push/request-otp/ and .../verify-otp/).
+    # 334: 333 after gamification/debug/ was removed (audit finding M-08),
+    # plus 1 for users/<id>/follow-stats/ (audit finding N-01).
+    #
+    # M-08: gamification/debug/ was AllowAny and returned the total user count,
+    # the total profile count and the username of the first row in auth_user --
+    # and called get_or_create on that user's profile, so it wrote. No client or
+    # test called it. This test caught its removal, which is the guard working.
+    #
+    # N-01: follow-stats replaces a client-side derivation that downloaded every
+    # follower row to compute two counts and a boolean -- ~31 MB and ~400,000
+    # queries at 50,000 followers. Adding it is what allowed FollowViewSet to
+    # drop its pagination exemption.
+    #
+    # Was 334 before M-08, which included the two USSD Push verification
+    # endpoints (charging/ussd-push/request-otp/ and .../verify-otp/).
     assert len(urlpatterns) == 334, (
         f'api/urls.py now declares {len(urlpatterns)} patterns. '
         'If this is intentional, update the expected count.'

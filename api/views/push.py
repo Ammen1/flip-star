@@ -7,12 +7,14 @@
                                        browser PushManager.subscribe().toJSON().
 - POST /api/push/unsubscribe/        → remove a subscription by endpoint.
 """
+
 from django.conf import settings
+from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
 
+from api.integrations.push.endpoints import PushEndpointRejected, validate_push_endpoint
 from api.models import PushSubscription
 from common.security import encrypted_endpoint
 
@@ -39,6 +41,21 @@ def push_subscribe(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Audit finding H-07. This endpoint used to store any URL the caller sent,
+    # and the server later POSTed to it -- a user-controlled outbound
+    # destination, with egress unrestricted at the NetworkPolicy level. The
+    # destination is checked before it is persisted, so an unacceptable one
+    # never reaches the database, and api/integrations/push/webpush.py checks
+    # again before sending in case a stored row predates this or the allow-list
+    # has since narrowed.
+    try:
+        endpoint = validate_push_endpoint(endpoint)
+    except PushEndpointRejected as exc:
+        return Response(
+            {'error': 'Push endpoint is not a supported push service.', 'code': exc.reason},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     user_agent = (request.META.get('HTTP_USER_AGENT') or '')[:255]
     sub, created = PushSubscription.objects.update_or_create(
         endpoint=endpoint,
@@ -59,7 +76,5 @@ def push_unsubscribe(request):
     endpoint = (request.data or {}).get('endpoint')
     if not endpoint:
         return Response({'error': 'endpoint is required'}, status=status.HTTP_400_BAD_REQUEST)
-    deleted, _ = PushSubscription.objects.filter(
-        user=request.user, endpoint=endpoint
-    ).delete()
+    deleted, _ = PushSubscription.objects.filter(user=request.user, endpoint=endpoint).delete()
     return Response({'ok': True, 'deleted': deleted})
