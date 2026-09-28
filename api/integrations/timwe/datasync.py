@@ -211,9 +211,25 @@ def parse_sync_order_relation(payload: bytes | str) -> SyncOrderRelation:
             f'updateType {update_type} is not one of 1 (Add), 2 (Delete) or 3 (Update).'
         )
 
-    for name in ('spID', 'productID', 'serviceID', 'updateTime'):
+    for name in ('spID', 'updateTime'):
         if not _text(body, name):
             raise SyncOrderRelationParseError(f'{name} is mandatory.')
+
+    # productID names the product; serviceID/serviceList name the service(s) it
+    # is provisioned under. Requiring productID unconditionally rejected real
+    # traffic: the MA's Deletion notifications carry the service pair and no
+    # productID at all, and three genuine STOPs were answered 1211 and never
+    # applied because of it (audit finding R-02, reproduced from the stored
+    # raw_payload rows). Either identifier is enough to say what was acted on;
+    # a request carrying neither identifies nothing, and is still refused.
+    # A serviceList of "|||" is present but names nothing, so the usable ids
+    # are what counts -- split the same way SyncOrderRelation.service_ids does.
+    _raw_services = _text(body, 'serviceList') or _text(body, 'serviceID')
+    _service_ids = [part for part in _raw_services.split('|') if part]
+    if not _text(body, 'productID') and not _service_ids:
+        raise SyncOrderRelationParseError(
+            'productID is mandatory unless serviceID or serviceList names a service.'
+        )
 
     extensions: dict[str, str] = {}
     extension_root = _find(body, 'extensionInfo')

@@ -166,7 +166,13 @@ def timwe_sync_order_relation(request):
     # on the tiers came from OneVAS (since removed), and TIMWE has not always
     # quoted the same ones; a subscriber who texted '1' has said which plan
     # they want regardless of that.
-    tier = resolve_tier(product_id=relation.product_id, keyword=relation.keyword)
+    tier = resolve_tier(
+        product_id=relation.product_id,
+        keyword=relation.keyword,
+        # service_ids covers a bundle's `a|b` serviceList; service_id is the
+        # plain case. Either way this is the MA's own exact identifier.
+        service_id=relation.service_id or next(iter(relation.service_ids), ''),
+    )
     if tier is None:
         # 2032 is precisely this case: the service the product belongs to does
         # not exist on our side. Returning it tells the MA to stop rather than

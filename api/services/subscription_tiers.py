@@ -50,15 +50,29 @@ def duration_for_keyword(keyword: str) -> str | None:
     return SMS_CODE_TO_DURATION.get(digits)
 
 
-def resolve_tier(product_id: str = '', keyword: str = '') -> SubscriptionTier | None:
+def resolve_tier(
+    product_id: str = '', keyword: str = '', service_id: str = ''
+) -> SubscriptionTier | None:
     """The tier a notification refers to, or None if nothing matches.
 
-    Product id first, because it is exact when it is right. The keyword is
-    consulted only when the id matched nothing, so a correct id is never
-    overridden by a keyword that disagrees with it.
+    Product id first, because it is exact when it is right. Then the service
+    id, also exact, which is what a Deletion notification carries when it omits
+    productID. The keyword is consulted last, so neither exact identifier is
+    ever overridden by a keyword that disagrees with it.
+
+    The service id goes *ahead* of the keyword deliberately. A real rejected
+    payload carried serviceID 30026300007332 -- weekly -- alongside keyword
+    ``1``, which ``duration_for_keyword`` reads as daily. Resolving that by
+    keyword would cancel a different tier than the one TIMWE named, which is
+    worse than refusing the request outright.
     """
     if product_id:
         tier = SubscriptionTier.objects.filter(product_id=product_id).first()
+        if tier is not None:
+            return tier
+
+    if service_id:
+        tier = SubscriptionTier.objects.filter(service_id=service_id).first()
         if tier is not None:
             return tier
 

@@ -84,6 +84,16 @@ REASON_UNAPPLIED = 'charged_not_yet_applied'
 REASON_NO_MSISDN = 'no_registered_msisdn'
 REASON_MSISDN_MISMATCH = 'msisdn_mismatch'
 REASON_NOT_ATTEMPTED = 'not_attempted'
+#: A plan whose recorded MA service disagrees with its own tier's service.
+#: Reported, never dropped: until this reason had a name, ``due_renewals``
+#: skipped such plans *before* the skip counter saw them, so the diagnostic
+#: printed "1 due, 0 skipped" while silently discarding every weekly and
+#: monthly subscriber. Observability only -- it charges nothing new.
+REASON_WRONG_SERVICE = 'wrong_service'
+#: An older plan belonging to a user whose newest plan was already considered.
+#: One plan per user is charged; this names the ones that lose that contest
+#: instead of vanishing from the count.
+REASON_SUPERSEDED = 'superseded_by_newer_plan'
 
 #: Plan statuses a lapsed short-code subscription can carry. Nothing marks a
 #: plan 'expired' when its period ends -- it stays 'active' with an end_date in
@@ -179,10 +189,36 @@ def _renewable_plans(now):
 
 
 def _for_this_service(plan) -> bool:
-    """A plan TIMWE recorded against another service is not this service's to renew."""
-    service_id = getattr(settings, 'TIMWE_SERVICE_ID', '') or ''
-    plan_service = (plan.metadata or {}).get('service_id') or ''
-    return not (service_id and plan_service and plan_service != service_id)
+    """A plan TIMWE recorded against another service is not its tier's to renew.
+
+    Compared against the tier's OWN service -- ``charging_service_id``, the
+    same value the charge itself names at ``_charge`` -- and not against the
+    deployment-wide ``TIMWE_SERVICE_ID``. Those are different things, and
+    conflating them was audit finding R-01: TIMWE provision a price point per
+    product, so staging carries four services under one spID
+    (7331/7332/7333/7334 for daily/weekly/monthly/ondemand, per migration
+    0143), while ``TIMWE_SERVICE_ID`` names only whichever one is configured.
+    Comparing a plan against the setting therefore rejected every plan whose
+    tier was not the configured one -- in production, every weekly and monthly
+    subscriber, none of which were ever renewed.
+
+    The guard itself is unchanged in intent and still rejects a genuine
+    cross-service mismatch. What it compares against is the service the charge
+    will actually name: the tier's own when it has one, and the deployment
+    default when it does not -- which is exactly what ``charging_service_id``
+    returning '' means, and what ``TimweChargeService.get_service_id`` then
+    resolves. So an unprovisioned tier behaves precisely as it did before this
+    changed, and a provisioned one is judged against its own service instead of
+    a setting that can only ever name one of the four.
+
+    A blank ``service_id`` on the plan still passes: a plan recorded before the
+    notifications carried a serviceID has nothing to disagree with.
+    """
+    from api.integrations.timwe.charge import TimweChargeService
+
+    effective = charging_service_id(plan.tier) or (TimweChargeService.get_service_id() or '')
+    plan_service = ((plan.metadata or {}).get('service_id') or '').strip()
+    return not (effective and plan_service and plan_service != effective)
 
 
 def lapsed_short_code_plan(user):
@@ -652,7 +688,16 @@ def due_renewals(now=None):
     now = now or timezone.now()
     seen = set()
     for plan in _sweep_candidates(now).iterator(chunk_size=500):
-        if plan.user_id in seen or not _for_this_service(plan):
+        # Both of these used to `continue`, which is why a discarded candidate
+        # never reached the caller's skipped tally. They yield a reason now.
+        # `seen` is still only marked for a plan that passes the service
+        # guard, so a wrong-service plan leaves an older plan for the same
+        # user eligible -- the behaviour before this changed.
+        if plan.user_id in seen:
+            yield plan, REASON_SUPERSEDED
+            continue
+        if not _for_this_service(plan):
+            yield plan, REASON_WRONG_SERVICE
             continue
         seen.add(plan.user_id)
         _, skip = _charge_number(plan.user, plan)

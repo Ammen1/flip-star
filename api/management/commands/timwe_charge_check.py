@@ -285,13 +285,18 @@ class Command(BaseCommand):
             )
 
         due = skipped = 0
+        by_reason: dict[str, int] = {}
+        by_tier: dict[str, int] = {}
         for plan, skip in renewal.due_renewals(now):
             number = getattr(getattr(plan.user, 'profile', None), 'phone_number', '') or ''
             state = f'skip: {skip}' if skip else 'DUE'
             if skip:
                 skipped += 1
+                by_reason[skip] = by_reason.get(skip, 0) + 1
             else:
                 due += 1
+            label = getattr(plan.tier, 'duration_type', '') or 'unknown'
+            by_tier[label] = by_tier.get(label, 0) + 1
             attempt = renewal.next_attempt(plan)
             self.stdout.write(
                 f'  user={plan.user_id:<8} {_mask(number):14} {plan.tier.name[:24]:24} '
@@ -299,6 +304,15 @@ class Command(BaseCommand):
                 f'ended {plan.end_date:%Y-%m-%d %H:%M}  attempt {attempt}  {state}'
             )
         self.stdout.write(f'  {due} due, {skipped} skipped')
+        # Every discarded candidate is attributable. A bare "0 skipped" hid
+        # finding R-01 for weeks: wrong-service plans were dropped before this
+        # tally could see them, so the funnel looked clean while every weekly
+        # and monthly subscriber was being discarded.
+        for reason, n in sorted(by_reason.items(), key=lambda kv: -kv[1]):
+            self.stdout.write(f'    skipped_{reason}={n}')
+        if by_tier:
+            spread = '  '.join(f'{k}={v}' for k, v in sorted(by_tier.items()))
+            self.stdout.write(f'  candidates by tier: {spread}')
         if due and not on:
             self.stdout.write('  (none will be charged while the switches are off)')
 

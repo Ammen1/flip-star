@@ -154,10 +154,43 @@ def test_parsing_ignores_the_namespace_prefix():
     assert relation.product_id == '1000000423'
 
 
-@pytest.mark.parametrize('element', ['spID', 'productID', 'serviceID', 'updateTime'])
+@pytest.mark.parametrize('element', ['spID', 'updateTime'])
 def test_missing_mandatory_element_is_rejected(element):
     with pytest.raises(SyncOrderRelationParseError, match=element):
         parse_sync_order_relation(_without(SUBSCRIPTION_XML, element))
+
+
+# productID and serviceID were each on the list above until audit finding R-02.
+# They are not independently mandatory: the MA's real Deletion notifications
+# carry the service pair and no productID at all, and requiring it answered
+# three genuine STOPs with 1211 and never applied them. What is required is that
+# the request identify *something* -- a product, or a service.
+
+
+@pytest.mark.parametrize('element', ['productID', 'serviceID'])
+def test_either_identifier_alone_is_enough(element):
+    """Dropping one identifier is fine while the other still names the order."""
+    relation = parse_sync_order_relation(_without(SUBSCRIPTION_XML, element))
+    assert relation.product_id or relation.service_ids
+
+
+def test_a_request_identifying_nothing_is_still_rejected():
+    xml = SUBSCRIPTION_XML
+    for element in ('productID', 'serviceID', 'serviceList'):
+        xml = _without(xml, element)
+    with pytest.raises(SyncOrderRelationParseError, match='productID is mandatory'):
+        parse_sync_order_relation(xml)
+
+
+def test_a_service_list_naming_nothing_is_rejected():
+    """ "|||" is present but empty of ids, so it identifies no more than a blank."""
+    xml = _without(_without(SUBSCRIPTION_XML, 'productID'), 'serviceID')
+    xml = xml.replace(
+        '<ns1:serviceList>0011002000001100</ns1:serviceList>',
+        '<ns1:serviceList>|||</ns1:serviceList>',
+    )
+    with pytest.raises(SyncOrderRelationParseError, match='productID is mandatory'):
+        parse_sync_order_relation(xml)
 
 
 def test_missing_user_id_is_rejected():
