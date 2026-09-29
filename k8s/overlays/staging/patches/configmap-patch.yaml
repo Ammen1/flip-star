@@ -266,6 +266,13 @@ data:
   # nothing; run it before and after to see what this actually did.
   TIMWE_SUBSCRIPTION_RENEWAL_ENABLED: "true"
 
+  # --- TIMWE Charging Payload Corrections ---
+  # These ensure the generated SOAP XML perfectly matches TIMWE's staging
+  # requirements for a successful chargeAmount response, preventing SVC0270.
+  TIMWE_CHARGE_CODE: "255"
+  TIMWE_CHARGE_TEL_PREFIX: "false"
+  TIMWE_CHARGE_AUTH_MODE: "plain"
+
   # Deep link base URL embedded in the welcome SMS. A subscriber who gets
   # this URL taps it to open the app / register. Must match what the mobile
   # team has registered. Defaults to https://uat.flipstar.et/register in code.
