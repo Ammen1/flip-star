@@ -1736,6 +1736,10 @@ def telebirr_ussd_subscription_initiate(request):
         phone_number=phone_number,
         coins=0,
         result_url=subscription_webhook_url or None,
+        # Subscriptions bill to their own telebirr account. coins=0 above is
+        # not the signal -- api/views/wallet.py reaches this same method for a
+        # coin purchase and must stay on the current account.
+        for_subscription=True,
     )
 
     if not result.get('success'):

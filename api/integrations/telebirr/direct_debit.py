@@ -20,6 +20,17 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+class TelebirrSubscriptionRoutingError(RuntimeError):
+    """Subscriptions are routed to their own telebirr account, and that
+    account's identity is incomplete for the command being sent.
+
+    Raised rather than falling back, because the fallback would be the
+    account that handles coin purchases and withdrawals. Sending a
+    subscription charge there is not a degraded outcome -- it is money
+    landing in the wrong place, which nothing downstream would notice.
+    """
+
+
 class TelebirrDirectDebitService:
     """Telebirr Direct Debit SOAP Service"""
 
@@ -67,8 +78,186 @@ class TelebirrDirectDebitService:
             settings, 'TELEBIRR_USSD_ORG_OPERATOR_CREDENTIAL', ''
         )
 
+        # Subscription routing -- the OLD merchant account.
+        #
+        # Subscriptions bill to a different telebirr account than everything
+        # else in the app. Coin purchases (C2B), withdrawal payouts (B2C) and
+        # airtime (TIMWE, a different provider) are untouched by this block.
+        #
+        # The short code is the switch: empty means every flow behaves exactly
+        # as it did before this existed.
+        self.subscription_shortcode = getattr(settings, 'TELEBIRR_SUBSCRIPTION_SHORTCODE', '')
+
+        # C2B / direct-debit side: mandate creation (SP, IdentifierType 14)
+        # and the debit itself (ORG, IdentifierType 11).
+        self.subscription_soap_url = getattr(settings, 'TELEBIRR_SUBSCRIPTION_SOAP_URL', '')
+        self.subscription_third_party_id = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_THIRD_PARTY_ID', ''
+        )
+        self.subscription_third_party_password = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_THIRD_PARTY_PASSWORD', ''
+        )
+        self.subscription_sp_operator_id = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_SP_OPERATOR_ID', ''
+        )
+        self.subscription_sp_operator_credential = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_SP_OPERATOR_CREDENTIAL', ''
+        )
+        self.subscription_org_operator_id = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_ID', ''
+        )
+        self.subscription_org_operator_credential = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_CREDENTIAL', ''
+        )
+
+        # USSD push side (IdentifierType 12). Named to mirror the
+        # TELEBIRR_USSD_* block above, which is the account these replace.
+        self.subscription_ussd_merchant_shortcode = (
+            getattr(settings, 'TELEBIRR_SUBSCRIPTION_USSD_MERCHANT_SHORTCODE', '')
+            or self.subscription_shortcode
+        )
+        self.subscription_ussd_soap_url = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_USSD_SOAP_URL', ''
+        )
+        self.subscription_ussd_third_party_id = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_ID', ''
+        )
+        self.subscription_ussd_third_party_password = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_PASSWORD', ''
+        )
+        self.subscription_ussd_org_operator_id = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID', ''
+        )
+        self.subscription_ussd_org_operator_credential = getattr(
+            settings, 'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL', ''
+        )
+
         # No SOAP client initialization needed for raw requests
         self.client = None
+
+    @property
+    def subscription_routing_enabled(self):
+        """True when subscription charges bill to their own telebirr account.
+
+        Read this rather than testing the short code directly: it is the one
+        place that decides, and tests assert against it.
+        """
+        return bool(self.subscription_shortcode)
+
+    def mandate_is_on_subscription_account(self, mandate):
+        """Whether an existing mandate belongs to the subscription account.
+
+        Routing a debit has to follow the MANDATE, not today's configuration.
+        A mandate created on the current account before this feature existed
+        must keep being debited there -- its stored payee short code is the
+        only durable record of which account it lives on, and
+        ``purchase_type`` is not a substitute: a subscription mandate created
+        last month is still a subscription, but it is not on the old account.
+        """
+        payee = (getattr(mandate, 'payee_identifier_value', '') or '').strip()
+        return bool(self.subscription_shortcode) and payee == self.subscription_shortcode
+
+    # Per operator role: which settings carry the identity, and which
+    # attributes hold them. Kept as data so an error can name the exact
+    # missing key rather than "subscription config incomplete".
+    _SUBSCRIPTION_ROLES = {
+        # role: (operator_id_key, operator_credential_key, attribute_prefix)
+        'sp': (
+            'TELEBIRR_SUBSCRIPTION_SP_OPERATOR_ID',
+            'TELEBIRR_SUBSCRIPTION_SP_OPERATOR_CREDENTIAL',
+            'subscription_sp_operator',
+        ),
+        'org': (
+            'TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_ID',
+            'TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_CREDENTIAL',
+            'subscription_org_operator',
+        ),
+        'ussd': (
+            'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID',
+            'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL',
+            'subscription_ussd_org_operator',
+        ),
+    }
+
+    def _subscription_identity(self, role, caller_id='', caller_password='', soap_url=''):
+        """Resolve the subscription account's identity for one operator role.
+
+        Returns None when subscription routing is off, which tells every
+        caller to carry on using the current account exactly as before.
+
+        Only the INITIATOR is required, and deliberately so. In the Huawei CPS
+        envelope the two credential blocks answer different questions:
+
+          <req:Initiator>  -- which merchant account the money moves against.
+                              Operator id + credential + short code. This is
+                              the routing decision, so it never falls back:
+                              borrowing the current account's operator would
+                              charge the wrong merchant.
+          <req:Caller>     -- which integrator is making the API call. The
+                              same partner integrates both accounts, so the
+                              current values are reused unless the
+                              subscription account was issued its own.
+
+        Args:
+            role: 'sp' (IdentifierType 14, mandate creation and one-off
+                payment), 'org' (IdentifierType 11, direct debit) or 'ussd'
+                (IdentifierType 12, USSD push).
+            caller_id, caller_password, soap_url: what this flow would have
+                used on the current account, reused when the subscription
+                account has no override of its own.
+
+        Raises:
+            TelebirrSubscriptionRoutingError: routing is on but this role's
+                OPERATOR identity is missing.
+        """
+        if not self.subscription_routing_enabled:
+            return None
+
+        operator_id_key, operator_credential_key, prefix = self._SUBSCRIPTION_ROLES[role]
+        operator_id = getattr(self, prefix + '_id')
+        operator_credential = getattr(self, prefix + '_credential')
+
+        missing = [
+            key
+            for key, value in (
+                (operator_id_key, operator_id),
+                (operator_credential_key, operator_credential),
+            )
+            if not value
+        ]
+        if missing:
+            # Names only. The values are credentials and never reach a log.
+            logger.error(
+                'Telebirr subscription routing is enabled but the %s operator identity '
+                'is incomplete; unset: %s',
+                role,
+                ', '.join(missing),
+            )
+            raise TelebirrSubscriptionRoutingError(
+                'Subscription telebirr account is configured (short code is set) but '
+                'the {} operator identity is incomplete. Unset: {}.'.format(
+                    role, ', '.join(missing)
+                )
+            )
+
+        if role == 'ussd':
+            own_caller_id = self.subscription_ussd_third_party_id
+            own_caller_password = self.subscription_ussd_third_party_password
+            own_soap_url = self.subscription_ussd_soap_url
+        else:
+            own_caller_id = self.subscription_third_party_id
+            own_caller_password = self.subscription_third_party_password
+            own_soap_url = self.subscription_soap_url
+
+        return {
+            'shortcode': self.subscription_shortcode,
+            'ussd_merchant_shortcode': self.subscription_ussd_merchant_shortcode,
+            'operator_id': operator_id,
+            'operator_credential': operator_credential,
+            'third_party_id': own_caller_id or caller_id,
+            'third_party_password': own_caller_password or caller_password,
+            'soap_url': own_soap_url or soap_url,
+        }
 
     def _generate_originator_conversation_id(self):
         """A unique id for one request, used to correlate the async result.
@@ -176,6 +365,7 @@ class TelebirrDirectDebitService:
         start_range_of_days=1,
         end_range_of_days=31,
         debug=False,
+        for_subscription=False,
     ):
         """
         Create Direct Debit Mandate
@@ -191,11 +381,26 @@ class TelebirrDirectDebitService:
             start_range_of_days: Start range of days for payment (default 1)
             end_range_of_days: End range of days for payment (default 31)
             debug: If True, print the SOAP envelope for debugging
+            for_subscription: True when this mandate bills a subscription, so
+                it routes to the subscription telebirr account when one is
+                configured. Has no effect when it is not -- see
+                _subscription_identity.
 
         Returns:
             dict: Response with success status and mandate details
         """
         try:
+            routing = (
+                self._subscription_identity(
+                    'sp',
+                    caller_id=self.third_party_id,
+                    caller_password=self.third_party_password,
+                    soap_url=self.soap_url,
+                )
+                if for_subscription
+                else None
+            )
+
             # Format dates
             if isinstance(first_payment_date, datetime):
                 first_payment_date = first_payment_date.strftime('%Y%m%d')
@@ -204,16 +409,23 @@ class TelebirrDirectDebitService:
 
             # Set defaults
             if payee_shortcode is None:
-                payee_shortcode = self.shortcode
+                payee_shortcode = routing['shortcode'] if routing else self.shortcode
             if payee_account_name is None:
                 payee_account_name = self.payee_account_name
 
             # Build initiator (SP Operator)
-            initiator = {
-                'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.sp_operator_id or self.third_party_id,
-                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
-            }
+            if routing:
+                initiator = {
+                    'IdentifierType': 14,  # SP Operator Username
+                    'Identifier': routing['operator_id'],
+                    'SecurityCredential': routing['operator_credential'],
+                }
+            else:
+                initiator = {
+                    'IdentifierType': 14,  # SP Operator Username
+                    'Identifier': self.sp_operator_id or self.third_party_id,
+                    'SecurityCredential': self.sp_operator_credential or self.third_party_password,
+                }
 
             # Build receiver party (Payer MSISDN)
             receiver_party = {
@@ -244,6 +456,8 @@ class TelebirrDirectDebitService:
                 initiator=initiator,
                 receiver_party=receiver_party,
                 body_xml=body_xml,
+                caller_id=routing['third_party_id'] if routing else None,
+                caller_password=routing['third_party_password'] if routing else None,
             )
 
             # Print SOAP envelope for debugging if debug=True
@@ -261,7 +475,7 @@ class TelebirrDirectDebitService:
             }
 
             response = requests.post(
-                self.soap_url,
+                (routing['soap_url'] if routing else '') or self.soap_url,
                 data=soap_envelope,
                 headers=headers,
                 timeout=30,
@@ -302,6 +516,11 @@ class TelebirrDirectDebitService:
                             'conversation_id': conversation_id,
                             'message': response_desc,
                             'response_code': response_code,
+                            # Which account this mandate now lives on. The
+                            # caller stores it: every later debit has to go
+                            # back to the same account, and configuration can
+                            # change underneath a long-lived mandate.
+                            'payee_shortcode': payee_shortcode,
                         }
                     else:
                         return {
@@ -442,6 +661,7 @@ class TelebirrDirectDebitService:
         shortcode=None,
         mandate_id=None,
         debug=False,
+        for_subscription=False,
     ):
         """
         Initiate Direct Debit Transaction
@@ -455,22 +675,47 @@ class TelebirrDirectDebitService:
                 without it Telebirr cannot tie this debit to a specific mandate
                 when a payer has more than one)
             debug: If True, print the SOAP envelope for debugging
+            for_subscription: True when this debit charges a subscription, so
+                it routes to the subscription telebirr account when one is
+                configured. No effect when it is not.
 
         Returns:
             dict: Response with success status and transaction ID
         """
         try:
-            # Set default shortcode
+            routing = (
+                self._subscription_identity(
+                    'org',
+                    caller_id=self.third_party_id,
+                    caller_password=self.third_party_password,
+                    soap_url=self.soap_url,
+                )
+                if for_subscription
+                else None
+            )
+
+            # Set default shortcode. An explicit shortcode still wins: the
+            # manual-debit endpoint passes the one stored on the mandate, which
+            # is the account that mandate was actually created against and is
+            # therefore more authoritative than any setting.
             if shortcode is None:
-                shortcode = self.shortcode
+                shortcode = routing['shortcode'] if routing else self.shortcode
 
             # Build initiator (Organization Operator or SP Operator)
-            initiator = {
-                'IdentifierType': 11,  # Organization Operator
-                'Identifier': self.org_operator_id or self.third_party_id,
-                'SecurityCredential': self.org_operator_credential or self.third_party_password,
-                'ShortCode': shortcode,
-            }
+            if routing:
+                initiator = {
+                    'IdentifierType': 11,  # Organization Operator
+                    'Identifier': routing['operator_id'],
+                    'SecurityCredential': routing['operator_credential'],
+                    'ShortCode': shortcode,
+                }
+            else:
+                initiator = {
+                    'IdentifierType': 11,  # Organization Operator
+                    'Identifier': self.org_operator_id or self.third_party_id,
+                    'SecurityCredential': self.org_operator_credential or self.third_party_password,
+                    'ShortCode': shortcode,
+                }
 
             # Build receiver party (Payer Reference Number)
             receiver_party = {
@@ -509,6 +754,8 @@ class TelebirrDirectDebitService:
                 initiator=initiator,
                 receiver_party=receiver_party,
                 body_xml=body_xml,
+                caller_id=routing['third_party_id'] if routing else None,
+                caller_password=routing['third_party_password'] if routing else None,
             )
 
             # Print SOAP envelope for debugging if debug=True
@@ -526,7 +773,7 @@ class TelebirrDirectDebitService:
             }
 
             response = requests.post(
-                self.soap_url,
+                (routing['soap_url'] if routing else '') or self.soap_url,
                 data=soap_envelope,
                 headers=headers,
                 timeout=30,
@@ -604,6 +851,7 @@ class TelebirrDirectDebitService:
         start_range_of_days=1,
         end_range_of_days=31,
         debug=False,
+        for_subscription=False,
     ):
         """
         Create One-Off Payment for Coin Purchasing
@@ -622,11 +870,26 @@ class TelebirrDirectDebitService:
             start_range_of_days: Start range of days for payment (default 1)
             end_range_of_days: End range of days for payment (default 31)
             debug: If True, print the SOAP envelope for debugging
+            for_subscription: True when this one-off pays for a subscription
+                rather than coins. Both purchase types share this method --
+                the caller's intent is the only thing that distinguishes them,
+                so it has to be passed in rather than inferred here.
 
         Returns:
             dict: Response with success status and payment details
         """
         try:
+            routing = (
+                self._subscription_identity(
+                    'sp',
+                    caller_id=self.third_party_id,
+                    caller_password=self.third_party_password,
+                    soap_url=self.soap_url,
+                )
+                if for_subscription
+                else None
+            )
+
             # Format dates - default to today if not provided.
             #
             # isinstance(x, datetime) alone misses a plain date object: a
@@ -655,16 +918,23 @@ class TelebirrDirectDebitService:
 
             # Set defaults
             if payee_shortcode is None:
-                payee_shortcode = self.shortcode
+                payee_shortcode = routing['shortcode'] if routing else self.shortcode
             if payee_account_name is None:
                 payee_account_name = self.payee_account_name
 
             # Build initiator (SP Operator)
-            initiator = {
-                'IdentifierType': 14,  # SP Operator Username
-                'Identifier': self.sp_operator_id or self.third_party_id,
-                'SecurityCredential': self.sp_operator_credential or self.third_party_password,
-            }
+            if routing:
+                initiator = {
+                    'IdentifierType': 14,  # SP Operator Username
+                    'Identifier': routing['operator_id'],
+                    'SecurityCredential': routing['operator_credential'],
+                }
+            else:
+                initiator = {
+                    'IdentifierType': 14,  # SP Operator Username
+                    'Identifier': self.sp_operator_id or self.third_party_id,
+                    'SecurityCredential': self.sp_operator_credential or self.third_party_password,
+                }
 
             # Build receiver party (Payer MSISDN)
             receiver_party = {
@@ -695,6 +965,8 @@ class TelebirrDirectDebitService:
                 initiator=initiator,
                 receiver_party=receiver_party,
                 body_xml=body_xml,
+                caller_id=routing['third_party_id'] if routing else None,
+                caller_password=routing['third_party_password'] if routing else None,
             )
 
             # Print SOAP envelope for debugging if debug=True
@@ -712,7 +984,7 @@ class TelebirrDirectDebitService:
             }
 
             response = requests.post(
-                self.soap_url,
+                (routing['soap_url'] if routing else '') or self.soap_url,
                 data=soap_envelope,
                 headers=headers,
                 timeout=30,
@@ -755,6 +1027,10 @@ class TelebirrDirectDebitService:
                         'conversation_id': conversation_id,
                         'message': response_desc or 'One-off payment request accepted successfully',
                         'response_code': response_code,
+                        # Which account this payment was raised against, so
+                        # the caller can record it on the mandate row: the
+                        # debit that follows has to return to the same one.
+                        'payee_shortcode': payee_shortcode,
                     }
                 else:
                     return {
@@ -887,7 +1163,9 @@ class TelebirrDirectDebitService:
         except Exception as e:
             return {'success': False, 'error': f'Mandate cancellation failed: {str(e)}'}
 
-    def query_mandate_by_payer(self, payer_msisdn, mandate_statuses=None, debug=False):
+    def query_mandate_by_payer(
+        self, payer_msisdn, mandate_statuses=None, debug=False, for_subscription=False
+    ):
         """
         Query Direct Debit Mandate by Payer
 
@@ -895,18 +1173,42 @@ class TelebirrDirectDebitService:
             payer_msisdn: Payer phone number (MSISDN)
             mandate_statuses: Optional list of mandate status codes (e.g., ['03', '01'])
             debug: If True, print the SOAP envelope for debugging
+            for_subscription: Query the subscription telebirr account instead.
+                A mandate exists on exactly one account, so a subscription
+                mandate queried against the coin account comes back "not
+                found" -- which reads as "the subscriber has no mandate" and
+                is the wrong conclusion. Read-only either way.
 
         Returns:
             dict: Response with success status and mandate data
         """
         try:
+            routing = (
+                self._subscription_identity(
+                    'org',
+                    caller_id=self.third_party_id,
+                    caller_password=self.third_party_password,
+                    soap_url=self.soap_url,
+                )
+                if for_subscription
+                else None
+            )
+
             # Build initiator (Organization Operator)
-            initiator = {
-                'IdentifierType': 11,  # Organization Operator
-                'Identifier': self.org_operator_id or self.third_party_id,
-                'SecurityCredential': self.org_operator_credential or self.third_party_password,
-                'ShortCode': self.shortcode,
-            }
+            if routing:
+                initiator = {
+                    'IdentifierType': 11,  # Organization Operator
+                    'Identifier': routing['operator_id'],
+                    'SecurityCredential': routing['operator_credential'],
+                    'ShortCode': routing['shortcode'],
+                }
+            else:
+                initiator = {
+                    'IdentifierType': 11,  # Organization Operator
+                    'Identifier': self.org_operator_id or self.third_party_id,
+                    'SecurityCredential': self.org_operator_credential or self.third_party_password,
+                    'ShortCode': self.shortcode,
+                }
 
             # Build receiver party (Payer MSISDN)
             receiver_party = {
@@ -935,6 +1237,8 @@ class TelebirrDirectDebitService:
                 initiator=initiator,
                 receiver_party=receiver_party,
                 body_xml=body_xml,
+                caller_id=routing['third_party_id'] if routing else None,
+                caller_password=routing['third_party_password'] if routing else None,
             )
 
             # Print SOAP envelope for debugging if debug=True
@@ -952,7 +1256,7 @@ class TelebirrDirectDebitService:
             }
 
             response = requests.post(
-                self.soap_url,
+                (routing['soap_url'] if routing else '') or self.soap_url,
                 data=soap_envelope,
                 headers=headers,
                 timeout=30,
@@ -1377,7 +1681,9 @@ class TelebirrDirectDebitService:
                 'error': f'B2C payment initiation failed: {str(e)}',
             }
 
-    def initiate_ussd_push_payment(self, amount, phone_number, coins, result_url=None):
+    def initiate_ussd_push_payment(
+        self, amount, phone_number, coins, result_url=None, for_subscription=False
+    ):
         """
         Initiate a USSD Push payment (InitTrans_BuyGoodsForCustomer) --
         triggers an immediate PIN-entry prompt on the payer's phone, unlike
@@ -1389,6 +1695,10 @@ class TelebirrDirectDebitService:
             coins: Number of coins being purchased (0 if not a coin purchase,
                 e.g. a subscription payment)
             result_url: Optional override for the configured webhook URL
+            for_subscription: True when this push charges a subscription. Coin
+                purchases and subscriptions both arrive here, and `coins=0` is
+                NOT a reliable proxy -- callers that want subscription routing
+                must say so.
 
         Returns:
             dict: {'success': bool, 'originator_conversation_id': str,
@@ -1404,6 +1714,33 @@ class TelebirrDirectDebitService:
                 self.ussd_org_operator_credential or self.sp_operator_credential
             )
             ussd_merchant_shortcode = self.ussd_merchant_shortcode or self.shortcode
+
+            # Resolved after the current-account values, which become the
+            # fallback for the <req:Caller> block and the gateway URL.
+            routing = (
+                self._subscription_identity(
+                    'ussd',
+                    caller_id=ussd_third_party_id,
+                    caller_password=ussd_third_party_password,
+                    soap_url=ussd_soap_url,
+                )
+                if for_subscription
+                else None
+            )
+
+            if routing:
+                # The Initiator is replaced outright -- that is the routing
+                # decision. Caller and gateway come back already resolved,
+                # having fallen back to the values above when the subscription
+                # account was not issued its own. The result URL is NOT
+                # touched: callbacks come back to us, so it belongs to this
+                # deployment rather than to the merchant account.
+                ussd_soap_url = routing['soap_url']
+                ussd_third_party_id = routing['third_party_id']
+                ussd_third_party_password = routing['third_party_password']
+                ussd_org_operator_id = routing['operator_id']
+                ussd_org_operator_credential = routing['operator_credential']
+                ussd_merchant_shortcode = routing['ussd_merchant_shortcode']
 
             originator_conversation_id = self._generate_originator_conversation_id()
             conversation_id = self._generate_conversation_id()

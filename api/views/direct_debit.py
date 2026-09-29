@@ -144,6 +144,10 @@ def create_direct_debit_mandate(request):
             frequency=frequency,
             first_payment_date=first_payment_date.strftime('%Y%m%d'),
             expiry_date=expiry_date.strftime('%Y%m%d'),
+            # Subscriptions bill to their own telebirr account. This endpoint
+            # rejects every tier whose duration_type is not daily/weekly/
+            # monthly above, so there is no coin purchase to confuse it with.
+            for_subscription=True,
         )
 
         if not result.get('success'):
@@ -161,7 +165,8 @@ def create_direct_debit_mandate(request):
             tier=tier,
             payer_msisdn=payer_msisdn,
             payer_reference_number=payer_reference_number,
-            payee_identifier_value=getattr(tier, 'short_code', '9286'),
+            payee_identifier_value=result.get('payee_shortcode')
+            or getattr(tier, 'short_code', '9286'),
             frequency=frequency,
             first_payment_date=first_payment_date,
             expiry_date=expiry_date,
@@ -680,6 +685,18 @@ def telebirr_direct_debit_webhook(request):
                             amount=amount,
                             currency='ETB',
                             mandate_id=mandate.mandate_id or None,
+                            # Follows the MANDATE, not today's config.
+                            # purchase_type would be wrong here: a
+                            # subscription mandate created before routing
+                            # existed is still a subscription, but it lives
+                            # on the current account and has to be debited
+                            # there. The stored payee short code is the only
+                            # durable record of which account that is.
+                            for_subscription=(
+                                telebirr_direct_debit_service.mandate_is_on_subscription_account(
+                                    mandate
+                                )
+                            ),
                         )
                         if debit_result.get('success'):
                             if debit_result.get('originator_conversation_id'):
@@ -1004,6 +1021,13 @@ def initiate_direct_debit(request):
             payer_reference_number=mandate.payer_reference_number,
             amount=amount,
             shortcode=mandate.payee_identifier_value,
+            # payee_identifier_value already pins the short code to whichever
+            # account this mandate lives on. The operator identity has to
+            # follow it: the right short code with the wrong operator's
+            # credential is refused, and the ResponseDesc names neither.
+            for_subscription=telebirr_direct_debit_service.mandate_is_on_subscription_account(
+                mandate
+            ),
         )
 
         if not result.get('success'):
@@ -1222,6 +1246,9 @@ def create_one_off_subscription(request):
             frequency='01',
             first_payment_date=datetime.now().date(),
             expiry_date=datetime.now().date(),
+            # Subscription, not coins. The coin one-off in purchase_coins()
+            # calls the same method and deliberately does not pass this.
+            for_subscription=True,
         )
 
         if not result.get('success'):
@@ -1236,7 +1263,8 @@ def create_one_off_subscription(request):
             payer_msisdn=payer_msisdn,
             payer_reference_number=payer_reference_number,
             payee_identifier_type=4,
-            payee_identifier_value=telebirr_direct_debit_service.shortcode,
+            payee_identifier_value=result.get('payee_shortcode')
+            or telebirr_direct_debit_service.shortcode,
             payee_account_name=telebirr_direct_debit_service.payee_account_name,
             status='pending_created',
             payment_type='one_off',

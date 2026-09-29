@@ -211,6 +211,67 @@ SCHEMA: tuple[Key, ...] = (
     _k('TELEBIRR_USSD_ORG_OPERATOR_ID', group='telebirr_ussd'),
     _k('TELEBIRR_USSD_ORG_OPERATOR_CREDENTIAL', group='telebirr_ussd'),
     _k('TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL', group='telebirr_ussd'),
+    # -- telebirr: subscription routing (the OLD merchant account) -----------
+    # Subscriptions bill to their own telebirr account; coins, payouts and
+    # airtime do not. The whole group is inert until the short code is set --
+    # see the block in config/settings/base.py for why that is the switch, and
+    # why only the operator pairs are mandatory once it is.
+    _k(
+        'TELEBIRR_SUBSCRIPTION_SHORTCODE',
+        group='telebirr_subscription',
+        doc='Short code subscriptions bill to. Empty means subscriptions stay '
+        'on the current account, i.e. the feature is off.',
+    ),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_SOAP_URL',
+        group='telebirr_subscription',
+        doc='C2B/direct-debit gateway. Falls back to TELEBIRR_SOAP_URL.',
+    ),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_THIRD_PARTY_ID',
+        group='telebirr_subscription',
+        doc='Caller identity for the C2B flows. Falls back to '
+        'TELEBIRR_THIRD_PARTY_ID -- the same integrator calls both accounts.',
+    ),
+    _k('TELEBIRR_SUBSCRIPTION_THIRD_PARTY_PASSWORD', group='telebirr_subscription'),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_SP_OPERATOR_ID',
+        group='telebirr_subscription',
+        doc='IdentifierType 14 -- mandate creation and one-off payment. '
+        'Required, with no fallback, once the short code is set.',
+    ),
+    _k('TELEBIRR_SUBSCRIPTION_SP_OPERATOR_CREDENTIAL', group='telebirr_subscription'),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_ID',
+        group='telebirr_subscription',
+        doc='IdentifierType 11 -- direct debit transaction. Required, with no '
+        'fallback, once the short code is set.',
+    ),
+    _k('TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_CREDENTIAL', group='telebirr_subscription'),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_USSD_MERCHANT_SHORTCODE',
+        group='telebirr_subscription',
+        doc='Falls back to TELEBIRR_SUBSCRIPTION_SHORTCODE.',
+    ),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_USSD_SOAP_URL',
+        group='telebirr_subscription',
+        doc='USSD push gateway. Falls back to TELEBIRR_USSD_SOAP_URL.',
+    ),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_ID',
+        group='telebirr_subscription',
+        doc='Caller identity for USSD push. Falls back to ' 'TELEBIRR_USSD_THIRD_PARTY_ID.',
+    ),
+    _k('TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_PASSWORD', group='telebirr_subscription'),
+    _k(
+        'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID',
+        group='telebirr_subscription',
+        doc='IdentifierType 12 -- USSD push (BuyGoodsForCustomer). This is the '
+        'live subscription path. Required, with no fallback, once the short '
+        'code is set.',
+    ),
+    _k('TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL', group='telebirr_subscription'),
     # -- telebirr: H5 / SuperApp checkout ------------------------------------
     _k('TELEBIRR_H5_BASE_URL', group='telebirr_h5'),
     _k('TELEBIRR_FABRIC_APP_ID', group='telebirr_h5'),

@@ -565,6 +565,88 @@ TELEBIRR_USSD_ORG_OPERATOR_CREDENTIAL = config('TELEBIRR_USSD_ORG_OPERATOR_CREDE
 # distinct from the general coin-purchase one above.
 TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL = config('TELEBIRR_SUBSCRIPTION_USSD_RESULT_URL', default='')
 
+# ---------------------------------------------------------------------------
+# Telebirr subscription routing -- the OLD merchant account
+# ---------------------------------------------------------------------------
+# Subscriptions bill to a different telebirr account than the rest of the app.
+# Coin purchases (C2B), withdrawal payouts (B2C) and airtime (TIMWE, a
+# separate provider entirely) stay where they are; only subscription charges
+# move. This is a commercial arrangement between Flipstar and Ethio Telecom,
+# not a technical one -- the two accounts settle to different places.
+#
+# OFF unless TELEBIRR_SUBSCRIPTION_SHORTCODE holds a value. Unset, every flow
+# behaves exactly as it did before these keys existed, so shipping the code is
+# a no-op until the account is configured. That matters because the switch is
+# a money-routing change and should be a deliberate act of configuration, not
+# a side effect of a deploy.
+#
+# WHAT MUST BE SET, AND WHAT FALLS BACK. The Huawei CPS envelope carries two
+# credential blocks that answer different questions, and they are treated
+# differently on purpose:
+#
+#   <req:Initiator>  Which merchant account the money moves against: operator
+#                    id, operator credential, short code. This IS the routing
+#                    decision, so it never falls back. A flow whose operator
+#                    identity is missing raises rather than borrowing the
+#                    current account -- that account funds withdrawals, and a
+#                    subscription charge landing there reconciles against
+#                    nothing.
+#
+#   <req:Caller>     Which integrator is calling the API. The same partner
+#                    integrates both accounts, so the current account's
+#                    third-party id and password are reused unless Ethio
+#                    Telecom issued separate ones. Same for the SOAP URL.
+#
+# Telebirr authenticates a different operator TYPE per command, which is why
+# there are three operator pairs rather than one. A deployment only needs the
+# pairs for the flows it actually uses:
+#   SP   (IdentifierType 14) -- CreateDirectDebitMandateByCustomer
+#   ORG  (IdentifierType 11) -- InitTrans_Initiate Direct Debit Transaction
+#   USSD (IdentifierType 12) -- InitTrans_BuyGoodsForCustomer
+#
+# Credentials belong in Vault, not in a ConfigMap. VAULT_PRECEDENCE is 'env',
+# so an empty value present in the environment OVERRIDES Vault -- setting any
+# of these to "" in a ConfigMap silently disables the Vault value rather than
+# deferring to it.
+TELEBIRR_SUBSCRIPTION_SHORTCODE = config('TELEBIRR_SUBSCRIPTION_SHORTCODE', default='')
+
+# C2B / direct-debit side: mandate creation (SP) and the debit itself (ORG).
+# Unset on a deployment that only takes subscriptions by USSD push.
+TELEBIRR_SUBSCRIPTION_SOAP_URL = config('TELEBIRR_SUBSCRIPTION_SOAP_URL', default='')
+TELEBIRR_SUBSCRIPTION_THIRD_PARTY_ID = config('TELEBIRR_SUBSCRIPTION_THIRD_PARTY_ID', default='')
+TELEBIRR_SUBSCRIPTION_THIRD_PARTY_PASSWORD = config(
+    'TELEBIRR_SUBSCRIPTION_THIRD_PARTY_PASSWORD', default=''
+)
+TELEBIRR_SUBSCRIPTION_SP_OPERATOR_ID = config('TELEBIRR_SUBSCRIPTION_SP_OPERATOR_ID', default='')
+TELEBIRR_SUBSCRIPTION_SP_OPERATOR_CREDENTIAL = config(
+    'TELEBIRR_SUBSCRIPTION_SP_OPERATOR_CREDENTIAL', default=''
+)
+TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_ID = config('TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_ID', default='')
+TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_CREDENTIAL = config(
+    'TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_CREDENTIAL', default=''
+)
+
+# USSD push side. This is the live subscription path: the web app's only
+# subscription payment call is /subscription/telebirr/ussd/initiate/.
+# Named to mirror the TELEBIRR_USSD_* block above, which is the account these
+# replace.
+TELEBIRR_SUBSCRIPTION_USSD_MERCHANT_SHORTCODE = config(
+    'TELEBIRR_SUBSCRIPTION_USSD_MERCHANT_SHORTCODE', default=''
+)
+TELEBIRR_SUBSCRIPTION_USSD_SOAP_URL = config('TELEBIRR_SUBSCRIPTION_USSD_SOAP_URL', default='')
+TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_ID = config(
+    'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_ID', default=''
+)
+TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_PASSWORD = config(
+    'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_PASSWORD', default=''
+)
+TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID = config(
+    'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID', default=''
+)
+TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL = config(
+    'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL', default=''
+)
+
 # Ethio Telecom CRM (PresentServiceGift API -- data-gift awards distinct
 # from Telebirr B2C cash payouts above). Used by api/services/crm_service.py.
 CRM_ENDPOINT = config('CRM_ENDPOINT', default='')

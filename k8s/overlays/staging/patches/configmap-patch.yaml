@@ -133,6 +133,64 @@ data:
   TELEBIRR_B2C_SHORTCODE: "553559"
   TELEBIRR_USSD_MERCHANT_SHORTCODE: "553559"
 
+  # Subscription routing -- the OLD merchant account (53599).
+  #
+  # Subscriptions bill to a different telebirr account than everything else.
+  # Coin purchases (C2B), withdrawal payouts (B2C) and airtime (TIMWE, a
+  # different provider) stay on 553559 above and are NOT affected by anything
+  # in this block. That is why TELEBIRR_SHORTCODE is not simply changed:
+  # create_one_off_payment and initiate_ussd_push_payment each serve both
+  # subscriptions and Buy Coins, so a global change moves coin revenue too.
+  #
+  # NOTHING IS SET HERE ON PURPOSE. Every one of these keys goes into Vault,
+  # including the short code and the SOAP URL, which are not secret but must
+  # arrive in the SAME write as the operator identity.
+  #
+  # The short code is the switch. Once it is set, a subscription flow whose
+  # operator identity is missing REFUSES to send -- it does not fall back to
+  # 553559, because that account funds withdrawals and a subscription charge
+  # landing there reconciles against nothing. Set the short code first and the
+  # credentials second, and every subscription charge fails in between.
+  #
+  # Ethio Telecom has issued the USSD identity only. That is enough: the web
+  # app's only subscription payment call is
+  # /subscription/telebirr/ussd/initiate/. Write these five together:
+  #
+  #   TELEBIRR_SUBSCRIPTION_SHORTCODE                      53599
+  #   TELEBIRR_SUBSCRIPTION_USSD_SOAP_URL                  (the old gateway)
+  #   TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_ID            SKYKIN
+  #   TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID           5359902
+  #   TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL   (the PIN)
+  #
+  # TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_PASSWORD is NOT required: the
+  # <req:Caller> block names the integrator making the API call rather than
+  # the merchant whose money moves, and the same partner integrates both
+  # accounts, so the current TELEBIRR_USSD_THIRD_PARTY_PASSWORD is reused.
+  # Set it only if Ethio Telecom issued a separate one. The OPERATOR
+  # credential above is the opposite case and never falls back.
+  #
+  # Until the SP (IdentifierType 14) and ORG (IdentifierType 11) identities
+  # are issued for 53599, these C2B subscription endpoints refuse rather than
+  # bill the wrong account -- neither is reachable from the web app today:
+  #   POST /direct-debit/create/               (mandate; commented out in the
+  #                                             web app, replaced by USSD)
+  #   POST /direct-debit/one-off-subscription/
+  # To enable them later, add to Vault:
+  #   TELEBIRR_SUBSCRIPTION_SOAP_URL
+  #   TELEBIRR_SUBSCRIPTION_THIRD_PARTY_ID / _PASSWORD   (optional; falls back)
+  #   TELEBIRR_SUBSCRIPTION_SP_OPERATOR_ID / _CREDENTIAL
+  #   TELEBIRR_SUBSCRIPTION_ORG_OPERATOR_ID / _CREDENTIAL
+  #
+  # After writing Vault, roll the deployment: the service reads settings once
+  # at import, so a Vault or ConfigMap change alone does not take effect.
+  # Then verify with ONE low-value subscription on a test MSISDN, and confirm
+  # a coin purchase the same day still settled to 553559.
+  #
+  # TELEBIRR_SUBSCRIPTION_USSD_MERCHANT_SHORTCODE is only needed if telebirr
+  # issued the old account a separate USSD code; it defaults to
+  # TELEBIRR_SUBSCRIPTION_SHORTCODE.
+
+
   # Certificate verification for the Telebirr SOAP gateway, off HERE ONLY.
   #
   # Audit finding H-02 flipped the TELEBIRR_VERIFY_SSL default in
