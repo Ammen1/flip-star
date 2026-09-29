@@ -75,6 +75,18 @@ AUDIT_KEYS = [
     'TELEBIRR_B2C_SHORTCODE',
     'TELEBIRR_USSD_MERCHANT_SHORTCODE',
     'TELEBIRR_B2C_SERVICE_CODE',
+    # Subscription routing -- the old merchant account. The short code is the
+    # switch that turns it on, so "which source wins" is the same question as
+    # "where is subscription revenue going", and it belongs here for exactly
+    # the reason above. The credentials are listed too: their SOURCE is worth
+    # reporting even though their values never are.
+    'TELEBIRR_SUBSCRIPTION_SHORTCODE',
+    'TELEBIRR_SUBSCRIPTION_USSD_MERCHANT_SHORTCODE',
+    'TELEBIRR_SUBSCRIPTION_USSD_SOAP_URL',
+    'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_ID',
+    'TELEBIRR_SUBSCRIPTION_USSD_THIRD_PARTY_PASSWORD',
+    'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_ID',
+    'TELEBIRR_SUBSCRIPTION_USSD_ORG_OPERATOR_CREDENTIAL',
 ]
 
 
