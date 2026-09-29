@@ -792,7 +792,13 @@ xmlns:loc="http://www.csapi.org/schema/parlayx/payment/amount_charging/v3_1/loca
             response = requests.post(
                 cls.get_endpoint(),
                 data=envelope.encode('utf-8'),
-                headers={'Content-Type': 'text/xml; charset=utf-8', 'SOAPAction': ''},
+                # Exactly what the MA's own working curl sends. We previously
+                # sent 'text/xml; charset=utf-8' plus an empty SOAPAction, and
+                # the same envelope that succeeds from curl was refused with
+                # SVC0001 in ~62ms -- a rejection too fast to be business
+                # logic. These are the only two differences that remained
+                # after the envelope was compared field by field.
+                headers={'Content-Type': 'application/xml'},
                 timeout=(CONNECT_TIMEOUT, read_timeout),
                 verify=verify,
             )

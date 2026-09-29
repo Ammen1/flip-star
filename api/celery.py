@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 from celery.signals import beat_init, worker_init, worker_shutdown
 
 # Set the default Django settings module for the 'celery' program.
@@ -200,7 +201,11 @@ app.conf.beat_schedule = {
     # not one per missed hour.
     'renew-expired-airtime-subscriptions': {
         'task': 'api.tasks.subscription_renewal.sweep_expired_subscriptions',
-        'schedule': 3600.0,
+        # crontab(minute=0), not an interval: a 3600s interval counts from
+        # whenever beat last started, so a restart at 06:43 moved every sweep
+        # to :06:43 for the life of that pod. On the hour is predictable, and
+        # it matches how the retry window reads to anyone looking at the logs.
+        'schedule': crontab(minute=0),
         'options': {'expires': 3300},
     },
 }
