@@ -829,7 +829,11 @@ def test_it_posts_soap_to_the_configured_endpoint():
         TimweChargeService.execute(msisdn=MSISDN, amount=10, description='d', reference_code='R1')
 
     assert post.call_args.args[0] == CONFIG['TIMWE_CHARGE_URL']
-    assert post.call_args.kwargs['headers']['Content-Type'].startswith('text/xml')
+    # 'application/xml', not 'text/xml': the MA's own working curl sends
+    # application/xml with no SOAPAction, and the identical envelope was
+    # refused SVC0001 in ~62ms when we sent text/xml plus an empty SOAPAction.
+    assert post.call_args.kwargs['headers']['Content-Type'] == 'application/xml'
+    assert 'SOAPAction' not in post.call_args.kwargs['headers']
 
 
 # ===========================================================================

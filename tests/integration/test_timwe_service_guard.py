@@ -503,7 +503,11 @@ def test_beat_registers_the_hourly_renewal_sweep():
 
     entry = app.conf.beat_schedule['renew-expired-airtime-subscriptions']
     assert entry['task'] == 'api.tasks.subscription_renewal.sweep_expired_subscriptions'
-    assert entry['schedule'] == 3600.0
-    # Expiring before the next run is what keeps a backlog after an outage to
-    # one sweep rather than one per missed hour.
-    assert entry['options']['expires'] < entry['schedule']
+    from celery.schedules import crontab
+
+    # crontab(minute=0) rather than a 3600s interval: an interval is phased
+    # from beat's last start, so a restart at :06 pinned every sweep to :06.
+    assert entry['schedule'] == crontab(minute=0)
+    # Expiring inside the hour is what keeps a backlog after an outage to one
+    # sweep rather than one per missed hour.
+    assert entry['options']['expires'] < 3600

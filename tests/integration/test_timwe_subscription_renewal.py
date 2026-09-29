@@ -31,6 +31,7 @@ import fakeredis
 import pytest
 import requests
 import urllib3.exceptions as U
+from celery.schedules import crontab
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -1138,7 +1139,10 @@ def test_the_sweep_is_scheduled_every_hour():
         if entry['task'] == sweep_expired_subscriptions.name
     ]
     assert len(entries) == 1
-    assert entries[0]['schedule'] == 3600.0
+    # crontab(minute=0), not a 3600s interval: an interval counts from
+    # whenever beat last started, so a restart at :06 moved every sweep to :06
+    # for that pod's lifetime. Hourly either way; the phase is now fixed.
+    assert entries[0]['schedule'] == crontab(minute=0)
 
 
 def test_the_sweep_task_runs_the_sweep(user, plan):
