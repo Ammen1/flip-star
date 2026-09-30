@@ -699,6 +699,17 @@ TELEBIRR_H5_COIN_MERCHANT_CODE = config('TELEBIRR_H5_COIN_MERCHANT_CODE', defaul
 TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE = config(
     'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE', default=''
 )
+
+# The merchant app id that pairs with each merch_code above.
+#
+# appid and merch_code are issued together and must travel together: a new
+# appid against the old merch_code is rejected, and the reverse too. They are
+# separate settings only because a deployment may be issued a new merch_code
+# on an existing app. Each falls back to TELEBIRR_MERCHANT_APP_ID.
+TELEBIRR_H5_COIN_MERCHANT_APP_ID = config('TELEBIRR_H5_COIN_MERCHANT_APP_ID', default='')
+TELEBIRR_H5_SUBSCRIPTION_MERCHANT_APP_ID = config(
+    'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_APP_ID', default=''
+)
 TELEBIRR_PRIVATE_KEY = config('TELEBIRR_PRIVATE_KEY', default='')
 TELEBIRR_PUBLIC_KEY = config('TELEBIRR_PUBLIC_KEY', default='')
 TELEBIRR_NOTIFY_URL = config('TELEBIRR_NOTIFY_URL', default='')

@@ -63,6 +63,13 @@ class TelebirrService:
         self.subscription_merchant_code = (
             getattr(settings, 'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE', '') or self.merchant_code
         )
+        self.coin_merchant_app_id = (
+            getattr(settings, 'TELEBIRR_H5_COIN_MERCHANT_APP_ID', '') or self.merchant_app_id
+        )
+        self.subscription_merchant_app_id = (
+            getattr(settings, 'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_APP_ID', '')
+            or self.merchant_app_id
+        )
         self.private_key_pem = getattr(settings, 'TELEBIRR_PRIVATE_KEY', '')
         self.public_key_pem = getattr(settings, 'TELEBIRR_PUBLIC_KEY', '')
         self.notify_url = getattr(settings, 'TELEBIRR_NOTIFY_URL', '')
@@ -87,6 +94,23 @@ class TelebirrService:
         if flow == 'subscription':
             return self.subscription_merchant_code
         return self.merchant_code
+
+    def merchant_app_id_for(self, flow=None):
+        """The merchant app id paired with this flow's merchant code.
+
+        Always resolved alongside merchant_code_for: telebirr issues appid and
+        merch_code together and rejects a request that mixes one account's
+        appid with another's merch_code.
+
+        NOT used by request_auth_token -- that exchange identifies the
+        mini-program for SuperApp login, not the merchant an order settles to,
+        and there is one mini-program whichever account is being paid.
+        """
+        if flow == 'coin':
+            return self.coin_merchant_app_id
+        if flow == 'subscription':
+            return self.subscription_merchant_app_id
+        return self.merchant_app_id
 
     # ------------------------------------------------------------------
     # Low-level helpers
@@ -225,7 +249,7 @@ class TelebirrService:
             'notify_url': notify_url or self.notify_url,
             'redirect_url': redirect_url or self.redirect_url,
             'trade_type': trade_type,
-            'appid': self.merchant_app_id,
+            'appid': self.merchant_app_id_for(flow),
             'merch_code': merch_code,
             'merch_order_id': merch_order_id,
             'title': title,
@@ -263,7 +287,7 @@ class TelebirrService:
             'notify_url': notify_url or self.notify_url,
             'redirect_url': redirect_url or self.redirect_url,
             'trade_type': trade_type,
-            'appid': self.merchant_app_id,
+            'appid': self.merchant_app_id_for(flow),
             'merch_code': self.merchant_code_for(flow),
             'merch_order_id': merch_order_id,
             'title': title,
@@ -284,7 +308,7 @@ class TelebirrService:
         the SuperApp SDK checks the two agree.
         """
         fields = {
-            'appid': self.merchant_app_id,
+            'appid': self.merchant_app_id_for(flow),
             'merch_code': self.merchant_code_for(flow),
             'nonce_str': self.create_nonce_str(),
             'prepay_id': prepay_id,
@@ -498,7 +522,7 @@ class TelebirrService:
                 'method': 'payment.queryorder',
                 'version': '1.0',
                 'biz_content': {
-                    'appid': self.merchant_app_id,
+                    'appid': self.merchant_app_id_for(flow),
                     'merch_code': self.merchant_code_for(flow),
                     'merch_order_id': merch_order_id,
                 },

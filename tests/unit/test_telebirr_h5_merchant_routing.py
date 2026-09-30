@@ -64,6 +64,8 @@ BASE = {
 SPLIT = {
     'TELEBIRR_H5_COIN_MERCHANT_CODE': 'COIN-CODE',
     'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE': 'SUB-CODE',
+    'TELEBIRR_H5_COIN_MERCHANT_APP_ID': 'COIN-APP',
+    'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_APP_ID': 'SUB-APP',
 }
 
 
@@ -158,22 +160,49 @@ def test_the_raw_request_carries_the_same_code_as_the_preorder():
     assert 'COIN-CODE' not in sub['raw_request']
 
 
-def test_only_the_merchant_code_differs_between_the_two_accounts():
-    """Everything else is shared, as Ethio Telecom confirmed.
+def test_appid_travels_with_its_merchant_code():
+    """Telebirr issues appid and merch_code together.
 
-    If a later change starts varying the app id or the Fabric key per flow,
-    this test fails and the assumption gets revisited deliberately.
+    Mixing one account's appid with another's merch_code is rejected, so the
+    pair must move as a unit rather than independently.
     """
     with _settings(**SPLIT):
         coin, _ = _order(flow='coin')
         sub, _ = _order(flow='subscription')
 
     cb, sb = coin['biz_content'], sub['biz_content']
-    assert cb['appid'] == sb['appid'] == 'MERCHANT-APP'
+    assert (cb['appid'], cb['merch_code']) == ('COIN-APP', 'COIN-CODE')
+    assert (sb['appid'], sb['merch_code']) == ('SUB-APP', 'SUB-CODE')
+
+
+def test_the_appid_falls_back_when_only_the_code_is_split():
+    """A deployment issued a new merch_code on the existing app.
+
+    Overriding only the code must leave the appid alone, rather than
+    requiring both to be set in lockstep.
+    """
+    with _settings(TELEBIRR_H5_COIN_MERCHANT_CODE='COIN-CODE'):
+        coin, _ = _order(flow='coin')
+
+    assert coin['biz_content']['merch_code'] == 'COIN-CODE'
+    assert coin['biz_content']['appid'] == 'MERCHANT-APP'
+
+
+def test_everything_except_the_merchant_pair_is_shared():
+    """The Fabric key, method and signing scheme do not vary per flow.
+
+    If a later change starts varying one of those, this fails and the
+    assumption gets revisited deliberately.
+    """
+    with _settings(**SPLIT):
+        coin, _ = _order(flow='coin')
+        sub, _ = _order(flow='subscription')
+
+    cb, sb = coin['biz_content'], sub['biz_content']
     assert coin['method'] == sub['method'] == 'payment.preorder'
     assert coin['sign_type'] == sub['sign_type'] == 'SHA256WithRSA'
     differing = {k for k in cb if cb[k] != sb.get(k)}
-    assert differing <= {'merch_code', 'merch_order_id'}
+    assert differing <= {'merch_code', 'appid', 'merch_order_id'}
 
 
 def test_one_keypair_signs_for_both_accounts():
@@ -206,6 +235,7 @@ def test_query_order_asks_the_right_merchant(flow, expected):
 
     That reads as "never paid" and would strand a completed purchase.
     """
+    expected_app = {'coin': 'COIN-APP', 'subscription': 'SUB-APP'}.get(flow, 'MERCHANT-APP')
     token = MagicMock(status_code=200)
     token.json.return_value = {'token': 'fabric-token'}
     token.raise_for_status.return_value = None
@@ -218,6 +248,7 @@ def test_query_order_asks_the_right_merchant(flow, expected):
 
     body = mock_post.call_args_list[1].kwargs['json']
     assert body['biz_content']['merch_code'] == expected
+    assert body['biz_content']['appid'] == expected_app
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +281,16 @@ def test_the_subscription_call_sites_declare_subscription():
     code = _code_only(sub_views)
     assert code.count("flow='subscription'") == 2  # create_order_ondemand + query_order
     assert "flow='coin'" not in code
+
+
+def test_superapp_login_is_not_per_merchant():
+    """request_auth_token identifies the mini-program, not the payee.
+
+    One mini-program serves both accounts, so its appid must not follow the
+    payment split -- there is no flow to pass it.
+    """
+    signature = inspect.signature(TelebirrService.request_auth_token)
+    assert 'flow' not in signature.parameters
 
 
 def test_notify_verification_needs_no_flow():
