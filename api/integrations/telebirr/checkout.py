@@ -52,6 +52,17 @@ class TelebirrService:
         self.app_secret = getattr(settings, 'TELEBIRR_APP_SECRET', '')
         self.merchant_app_id = getattr(settings, 'TELEBIRR_MERCHANT_APP_ID', '')
         self.merchant_code = getattr(settings, 'TELEBIRR_MERCHANT_CODE', '')
+
+        # Per-payment-type merchant codes. Coin purchases and subscriptions
+        # both reach preOrder, so the account cannot be inferred from the
+        # method being called -- the caller declares it with flow=. Each falls
+        # back to the shared code, so this is inert until configured.
+        self.coin_merchant_code = (
+            getattr(settings, 'TELEBIRR_H5_COIN_MERCHANT_CODE', '') or self.merchant_code
+        )
+        self.subscription_merchant_code = (
+            getattr(settings, 'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE', '') or self.merchant_code
+        )
         self.private_key_pem = getattr(settings, 'TELEBIRR_PRIVATE_KEY', '')
         self.public_key_pem = getattr(settings, 'TELEBIRR_PUBLIC_KEY', '')
         self.notify_url = getattr(settings, 'TELEBIRR_NOTIFY_URL', '')
@@ -60,6 +71,22 @@ class TelebirrService:
         # https testbed certs are not always chain-trusted; mirror the demo's
         # rejectUnauthorized:false. Override with TELEBIRR_VERIFY_SSL=true.
         self.verify_ssl = getattr(settings, 'TELEBIRR_VERIFY_SSL', False)
+
+    def merchant_code_for(self, flow=None):
+        """The merchant account this payment settles to.
+
+        Args:
+            flow: 'coin', 'subscription', or None for the shared default.
+
+        Only merch_code varies between accounts -- Ethio Telecom confirmed the
+        Fabric app id, app secret, merchant app id and RSA keys are shared, so
+        the signing path is untouched and one keypair signs for both.
+        """
+        if flow == 'coin':
+            return self.coin_merchant_code
+        if flow == 'subscription':
+            return self.subscription_merchant_code
+        return self.merchant_code
 
     # ------------------------------------------------------------------
     # Low-level helpers
@@ -178,8 +205,16 @@ class TelebirrService:
     # Step 3: create order (preOrder) -> rawRequest
     # ------------------------------------------------------------------
     def _build_pre_order_request(
-        self, title, amount, merch_order_id, notify_url=None, redirect_url=None, trade_type='InApp'
+        self,
+        title,
+        amount,
+        merch_order_id,
+        notify_url=None,
+        redirect_url=None,
+        trade_type='InApp',
+        flow=None,
     ):
+        merch_code = self.merchant_code_for(flow)
         req = {
             'timestamp': self.create_timestamp(),
             'nonce_str': self.create_nonce_str(),
@@ -191,14 +226,14 @@ class TelebirrService:
             'redirect_url': redirect_url or self.redirect_url,
             'trade_type': trade_type,
             'appid': self.merchant_app_id,
-            'merch_code': self.merchant_code,
+            'merch_code': merch_code,
             'merch_order_id': merch_order_id,
             'title': title,
             'total_amount': str(amount),
             'trans_currency': 'ETB',
             'business_type': 'BuyGoods',
             'timeout_express': '120m',
-            'payee_identifier': self.merchant_code,
+            'payee_identifier': merch_code,
             'payee_identifier_type': '04',
             'payee_type': '3000',
         }
@@ -208,9 +243,16 @@ class TelebirrService:
         return req
 
     def _build_pre_order_request_ondemand(
-        self, title, amount, merch_order_id, notify_url=None, redirect_url=None, trade_type='InApp'
+        self,
+        title,
+        amount,
+        merch_order_id,
+        notify_url=None,
+        redirect_url=None,
+        trade_type='InApp',
+        flow=None,
     ):
-        """Build preOrder request for on-demand coin purchases (without payee fields)."""
+        """Build preOrder request for on-demand purchases (without payee fields)."""
         req = {
             'timestamp': self.create_timestamp(),
             'nonce_str': self.create_nonce_str(),
@@ -222,7 +264,7 @@ class TelebirrService:
             'redirect_url': redirect_url or self.redirect_url,
             'trade_type': trade_type,
             'appid': self.merchant_app_id,
-            'merch_code': self.merchant_code,
+            'merch_code': self.merchant_code_for(flow),
             'merch_order_id': merch_order_id,
             'title': title,
             'total_amount': str(amount),
@@ -235,11 +277,15 @@ class TelebirrService:
         req['sign_type'] = 'SHA256WithRSA'
         return req
 
-    def _build_raw_request(self, prepay_id):
-        """Build the signed rawRequest string handed to js_fun_start_pay."""
+    def _build_raw_request(self, prepay_id, flow=None):
+        """Build the signed rawRequest string handed to js_fun_start_pay.
+
+        Carries the same merch_code as the preOrder that produced prepay_id --
+        the SuperApp SDK checks the two agree.
+        """
         fields = {
             'appid': self.merchant_app_id,
-            'merch_code': self.merchant_code,
+            'merch_code': self.merchant_code_for(flow),
             'nonce_str': self.create_nonce_str(),
             'prepay_id': prepay_id,
             'timestamp': self.create_timestamp(),
@@ -265,6 +311,7 @@ class TelebirrService:
         notify_url=None,
         redirect_url=None,
         trade_type='InApp',
+        flow=None,
     ):
         """
         Create a prepaid order and return the signed rawRequest for the H5 page.
@@ -291,6 +338,7 @@ class TelebirrService:
                 notify_url=notify_url,
                 redirect_url=redirect_url,
                 trade_type=trade_type,
+                flow=flow,
             )
             url = f'{self.base_url}/payment/v1/merchant/preOrder'
             logger.info(f'[TELEBIRR] preOrder request: {json.dumps(req_obj, indent=2)}')
@@ -320,7 +368,7 @@ class TelebirrService:
                     'success': True,
                     'merch_order_id': result['biz_content'].get('merch_order_id', merch_order_id),
                     'prepay_id': prepay_id,
-                    'raw_request': self._build_raw_request(prepay_id),
+                    'raw_request': self._build_raw_request(prepay_id, flow=flow),
                 }
             return {
                 'success': False,
@@ -343,9 +391,17 @@ class TelebirrService:
         notify_url=None,
         redirect_url=None,
         trade_type='InApp',
+        flow=None,
     ):
         """
-        Create a prepaid order for on-demand coin purchases (without payee fields).
+        Create a prepaid order for on-demand purchases (without payee fields).
+
+        Args:
+            flow: 'coin' or 'subscription' -- which merchant account the money
+                settles to. Both purchase types reach this method, so the
+                account cannot be inferred here; the caller must say. None
+                keeps the shared merchant code, which is the behaviour before
+                the accounts were split.
 
         Returns dict:
           { success, merch_order_id, prepay_id, raw_request }  on success
@@ -369,6 +425,7 @@ class TelebirrService:
                 notify_url=notify_url,
                 redirect_url=redirect_url,
                 trade_type=trade_type,
+                flow=flow,
             )
             url = f'{self.base_url}/payment/v1/merchant/preOrder'
             logger.info(f'[TELEBIRR] preOrder request (ondemand): {json.dumps(req_obj, indent=2)}')
@@ -401,7 +458,10 @@ class TelebirrService:
                     'success': True,
                     'merch_order_id': result['biz_content'].get('merch_order_id', merch_order_id),
                     'prepay_id': prepay_id,
-                    'raw_request': self._build_raw_request(prepay_id),
+                    'raw_request': self._build_raw_request(prepay_id, flow=flow),
+                    # Which account this order settles to. Recorded by the
+                    # caller so a later queryOrder asks the right merchant.
+                    'merch_code': self.merchant_code_for(flow),
                 }
             return {
                 'success': False,
@@ -419,8 +479,13 @@ class TelebirrService:
     # ------------------------------------------------------------------
     # queryOrder
     # ------------------------------------------------------------------
-    def query_order(self, merch_order_id):
-        """Query an order's status by merchant order id."""
+    def query_order(self, merch_order_id, flow=None):
+        """Query an order's status by merchant order id.
+
+        `flow` must match the account the order was created against -- an
+        order queried on the wrong merchant comes back not-found, which reads
+        as "never paid" and is the wrong conclusion.
+        """
         try:
             token_result = self.apply_fabric_token()
             fabric_token = token_result.get('token')
@@ -434,7 +499,7 @@ class TelebirrService:
                 'version': '1.0',
                 'biz_content': {
                     'appid': self.merchant_app_id,
-                    'merch_code': self.merchant_code,
+                    'merch_code': self.merchant_code_for(flow),
                     'merch_order_id': merch_order_id,
                 },
             }

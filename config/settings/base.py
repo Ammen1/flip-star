@@ -682,6 +682,23 @@ TELEBIRR_FABRIC_APP_ID = config('TELEBIRR_FABRIC_APP_ID', default='')
 TELEBIRR_APP_SECRET = config('TELEBIRR_APP_SECRET', default='')
 TELEBIRR_MERCHANT_APP_ID = config('TELEBIRR_MERCHANT_APP_ID', default='')
 TELEBIRR_MERCHANT_CODE = config('TELEBIRR_MERCHANT_CODE', default='')
+
+# H5 / Fabric merchant code, per payment type.
+#
+# Coin purchases and subscription payments both go through preOrder, and both
+# read merch_code -- the field that decides which merchant account the money
+# lands in. One shared setting cannot separate them, which is the same trap
+# TELEBIRR_SHORTCODE has on the SOAP side.
+#
+# Each falls back to TELEBIRR_MERCHANT_CODE, so a deployment that wants both
+# payment types on one account sets neither and nothing changes. Ethio Telecom
+# confirmed that only merch_code differs between merchant accounts -- the
+# Fabric app id, app secret, merchant app id and RSA keys are shared -- so
+# there is deliberately nothing else to override here.
+TELEBIRR_H5_COIN_MERCHANT_CODE = config('TELEBIRR_H5_COIN_MERCHANT_CODE', default='')
+TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE = config(
+    'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE', default=''
+)
 TELEBIRR_PRIVATE_KEY = config('TELEBIRR_PRIVATE_KEY', default='')
 TELEBIRR_PUBLIC_KEY = config('TELEBIRR_PUBLIC_KEY', default='')
 TELEBIRR_NOTIFY_URL = config('TELEBIRR_NOTIFY_URL', default='')

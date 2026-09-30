@@ -278,6 +278,17 @@ SCHEMA: tuple[Key, ...] = (
     _k('TELEBIRR_APP_SECRET', group='telebirr_h5'),
     _k('TELEBIRR_MERCHANT_APP_ID', group='telebirr_h5'),
     _k('TELEBIRR_MERCHANT_CODE', group='telebirr_h5'),
+    _k(
+        'TELEBIRR_H5_COIN_MERCHANT_CODE',
+        group='telebirr_h5',
+        doc='Merchant code coin purchases settle to. Falls back to ' 'TELEBIRR_MERCHANT_CODE.',
+    ),
+    _k(
+        'TELEBIRR_H5_SUBSCRIPTION_MERCHANT_CODE',
+        group='telebirr_h5',
+        doc='Merchant code H5 subscription payments settle to. Falls back to '
+        'TELEBIRR_MERCHANT_CODE.',
+    ),
     _k('TELEBIRR_PRIVATE_KEY', group='telebirr_h5', doc='RSA private key, PEM.'),
     _k('TELEBIRR_PUBLIC_KEY', group='telebirr_h5', doc="Telebirr's public key, PEM."),
     _k('TELEBIRR_NOTIFY_URL', group='telebirr_h5'),

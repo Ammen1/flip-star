@@ -1425,6 +1425,10 @@ def telebirr_initiate_payment(request):
         title=title,
         amount=total_amount,
         trade_type='InApp',
+        # Coin revenue settles to its own merchant account. Subscriptions
+        # reach this same method from api/views/subscription.py and pass
+        # flow='subscription' instead -- the method cannot tell them apart.
+        flow='coin',
     )
 
     if not result.get('success'):
@@ -1730,7 +1734,9 @@ def telebirr_query_order(request):
     if not merch_order_id:
         return Response({'error': 'merch_order_id is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    result = telebirr_service.query_order(merch_order_id)
+    # Same account the order was created against; the wrong one answers
+    # "not found", which reads as "never paid".
+    result = telebirr_service.query_order(merch_order_id, flow='coin')
     if not result.get('success'):
         return Response(
             {'error': result.get('error', 'Query failed'), 'details': result},

@@ -984,6 +984,9 @@ def telebirr_one_time_initiate(request):
             title=title,
             amount=amount,
             merch_order_id=merch_order_id,
+            # Subscription payments settle to their own merchant account.
+            # Buy Coins calls this same method with flow='coin'.
+            flow='subscription',
         )
 
         if not result.get('success'):
@@ -1314,7 +1317,7 @@ def telebirr_one_time_query(request):
         failure_reason = None
         if subscription.status == 'pending':
             try:
-                query_result = telebirr_service.query_order(merch_order_id)
+                query_result = telebirr_service.query_order(merch_order_id, flow='subscription')
 
                 if query_result.get('success') and query_result.get('is_paid'):
                     with transaction.atomic():
