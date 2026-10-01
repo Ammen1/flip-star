@@ -108,6 +108,93 @@ def subscription_required_payload(message=None):
     }
 
 
+#: Attached to a sign-in response when the account has no active plan.
+#:
+#: The token is still issued. The client reads this flag and holds the user on
+#: the subscribe screen instead of the feed -- which keeps the in-app renew
+#: path working, and keeps a subscriber whose telebirr callback is merely late
+#: from being locked out of an app they have paid for. Every contributing
+#: action is already refused server-side by subscriber_action_refusal(), so an
+#: issued token grants nothing a non-subscriber should not have.
+LOGIN_REQUIRES_SUBSCRIPTION_CODE = 'SUBSCRIPTION_REQUIRED_TO_CONTINUE'
+
+
+def resubscribe_instruction():
+    """How to subscribe again by SMS: 'Send 1 to 9286 for Daily, ...'.
+
+    Built from the live tiers rather than hard-coded, because the keyword and
+    the short code both come from what the aggregator is configured to
+    recognise -- the same source the cancellation SMS quotes. A hard-coded
+    sentence here would drift from that SMS the first time a tier changes.
+    """
+    from django.conf import settings
+
+    from api.models.subscription import SubscriptionTier
+    from api.services.sms_subscription import SUBSCRIBE_KEYWORDS
+
+    default_code = getattr(settings, 'SMS_SHORT_CODE', '9286')
+    parts = []
+    for duration, keyword in SUBSCRIBE_KEYWORDS.items():
+        tier = SubscriptionTier.objects.filter(
+            duration_type=duration, is_active=True
+        ).first()
+        if tier is None:
+            continue
+        parts.append(f'{keyword} to {tier.short_code or default_code} for {tier.name}')
+
+    if not parts:
+        # No tier is provisioned. Say something true rather than an empty
+        # instruction that reads as a broken screen.
+        return f'Send 1, 2 or 3 to {default_code} to subscribe.'
+    return 'Send ' + ', or '.join(parts) + '.'
+
+
+def has_ever_subscribed(user):
+    """True when this account has held a plan before, active or not.
+
+    Distinguishes "you were unsubscribed" from "you have never subscribed".
+    Telling somebody they were unsubscribed when they never subscribed is the
+    kind of wrong detail that makes people think their payment was lost.
+    """
+    if user is None or not getattr(user, 'is_authenticated', False):
+        return False
+
+    from api.models import Subscription
+    from api.models.subscription import SubscriptionPlan
+
+    return (
+        SubscriptionPlan.objects.filter(user=user).exists()
+        or Subscription.objects.filter(user=user).exists()
+    )
+
+
+def login_subscription_state(user):
+    """What a sign-in response should say about this account's plan.
+
+    Returned by every sign-in path -- password, phone OTP, subscription OTP
+    and SuperApp auto-login -- so the client has one flag to branch on instead
+    of four differently-shaped answers. ``requires_subscription`` is False for
+    a subscriber, and the extra keys are absent, so an active customer's
+    response is unchanged apart from that one boolean.
+    """
+    if has_active_subscription(user):
+        return {'requires_subscription': False}
+
+    lapsed = has_ever_subscribed(user)
+    instruction = resubscribe_instruction()
+    message = (
+        f'Your subscription has ended. {instruction}'
+        if lapsed
+        else f'An active FlipStar plan is required. {instruction}'
+    )
+    return {
+        'requires_subscription': True,
+        'subscription_code': LOGIN_REQUIRES_SUBSCRIPTION_CODE,
+        'subscription_message': message,
+        'previously_subscribed': lapsed,
+    }
+
+
 #: Refusing a coin purchase for want of access. Distinct from
 #: SUBSCRIPTION_REQUIRED_CODE so a client can tell "you cannot post" from
 #: "you cannot buy coins" and send the customer to the right place.

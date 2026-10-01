@@ -58,9 +58,13 @@ from api.services.subscription_access import (
     SUBSCRIBER_ACTIONS,
     SUBSCRIPTION_REQUIRED_CODE,
     has_active_subscription,
+    login_subscription_state,
     payment_pending_payload,
     subscriber_action_refusal,
     subscription_required_payload,
+)
+from api.services.usernames import (
+    generate_unique as generate_unique_username,
 )
 from api.services.usernames import (
     is_duplicate_username_error,
@@ -197,7 +201,16 @@ def login(request):
                 )
             except Exception:  # noqa: S110 – best-effort audit log; must not surface to the caller
                 pass
-            return Response({'user': UserSerializer(user).data, 'token': token.key})
+            return Response(
+                {
+                    'user': UserSerializer(user).data,
+                    'token': token.key,
+                    # One flag, every sign-in path. The client holds an
+                    # account with no plan on the subscribe screen rather
+                    # than letting it into the feed.
+                    **login_subscription_state(user),
+                }
+            )
         else:
             remaining = check_and_increment_failure(request, 'login', 6, 600)
             print(f'[LOGIN] Password check FAILED for user: {user.username}')
@@ -568,7 +581,16 @@ def login_with_phone(request):
         print(f'[LOGIN WITH PHONE DEBUG] Found via subscription, user: {user.username}')
         if user.check_password(password):
             token, _ = Token.objects.get_or_create(user=user)
-            return Response({'user': UserSerializer(user).data, 'token': token.key})
+            return Response(
+                {
+                    'user': UserSerializer(user).data,
+                    'token': token.key,
+                    # One flag, every sign-in path. The client holds an
+                    # account with no plan on the subscribe screen rather
+                    # than letting it into the feed.
+                    **login_subscription_state(user),
+                }
+            )
         if not user.has_usable_password():
             return _pin_not_set_response(phone)
         return Response({'error': 'Invalid password'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -591,7 +613,16 @@ def login_with_phone(request):
         print(f'[LOGIN WITH PHONE DEBUG] Found via UserProfile: {user.username}')
         if user.check_password(password):
             token, _ = Token.objects.get_or_create(user=user)
-            return Response({'user': UserSerializer(user).data, 'token': token.key})
+            return Response(
+                {
+                    'user': UserSerializer(user).data,
+                    'token': token.key,
+                    # One flag, every sign-in path. The client holds an
+                    # account with no plan on the subscribe screen rather
+                    # than letting it into the feed.
+                    **login_subscription_state(user),
+                }
+            )
         if not user.has_usable_password():
             return _pin_not_set_response(phone)
         return Response({'error': 'Invalid password'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -792,7 +823,13 @@ def login_with_otp(request):
         user = subscription.user
 
     token, _created = Token.objects.get_or_create(user=user)
-    return Response({'token': token.key, 'user': UserSerializer(user).data})
+    return Response(
+        {
+            'token': token.key,
+            'user': UserSerializer(user).data,
+            **login_subscription_state(user),
+        }
+    )
 
 
 @api_view(['POST'])
@@ -1083,22 +1120,30 @@ def login_with_subscription_otp(request):
 
         token, _ = Token.objects.get_or_create(user=user)
         return Response(
-            {'user': UserSerializer(user).data, 'token': token.key, 'message': 'Login successful'},
+            {
+                'user': UserSerializer(user).data,
+                'token': token.key,
+                'message': 'Login successful',
+                **login_subscription_state(user),
+            },
             status=status.HTTP_200_OK,
         )
 
     # No user yet - create new account (SMS-first flow)
     print('[SUBSCRIPTION LOGIN DEBUG] No user linked, creating new account')
 
-    # Username is required for new users
-    if not username:
-        return Response(
-            {'error': 'Username is required for new accounts'}, status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # Same rule as every other place a username is claimed.
-    if username_is_taken(username):
-        return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
+    # A username is no longer asked for on this screen. The subscriber came
+    # from an SMS and has already proved the number with the code; making them
+    # invent a handle as well was a step that lost people, and the name is not
+    # used to authenticate anything -- sign-in is by phone and PIN.
+    #
+    # An explicitly supplied one is still honoured, so any client that still
+    # sends the field keeps working and keeps its uniqueness check.
+    if username:
+        if username_is_taken(username):
+            return Response(username_taken_payload(), status=status.HTTP_409_CONFLICT)
+    else:
+        username = generate_unique_username()
 
     # Create user account
     try:

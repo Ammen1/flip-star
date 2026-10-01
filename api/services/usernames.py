@@ -65,6 +65,37 @@ def taken_payload():
     return {'error': USERNAME_TAKEN_MESSAGE, 'code': USERNAME_TAKEN_CODE, 'field': 'username'}
 
 
+def generate_unique(prefix='star'):
+    """A username for an account created without the customer choosing one.
+
+    Used by the SMS and SuperApp subscription flows, where the subscriber
+    arrives from a text message and is not asked to invent a handle.
+
+    Deliberately NOT derived from the phone number. The existing
+    ``user_{phone[-8:]}`` pattern puts eight digits of a subscriber's own
+    number into a name shown publicly on every post they make; adding more
+    callers to it would multiply that exposure. A random suffix is the same
+    shape to read and gives nothing away.
+
+    Collision is handled by retrying rather than by checking first: between an
+    ``exists()`` and a ``create_user()`` another request can take the name, and
+    the database constraint is the only thing that actually decides. Callers
+    should still be ready for ``is_duplicate_username_error`` on save.
+    """
+    import secrets
+
+    from django.contrib.auth.models import User
+
+    for _attempt in range(10):
+        candidate = f'{prefix}{secrets.randbelow(90000000) + 10000000}'
+        if not User.objects.filter(username__iexact=candidate).exists():
+            return candidate
+
+    # Ten collisions against an 8-digit space means something is badly wrong;
+    # a longer name is still better than returning None to a create_user call.
+    return f'{prefix}{secrets.token_hex(6)}'
+
+
 def is_duplicate_username_error(exc):
     """Did this database error come from the username constraint?
 
