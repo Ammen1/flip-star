@@ -403,13 +403,13 @@ jobs:
           dev-requirements: "true"
 
       - name: Download unit coverage data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-unit
         continue-on-error: true
 
       - name: Download integration coverage data
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-integration
         continue-on-error: true
