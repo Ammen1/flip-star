@@ -290,7 +290,7 @@ jobs:
       # handed to the coverage-report job instead of being summarised here.
       - name: Upload unit coverage data
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-unit
           path: .coverage.unit
@@ -364,7 +364,7 @@ jobs:
 
       - name: Upload integration coverage data
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-integration
           path: .coverage.integration
@@ -454,7 +454,7 @@ jobs:
 
       - name: Upload combined coverage xml
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-combined-xml
           path: coverage.xml
