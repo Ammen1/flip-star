@@ -1,0 +1,40 @@
+# REQUIRED: the dashboard pod carries app.kubernetes.io/part-of: flipstar, so
+# flipstar-default-deny-ingress (k8s/base/networkpolicy.yaml) applies to it.
+# Without this allow rule ingress-nginx gets 504s from a healthy pod.
+#
+# A copy of k8s/base/web/networkpolicy.yaml, values and all -- the namespace
+# label and both CIDRs were verified on this cluster for that file, and the
+# probe traffic they admit originates from the node the same way. Kept as
+# wide as that one on purpose: this pod serves only static, non-secret files,
+# and the address check that matters is the Ingress allow-list in front of it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flipstar-dashboard-allow-ingress
+  labels:
+    app.kubernetes.io/name: flipstar-dashboard
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: flipstar
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-dashboard
+      app.kubernetes.io/component: dashboard
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - ipBlock:
+            cidr: 10.0.0.93/32
+        - ipBlock:
+            cidr: 10.42.0.0/16
+      ports:
+        - protocol: TCP
+          port: 8080

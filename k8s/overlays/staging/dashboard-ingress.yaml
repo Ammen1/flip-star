@@ -1,0 +1,83 @@
+# The private dashboard host. A separate Ingress from ingress.yaml on purpose:
+# ingress-nginx applies these annotations to every path of the Ingress that
+# carries them, so the allow-list and the HTTPS redirect stay on this host
+# and cannot leak onto -- or be dropped from -- the public ones.
+#
+#   dashboard.flipstar.et /       -> flipstar-dashboard  (static admin UI)
+#   dashboard.flipstar.et /api    -> flipstar-backend    (same-origin API)
+#   dashboard.flipstar.et /media  -> flipstar-backend    (media URLs the API
+#                                    builds from this request's own host)
+#
+# Same-origin /api is what lets the dashboard's CSP say connect-src 'self'
+# and keeps this origin out of CORS_ALLOWED_ORIGINS. The backend still needs
+# the hostname in ALLOWED_HOSTS (patches/configmap-patch.yaml) or Django
+# answers 400.
+#
+# Three layers, each enough to stop a stranger on its own:
+#   1. this allow-list -- nobody outside dashboard-access.yaml gets a byte,
+#      not even the login page;
+#   2. ADMIN_ALLOWED_IPS in the backend -- the admin API refuses outside
+#      addresses on every hostname, not only this one;
+#   3. authentication and the staff/role checks on every admin request.
+#
+# COMMIT AFTER the dashboard image exists in GHCR (the web repo's workflow
+# builds it), the TLS Secret below exists, and DNS points at the node -- see
+# docs/private-dashboard.md. Before that this host answers 503 or with the
+# ingress's fake certificate; nothing else is affected.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: flipstar-dashboard
+  annotations:
+    # Both spellings. ingress-nginx before v1.9 reads only whitelist-;
+    # later versions read allowlist- and keep whitelist- as an alias. Setting
+    # both means an upgrade that drops the alias cannot silently remove the
+    # restriction. The values are placeholders: kustomization.yaml overwrites
+    # both from dashboard-access.yaml.
+    nginx.ingress.kubernetes.io/whitelist-source-range: "192.0.2.1/32"
+    nginx.ingress.kubernetes.io/allowlist-source-range: "192.0.2.1/32"
+    # A staff token must never cross the network in clear text. ingress.yaml
+    # turns the redirect OFF for the public hosts (Telebirr posts callbacks
+    # over plain HTTP); none of that traffic comes to this host.
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Matches ingress.yaml: admin uploads (campaign media, app builds) go
+    # through /api on this host now.
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+    - hosts:
+        - dashboard.flipstar.et
+      # Created out-of-band, never committed -- docs/private-dashboard.md,
+      # "TLS". Its own Secret, so issuing or renewing it never touches the
+      # certificate the public hosts are served with.
+      secretName: flipstar-dashboard-tls
+
+  rules:
+    - host: dashboard.flipstar.et
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+          - path: /media
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-backend
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flipstar-dashboard
+                port:
+                  name: http

@@ -1,0 +1,21 @@
+# Port 80 on the Service, 8080 in the pod; the dashboard Ingress targets the
+# port by NAME, as the web one does. ClusterIP only -- the one way in from
+# outside the cluster is the dashboard Ingress and its allow-list.
+apiVersion: v1
+kind: Service
+metadata:
+  name: flipstar-dashboard
+  labels:
+    app.kubernetes.io/name: flipstar-dashboard
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: flipstar
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: flipstar-dashboard
+    app.kubernetes.io/component: dashboard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

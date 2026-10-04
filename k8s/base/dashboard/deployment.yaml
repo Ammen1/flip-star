@@ -1,0 +1,112 @@
+# FlipStar private staff dashboard (Flipstar-web/Dockerfile.dashboard).
+#
+# The same shape as k8s/base/web/deployment.yaml -- read that file's header
+# for port 8080 and why the API base URL is baked in at build time. What
+# differs, and why:
+#
+# 1. One replica. A handful of staff use it; maxSurge 1 / maxUnavailable 0
+#    still means a rollout starts the new pod before stopping the old one.
+#
+# 2. This pod holds no data and makes no decisions. It serves static files.
+#    Who may load them is the dashboard Ingress's source-range allow-list;
+#    what any of it can read or change is decided by the backend, per request
+#    (AdminPathGuardMiddleware, ADMIN_ALLOWED_IPS, each view's permissions).
+#
+# 3. No imagePullSecrets. The dashboard image is a PRIVATE GHCR package, and
+#    the node's containerd already authenticates every ghcr.io pull through
+#    /etc/rancher/k3s/registries.yaml -- the same way the backend and web
+#    images are pulled. Nothing to create per namespace.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flipstar-dashboard
+  labels:
+    app.kubernetes.io/name: flipstar-dashboard
+    app.kubernetes.io/component: dashboard
+    app.kubernetes.io/part-of: flipstar
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: flipstar-dashboard
+      app.kubernetes.io/component: dashboard
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: flipstar-dashboard
+        app.kubernetes.io/component: dashboard
+        app.kubernetes.io/part-of: flipstar
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # 101:101 is the `nginx` user baked into nginxinc/nginx-unprivileged.
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dashboard
+          image: ghcr.io/ammen1/flipstar-dashboard:__REPLACED_BY_KUSTOMIZE__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # /healthz is a `return 200` block in Flipstar-web/dashboard.default.conf.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 12
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # The web pod's budget, unchanged: the same nginx serving files.
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          # readOnlyRootFilesystem forces all three, exactly as for the web pod.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /var/run
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30

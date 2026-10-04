@@ -24,7 +24,18 @@ data:
   # partner-webserver679.phinfra.local:7890 is TIMWE's infrastructure probing
   # the backend (it also hits /api/v1/timwe/sync-order-relation); without it
   # here Django answers 400 DisallowedHost and logs an ERROR for every probe.
-  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,flipstar.et,172.16.170.2,10.0.0.93,partner-webserver679.phinfra.local"
+  # dashboard.flipstar.et is the private staff dashboard, which calls this API
+  # same-origin through its own Ingress (dashboard-ingress.yaml). Same-origin
+  # is also why it is in neither CORS_ALLOWED_ORIGINS nor CSRF_TRUSTED_ORIGINS.
+  ALLOWED_HOSTS: "api.uat.flipstar.et,uat.flipstar.et,flipstar.et,172.16.170.2,10.0.0.93,partner-webserver679.phinfra.local,dashboard.flipstar.et"
+
+  # Networks the admin API (/api/admin/, /api/v1/admin/) answers, on every
+  # hostname. Empty = unrestricted, which is how it has always behaved.
+  # Leave it empty until staff have moved to dashboard.flipstar.et, then set
+  # it to the same value as dashboard-access.yaml -- docs/private-dashboard.md,
+  # step 5. Setting it earlier cuts off anyone still using /admin on the
+  # public hosts from outside those networks.
+  ADMIN_ALLOWED_IPS: ""
 
   # The pod CIDR, so X-Forwarded-For from ingress-nginx is honoured.
   # common/security/client_ip.py only trusts that header when the immediate

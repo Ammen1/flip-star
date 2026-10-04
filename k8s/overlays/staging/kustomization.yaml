@@ -15,6 +15,26 @@ resources:
 - ../../base
 - ../../base/web
 - ingress.yaml
+# The private staff dashboard -- docs/private-dashboard.md. dashboard-access
+# is local-config: it feeds the replacement below and is never applied.
+- ../../base/dashboard
+- dashboard-access.yaml
+- dashboard-ingress.yaml
+
+# One allow-list, written once. Both annotation spellings on the dashboard
+# Ingress take their value from dashboard-access.yaml.
+replacements:
+- source:
+    kind: ConfigMap
+    name: dashboard-access
+    fieldPath: data.allowedSourceRanges
+  targets:
+  - select:
+      kind: Ingress
+      name: flipstar-dashboard
+    fieldPaths:
+    - metadata.annotations.[nginx.ingress.kubernetes.io/whitelist-source-range]
+    - metadata.annotations.[nginx.ingress.kubernetes.io/allowlist-source-range]
 
 labels:
 - includeSelectors: true
