@@ -53,6 +53,9 @@ images:
 - name: ghcr.io/ammen1/flip-star-backend-celery
   newName: ghcr.io/ammen1/flip-star-backend-celery
   newTag: be1eebb8b43253dd0be741f914bda7760ef38d6f
+- name: ghcr.io/ammen1/flipstar-dashboard
+  newName: ghcr.io/ammen1/flipstar-dashboard
+  newTag: dc380cdce0e8016fa2709a496d8473a8ce3e0da0
 - name: ghcr.io/ammen1/flipstar-web
   newName: ghcr.io/ammen1/flipstar-web
-  newTag: b239a05c89cf647e09a53c1001f8c4beda1a5c81
+  newTag: dc380cdce0e8016fa2709a496d8473a8ce3e0da0
