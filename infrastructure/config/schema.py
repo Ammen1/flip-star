@@ -123,6 +123,13 @@ SCHEMA: tuple[Key, ...] = (
         'spoof their IP past per-IP throttling.',
     ),
     _k(
+        'ADMIN_ALLOWED_IPS',
+        kind='csv',
+        group='http',
+        doc='Networks the admin API may be called from. Empty means unrestricted; '
+        'set it to the private dashboard allow-list once staff use the dashboard.',
+    ),
+    _k(
         'AUTH_TOKEN_TTL_DAYS',
         kind='int',
         required=True,

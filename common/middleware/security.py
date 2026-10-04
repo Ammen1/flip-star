@@ -28,6 +28,7 @@ porting one would have been redundant.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 
 from django.conf import settings
@@ -75,35 +76,71 @@ class AdminPathGuardMiddleware(MiddlewareMixin):
     place as defense in depth, not as the only line of defense.
     """
 
-    ADMIN_PATH_PREFIX = '/api/v1/admin/'
+    # BOTH mounts. config/urls.py includes api.urls twice -- at /api/ and at
+    # /api/v1/ -- so every admin view is reachable at two paths. This guarded
+    # only the second, and the first reached the views directly: an ordinary
+    # signed-in user calling /api/admin/... met only each view's own
+    # permission_classes, several of which are plain IsAuthenticated on the
+    # assumption that this middleware stood in front of them. A chokepoint
+    # with a side door is not a chokepoint.
+    ADMIN_PATH_PREFIXES = ('/api/v1/admin/', '/api/admin/')
+
+    # Kept for anything that imported the old single-prefix name.
+    ADMIN_PATH_PREFIX = ADMIN_PATH_PREFIXES[0]
 
     def process_request(self, request):
         path = request.path or ''
-        if not path.startswith(self.ADMIN_PATH_PREFIX):
+        if not path.startswith(self.ADMIN_PATH_PREFIXES):
             return None
 
         # The CORS middleware answers OPTIONS preflights; let them through.
         if request.method == 'OPTIONS':
             return None
 
+        # Where the request comes from, before who sent it: outside
+        # ADMIN_ALLOWED_IPS a valid staff token is refused all the same, and
+        # its token is never looked up.
+        if not self._network_allowed(request):
+            logger.warning(
+                'AdminPathGuard: blocked %s from %s -- not in ADMIN_ALLOWED_IPS',
+                path,
+                get_client_ip(request),
+            )
+            _log_security_event(
+                request, 'UNAUTHORIZED_API', 'HIGH', None, 'Source address not in ADMIN_ALLOWED_IPS'
+            )
+            return JsonResponse(
+                {'detail': 'Admin access is not permitted from this network.'}, status=403
+            )
+
         user = self._resolve_user(request)
         logger.debug(
             'AdminPathGuard: %s %s resolved user=%s staff=%s',
-            request.method, path, getattr(user, 'username', None), getattr(user, 'is_staff', False),
+            request.method,
+            path,
+            getattr(user, 'username', None),
+            getattr(user, 'is_staff', False),
         )
 
         if user is None or not user.is_authenticated:
             logger.warning('AdminPathGuard: blocked unauthenticated request to %s', path)
-            _log_security_event(request, 'UNAUTHORIZED_API', 'HIGH', user, 'Authentication required')
+            _log_security_event(
+                request, 'UNAUTHORIZED_API', 'HIGH', user, 'Authentication required'
+            )
             return JsonResponse({'detail': 'Authentication required.'}, status=401)
 
         if not (getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False)):
             logger.warning(
-                'AdminPathGuard: blocked non-staff user %s from %s', user.username, path,
+                'AdminPathGuard: blocked non-staff user %s from %s',
+                user.username,
+                path,
             )
-            _log_security_event(request, 'UNAUTHORIZED_API', 'HIGH', user, 'Admin privileges required')
+            _log_security_event(
+                request, 'UNAUTHORIZED_API', 'HIGH', user, 'Admin privileges required'
+            )
             return JsonResponse(
-                {'detail': 'You do not have permission to perform this action.'}, status=403,
+                {'detail': 'You do not have permission to perform this action.'},
+                status=403,
             )
 
         # Pin the user so any downstream code that reads request.user (before
@@ -119,20 +156,29 @@ class AdminPathGuardMiddleware(MiddlewareMixin):
         if request.method not in ('GET', 'HEAD', 'OPTIONS'):
             try:
                 from api.models.subscription import AdminRole
+
                 admin_role = AdminRole.objects.filter(user=user, is_active=True).first()
             except Exception:
                 admin_role = None
 
             if admin_role:
                 level = admin_role.permission_level
-                blocked = level == 'read_only' or (level == 'edit_only' and request.method == 'DELETE')
+                blocked = level == 'read_only' or (
+                    level == 'edit_only' and request.method == 'DELETE'
+                )
                 if blocked:
                     logger.warning(
                         'AdminPathGuard: blocked %s for %s (role=%s level=%s)',
-                        request.method, user.username, admin_role.role, level,
+                        request.method,
+                        user.username,
+                        admin_role.role,
+                        level,
                     )
                     _log_security_event(
-                        request, 'PERMISSION_DENIED', 'MEDIUM', user,
+                        request,
+                        'PERMISSION_DENIED',
+                        'MEDIUM',
+                        user,
                         f'role={admin_role.role} level={level} cannot perform {request.method}',
                     )
                     nice_level = level.replace('_', ' ')
@@ -146,6 +192,41 @@ class AdminPathGuardMiddleware(MiddlewareMixin):
                         status=403,
                     )
         return None
+
+    @staticmethod
+    def _network_allowed(request) -> bool:
+        """Whether the caller's address is inside ``ADMIN_ALLOWED_IPS``.
+
+        Unset means unrestricted -- the behaviour before this setting existed.
+        Set, it fails closed: an entry that is not an IP or CIDR is logged and
+        dropped, and if nothing usable is left everyone is refused, because a
+        typo in an allow-list must not quietly turn it off.
+
+        The caller is resolved through ``get_client_ip``, which believes
+        X-Forwarded-For only from TRUSTED_PROXY_IPS -- otherwise the list
+        would be one forged header away from useless.
+        """
+        raw = getattr(settings, 'ADMIN_ALLOWED_IPS', None) or []
+        if isinstance(raw, str):
+            raw = raw.split(',')
+        entries = [entry.strip() for entry in raw if entry and entry.strip()]
+        if not entries:
+            return True
+
+        networks = []
+        for entry in entries:
+            try:
+                networks.append(ipaddress.ip_network(entry, strict=False))
+            except ValueError:
+                logger.error('ADMIN_ALLOWED_IPS: %r is not an IP or CIDR -- ignored', entry)
+        if not networks:
+            return False
+
+        try:
+            client = ipaddress.ip_address(get_client_ip(request))
+        except ValueError:
+            return False
+        return any(client in network for network in networks)
 
     @staticmethod
     def _resolve_user(request):
@@ -184,7 +265,9 @@ class AdminLoginThrottleMiddleware(MiddlewareMixin):
             return None
 
         if cache.get(self._cache_key(request), 0) >= self.MAX_ATTEMPTS:
-            return HttpResponse('Too many login attempts. Please try again in 10 minutes.', status=429)
+            return HttpResponse(
+                'Too many login attempts. Please try again in 10 minutes.', status=429
+            )
         return None
 
     def process_response(self, request, response):
@@ -206,8 +289,17 @@ class SecurityScanMiddleware(MiddlewareMixin):
     """Block common scanner/bot probe paths, and the root path for obviously automated user agents."""
 
     BLOCKED_PATHS = (
-        '/proc.php', '/nuclei.svg', '/webui', '/admin.php', '/wp-admin',
-        '/xmlrpc.php', '/.env', '/config.php', '/phpmyadmin', '/mysql', '/runners',
+        '/proc.php',
+        '/nuclei.svg',
+        '/webui',
+        '/admin.php',
+        '/wp-admin',
+        '/xmlrpc.php',
+        '/.env',
+        '/config.php',
+        '/phpmyadmin',
+        '/mysql',
+        '/runners',
     )
 
     SUSPICIOUS_UA_PATTERNS = ('scanner', 'crawler', 'nuclei', 'nikto', 'sqlmap', 'masscan')
@@ -218,10 +310,14 @@ class SecurityScanMiddleware(MiddlewareMixin):
         if path == '/' and self._is_suspicious_user_agent(request):
             logger.warning(
                 'SecurityScan: blocked root-path probe from %s (UA=%r)',
-                get_client_ip(request), request.META.get('HTTP_USER_AGENT', ''),
+                get_client_ip(request),
+                request.META.get('HTTP_USER_AGENT', ''),
             )
             _log_security_event(
-                request, 'SCANNER_PROBE', 'LOW', getattr(request, 'user', None),
+                request,
+                'SCANNER_PROBE',
+                'LOW',
+                getattr(request, 'user', None),
                 'Blocked root path probe from suspicious user agent',
             )
             return HttpResponseForbidden()
@@ -229,10 +325,15 @@ class SecurityScanMiddleware(MiddlewareMixin):
         for blocked in self.BLOCKED_PATHS:
             if blocked in path:
                 logger.warning(
-                    'SecurityScan: blocked scanner probe %s from %s', request.path, get_client_ip(request),
+                    'SecurityScan: blocked scanner probe %s from %s',
+                    request.path,
+                    get_client_ip(request),
                 )
                 _log_security_event(
-                    request, 'SCANNER_PROBE', 'LOW', getattr(request, 'user', None),
+                    request,
+                    'SCANNER_PROBE',
+                    'LOW',
+                    getattr(request, 'user', None),
                     f'Blocked scanner probe: {blocked}',
                 )
                 return HttpResponseForbidden()

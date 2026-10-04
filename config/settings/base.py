@@ -220,6 +220,20 @@ TELEBIRR_WEBHOOK_ALLOWED_IPS = [
     ip.strip() for ip in config('TELEBIRR_WEBHOOK_ALLOWED_IPS', default='').split(',') if ip.strip()
 ]
 
+# IPs/CIDR ranges the admin API (/api/admin/ and /api/v1/admin/) may be called
+# from, on top of -- never instead of -- the staff check. Enforced by
+# AdminPathGuardMiddleware, so it holds whichever hostname the request came in
+# on: the private dashboard host, or any of the public ones that also route
+# /api to this backend.
+#
+# Empty by default, and empty means no network restriction: exactly today's
+# behaviour. Set it to the same ranges as the dashboard Ingress's allow-list
+# once staff are on the dashboard -- see docs/private-dashboard.md. Set but
+# unparseable refuses everyone rather than nobody.
+ADMIN_ALLOWED_IPS = [
+    ip.strip() for ip in config('ADMIN_ALLOWED_IPS', default='').split(',') if ip.strip()
+]
+
 
 # ---------------------------------------------------------------------------
 # Internationalisation
