@@ -94,6 +94,21 @@ def subscriber():
     return user
 
 
+@pytest.fixture
+def pinless_subscriber():
+    """An account with no PIN to sign in with.
+
+    The shape SuperApp auto-login creates: ``get_or_create(username=...)`` and
+    no password at all. Such a subscriber still needs the OTP to SET a PIN, so
+    the tests of the code path use this one -- the PIN holder in `subscriber`
+    is now sent to sign in instead and is given no code.
+    """
+    user = User.objects.create(username='pinless', password='')
+    user.profile.phone_number = MSISDN
+    user.profile.save(update_fields=['phone_number'])
+    return user
+
+
 # ── STOP ─────────────────────────────────────────────────────────────────────
 
 
@@ -164,8 +179,8 @@ def test_a_cancellation_stands_even_if_the_sms_cannot_be_sent(daily_tier, subscr
 # ── subscribing and renewing ─────────────────────────────────────────────────
 
 
-def test_the_first_charge_sends_the_welcome_message_with_the_way_in(daily_tier, subscriber):
-    _apply_relation(relation(), daily_tier, subscriber)
+def test_the_first_charge_sends_the_welcome_message_with_the_way_in(daily_tier, pinless_subscriber):
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
 
     sms = only_message()
     assert sms.purpose == 'subscription_welcome'
@@ -173,8 +188,8 @@ def test_the_first_charge_sends_the_welcome_message_with_the_way_in(daily_tier, 
     assert 'OTP' in sms.body
 
 
-def test_the_first_message_carries_a_link(daily_tier, subscriber):
-    _apply_relation(relation(), daily_tier, subscriber)
+def test_the_first_message_carries_a_link(daily_tier, pinless_subscriber):
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
 
     assert 'subscription_tp=true' in only_message().body
 
@@ -195,43 +210,43 @@ def test_a_renewal_reads_as_a_renewal(daily_tier, subscriber):
     assert first.body != sms.body
 
 
-def test_a_renewal_carries_the_same_way_in_as_the_first_message(daily_tier, subscriber):
+def test_a_renewal_carries_the_same_way_in_as_the_first_message(daily_tier, pinless_subscriber):
     """The reported gap: only the first message had a link. Somebody who lost
     it, or never got round to signing in, was charged month after month with
     no way back."""
-    _apply_relation(relation(), daily_tier, subscriber)
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
     SmsMessage.objects.all().delete()
 
-    _apply_relation(relation(transaction_id='TX-2'), daily_tier, subscriber)
+    _apply_relation(relation(transaction_id='TX-2'), daily_tier, pinless_subscriber)
 
     body = only_message().body
     assert 'subscription_tp=true' in body, 'a renewal offers no way in'
     assert MSISDN in body, 'the link does not carry their number'
 
 
-def test_a_renewal_sends_the_code_because_the_charge_replaced_it(daily_tier, subscriber):
+def test_a_renewal_sends_the_code_because_the_charge_replaced_it(daily_tier, pinless_subscriber):
     """Why a renewal now carries an OTP, against the comment that used to say
     it must not: this path already replaces plan.setup_otp when it charges, so
     the code the subscriber was holding is dead either way. Saying nothing
     left them with a code that had silently stopped working."""
-    _apply_relation(relation(), daily_tier, subscriber)
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
     plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
     first_code = plan.setup_otp
     SmsMessage.objects.all().delete()
 
-    _apply_relation(relation(transaction_id='TX-2'), daily_tier, subscriber)
+    _apply_relation(relation(transaction_id='TX-2'), daily_tier, pinless_subscriber)
 
     plan.refresh_from_db()
     assert plan.setup_otp != first_code, 'the stored code was not replaced after all'
     assert plan.setup_otp in only_message().body, 'the new code was never sent'
 
 
-def test_a_renewal_we_charge_ourselves_keeps_their_code(daily_tier, subscriber):
+def test_a_renewal_we_charge_ourselves_keeps_their_code(daily_tier, pinless_subscriber):
     """The other renewal path does not touch the stored code, so it sends the
     link and no OTP -- issuing one there would break a working code."""
     from api.services import sms_subscription
 
-    _apply_relation(relation(), daily_tier, subscriber)
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
     plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
 
     body = sms_subscription.build_renewal_message(
@@ -308,7 +323,7 @@ def test_a_renewal_fits_two_segments_on_every_plan(subscriber, duration):
     assert segments(without) <= 2, f'{duration} without OTP: {describe(without)}'
 
 
-def test_the_longest_plausible_renewal_still_fits(subscriber):
+def test_the_longest_plausible_renewal_still_fits(pinless_subscriber):
     """The seeded plans are short-named. This is the shape that would bust the
     budget first: a long plan name, a four-figure price, and the longer of the
     two links (an account holder gets `existing_user=true` on the end)."""
@@ -323,7 +338,7 @@ def test_the_longest_plausible_renewal_still_fits(subscriber):
         is_active=True,
     )
     plan = SubscriptionPlan.objects.create(
-        user=subscriber,
+        user=pinless_subscriber,
         tier=tier,
         duration_type='monthly',
         status='active',
@@ -349,10 +364,10 @@ def test_a_renewal_is_sent_as_gsm7(daily_tier, subscriber):
     assert encoding_of(renewal_text(daily_tier, plan, otp='123456')) == 'GSM-7'
 
 
-def test_the_renewal_still_says_everything_it_must(daily_tier, subscriber):
+def test_the_renewal_still_says_everything_it_must(daily_tier, pinless_subscriber):
     """Shortened, not gutted: what was removed was the greeting and the
     padding around the link, never the facts."""
-    _apply_relation(relation(), daily_tier, subscriber)
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
     plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
 
     body = renewal_text(daily_tier, plan, otp='123456')
@@ -367,10 +382,10 @@ def test_the_renewal_still_says_everything_it_must(daily_tier, subscriber):
     assert 'Dear valued customer' not in body, 'the greeting was the first thing cut'
 
 
-def test_the_first_subscription_message_is_unchanged(daily_tier, subscriber):
+def test_the_first_subscription_message_is_unchanged(daily_tier, pinless_subscriber):
     """Only the renewal was shortened. The welcome message still reads as it
     did, greeting included."""
-    _apply_relation(relation(), daily_tier, subscriber)
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
 
     body = only_message().body
 
@@ -591,3 +606,156 @@ def test_the_register_url_carries_no_query_string_of_its_own():
 
     assert '?' not in url
     assert '{' not in url, 'an unformatted placeholder is still in the URL'
+
+
+# ── an account holder is sent to sign in, not given a code ───────────────────
+#
+# A subscriber who already has a Flipstar account with a PIN used to be sent
+# the same message as a brand-new one: an OTP and a link to the "Verify & Set
+# Your PIN" screen. That asked them to replace a PIN they already had, with a
+# code they did not need. They now get a sign-in link and are told to use their
+# phone number and PIN.
+#
+# "Has an account" is not the test -- "has a PIN" is. An account SuperApp
+# auto-login creates has no password at all, and Django reports an EMPTY
+# password as usable. That subscriber still gets the code.
+
+
+def test_an_account_holder_gets_a_sign_in_link_not_a_code(daily_tier, subscriber):
+    _apply_relation(relation(), daily_tier, subscriber)
+
+    body = only_message().body
+
+    assert 'successfully subscribed' in body
+    assert '/login?phone=' in body, 'not sent to sign in'
+    assert MSISDN in body, 'the number is not filled in'
+    assert 'OTP' not in body, 'a PIN holder was sent a code'
+    assert 'subscription_tp=true' not in body, 'sent to the PIN-setup screen'
+
+
+def test_the_account_holder_is_told_what_to_do(daily_tier, subscriber):
+    _apply_relation(relation(), daily_tier, subscriber)
+
+    body = only_message().body
+
+    assert 'You already have a Flipstar account' in body
+    assert 'phone number and PIN' in body, 'not told how to sign in'
+    assert 'Forgot PIN' in body, 'no way back for a forgotten PIN'
+    assert 'STOP1' in body and '9286' in body, 'not told how to stop'
+
+
+def test_no_code_is_stored_for_an_account_holder(daily_tier, subscriber):
+    """A setup code SETS the PIN, so it is a reset token. Issuing one to
+    somebody who does not need it leaves a live reset token on their plan."""
+    _apply_relation(relation(), daily_tier, subscriber)
+
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+    assert plan.setup_otp in (None, ''), 'a reset token was issued for nothing'
+    assert plan.setup_otp_expires_at is None
+
+
+def test_a_renewal_clears_an_old_code_for_an_account_holder(daily_tier, subscriber):
+    """An older code from before they set a PIN must not stay usable."""
+    _apply_relation(relation(), daily_tier, subscriber)
+    plan = SubscriptionPlan.objects.get(onevas_phone_number=MSISDN)
+    plan.setup_otp = '999999'
+    plan.save(update_fields=['setup_otp'])
+
+    _apply_relation(relation(transaction_id='TX-2'), daily_tier, subscriber)
+
+    plan.refresh_from_db()
+    assert plan.setup_otp in (None, ''), 'a stale reset token survived the renewal'
+
+
+def test_an_account_holders_renewal_also_sends_them_to_sign_in(daily_tier, subscriber):
+    _apply_relation(relation(), daily_tier, subscriber)
+    SmsMessage.objects.all().delete()
+
+    _apply_relation(relation(transaction_id='TX-2'), daily_tier, subscriber)
+
+    body = only_message().body
+    assert 'renewed' in body
+    assert '/login?phone=' in body
+    assert 'OTP' not in body
+    assert 'subscription_tp=true' not in body
+
+
+@pytest.mark.parametrize('duration', ['daily', 'weekly', 'monthly'])
+def test_an_account_holders_renewal_fits_two_segments(subscriber, duration):
+    from api.services.sms.segments import describe, encoding_of, segments
+
+    tier = SubscriptionTier.objects.get(duration_type=duration)
+    plan = SubscriptionPlan.objects.create(
+        user=subscriber,
+        tier=tier,
+        duration_type=duration,
+        status='active',
+        onevas_phone_number=MSISDN,
+    )
+    plan.activate()
+    plan.refresh_from_db()
+
+    body = renewal_text(tier, plan)
+
+    assert '/login?phone=' in body
+    assert segments(body) <= 2, describe(body)
+    assert encoding_of(body) == 'GSM-7', 'one non-GSM character drops capacity to 67 a part'
+
+
+def test_an_account_with_no_pin_still_gets_the_code(daily_tier, pinless_subscriber):
+    """The Django trap: an empty password reports usable. Sending this
+    subscriber to sign in with a PIN they never set, and no code to set one
+    with, would leave them no way in at all."""
+    _apply_relation(relation(), daily_tier, pinless_subscriber)
+
+    body = only_message().body
+    assert 'OTP' in body
+    assert 'subscription_tp=true' in body
+    assert '/login?phone=' not in body
+
+
+def test_can_sign_in_requires_a_real_pin():
+    from api.services.sms_subscription import can_sign_in_with_pin
+
+    with_pin = User(username='a')
+    with_pin.set_password('123456')
+    empty = User(username='b', password='')
+    unusable = User(username='c')
+    unusable.set_unusable_password()
+
+    assert can_sign_in_with_pin(with_pin) is True
+    assert can_sign_in_with_pin(empty) is False, 'empty password counted as a PIN'
+    assert can_sign_in_with_pin(unusable) is False
+    assert can_sign_in_with_pin(None) is False
+
+
+def test_a_new_subscribers_code_has_an_expiry(daily_tier):
+    """The reported "Invalid OTP": the create branch stored the code and never
+    its expiry, and login_with_subscription_otp requires expiry > now -- so a
+    NULL rejected every code a brand-new subscriber typed."""
+    from api.services import sms_subscription
+
+    result = sms_subscription.subscribe(
+        phone_number='251900000001', tier=daily_tier, payment_method='timwe'
+    )
+
+    plan = result.plan
+    plan.refresh_from_db()
+    assert result.otp, 'no code issued to somebody with no account'
+    assert plan.setup_otp == result.otp
+    assert plan.setup_otp_expires_at is not None, 'NULL expiry -- the code can never verify'
+
+
+def test_the_sign_in_link_is_built_from_the_configured_site():
+    """The configured base is the registration page itself, so the site is
+    recovered from it rather than /login being glued onto /register."""
+    from api.services.sms_subscription import login_link
+
+    assert (
+        login_link(base_url='https://flipstar.et/register', phone_number=MSISDN)
+        == f'https://flipstar.et/login?phone={MSISDN}'
+    )
+    assert (
+        login_link(base_url='https://uat.flipstar.et/register', phone_number=MSISDN)
+        == f'https://uat.flipstar.et/login?phone={MSISDN}'
+    )

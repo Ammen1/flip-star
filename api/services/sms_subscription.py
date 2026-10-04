@@ -86,13 +86,18 @@ FIRST_TIME_FREE_TRIAL_DAYS = 1
 class SubscribeResult:
     """What happened, and what the caller needs to send an SMS about it."""
 
-    def __init__(self, *, action, plan, otp, free_trial_days, existing_user):
+    def __init__(self, *, action, plan, otp, free_trial_days, existing_user, can_sign_in=False):
         #: 'created' or 'renewed'.
         self.action = action
         self.plan = plan
+        #: None when no setup code was issued -- see can_sign_in_with_pin.
         self.otp = otp
         self.free_trial_days = free_trial_days
         self.existing_user = existing_user
+        #: The subscriber already has an account they can sign in to with a
+        #: PIN, so the SMS sends them to sign in rather than handing them a
+        #: code to set one.
+        self.can_sign_in = can_sign_in
 
 
 def resolve_subscriber(phone_number):
@@ -122,6 +127,25 @@ def resolve_subscriber(phone_number):
         plan.user.profile.phone_number = phone_number
         plan.user.profile.save(update_fields=['phone_number'])
     return plan.user
+
+
+def can_sign_in_with_pin(user):
+    """True when this account has a PIN it can sign in with right now.
+
+    Not the same as "has an account". An account made by SuperApp auto-login
+    is created with ``get_or_create(username=...)`` and no password at all,
+    and Django reports an EMPTY password as usable -- ``has_usable_password()``
+    only recognises the ``!`` marker that ``set_unusable_password()`` writes.
+    So it is True for an account that cannot sign in with anything.
+
+    Checked here rather than trusted: telling a subscriber to "sign in with
+    your PIN" when they have never set one, and sending them no code to set
+    one with, leaves them no way in to what they have just paid for.
+    """
+    if user is None:
+        return False
+    password = getattr(user, 'password', '') or ''
+    return bool(password) and user.has_usable_password()
 
 
 def _generate_otp():
@@ -184,7 +208,15 @@ def subscribe(*, phone_number, tier, payment_method, metadata=None, user=None):
     metadata = metadata or {}
     if user is None:
         user = resolve_subscriber(phone_number)
-    otp = _generate_otp()
+
+    # An account holder with a PIN is sent to sign in, not given a code. A
+    # setup code is a PIN-reset token -- login_with_subscription_otp SETS the
+    # PIN with it -- so issuing one to somebody who does not need it leaves a
+    # live reset token on their plan for nothing. If they have forgotten the
+    # PIN, Resend on the sign-in screen issues a fresh one on request.
+    can_sign_in = can_sign_in_with_pin(user)
+    otp = None if can_sign_in else _generate_otp()
+    otp_expires_at = timezone.now() + timedelta(minutes=30) if otp else None
 
     _cancel_conflicting_plans(
         user=user,
@@ -206,11 +238,13 @@ def subscribe(*, phone_number, tier, payment_method, metadata=None, user=None):
     if existing is not None:
         existing.tier = tier
         existing.duration_type = tier.duration_type
-        existing.setup_otp = otp
         # Every issued code gets an expiry, because login_with_subscription_otp
-        # now enforces one -- and a code that resets a PIN must not live for
-        # ever. 30 minutes matches the other two places that issue one.
-        existing.setup_otp_expires_at = timezone.now() + timedelta(minutes=30)
+        # enforces one -- and a code that resets a PIN must not live for ever.
+        # When no code is issued both are cleared, so an older code from a
+        # previous subscription does not stay usable on a plan whose holder
+        # signs in with a PIN.
+        existing.setup_otp = otp
+        existing.setup_otp_expires_at = otp_expires_at
         existing.save(update_fields=['tier', 'duration_type', 'setup_otp', 'setup_otp_expires_at'])
         existing.activate()
         _record_payment(existing, tier, payment_method)
@@ -228,6 +262,7 @@ def subscribe(*, phone_number, tier, payment_method, metadata=None, user=None):
             otp=otp,
             free_trial_days=existing.free_trial_days or 0,
             existing_user=user is not None,
+            can_sign_in=can_sign_in,
         )
 
     # First subscription for this number gets a complimentary day. Judged on
@@ -248,6 +283,12 @@ def subscribe(*, phone_number, tier, payment_method, metadata=None, user=None):
         subscription_source='sms',
         payment_method=payment_method,
         setup_otp=otp,
+        # This was never set here. login_with_subscription_otp requires
+        # setup_otp_expires_at > now and a NULL fails that filter, so every
+        # code issued to a brand-new subscriber was rejected as "Invalid OTP"
+        # however correctly it was typed -- the renewal branch above set it,
+        # this one did not.
+        setup_otp_expires_at=otp_expires_at,
         free_trial_days=free_trial_days,
         status='pending',
         metadata=metadata,
@@ -272,6 +313,7 @@ def subscribe(*, phone_number, tier, payment_method, metadata=None, user=None):
         otp=otp,
         free_trial_days=free_trial_days,
         existing_user=user is not None,
+        can_sign_in=can_sign_in,
     )
 
 
@@ -324,6 +366,25 @@ def access_link(*, base_url, phone_number, existing_user=False):
     return f'{base_url}?subscription_tp=true&phone={phone_number}{existing}'
 
 
+def login_link(*, base_url, phone_number):
+    """The sign-in page, with the number filled in.
+
+    For a subscriber who already has a PIN. access_link() sends them to the
+    "Verify & Set Your PIN" screen, which will not submit without a six-digit
+    code -- so once no code is being sent, that link is a dead end.
+
+    The configured base is the registration page itself
+    (``https://flipstar.et/register``), so the site is recovered from it
+    rather than a second setting being added that could disagree with it.
+    The login page normalises a 251 number to the nine digits it shows.
+    """
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(base_url or '')
+    origin = f'{parts.scheme}://{parts.netloc}' if parts.scheme and parts.netloc else ''
+    return f'{origin}/login?phone={phone_number}'
+
+
 def build_welcome_message(*, tier, result, phone_number, base_url):
     """The SMS a subscriber gets after being charged.
 
@@ -344,10 +405,25 @@ def build_welcome_message(*, tier, result, phone_number, base_url):
         trial = f'The subscription price is {tier.price_etb} ETB per {price_period}.'
 
     started = result.plan.start_date.strftime('%Y-%m-%d %H:%M')
+
+    # Somebody who already has a PIN is told to sign in with it, and given no
+    # code. Before, every subscriber got an OTP and a link to the PIN-setup
+    # screen -- an account holder was being asked to replace a PIN they
+    # already had, with a code they did not need.
+    if result.can_sign_in:
+        link = login_link(base_url=base_url, phone_number=phone_number)
+        return (
+            f'Dear valued customer, you have successfully subscribed to the {tier.name} '
+            f'Flipstar service, effective from {started}. {trial} '
+            f'You already have a Flipstar account. To sign in, open {link} '
+            f'and enter your phone number and PIN. '
+            f'Forgot your PIN? Tap Forgot PIN on that page. '
+            f'To cancel, send {stop_keyword} to {tier.short_code}.'
+        )
+
     link = access_link(
         base_url=base_url, phone_number=phone_number, existing_user=result.existing_user
     )
-
     return (
         f'Dear valued customer, you have successfully subscribed to the {tier.name} '
         f'Flipstar service, effective from {started}. {trial} '
@@ -396,13 +472,23 @@ def build_renewal_message(*, tier, plan, phone_number=None, base_url=None, otp=N
 
     access = ''
     if base_url and phone_number:
-        link = access_link(
-            base_url=base_url,
-            phone_number=phone_number,
-            existing_user=bool(getattr(plan, 'user_id', None)),
-        )
-        access = f' Open {link}'
-        access += f' and enter OTP {otp}.' if otp else '.'
+        if can_sign_in_with_pin(getattr(plan, 'user', None)):
+            # A PIN holder signs in. Also fixes the daily renewal that issues
+            # no code: it linked an account holder to the PIN-setup screen,
+            # which cannot be submitted without one -- a link to nowhere,
+            # sent every time they were charged.
+            access = (
+                f' Sign in at {login_link(base_url=base_url, phone_number=phone_number)} '
+                f'with your phone number and PIN.'
+            )
+        else:
+            link = access_link(
+                base_url=base_url,
+                phone_number=phone_number,
+                existing_user=bool(getattr(plan, 'user_id', None)),
+            )
+            access = f' Open {link}'
+            access += f' and enter OTP {otp}.' if otp else '.'
 
     return (
         f'Your {tier.name} Flipstar subscription is renewed for {tier.price_etb} ETB '
