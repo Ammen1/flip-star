@@ -1,22 +1,21 @@
 # WHO MAY OPEN THE DASHBOARD -- the one value to edit.
 #
-# Comma-separated IPs/CIDRs of the staff networks (office egress address, VPN
-# exit), in the form "203.0.113.20/32,198.51.100.0/29" (those two are
-# documentation ranges, not real networks). kustomization.yaml copies it
-# into both allow-list annotations on dashboard-ingress.yaml, so the two can
-# never disagree. Not a secret, so it lives in Git like every other host and
-# address in this overlay -- but it is the whole network boundary, so review
-# every change to it as you would a firewall rule.
+# Staff reach the dashboard over Tailscale, not the public internet. The node
+# advertises 10.0.0.93/32 (the ingress load-balancer address) as a subnet
+# route with SNAT off, so ingress-nginx sees each device's own tailnet
+# address -- stable per device, unlike the staff's dynamic ISP addresses, and
+# meaningless outside the tailnet, so publishing it here gives nothing away.
+# Each staff device also needs:  10.0.0.93  dashboard.flipstar.et  in its
+# hosts file; over the public internet it gets 403. See
+# docs/private-dashboard.md, "Staff access over Tailscale".
 #
-# The value below is RFC 5737 documentation space and matches no real client:
-# until it is replaced, everyone gets 403 from the ingress. That is the
-# intended default. An allow-list that starts empty starts open.
+# Comma-separated /32s, one per device. kustomization.yaml copies the value
+# into both allow-list annotations on dashboard-ingress.yaml, so they can
+# never disagree.
 #
-# NEVER add the node or pod networks (10.0.0.0/8, 10.42.0.0/16, 10.0.0.93).
-# If ingress-nginx sees those addresses instead of real clients (SNAT in
-# front of it), every visitor appears to come from them and the allow-list
-# would admit the whole internet. Verify client addresses first -- see
-# docs/private-dashboard.md, "Before the first deploy".
+# NEVER add the node or pod networks (10.0.0.0/8, 10.42.0.0/16, 10.0.0.93), or
+# the whole tailnet range 100.64.0.0/10. tests/unit/test_private_dashboard_manifests.py
+# rejects internal and over-wide networks.
 #
 # local-config: read by kustomize for the replacement, never sent to the
 # cluster.
@@ -27,4 +26,4 @@ metadata:
   annotations:
     config.kubernetes.io/local-config: "true"
 data:
-  allowedSourceRanges: "192.0.2.1/32"
+  allowedSourceRanges: "100.90.215.41/32"
